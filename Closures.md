@@ -1,6 +1,6 @@
 # Closures 
 
-A closure is a function written by another function. Closures are so called because they _enclose_ the environment of the parent function, and can access all variables and parameters in that function. This is useful because it allows us to have two levels of parameters. One level of parameters (the parent) controls how the function works. The other level (the child) does the work. The following example shows how can use this idea to generate a family of power functions. The parent function (`power`) creates child functions (square and cube) that actually do the hard work.
+A closure is a function written by another function. Closures are so called because they _enclose_ the environment of the parent function, and can access all variables and parameters in that function. This is useful because it allows us to have two levels of parameters. One level of parameters (the parent) controls how the function works. The other level (the child) does the work. The following example shows how can use this idea to generate a family of power functions. The parent function (`power`) creates child functions (`square` and `cube`) that actually do the hard work.
 
     power <- function(exponent) {
       function(x) x ^ exponent
@@ -36,6 +36,4 @@ The new function is a closure, and its environment is the enclosing environment.
     counter_one() # -> [1] 2
     counter_two() # -> [1] 1
 
-A more technical description is available in [Frames, Environments, and Scope in R and S-PLUS](http://cran.r-project.org/doc/contrib/Fox-Companion/appendix-scope.pdf). Read Section 2, which introduces you to the formal vocabulary used in much of the R documentation, and skim the rest of the document.
-
-Read about other ways to use closures and lexical scope in Sections 3 and 4 of [Lexical scope and statistical computing](http://www.stat.auckland.ac.nz/~ihaka/downloads/lexical.pdf). The rest of the paper is also recommended.
+A more technical description is available in [Frames, Environments, and Scope in R and S-PLUS](http://cran.r-project.org/doc/contrib/Fox-Companion/appendix-scope.pdf). Section 2 is recommended as a good introduction to the formal vocabulary used in much of the R documentation. [Lexical scope and statistical computing](http://www.stat.auckland.ac.nz/~ihaka/downloads/lexical.pdf) gives more examples of the power and utility of closures.
