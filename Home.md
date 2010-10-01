@@ -7,7 +7,7 @@ In the these topics I try and explain how fundamental R components work, taking 
   * [[Scoping]]
   * Lazy evaluation: default, delayedAssign, autoload, makeActiveBinding
   * Computing on the language: calls, expressions, functions
-  
+
 # Good development practices
 
 The following documents give my opinionated beliefs on good development practice, distilled from my experience writing over 20 R packages.

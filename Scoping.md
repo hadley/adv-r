@@ -1,8 +1,10 @@
-# Lexical scoping
+# R scoping rules
 
-# Dynamic scoping
+## Lexical scoping
 
-# Lazy evaluation
+## Dynamic scoping
+
+## Lazy evaluation
 
 Arguments are lazily evaluated in their original environment.
 
