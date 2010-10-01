@@ -12,7 +12,7 @@ In the these topics I try and explain how fundamental R components work, taking 
 
 The following documents give my opinionated beliefs on good development practice, distilled from my experience writing over 20 R packages.
 
-  * [[Introduction to namespaces]] for use with roxygen
+  * [[Introduction to namespaces|Namespaces]] for use with roxygen
   * [[Testing]]
 
   [lang-def]:http://cran.r-project.org/doc/manuals/R-lang.html
