@@ -5,6 +5,7 @@ In the these topics I try and explain how fundamental R components work, taking 
   * [[The S3 object system|S3]]
   * [[Closures]]
   * [[Scoping]]
+  * [[Controlling evaluation|Evaluation]]
   * Lazy evaluation: default, delayedAssign, autoload, makeActiveBinding
   * Computing on the language: calls, expressions, functions
 
