@@ -14,12 +14,12 @@ In this exploration of evaluation, we're going to write our own simplified versi
 
 To describe how we want subset to work, we need some new vocabulary:
 
-  * __symbol__, or __name__, is a  (`is.symbol` & `as.symbol`)
-  * a __call__ is an unevaluated expression, rather than the value of that expression (is.call & as.call)
-  * an __expression__ is a list of calls and/or symbols (`is.expression` & `as.expression`)
+  * __symbol__, or __name__, describes the name of an object, like x or y, not `5` or `"a"`  (see `is.symbol` & `as.symbol`)
+  * a __call__ is an unevaluated expression, like `x == y`, rather than the result of that call (see `is.call` & `as.call`)
+  * an __expression__ is a list of calls and/or symbols (see `is.expression` & `as.expression`)
   * a __language object__ is a call, expression, or name (`is.language`)
 
-So we want to capture the call that describes the subset condition and then evaluate it in the context of the data frame.
+So we want to capture the call that describes the subsetting condition and then evaluate it in the context of the data frame.
 
 # Quoting 
 
@@ -28,19 +28,19 @@ Capturing a language object without evaluating it is called quoting, and R has a
     quote(vs == am)
     # vs == am
 
-We could also build it up manually using `call`:
+We could also build a call manually using `call`:
 
     call("==", as.name("vs"), as.name("am"))
     # vs == am
 
-Or from text with `parse`:
+Or from a stringr with `parse`:
 
     parse(text = "vs == am")[[1]]
     # vs == am
     # Parse returns an expression, but we just want the first element
     # which is a call
 
-The simplest way to write `subset` would be to require that the user supply a call object, created using one of the above techniques. But that requires extra typing, just what we were trying to avoid when creating this function. We want create the call inside the function, not outside of it. 
+The simplest way to write `subset` would be to require that the user supply a call, created using one of the above techniques. But that requires extra typing, just what we were trying to avoid when creating this function. We want create the call inside the function, not outside of it. 
 
 Think about why `quote` wouldn't be useful in this case, and then run the following code to check if your guess was correct:
 
@@ -140,6 +140,15 @@ And it works :)
 
 This is an example of [dynamic scope](http://en.wikipedia.org/wiki/Scope_(programming)#Dynamic_scoping) 
 
+Another approach would be to use a formula, created with `~`.  Formula works much like quote, but it also captures the environment in which it is created:
+
+    subset <- function(x, f) {
+      r <- eval(f[[2]], x, environment(f))
+      r <- r & !is.na(r)
+      x[r, ]
+    }
+    subset(mtcars, ~ cyl == x)
+
 # Calling from another function
 
 While `subset` saves typing, it has one big disadvantage: it's now difficult to use non-interactively, i.e. from another function. 
@@ -230,4 +239,21 @@ We can use this idea to crudely identify R functions that may be problematic to 
 
 # Conclusion
 
-Now you understand how our version of subset works, go back and read the source code for `subset.data.frame`, the base R version which does a little more.  Other functions that work similarly are `with.default`, `within.data.frame`, `transform.data.frame`, and in the plyr package `.`, `arrange`, and `summarise`.  Look at the source code for these functions and 
+Now you understand how our version of subset works, go back and read the source code for `subset.data.frame`, the base R version which does a little more. Other functions that work similarly are `with.default`, `within.data.frame`, `transform.data.frame`, and in the plyr package `.`, `arrange`, and `summarise`. Look at the source code for these functions and see if you can figure out how they work.
+
+# Appendix A: symbols, calls, expressions
+
+    as.symbol("a")
+    as.symbol("a b c")
+
+
+    substitute(x, list(x = quote(2 + 2)))
+    # 2 + 2
+    substitute(x, list(x = expression(2 + 2)))
+    # expression(2 + 2)
+
+    # From R language definition
+    eval(substitute(mode(x), list(x = quote(2 + 2))))
+    # "numeric"
+    eval(substitute(mode(x), list(x = expression(2 + 2))))
+    # "expression"
