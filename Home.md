@@ -3,8 +3,7 @@
 In the these topics I try and explain how fundamental R components work, taking the [R language definition][lang-def] and trying to make it more user friendly with plenty of examples to illustrate each idea.
 
   * [[The S3 object system|S3]]
-  * [[Closures]]
-  * [[Scoping]]
+  * [[Scoping, environments and closures|Scoping]]
   * [[Controlling evaluation|Evaluation]]
   * Lazy evaluation: default, delayedAssign, autoload, makeActiveBinding
   * Computing on the language: calls, expressions, functions
