@@ -14,6 +14,8 @@ The following documents give my opinionated beliefs on good development practice
 
   * [[Introduction to namespaces|Namespaces]] for use with roxygen
   * [[Testing]]
+  * [[How to make a reproducible example|Reproducibility]]
+  * [[A philosophy of data|data-philosophy]]
 
   [lang-def]:http://cran.r-project.org/doc/manuals/R-lang.html
   
