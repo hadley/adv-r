@@ -2,18 +2,40 @@
 
 ## Scoping
 
-Scoping refers to the set of rules than govern how we go from an object name, e.g. "x", to the contents of that object, e.g. 10. R has two types of scoping: __lexical scoping__,  implemented automatically at the language level, and dynamic scoping, used in select functions to save typing during interactive analysis.  Dynamic scoping is described in more detail in the context of [[controlling evaluation||Evaluation]].
+Scoping refers to the set of rules than govern how we go from an object name, e.g. `x`, to the contents of that object, e.g. `10`. R has two types of scoping: __lexical scoping__, implemented automatically at the language level, and dynamic scoping, used in select functions to save typing during interactive analysis. Dynamic scoping is described in more detail in the context of [[controlling evaluation||Evaluation]].
 
-Vocab:
+## Environments
 
   * __frame__: collection of named objects (like a list)
   * __environment__: a frame plus a parent environment
 
-## Other important environments
+An environment is very similar to a list, with two important differences. Firstly, an environment has reference semantics: R's usual copy on modify rules do not apply. Secondly, an environment has a parent: if an object is not found in an environment, then R will look in its parent.
 
   * `globalenv()`: the user's workspace
   * `baseenv()`: the environment of the base package
   * `emptyenv()`: the ultimate ancestor of all environments
+
+`ls`, `get`, `assign`
+
+    ls(environment(plot), all = T)
+    get(".units", environment(plot))
+
+    e <- new.env(hash = T, parent = emptyenv())
+    f <- e
+    
+    e$a
+    exists("a", e)
+    get("a", e)
+    ls(e)
+    
+    # Environments are reference object: R's usual copy-on-modify semantics
+    # do not apply
+    e$a <- 10
+    f$a
+    
+    ls(e)
+    
+    parent.env(e)
 
 ## Lexical scoping
 
@@ -22,6 +44,9 @@ This is straightforward when the object exists in the local environment:
     x <- 10
     # 10
     x
+    
+    y
+    # Error: object 'y' not found
 
 If an object with that name doesn't exist in the current environment, R next looks in the parent environment. The parent environment is the environment in which the function was originally defined.
 
