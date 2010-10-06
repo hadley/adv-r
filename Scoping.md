@@ -2,65 +2,48 @@
 
 ## Scoping
 
-Scoping refers to the set of rules than govern how we go from an object name, e.g. `x`, to the contents of that object, e.g. `10`. R has two types of scoping: __lexical scoping__, implemented automatically at the language level, and dynamic scoping, used in select functions to save typing during interactive analysis. Dynamic scoping is described in more detail in the context of [[controlling evaluation||Evaluation]].
-
-## Environments
-
-  * __frame__: collection of named objects (like a list)
-  * __environment__: a frame plus a parent environment
-
-An environment is very similar to a list, with two important differences. Firstly, an environment has reference semantics: R's usual copy on modify rules do not apply. Secondly, an environment has a parent: if an object is not found in an environment, then R will look in its parent.
-
-  * `globalenv()`: the user's workspace
-  * `baseenv()`: the environment of the base package
-  * `emptyenv()`: the ultimate ancestor of all environments
-
-`ls`, `get`, `assign`
-
-    ls(environment(plot), all = T)
-    get(".units", environment(plot))
-
-    e <- new.env(hash = T, parent = emptyenv())
-    f <- e
-    
-    e$a
-    exists("a", e)
-    get("a", e)
-    ls(e)
-    
-    # Environments are reference object: R's usual copy-on-modify semantics
-    # do not apply
-    e$a <- 10
-    f$a
-    
-    ls(e)
-    
-    parent.env(e)
-
-## Lexical scoping
-
-This is straightforward when the object exists in the local environment:
+Scoping is the set of rules that govern how R looks up the value of a symbol, or name, how R goes from the symbol `x`, to its value `10` in the following example.
 
     x <- 10
-    # 10
     x
-    
-    y
-    # Error: object 'y' not found
+    # [1] 10
 
-If an object with that name doesn't exist in the current environment, R next looks in the parent environment. The parent environment is the environment in which the function was originally defined.
+R has two types of scoping: __lexical scoping__, implemented automatically at the language level, and __dynamic scoping__, used in select functions to save typing during interactive analysis. This document describes lexical scoping, as well as environments (the underlying data structure) and closures (a useful consequence). Dynamic scoping is described in the context of [[controlling evaluation||Evaluation]].
 
-    
+## Basic rules
+
+Lexical scoping is so called because it depends on the underlying lexical structure of the program, not it's run time behaviour. With lexical scoping, it's easy to figure out what value each name will have just by looking at the local source environment.
+
+The following example illustrates the basic principle:
+
+    x <- 5
     f <- function() { 
-      x
+      y <- 10
+      c(x = x, y = y)
     }
     f()
-    # [1] 10
-    x <- 20
-    f()
-    # [1] 20
+    #  x  y 
+    #  5 10
 
-And this works regardless of how many functions down.  See if you can predict what the following function will return before trying it out yourself.
+Unlike some languages, R looks up at the values at run-time, not when the function is created:
+
+    x <- 15
+    f()
+    #  x  y 
+    # 15 10
+
+If an name is defined inside a function, it will mask the top-level definition:
+
+    g <- function() { 
+      x <- 20
+      y <- 10
+      c(x = x, y = y)
+    }
+    f()
+    #  x  y 
+    # 20 10
+
+The same principle applies regardless of the degree of nesting. See if you can predict what the following function will return before trying it out yourself.
 
     w <- 0
     f <- function() {
@@ -69,7 +52,7 @@ And this works regardless of how many functions down.  See if you can predict wh
         y <- 2
         h <- function() {
           z <- 3
-          c(w, x, y, z)
+          c(w = w, x = x, y = y, z = z)
         }
         h()
       }
@@ -77,6 +60,60 @@ And this works regardless of how many functions down.  See if you can predict wh
     }
     f()
 
+To better understand how scoping works, it's useful to know a little about environments, the data structure that powers scoping.
+
+## Environments
+
+An __environment__ is very similar to a list, with two important differences. Firstly, an environment has reference semantics: R's usual copy on modify rules do not apply. Secondly, an environment has a parent: if an object is not found in an environment, then R will look in its parent. Technically, an environment is made up of a __frame__, a collection of named objects (like a list), and link to a parent environment.
+
+When a function is created, it gains a pointer to the environment where it was made. You can access this environment with the `environment` function. This environment may have access to objects that are not in the global environment: this is how [[namespaces]] work.
+
+    environment(plot)
+    ls(environment(plot), all = T)
+    get(".units", environment(plot))
+    get(".units")
+
+Every time a function is called, a new environment is created to host execution. The following example illustrates that each time a function is run it gets a new environment:
+
+    f <- function(x) {
+      if (!exists("a")) {
+        message("Defining a")
+        a <- 1
+      } else {
+        a <- a + 1 
+      }
+      a
+    }
+    f()
+    # Defining a
+    # [1] 1
+    f()
+    # Defining a
+    # [1] 1
+
+The section on closures describes how to work around this limitation by using a parent environment that stays the same between runs.
+
+Environments can also be useful in their own right, if you want to create a data structure that has reference semantics. This is not something that should be undertaken lightly: it will violate users expectations about how R code works, but it can sometimes be critical. The following example shows how to create an environment for this purpose.
+
+    e <- new.env(hash = T, parent = emptyenv())
+    f <- e
+
+    exists("a", e)
+    e$a
+    get("a", e)
+    ls(e)
+
+    # Environments are reference object: R's usual copy-on-modify semantics
+    # do not apply
+    e$a <- 10
+    ls(e)
+    f$a
+
+There are also a few special environments that you can access directly:
+
+  * `globalenv()`: the user's workspace
+  * `baseenv()`: the environment of the base package
+  * `emptyenv()`: the ultimate ancestor of all environments
 
 ## Lazy evaluation
 
