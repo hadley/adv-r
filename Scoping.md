@@ -8,7 +8,7 @@ Scoping is the set of rules that govern how R looks up the value of a symbol, or
     x
     # [1] 10
 
-R has two types of scoping: __lexical scoping__, implemented automatically at the language level, and __dynamic scoping__, used in select functions to save typing during interactive analysis. This document describes lexical scoping, as well as environments (the underlying data structure) and closures (a useful consequence). Dynamic scoping is described in the context of [[controlling evaluation||Evaluation]].
+R has two types of scoping: __lexical scoping__, implemented automatically at the language level, and __dynamic scoping__, used in select functions to save typing during interactive analysis. This document describes lexical scoping, as well as environments (the underlying data structure) and closures (a useful consequence). Dynamic scoping is described in the context of [[controlling evaluation|Evaluation]].
 
 ## Basic rules
 
