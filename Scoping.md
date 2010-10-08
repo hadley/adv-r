@@ -12,7 +12,7 @@ R has two types of scoping: __lexical scoping__, implemented automatically at th
 
 ## Basic rules
 
-Lexical scoping is so called because it depends on the underlying lexical structure of the program, not it's run time behaviour. With lexical scoping, it's easy to figure out what value each name will have just by looking at the local source environment.
+Lexical scoping is so called because it depends on the underlying lexical structure of the program, the way that functions are nested when they are written, not when they are called.  With lexical scoping, it's generally easy to figure out what value each name will have by looking at the definition of the function.
 
 The following example illustrates the basic principle:
 
