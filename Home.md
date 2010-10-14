@@ -1,4 +1,6 @@
-# Specialised data types and languages
+# Advanced R development
+
+## Specialised data types and languages
 
 These types of data come up so frequently it's useful to know a little about them and the specialised languages that you use to work with them.
 
@@ -6,7 +8,7 @@ These types of data come up so frequently it's useful to know a little about the
   * Databases and SQL
   * XML and XPath
 
-# Advanced R topics
+## Advanced R topics
 
 In the these topics I try and explain how fundamental R components work, taking the [R language definition][lang-def] and trying to make it more user friendly with plenty of examples to illustrate each idea.
 
@@ -16,7 +18,7 @@ In the these topics I try and explain how fundamental R components work, taking 
   * Lazy evaluation: default, delayedAssign, autoload, makeActiveBinding
   * Computing on the language: calls, expressions, functions
 
-# Good development practices
+## Good development practices
 
 The following documents give my opinionated beliefs on good development practice, distilled from my experience writing over 20 R packages.  You want to make sure that your code is:
 
