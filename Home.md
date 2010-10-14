@@ -36,7 +36,7 @@ And you'll learn how to make it so in the following pages:
   * Source code control: git + github
   * [[How to make a reproducible example|Reproducibility]]
   * [[A philosophy of data|data-philosophy]]
-  * Style guide
+  * [[Style guide|style]]
   * Package release check list
   * Mastering the command line
 
