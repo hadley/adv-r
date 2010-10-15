@@ -19,7 +19,7 @@ In the following pages I try and explain how fundamental R components work, taki
   * [[Controlling evaluation|Evaluation]]
   * Lazy evaluation: default, delayedAssign, autoload, makeActiveBinding
   * Computing on the language
-  * Exceptions and debugging
+  * [[Exceptions and debugging|Exceptions-debugging]]
 
 ## Good development practices
 
