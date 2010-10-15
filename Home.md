@@ -40,7 +40,7 @@ And you'll learn how to make it so in the following pages:
   * Testing
   * [[Source code control|git]]: git + github
   * [[Style guide|Style]]
-  * [[Package release check list|Release]]
+  * [[Releasing your package|Release]]
   
 ## Miscellaneous
 
