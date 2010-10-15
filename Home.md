@@ -18,7 +18,7 @@ In the following pages I try and explain how fundamental R components work, taki
   * [[Scoping, environments and closures|Scoping]]
   * [[Controlling evaluation|Evaluation]]
   * Lazy evaluation: default, delayedAssign, autoload, makeActiveBinding
-  * Computing on the language
+  * [[Computing on the language|Computing-on-the-language]]
   * [[Exceptions and debugging|Exceptions-debugging]]
 
 ## Good development practices
