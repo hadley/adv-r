@@ -1,8 +1,17 @@
 # Release checklist
 
+## Checking
+
+  * run `roxygenise()` to update documentation
+  * run `R CMD check`
+
+## Post-check
+  
   * update `NEWS`, checking that dates are correct
   * `R CMD build` then upload to CRAN: `ftp -u ftp://cran.R-project.org/incoming/ package_name.tar.gz`
   * send email to `cran@r-project.org`
+
+## Post-CRAN
 
 Once you've received confirmation that all checks have passed on all platforms:
 
