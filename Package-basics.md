@@ -1,6 +1,5 @@
 # Package basics
 
-
 # File layout 
 
 * DESCRIPTION
@@ -19,5 +18,3 @@
 * TODO
 
 * tests/
-
-# `R CMD check`

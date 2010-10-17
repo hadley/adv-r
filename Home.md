@@ -21,32 +21,21 @@ In the following pages I try and explain how fundamental R components work, taki
   * [[Computing on the language|Computing-on-the-language]]
   * [[Exceptions and debugging|Exceptions-debugging]]
 
-## Good development practices
+## Developing a package
 
-The following documents give my opinionated beliefs on good development practice, distilled from my experience writing over 20 R packages. You want to make sure that your code is:
+Learn how to get started with a package in [[package basics]], and then read up on the following topics to master package development:
 
-  * correct (testing)
-  * maintainable (style)
-  * usable (good documentation)
-  * easy to install (package)
-  * available (git + github)
-  * publicised
+  * [[well tested||Testing]]
+  * clearly [[documented|Documentation]]
+  * readable, with well defined [[style]]
+  * uses [[namespaces]] to minimise conflict with other packages
+  * [[source code control|git]]: git + github
+  * [[ready for release|Release]]
 
-And you'll learn how to make it so in the following pages:
-
-  * [[Package basics]]
-  * [[Documentation]]
-  * [[Introduction to namespaces|Namespaces]] for use with roxygen
-  * Testing
-  * [[Source code control|git]]: git + github
-  * [[Style guide|Style]]
-  * [[Releasing your package|Release]]
-  
 ## Miscellaneous
 
 * [[How to make a reproducible example|Reproducibility]]
 * [[A philosophy of data|data-philosophy]]
 * Mastering the command line
-
 
   [lang-def]:http://cran.r-project.org/doc/manuals/R-lang.html
