@@ -13,7 +13,7 @@ These types of data come up so frequently it's useful to know a little about the
 In the following pages I try and explain how fundamental R components work, taking the [R language definition][lang-def] and making it easier to understand with plenty of examples to illustrate each idea.
 
   * [[The S3 object system|S3]]
-  * The S4 object system
+  * [[The S4 object system|S4]]
   * Other object systems
   * [[Scoping, environments and closures|Scoping]]
   * [[Controlling evaluation|Evaluation]]
