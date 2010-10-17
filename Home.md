@@ -4,9 +4,9 @@
 
 These types of data come up so frequently it's useful to know a little about them and the specialised languages that you use to work with them:
 
-  * Strings and regular expressions
-  * Databases and SQL
-  * XML and XPath
+  * [[Strings and regular expressions|lang-regexp]]
+  * [[Databases and SQL|lang-sql]]
+  * [[XML and XPath|lang-xml]]
 
 ## Advanced R topics
 
