@@ -1,5 +1,16 @@
 # Git
 
+Using a source code control system, like git, is highly recommended because it makes it easy to:
+
+* incorporate contributions from multiple developers working on the code at
+  the same time
+
+* rewind time to undo mistakes or see what has changed between working code and broken code
+
+In this document, I'll describe the use of git and github because they are the tools that I am most familiar with. There are many others (like subversion, mercurial and bazaar) that offer similar capabilities - the choice of git is somewhat arbitrary but the skills will readily transfer to other systems.
+
+I'll just give you the basics, and give pointers to places were you can learn more advanced techniques.
+
 http://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html
 
 
@@ -9,3 +20,5 @@ http://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html
 * makes it easy for others to send in patches
 * ticketing system for tracking bugs
 * RSS feed of changes, and line-by-line comments are very useful for working with collaborators
+
+Additionally github gives you free hosting for public repositories.  You only have to pay if you want private repositories with private collaborators.
