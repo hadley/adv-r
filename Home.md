@@ -26,8 +26,8 @@ In the following pages I try and explain how fundamental R components work, taki
 Learn how to get started with a package in [[package basics]], and then read up on the following topics to master package development:
 
   * [[well tested||Testing]]
-  * clearly documented, at both the [[function||docs-function]] and
-    [[package||docs-package]] level
+  * clearly documented, at both the [[function|docs-function]] and
+    [[package|docs-package]] level
   * readable, with well defined [[style]]
   * uses [[namespaces]] to minimise conflict with other packages
   * [[source code control|git]]: git + github
