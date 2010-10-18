@@ -81,3 +81,8 @@ Every package should contain an overview documentation topic that describes the 
 
 ## Vignettes
 
+## `NEWS`
+
+## `CITATION`
+
+## Demos
