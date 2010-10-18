@@ -72,17 +72,3 @@ Character formatting:
  * External links: `\email{email_address}`, `\url{uniform_resource_locator}`
  * `\link[package]{function}` - the first argument can be omitted if the link
     is in the current package, or a base package.
-
-# Package documentation
-
-## Topic
-
-Every package should contain an overview documentation topic that describes the overall purpose of the package, and points to the most important functions. This topic should have `@docType package` and be aliased to `package-pkgname` and `pkgname` (unless there is already a function by that name).
-
-## Vignettes
-
-## `NEWS`
-
-## `CITATION`
-
-## Demos
