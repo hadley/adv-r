@@ -1,4 +1,6 @@
-# Git
+# Git and github
+
+## Git
 
 Using a source code control system, like git, is highly recommended because it makes it easy to:
 
@@ -14,7 +16,7 @@ I'll just give you the basics, and give pointers to places were you can learn mo
 http://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html
 
 
-# Github
+## Github
 
 * git enabled wiki (which these documents have been written in)
 * makes it easy for others to send in patches

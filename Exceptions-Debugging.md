@@ -1,14 +1,14 @@
 # Dealing with errors and exceptions
 
-# Exceptions
+## Exceptions
 
-## Creating
+### Creating
 
   * `stop()`
   * `warning()`
   * `message()`
   
-## Handling
+### Handling
 
   * `try`
   * `tryCatch`
@@ -18,7 +18,7 @@ Examples:
   * capturing all messages or warnings produced by a function
   * capturing user interrupts: `Ctrl + C`
 
-# Debugging
+## Debugging
 
 * `traceback`: show where error occurred
 * `browser`: interact inside function environment.  `c`, `n`, `return`, `Q`, `where`

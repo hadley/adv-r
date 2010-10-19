@@ -2,7 +2,7 @@
 
 An R package is the basic unit of reusable code.  This document explains how to get started creating your own package.  Full details are available in the [writing R extensions](http://cran.r-project.org/doc/manuals/R-exts.html#Creating-R-packages) guide.
 
-# Package structure
+## Package structure
 
 There are only three elements that you must have:
 
@@ -38,11 +38,11 @@ Most packages will also include the following files and directories:
   the package and are exported for others use. See [[namespaces]] for more
   details.
 
-* a `CITATION` file describes how to cite your package. If you have published
-  a peer reviewed article which you'd like people to cite when they use your
-  software, this is the place to put it.
+* a `inst/CITATION` file describes how to cite your package. If you have
+  published a peer reviewed article which you'd like people to cite when they
+  use your software, this is the place to put it.
 
-# Getting started
+## Getting started
 
 To create a package the first thing (and sometimes the most difficult) is to come up with a name for it. Following the following rules for coming up with a name:
 
@@ -62,7 +62,7 @@ Once you have your name, create a directory of that same name, and inside that c
 
 The next step is to create a description file that gives the run down of basic information about your package.  I normally copy one from another package and modify it to suit.
 
-# `DESCRIPTION`
+## `DESCRIPTION`
 
 I've included the the `DESCRIPTION` file for the `plyr` package below so that you can see what the basic components R.
 

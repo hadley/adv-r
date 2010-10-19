@@ -7,3 +7,6 @@ For regular expressions, you may also find the websites helpful:
  * [reference sheet](http://www.regular-expressions.info/reference.html)
  * [interactively test regular expressions](http://gskinner.com/RegExr/)
  * [build a regular expression](http://www.txt2re.com) from an input string
+
+
+Stringr package.

@@ -2,6 +2,13 @@
 
 This brief guide introduces you to namespaces and best practices for their use in conjunction with Roxygen.
 
+## Package dependencies
+
+ * imports
+ * suggests
+ * depends
+ * enhaces
+
 ## Why use a namespace?
 
 Namespaces make it easier to come up with you own function names without worrying about what names other packages have used. A namespace means you can use any name you like for internal functions, and when there is a conflict with an exported function, there is a standard disambiguation procedure.

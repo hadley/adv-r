@@ -2,8 +2,6 @@
 
 Documentation is one of the most important aspects of good code. Without it, users won't know how to use your package, and are unlikely to do so. Documentation is also useful for you in the future, and for other developers working on your package.
 
-# roxygen
-
 [roxygen](http://roxygen.org/) is the best way to make documentation in R. With roxygen, you write the documentation right next to each function in comments, and then it is turned into `.Rd` files by running the `roxygenise()` function. This has a number of advantages over writing `.Rd` by hand:
 
   * code and documentation are adjacent so it's easier to remember when you 
@@ -12,15 +10,7 @@ Documentation is one of the most important aspects of good code. Without it, use
 
 Roxygen also makes it easy to generate a namespace for your package, as described in [[Namespaces]].
 
-## General tips
-
-In my opinion, one of the most important parts of the documentation are the examples - these are what most people will look at first to figure out how to use the function.
-
-When to combine documentation of multiple functions.
-
-## Basic tags
-
-## Other tags
+## Roxygen tags
 
 ## Text formatting 
 
@@ -72,3 +62,9 @@ Character formatting:
  * External links: `\email{email_address}`, `\url{uniform_resource_locator}`
  * `\link[package]{function}` - the first argument can be omitted if the link
     is in the current package, or a base package.
+
+## General tips
+
+In my opinion, one of the most important parts of the documentation are the examples - these are what most people will look at first to figure out how to use the function.
+
+When to combine documentation of multiple functions.

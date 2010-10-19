@@ -14,7 +14,7 @@ Subset is special because `vs == am` or `cyl == 4` aren't evaluated in the globa
 
 To do this, `subset` must be able to capture the meaning of your condition string without evaluating it. The next section describes how to do that.
 
-# Quoting 
+## Quoting 
 
 To talk about quoting, capturing a language object without evaluating it, we need some new vocabulary:
 
@@ -74,7 +74,7 @@ Substitute is the tool most commonly used for this task, but it's the hardest to
 
 Once we have the call, we need to evaluate it in the way we want, as described next.
 
-# Evaluation
+## Evaluation
 
 Now we've have the call that represents the subset condition we want, we want to evaluate it in the right context, so that `cyl` is interpreted as `mtcars$cyl`.  To do this we need the `eval` function:
 
@@ -104,7 +104,7 @@ Now we have all the pieces we need to write the `subset` function: we can captur
 
 Unfortunately, we're not quite done because this function doesn't work as we always expect.
 
-# Scoping issues
+## Scoping issues
 
 What do you expect the following to do:
 
@@ -144,7 +144,7 @@ There is one other approach we could use: a formula. `~` works much like quote, 
     }
     subset(mtcars, ~ cyl == x)
 
-# Calling from another function
+## Calling from another function
 
 While `subset` saves typing, it has one big disadvantage: it's now difficult to use non-interactively, e.g. from another function.
 
@@ -230,7 +230,7 @@ But hopefully a little thought, or maybe some experimentation, will show why thi
     fs <- ls("package:base")
     fs[sapply(fs, is.interactive)] -->
 
-# Conclusion
+## Conclusion
 
 Now you understand how our version of subset works, go back and read the source code for `subset.data.frame`, the base R version which does a little more. Other functions that work similarly are `with.default`, `within.data.frame`, `transform.data.frame`, and in the plyr package `.`, `arrange`, and `summarise`. Look at the source code for these functions and see if you can figure out how they work.
 
