@@ -1,8 +1,8 @@
 # Style guide
 
-Good coding style is like using correct punctuation when writing: you can manage without it, but it sure makes things easier to read. As with punctuation, there are many possible variations, and the main thing is to be consistent. The following guide describes the style that I use - you don't have to use it, but you need to have some consistent style that you follow.  It's based on Google's [R style guide][1].
+Good coding style is like using correct punctuation when writing: you can manage without it, but it sure makes things easier to read. As with punctuation, there are many possible variations, and the main thing is to be consistent. The following guide describes the style that I use - you don't have to use it, but you need to have some consistent style that you do follow.  My style is  based on Google's [R style guide][1], with a few tweaks.
 
-Good style is important because while your code only has one author, it will usually have multiple readers
+Good style is important because while your code only has one author, it will usually have multiple readers, and when you know you will be working with multiple people on the same code, it's a good idea to agree on a common style up-front.
 
 ## Notation and naming
 
@@ -125,17 +125,12 @@ Use `<-`, not `=`, for assignment.
     # Bad
     x = 5
 
-## Organization
+## Organisation
 
 ### Commenting guidelines
 
 Comment your code. Entire commented lines should begin with `#` and one space. Comments should explain the why, not the what.
 
-Use commented lines of `-` and `=` to break up your files into scannable chunks
-
-## References
-
-<http://www.maths.lth.se/help/R/RCC/> - R Coding Conventions  
-<http://ess.r-project.org/> - For emacs users. This runs R in your emacs and has an emacs mode.
+Use commented lines of `-` and `=` to break up your files into scannable chunks.
 
  [1]: http://google-styleguide.googlecode.com/svn/trunk/google-r-style.html
