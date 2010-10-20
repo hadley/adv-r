@@ -119,9 +119,7 @@ There are also a few special environments that you can access directly:
 
 ## Lazy evaluation
 
-Promises
-
-Arguments are lazily evaluated in their original environment.
+In R, function arguments are evaluated [[lazily|lazy-evaluation]], only when they are needed. This evaluation takes place in their original environment, not the environment of the function:
 
     f <- function() {
       y <- "f"
