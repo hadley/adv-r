@@ -110,8 +110,3 @@ Other optional (and less used) fields are:
 
   * Date
   * Collate
-  * Type
-  * BugReports
-  * CopyRight
-  * Language
-  * Classification
