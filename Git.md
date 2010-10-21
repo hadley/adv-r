@@ -15,6 +15,13 @@ I'll just give you the basics, and give pointers to places were you can learn mo
 
 http://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html
 
+### The basics
+
+  * `git init`
+  * `git add`
+  * `git commit`
+  * `git push`
+  * `git pull --rebase`
 
 ## Github
 

@@ -29,12 +29,14 @@ In the following pages I try and explain how fundamental R components work, taki
 
   * [[The S3 object system|S3]]
   * [[The S4 object system|S4]]
-  * Other object systems
+  <!-- * Other object systems -->
   * [[Scoping, environments and closures|Scoping]]
   * [[Controlling evaluation|Evaluation]]
   * [[Lazy evaluation|Lazy-evaluation]]
   * [[Computing on the language|Computing-on-the-language]]
   * [[Exceptions and debugging|Exceptions-debugging]]
+
+These sections are designed to be a primer for the more technical descriptions available in the [R language definition][lang-def] and [software for data analysis](http://amzn.com/0387759352).
 
 ## Package development
 
@@ -48,6 +50,8 @@ Learn how to get started with a package in [[package basics]], and then read up 
   * [[source code control|git]]: git + github
   * [[ready for release|Release]]
 
+The canonical reference for package development will always be [writing R extensions][r-ext] - these pages attempt to expand on the more important points and discuss more of the why and what of best practices.
+
 ## Miscellaneous
 
 * [[How to make a reproducible example|Reproducibility]]
@@ -55,3 +59,4 @@ Learn how to get started with a package in [[package basics]], and then read up 
 * Mastering the command line
 
   [lang-def]:http://cran.r-project.org/doc/manuals/R-lang.html
+  [r-ext]:http://cran.r-project.org/doc/manuals/R-exts.html
