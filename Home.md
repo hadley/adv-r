@@ -60,4 +60,3 @@ The canonical reference for package development will always be [writing R extens
 
   [lang-def]:http://cran.r-project.org/doc/manuals/R-lang.html
   [r-ext]:http://cran.r-project.org/doc/manuals/R-exts.html
-e
