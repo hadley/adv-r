@@ -22,7 +22,7 @@ Once you have passed the checking process, you need to upload your package to CR
   `ftp -u ftp://cran.R-project.org/incoming/ package_name.tar.gz`
 
 * send an email to `cran@r-project.org` - this is optional, but if you don't
-  you'll only hear back if something went wrong with the checking process.
+  you'll only hear back if something went wrong with the checking process. An example email would be something like: Hello, I just uploaded package name to cran. Please let me know if anything goes wrong. Thank you, Me
 
 Once all the checks have passed you'll get a friendly email from the CRAN maintainer and you'll be ready to start publicising your package.
 
