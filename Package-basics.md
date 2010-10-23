@@ -6,33 +6,27 @@ An R package is the basic unit of reusable code.  This document explains how to 
 
 There are only three elements that you must have:
 
-* a `DESCRIPTION` file which gives metadata about the package
+* a `DESCRIPTION` file which gives metadata about the package.  This is 
+  described below.
 
-* an `R/` directory where you R code lives (in `.R` or `.r` files)
+* an `R/` directory where you R code lives (in `.R` or `.r` files). See
+  [[style|Style]] for information on how these should be formatted and broken
+  into pieces.
 
-* a `man/` directory where your [[documentation]], produced with roxygen,
-  lives
+* a `man/` directory where your function [[documentation|docs-function]],
+  produced with roxygen, lives.
 
-Most packages will also include the following files and directories:
-
-* `data/` which contains `.rdata` files if you want to include
-  sample datasets (or other R objects) with your package.
-
-* `inst/doc/` for larger scale documentation like vignettes.
-
-* `inst/tests/` to contain your package [[testing]] code.
-
-* `inst/demo/`
-
-* `src` for the source code for any C or fortran functions you have written.
+Most packages will also include these files:
 
 * the `NEWS` file describes the changes in each version of the package. Using
   the standard R format will allow you to take advantage of many automated
-  tools for displaying changes between versions.
+  tools for displaying changes between versions. See [[package
+  documentation|docs-package]] for more information.
 
 * a `README` file should give a general overview of your package, including
-  why it's important.  I usually include this text in any package announcement
-  that I make.
+  why it's important. I usually include this text in any package announcement
+  that I make. See [[package documentation|docs-package]] for more
+  information.
 
 * a `NAMESPACE` file describes which functions are part of the formal API of
   the package and are exported for others use. See [[namespaces]] for more
@@ -40,11 +34,27 @@ Most packages will also include the following files and directories:
 
 * a `inst/CITATION` file describes how to cite your package. If you have
   published a peer reviewed article which you'd like people to cite when they
-  use your software, this is the place to put it.
+  use your software, this is the place to put it. See [[package
+  documentation|docs-package]] for the format that this file should have.
+
+And these directories:
+
+* `data/` which contains `.rdata` files if you want to include
+  sample datasets (or other R objects) with your package.
+
+* `inst/doc/` for larger scale documentation like vignettes. See [[package
+  documentation|docs-package]] for more details.
+
+* `inst/tests/` to contain your package [[testing]] code.
+
+* `inst/demo/` for larger scale demos. See [[package
+  documentation|docs-package]] for more details.
+
+* `src` for the source code for any C or fortran functions you have written.
 
 ## Getting started
 
-To create a package the first thing (and sometimes the most difficult) is to come up with a name for it. Following the following rules for coming up with a name:
+When creating a package the first thing (and sometimes the most difficult) is to come up with a name for it. Follow these rules to make a good name:
 
 * The package name can only consist of letters and numbers, and must start
   with a letter
@@ -60,7 +70,7 @@ To create a package the first thing (and sometimes the most difficult) is to com
 
 Once you have your name, create a directory of that same name, and inside that create an `R` subdirectory copy your existing code into that directory. It's up to you how you arrange your functions into files, but I suggest grouping related functions into a single file. My rule of thumb is that if I can't remember which file a function lives in, I probably need to split them up into more files - having one function per file is perfectly reasonable, particularly if the functions are large or have a lot of documentation.
 
-The next step is to create a description file that gives the run down of basic information about your package.  I normally copy one from another package and modify it to suit.
+The next step is to create a `DESCRIPTION` file defines package metadata, as described in the following section.
 
 ## `DESCRIPTION`
 
@@ -88,25 +98,25 @@ I've included the the `DESCRIPTION` file for the `plyr` package below so that yo
 
 These are describe in more detail below
 
-  * package: name of the package - should be the same as the directory name
-  * title: a one-line description of the package
-  * description: a more detailed paragraph-length description
-  * version: version number, usually of the form `major.minor.patchlevel`. 
+  * `Package`: name of the package - should be the same as the directory name
+  * `Title`: a one-line description of the package
+  * `Description`: a more detailed paragraph-length description
+  * `Version`: version number, usually of the form `major.minor.patchlevel`. 
     See `?package_version` for more details on the package version format
-  * author: a free-form text string listing all contributors to the package
-  * maintainer: a single name and email address for the person responsible for
-    package maintenance
+  * `Author`: a free-form text string listing all contributors to the package
+  * `Maintainer`: a single name and email address for the person responsible
+    for package maintenance
 
 Optional components
 
-  * depends, suggests, imports and enhances describe the package dependencies
-    and are described more in [[namespaces]]
-  * the package __license__: a standard abbreviation for an open source
+  * `Depends`, `Suggests`, `Imports` and `Enhances` describe the package
+    dependencies and are detailed more in [[namespaces]].
+  * `License`: a standard abbreviation for an open source
     license or "file LICENSE" if non-standard (not recommended)
-  * URL: a pointer to the package website.  Multiple urls can be separated 
+  * `URL`: a pointer to the package website.  Multiple urls can be separated 
     with a comma or whitespace.
 
 Other optional (and less used) fields are:
 
-  * Date
-  * Collate
+  * `Date`
+  * `Collate`
