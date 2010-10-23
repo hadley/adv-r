@@ -40,15 +40,16 @@ These sections are designed to be a primer for the more technical descriptions a
 
 ## Package development
 
-Learn how to get started with a package in [[package basics]], and then read up on the following topics to master package development:
+Packages are the fundamental unit of reproducible R code. They include reusable R functions, the documentation that describes how to use them, and sample data. In this section you'll learn how to turn your code into packages that others can easily download and use.
 
-  * [[well tested||Testing]]
-  * clearly documented, at both the [[function|docs-function]] and
-    [[package|docs-package]] level  (outline)
-  * readable, with well defined [[style]]  (complete)
-  * uses [[namespaces]] to minimise conflict with other packages  (draft)
-  * [[source code control|git]]: git + github  (outline)
-  * [[ready for release|Release]]  (complete)
+  * [[Package basics]]  (draft)
+  * [[Testing]]
+  * Documentation at both the [[function|docs-function]] and
+    [[package|docs-package]] levels  (outline)
+  * Good code [[style]]  (complete)
+  * [[Namespaces]], to minimise conflict with other packages  (draft)
+  * [[Source code control|git]]: git + github  (outline)
+  * [[Ready for release|Release]]  (complete)
 
 The canonical reference for package development will always be [writing R extensions][r-ext] - these pages attempt to expand on the more important points and discuss more of the why and what of best practices.
 
