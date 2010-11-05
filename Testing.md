@@ -60,83 +60,83 @@ There are 11 built in expectations:
 
 * `equals()` uses `all.equal()` to check for equality with numerical tolerance.
 
-    # Passes 
-    expect_that(10, equals(10)) 
-    # Also passes
-    expect_that(10, equals(10 + 1e-7))  
-    # Fails
-    expect_that(10, equals(10 + 1e-6))  
-    # Definitely fails! 
-    expect_that(10, equals(11)) 
+      # Passes 
+      expect_that(10, equals(10)) 
+      # Also passes
+      expect_that(10, equals(10 + 1e-7))  
+      # Fails
+      expect_that(10, equals(10 + 1e-6))  
+      # Definitely fails! 
+      expect_that(10, equals(11)) 
   
 * `is_identical_to()` uses `identical()` to check for exact equality.
 
-    # Passes
-    expect_that(10, is_identical_to(10)) 
-    # Fails
-    expect_that(10, is_identical_to(10 + 1e-10))  
+      # Passes
+      expect_that(10, is_identical_to(10)) 
+      # Fails
+      expect_that(10, is_identical_to(10 + 1e-10))  
 
 * `is_equivalent_to()` is a more relaxed version of `equals()` that ignores
   attributes:
 
-    # Fails
-    expect_that(c("one" = 1, "two" = 2), equals(1:2))
-    # Passes
-    expect_that(c("one" = 1, "two" = 2), is_equivalent_to(1:2))
+      # Fails
+      expect_that(c("one" = 1, "two" = 2), equals(1:2))
+      # Passes
+      expect_that(c("one" = 1, "two" = 2), is_equivalent_to(1:2))
 
 * `is_a()` checks that an object `inherit()`s from a specified class.
 
-    model <- lm(mpg ~ wt, data = mtcars)
-    # Passes
-    expect_that(model, is_a("lm"))  
-    # Fails 
-    expect_that(model, is_a("glm")) 
+      model <- lm(mpg ~ wt, data = mtcars)
+      # Passes
+      expect_that(model, is_a("lm"))  
+      # Fails 
+      expect_that(model, is_a("glm")) 
 
 * `matches()` matches a character vector against a regular expression. The
   optional `all` argument controls where all elements or just one element need
   to match. This code is powered by `str_detect()` from the `stringr`
   package.
 
-    string <- "Testing is fun!"
-    # Passes
-    expect_that(string, matches("Testing")) 
-    # Fails, match is case-sensitive
-    expect_that(string, matches("testing")) 
-    # Passes, match can be a regular expression
-    expect_that(string, matches("t.+ting")) 
+      string <- "Testing is fun!"
+      # Passes
+      expect_that(string, matches("Testing")) 
+      # Fails, match is case-sensitive
+      expect_that(string, matches("testing")) 
+      # Passes, match can be a regular expression
+      expect_that(string, matches("t.+ting")) 
 
 * `prints_text()` matches the printed output from an expression against a
   regular expression.
 
-    a <- list(1:10, letters)
-    # Passes
-    expect_that(str(a), prints_text("List of 2"))
-    # Passes
-    expect_that(str(a), prints_text(fixed("int [1:10]"))
+      a <- list(1:10, letters)
+      # Passes
+      expect_that(str(a), prints_text("List of 2"))
+      # Passes
+      expect_that(str(a), prints_text(fixed("int [1:10]"))
 
 * `shows_message()` checks that an expression shows a message:
 
-    # Passes
-    expect_that(library(mgcv), shows_message("This is mgcv"))
+      # Passes
+      expect_that(library(mgcv), shows_message("This is mgcv"))
 
 * `gives_warning()` expects that you get a warning.
 
-    # Passes
-    expect_that(log(-1), gives_warning())
-    expect_that(log(-1), 
-      gives_warning("NaNs produced"))
-    # Fails
-    expect_that(log(0), gives_warning())
+      # Passes
+      expect_that(log(-1), gives_warning())
+      expect_that(log(-1), 
+        gives_warning("NaNs produced"))
+      # Fails
+      expect_that(log(0), gives_warning())
 
 * `throws_error()` verifies that the expression throws an error. You can also
   supply a regular expression which is applied to the text of the error.
 
-    # Fails
-    expect_that(1 / 2, throws_error()) 
-    # Passes
-    expect_that(1 / "a", throws_error()) 
-    # But better to be explicit
-    expect_that(1 / "a", throws_error("non-numeric argument"))
+      # Fails
+      expect_that(1 / 2, throws_error()) 
+      # Passes
+      expect_that(1 / "a", throws_error()) 
+      # But better to be explicit
+      expect_that(1 / "a", throws_error("non-numeric argument"))
 
 * `is_true()` is a useful catchall if none of the other expectations do what
   you want - it checks that an expression is true. `is_false()` is the
@@ -148,17 +148,17 @@ If you don't like the readable, but verbose, `expect_that` style, you can use on
   <tr>
     <th>Full</th><th>Abbreviation</th>
   </tr>
-  <tr><td>`expect_that(x, is_true())`</td><td>`expect_true(x)`</td></tr>
-  <tr><td>`expect_that(x, is_false())`</td><td>`expect_false(x)`</td></tr>
-  <tr><td>`expect_that(x, is_a(y))`</td><td>`expect_is(x, y)`</td></tr>
-  <tr><td>`expect_that(x, equals(y))`</td><td>`expect_equal(x, y)`</td></tr>
-  <tr><td>`expect_that(x, is_equivalent_to(y))`</td><td>`expect_equivalent(x, y)`</td></tr>
-  <tr><td>`expect_that(x, is_identical_to(y))`</td><td>`expect_identical(x, y)`</td></tr>
-  <tr><td>`expect_that(x, matches(y))`</td><td>`expect_matches(x, y)`</td></tr>
-  <tr><td>`expect_that(x, prints_text(y))`</td><td>`expect_output(x, y)`</td></tr>
-  <tr><td>`expect_that(x, shows_message(y))`</td><td>`expect_message(x, y)`</td></tr>
-  <tr><td>`expect_that(x, gives_warning(y))`</td><td>`expect_warning(x, y)`</td></tr>
-  <tr><td>`expect_that(x, throws_error(y))`</td><td>`expect_error(x, y)`</td></tr>
+  <tr><td><code>expect_that(x, is_true())</code></td><td><code>expect_true(x)</code></td></tr>
+  <tr><td><code>expect_that(x, is_false())</code></td><td><code>expect_false(x)</code></td></tr>
+  <tr><td><code>expect_that(x, is_a(y))</code></td><td><code>expect_is(x, y)</code></td></tr>
+  <tr><td><code>expect_that(x, equals(y))</code></td><td><code>expect_equal(x, y)</code></td></tr>
+  <tr><td><code>expect_that(x, is_equivalent_to(y))</code></td><td><code>expect_equivalent(x, y)</code></td></tr>
+  <tr><td><code>expect_that(x, is_identical_to(y))</code></td><td><code>expect_identical(x, y)</code></td></tr>
+  <tr><td><code>expect_that(x, matches(y))</code></td><td><code>expect_matches(x, y)</code></td></tr>
+  <tr><td><code>expect_that(x, prints_text(y))</code></td><td><code>expect_output(x, y)</code></td></tr>
+  <tr><td><code>expect_that(x, shows_message(y))</code></td><td><code>expect_message(x, y)</code></td></tr>
+  <tr><td><code>expect_that(x, gives_warning(y))</code></td><td><code>expect_warning(x, y)</code></td></tr>
+  <tr><td><code>expect_that(x, throws_error(y))</code></td><td><code>expect_error(x, y)</code></td></tr>
 </table>
 
 Running a sequence of expectations is useful because it ensures that your code behaves as expected. You could even use an expectation within a function to check that the inputs are what you expect. However, they're not so useful when something goes wrong: all you know is that something is not as expected, not anything about where the problem is. Tests, described next, organise expectations into coherent blocks that describe the overall goal of that set of expectations.
