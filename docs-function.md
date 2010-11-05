@@ -4,13 +4,78 @@ Documentation is one of the most important aspects of good code. Without it, use
 
 [roxygen](http://roxygen.org/) is the best way to make documentation in R. With roxygen, you write the documentation right next to each function in comments, and then it is turned into `.Rd` files by running the `roxygenise()` function. This has a number of advantages over writing `.Rd` by hand:
 
-  * code and documentation are adjacent so it's easier to remember when you 
-    need to update the documentation
-  * roxygen generates as much as possible for you
+* code and documentation are adjacent so it's easier to remember when you 
+  need to update the documentation
+
+* roxygen generates as much as possible for you
 
 Roxygen also makes it easy to generate a namespace for your package, as described in [[Namespaces]].
 
-## Roxygen tags
+In my opinion, one of the most important parts of the documentation are the examples - these are what most people will look at first to figure out how to use the function.
+
+When to combine documentation of multiple functions.
+
+## Documenting
+
+### Documenting a function
+
+The following code shows the arrange function and its documentation from the plyr package.  The documentation is stored in comments with a special form (`#'`) and starts with a single line description of the function.  A paragraph provides more details and then specific tags provide additional information about the function.
+
+    #' Order a data frame by its colums.
+    #'
+    #' This function completes the subsetting, transforming and ordering triad
+    #' with a function that works in a similar way to \code{\link{subset}} and 
+    #' \code{\link{transform}} but for reordering a data frame by its columns.
+    #' This saves a lot of typing!
+    #'
+    #' @param df data frame to reorder
+    #' @param ... expressions evaluated in the context of \code{df} and 
+    #'   then fed to \code{\link{order}}
+    #' @keywords manip
+    #' @export
+    #' @examples
+    #' mtcars[with(mtcars, order(cyl, disp)), ]
+    #' arrange(mtcars, cyl, disp)
+    #' arrange(mtcars, cyl, desc(disp))
+    arrange <- function(df, ...) {
+      ord <- eval(substitute(order(...)), df, parent.frame())
+      unrowname(df[ord, ])
+    }
+
+The tags used here are:
+
+* `@param arg description` - a description for each function argument
+
+* `@keywords` - one or more (space-separated) keywords from
+  `file.path(R.home(), "doc/KEYWORDS")`
+
+* `@export` - a flag indicating that this function should be exported for use
+  by others. Described in more detail in [[namespaces]].
+
+* `@examples` - examples of the function in use.
+
+Other tags that you might find useful are:
+
+* `@author`
+* `@title`
+* `@name`, `@alias`
+* `@usage`
+* `@seealso`
+* `@return`
+* `@references`
+* `@`
+
+### Documenting a S3 method
+
+### Documenting a S4 method
+
+### Documenting a S4 class
+
+### Documenting a package
+
+See [[docs-package]]
+
+### Documenting a R5 class
 
 ## Text formatting 
 
@@ -63,8 +128,11 @@ Character formatting:
  * `\link[package]{function}` - the first argument can be omitted if the link
     is in the current package, or a base package.
 
-## General tips
 
-In my opinion, one of the most important parts of the documentation are the examples - these are what most people will look at first to figure out how to use the function.
+## Running roxygen
 
-When to combine documentation of multiple functions.
+There are three ways to run roxygen:
+
+  * `R CMD roxygen`
+  * `roxygen::roxygenize`
+  * `devtools::document`
