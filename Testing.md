@@ -21,7 +21,7 @@ It will always require a little more work to turn your casual interactive tests 
   easier to re-combine in new ways.
 
 * Less struggle to pick up development after a break. If you always finish a
-  session of coding by creating a failing test (e.g.\ for the feature you want
+  session of coding by creating a failing test (e.g. for the feature you want
   to implement next) it's easy to pick up where you left off: your tests let
   you know what to do next.
 
@@ -34,27 +34,31 @@ It will always require a little more work to turn your casual interactive tests 
 
 ## testthat test structure
 
-`testthat` has a hierarchical structure made up of expectations, tests and contexts.
+`testthat` has a hierarchical structure made up of expectations, tests and contexts. 
 
-* An __expectation__ describes what the result of a computation should be.
-  Does it have the right value and right class? Does it produce error messages
-  when you expect it to? There are 11 types of built in expectations.
+* An __expectation__ describes what expected result of a computation: Does it
+  have the right value and right class? Does it produce error messages when it
+  should? There are 11 types of built in expectations.
 
 * A __test___ groups together multiple expectations to test one function, or
   tightly related functionality across multiple functions. A test is created
   with the `test_that` function.
 
 * A __context__ groups together multiple tests that test related
-  functionality.
+  functionality.  Contexts are defined with the `context()` function.
 
-These are described in detail below. Expectations give you the tools to
-convert your visual, interactive experiments into reproducible scripts; tests
-and contexts are just ways of organising your expectations so that when
-something goes wrong you can easily track down the source of the problem.
+These are described in detail below. 
+
+Expectations give you the tools to convert your visual, interactive
+experiments into reproducible scripts; tests and contexts are ways of
+organising your expectations so that when something goes wrong you can easily
+track down the source of the problem.
 
 ### Expectations
 
-An expectation is the finest level of testing; it makes a binary assertion about whether or not a value is as you expect. An expectation is easy to read, since it is nearly a sentence already: `expect_that(a, equals(b))` reads as "I expect that a will equal b". If the expectation isn't true, `testthat` will raise an error.
+An expectation is the finest level of testing; it makes a binary assertion about whether or not a value is as you expect. If the expectation isn't true, `testthat` will raise an error.
+
+An expectation is easy to read, since it is nearly a sentence already: `expect_that(a, equals(b))` reads as "I expect that a will equal b". 
 
 There are 11 built in expectations:
 
@@ -142,7 +146,7 @@ There are 11 built in expectations:
   you want - it checks that an expression is true. `is_false()` is the
   complement of `is_true()`.
 
-If you don't like the readable, but verbose, `expect_that` style, you can use one of the shortcut functions: 
+If you don't like the readable, but verbose, `expect_that` style, you can use one of the shortcut functions:
 
 <table>
   <tr>
@@ -161,7 +165,7 @@ If you don't like the readable, but verbose, `expect_that` style, you can use on
   <tr><td><code>expect_that(x, throws_error(y))</code></td><td><code>expect_error(x, y)</code></td></tr>
 </table>
 
-Running a sequence of expectations is useful because it ensures that your code behaves as expected. You could even use an expectation within a function to check that the inputs are what you expect. However, they're not so useful when something goes wrong: all you know is that something is not as expected, not anything about where the problem is. Tests, described next, organise expectations into coherent blocks that describe the overall goal of that set of expectations.
+Running a sequence of expectations is useful because it ensures that your code behaves as expected. You could even use an expectation within a function to check that the inputs are what you expect. However, they're not so useful when something goes wrong: all you know is that something is not as expected, not anything about where the problem is. Tests, described next, organise expectations into coherent blocks that describe the overall goal of a set of expectations.
 
 ### Tests
 
@@ -225,11 +229,7 @@ The following code shows the context that tests the operation of the `str_length
 
 ## Running tests
 
-So far we've talked about running tests by `source()`ing in R files. This is
-useful to double-check that everything works, but it gives you little
-information about what went wrong. This section shows how to take your testing
-to the next level by setting up a more formal workflow. There are three basic
-techniques to use:
+There are two situations in which you want to run your tests: interactively while you're developing your package to make sure that everything works ok, and then as a final automated check before releasing your package. 
 
 * run all tests in a file or directory `test_file()` or `test_dir()`
 
@@ -300,19 +300,17 @@ Tests are most useful when run frequently, and `autotest` takes that idea to the
 
 Once run, `autotest()` will continuously scan both directories for changes. If a test file is modified, it will test that file; if a code file is modified, it will reload that file and rerun all tests. To quit, you'll need to press Ctrl + Break on windows, Escape in the mac gui, or Ctrl + C if running from the command line.
 
-This promotes a workflow where the \emph{only} way you test your code is through tests. Instead of modify-save-source-check you just modify and save, then watch the automated test output for problems.
+This promotes a workflow where the _only_ way you test your code is through tests. Instead of modify-save-source-check you just modify and save, then watch the automated test output for problems.
 
 ## R CMD check
 
-If you are developing a package, you can have your tests automatically run by `R CMD check`. I recommend storing your tests in `inst/tests/` (so users also have access to them), and then including one file in `tests/` that runs all of the package tests. The `test_package(package_name)` function makes this easy. It:
+When developing a package, put your tests in `inst/tests` and then create a file `tests/run-all.R` (note that it must be a capital R), which contains the following code:
 
-* Expects your tests to be in the `inst/tests/` directory
+    library(testthat)
+    library(mypackage)
+    
+    test_package("mypackage")
 
-* Evaluates your tests in the package namespace (so you can test non exported
-  functions)
+This will evaluates your tests in the package namespace (so you can test non-exported functions), and it will throw an error if there are any test failures. This means you'll see the full report of test failures and {\tt R CMD check} won't pass unless all tests pass.
 
-* Throws an error at the end if there are any test failures. This means you'll
-  see the full report of test failures and {\tt R CMD check} won't pass unless
-  all tests pass.
-
-This setup has the additional advantage that users can make sure your package works correctly in their run-time environment.
+This also makes it easy for your users to check that you package works correctly in their run-time environment.
