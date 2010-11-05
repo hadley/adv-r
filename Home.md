@@ -35,6 +35,8 @@ In the following pages I try and explain how fundamental R components work, taki
   * [[Lazy evaluation|Lazy-evaluation]]  (draft)
   * [[Computing on the language|Computing-on-the-language]]  (outline)
   * [[Exceptions and debugging|Exceptions-debugging]]  (outline)
+  * [[Performance and profiling|performance]]  (outline)
+  * [[High performance functions with Rcpp|Rcpp]]  (outline)
 
 These sections are designed to be a primer for the more technical descriptions available in the [R language definition][lang-def] and [software for data analysis](http://amzn.com/0387759352).
 
