@@ -12,7 +12,7 @@ R has two types of scoping: __lexical scoping__, implemented automatically at th
 
 ## Basic rules
 
-Lexical scoping looks up variable values using how functions are nested when they are written, not how they are called. With lexical scoping, you can figure out where the value of each variable will be looked up only by looking at the definition of the function, you don't need to anything about how the function is called.
+Lexical scoping looks up variable values using how functions are nested when they are written, not how they are called. With lexical scoping, you can figure out where the value of each variable will be looked up only by looking at the definition of the function, you don't need to know anything about how the function is called.
 
 The "lexical" in lexical scoping doesn't correspond to the usual English definition ("of or relating to words or the vocabulary of a language as distinguished from its grammar and construction") but comes from the computer science term "lexing", which is part of the process that converts code represented as text to meaningful pieces that the programming language understands.
 
