@@ -8,8 +8,7 @@ The best resource for up-to-date details on package development is always the of
 
 There are only three elements that you must have:
 
-* the `DESCRIPTION` file describes metadata about the package. This is
-  described in the following section.
+* the `DESCRIPTION` file describes the package, and is detailed below.
 
 * the `R/` directory where your R code lives (in `.R` or `.r` files). See
   [[style|Style]] for information on how these should be formatted.
@@ -71,9 +70,9 @@ When creating a package the first thing (and sometimes the most difficult) is to
 
 Once you have a name, create a directory with that name, and inside that create an `R` subdirectory. Copy your existing code into that directory. It's up to you how you arrange your functions into files, but I suggest grouping related functions into a single file. My rule of thumb is that if I can't remember which file a function lives in, I probably need to split them up into more files - having one function per file is perfectly reasonable, particularly if the functions are large or have a lot of documentation.
 
-The next step is to create a `DESCRIPTION` file that defines package metadata, as described next.
+The next step is to create a `DESCRIPTION` file that defines package metadata.
 
-## `DESCRIPTION`
+## DESCRIPTION
 
 The `DESCRIPTION` contains important information that describes how your package fits into the R ecosystem. I've included the the `DESCRIPTION` file for the `plyr` package below so that you can see what the basic components are. 
 
