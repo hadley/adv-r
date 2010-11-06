@@ -10,8 +10,6 @@ Good style is important because while your code only has one author, it will usu
 
 File names should end in `.r` and be meaningful.
 
-When handing in an electronic copy of your assignment code, put your files in a directory called `firstname-lastname-hw-x` then email me a zip of that directory.
-
     # Good
     explore-diamonds.r
     hadley-wickham-hw-1.r
