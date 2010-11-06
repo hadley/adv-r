@@ -23,7 +23,7 @@ In the following pages I try and explain how fundamental R components work, taki
   * [[The S3 object system|S3]]  (draft)
   * [[The S4 object system|S4]]  (draft)
   * [[Scoping, environments and closures|Scoping]]  (draft)
-  * [[Reference based classes|R5]]  
+  * [[Reference based classes|R5]]  (outline)
   * [[Controlling evaluation|Evaluation]]  (complete)
   * [[Lazy evaluation|Lazy-evaluation]]  (draft)
   * [[Computing on the language|Computing-on-the-language]]  (outline)
