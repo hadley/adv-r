@@ -4,10 +4,20 @@
 
 ### Creating
 
-  * `stop()`
-  * `warning()`
-  * `message()`
-  
+* don't use `cat()` or `print()`, except for print methods, or for optional
+  debugging information.
+
+* use `message()` to inform the user about something expected - I often do
+  this when filling in important missing arguments that have a non-trivial
+  computation or impact. Two examples are `reshape2::melt` package which
+  informs the user what melt and id variables where used if not specific, and
+  `plyr::join` which informs which variables where used to join the two
+  tables.
+
+* use `warning()` for unexpected problems that aren't show stoppers
+
+* use `stop()` when the problem is so big you can't continue
+
 ### Handling
 
   * `try`
