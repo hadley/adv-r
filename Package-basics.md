@@ -107,7 +107,8 @@ There are six required elements:
 
 * `Version`: the version number, which should be of the the form
   `major.minor.patchlevel`. See `?package_version` for more details on the
-  package version formats.
+  package version formats.  I recommended following the principles of 
+  [semantic versioning](http://semver.org/).
 
 * `Maintainer`: a single name and email address for the person responsible for
   package maintenance.
