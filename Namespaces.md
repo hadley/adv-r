@@ -34,16 +34,7 @@ To export a function, add the roxygen `@export` tag.
 
 ## Importing 
 
-In your package `DESCRIPTION` there are two ways to indicate that you package
-requires another package to work: by listing it in either `Depends` or
-`Imports`. `Depends` works just like using library to load a package, but
-`Imports` is a little more subtle: the dependency doesn't get loaded in a way
-the user can see. This is good practice because it reduces the chances of
-conflict, and it makes the code clearer by requiring the every package used be
-explicitly loaded. For example, ggplot2 currently depends on the plyr package
-- this means that once you've loaded ggplot2, you don't need to load plyr to
-get access to (e.g) `ddply`. This is bad because you can't see which packages
-a block of code uses.
+In your package `DESCRIPTION` there are two ways to indicate that you package requires another package to work: by listing it in either `Depends` or `Imports`. `Depends` works just like using library to load a package, but `Imports` is a little more subtle: the dependency doesn't get loaded in a way the user can see. This is good practice because it reduces the chances of conflict, and it makes the code clearer by requiring the every package used be explicitly loaded. For example, ggplot2 currently depends on the plyr package - this means that once you've loaded ggplot2, you don't need to load plyr to get access to (e.g) `ddply`. This is bad because you can't see which packages a block of code uses.
 
 There are two places you need to record your package's dependency:
 
@@ -51,8 +42,12 @@ There are two places you need to record your package's dependency:
  `install.packages` to download package dependencies automatically.
 
 * In the `NAMESPACE` file, to make all the functions in the dependency
- available to your code. The easiest way to do this is to add `@imports
- package-name` to you package documentation.
+  available to your code. The easiest way to do this is to add `@imports
+  package-name` to your package documentation:
+
+      #' @docType package
+      #' ...
+      #' @imports stringr MASS
 
 There are two alternatives to using `@imports`, but these are not currently
 recommended:
@@ -60,8 +55,8 @@ recommended:
 * `@importFrom` imports only selected functions from another package. This is
   currently a pain in roxygen because it doesn't automatically remove
   duplicates - this means that if you use a function in more than one place,
-  you have to arbitrarily choose where to import it. For this reason, I
-  currently recommend using `@imports` in the documentation for the package.
+  you have to arbitrarily choose where to import it. Hopefully this will be
+  fixed in a future version of roxygen.
 
 * `::` refers to a function within a package directly. I don't recommend this
   method because it doesn't work well during package development -- it will
