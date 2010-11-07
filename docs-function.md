@@ -18,6 +18,8 @@ There are three ways to run roxygen:
 
 ## Documenting
 
+Remember that you only need to document exported functions, but all exported functions need to be documented. Exporting a function is a commitment to your users, and it's not to be made lightly. If you're not sure that a function should be exported and documented, then you probably shouldn't.
+
 ### Documenting a function
 
 The following code shows the arrange function and its documentation from the
