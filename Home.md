@@ -49,6 +49,8 @@ Packages are the fundamental unit of reproducible R code. They include reusable 
 
 The canonical reference for package development will always be [writing R extensions][r-ext] - these pages attempt to expand on the more important points and discuss more of the why and what of best practices.
 
+Making R packages, a presentation to HACASA and the Houston R users group: http://www.slideshare.net/hadley/r-packages
+
 ## Specialised data languages
 
 These types of data come up so frequently it's useful to know a little about them and the specialised languages that you use to work with them:
