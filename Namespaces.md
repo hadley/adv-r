@@ -7,8 +7,7 @@ means you can use any name you like for internal functions, and when there is
 a conflict with an exported function, there is a standard disambiguation
 procedure.
 
-The easiest way to use namespaces is with roxygen, because it keeps the
-namespace definitions next to the function that it concerns.
+The easiest way to use namespaces is with roxygen, because it keeps the namespace definitions next to the function that it concerns. The translation between roxygen tags and `NAMESPACE` directives is usually straightforward: the tag becomes a function name and its space-separated arguments become comma separated arguments to the function.  For example `@import plyr` becomes `import(plyr)` and `@importFrom plyr ddply` becomes `importFrom(plyr, ddply)`.  The chief exception is `@export` which will automatically figure out the function name to export.
 
 ## Exporting 
 
@@ -34,7 +33,7 @@ To export a function, add the roxygen `@export` tag.
 
 To export a method for a S3 generic function, add `S3method` roxygen tag: `@S3method function class`
 
-You may also want to make the distinction between functions for users and functions for other developers.  Functions that might be useful for developers or power users should be exported by given `@keywords internal` so they don't show up in routine lists of function documentation.
+You may also want to make the distinction between functions for users and functions for other developers.  Functions that might be useful for developers or power users should be exported, but tagged with `@keywords internal` so they don't show up in routine lists of function documentation.
 
 ## Importing 
 
@@ -86,6 +85,11 @@ Other types of imports:
   function won't change from version to version. It would be better to
   encourage the author to make it an external, exported function, or ask if
   you could include a copy of it in your package.
+
+## How do they work
+
+New set of rules on top of ordinary [[scoping]] rules, which deal with lists of environments - each environment belongs to a package. Search path. Variable look up differs depending on whether you're inside or outside a package. If a package has a namespace, then R looks first inside the package namespace, then the imports, then the base namespace and then the normal search path.
+
 
 
 [S4]: http://cran.r-project.org/doc/manuals/R-exts.html#Name-spaces-with-S4-classes-and-methods
