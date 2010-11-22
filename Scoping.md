@@ -34,7 +34,7 @@ Unlike some languages, R looks up at the values at run-time, not when the functi
     #  x  y 
     # 15 10
 
-If an name is defined inside a function, it will mask the top-level definition:
+If a name is defined inside a function, it will mask the top-level definition:
 
     g <- function() { 
       x <- 20
