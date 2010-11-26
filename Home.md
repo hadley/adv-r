@@ -1,6 +1,7 @@
 # Advanced R development
+(Making reproducible code)
 
-This wiki describes the three sets of skills that I think you need to be an advanced R developer:
+This wiki describes the skills that I think you need to be an advanced R developer, producing reproducible code that can be used in a wide variety of circumstances.
 
 * You are familiar with the fundamentals of R, so that you can represent
   complex data types and simplify the operations performed on them. You have a
@@ -10,11 +11,6 @@ This wiki describes the three sets of skills that I think you need to be an adva
 * You know how to produce packages to make your work available to a wider
   audience, and how to efficiently program "in the large", so you spend your
   time solving new problems not struggling with old code.
-
-* You know the three specialised languages needed to extract data from the
-  types of data that analysts encounter most often: regular expressions for
-  strings, SQL for databases, and xpath for xml.
-
 
 ## R fundamentals
 
@@ -51,13 +47,17 @@ The canonical reference for package development will always be [writing R extens
 
 Making R packages, a presentation to HACASA and the Houston R users group: http://www.slideshare.net/hadley/r-packages
 
-## Specialised data languages
+<!-- ## Specialised data languages
+
+* You know the three specialised languages needed to extract data from the
+  types of data that analysts encounter most often: regular expressions for
+  strings, SQL for databases, and xpath for xml.
 
 These types of data come up so frequently it's useful to know a little about them and the specialised languages that you use to work with them:
 
   * [[Strings and regular expressions|lang-regexp]]  (outline)
   * [[Databases and SQL|lang-sql]]  (outline)
-  * [[XML and XPath|lang-xml]]   (outline)
+  * [[XML and XPath|lang-xml]]   (outline) -->
 
 ## Miscellaneous
 
