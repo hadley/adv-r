@@ -111,6 +111,8 @@ Environments can also be useful in their own right, if you want to create a data
     ls(e)
     f$a
 
+The new [[reference based classes|R5]], introduced in R 2.12, provide a more formal way to do this, with usual inheritance semantics.
+
 There are also a few special environments that you can access directly:
 
   * `globalenv()`: the user's workspace
