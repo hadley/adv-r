@@ -1,49 +1,57 @@
-# A unified philosophy of data
+# A philosophy of clean data
 
-This paper outlines a unified philosophy of data, a philosophy that helps to motivate an optimal form of data storage for data analysis.
+This paper provides a definition of clean data, and a justification as why it is important in terms of the common operations of data analysis, reformation, visualisation and modelling. Hopefully it will help guide the collection and storage of data, and make it easy to teach this important foundation of statistics. I will also provide examples of many datasets in the wild that violate these constraints, and show steps to convert them to clean data.
 
-Hopefully it will help guide the collection and storage of data, and make it easy to teach this important foundation of statistics.
+Once have clean data in long format, and a set of tools that keeps it in that format, you can focus on the problem you are trying to solve, rather than on further data wrangling. 
 
-It does not attempt to be completely comprehensive: there are many special cases in which it will not apply. For example, multivariate statistics are better suited to thinking about the data as a mathematical matrix. Very large data has other special requirements for efficiency (both time and space) (for the purposes of this paper, this means data that take up gigabytes, rather than megabytes). My expectation is that this philosophy covers the most common 90% of data analyses.
+This framework is not comprehensive: there are many special cases in which it will not apply. For example, multivariate statistics are better suited to thinking about the data as a mathematical matrix. Very large data has other special requirements for efficiency (both time and space), and for the purposes of this paper, this means data that take up gigabytes, rather than megabytes. My expectation is that this philosophy covers the most common 90% of data analyses.
 
-I call this is a unified philosophy of data because it covers the three most common types of operations in an analysis: reformation, visualisation and modelling.
+I will focus on R, because that is where I have developed the computational tools to support this philosophy of data, but I believe the principles apply to any programming language which deals with data. My principles of clean data are partly inspired by relational data and normalised form, but the tools of SQL are not the tools of statistics. I will also provide examples of functions in R that don't work well with this type of data, and hopefully explain why some tasks seem so hard to do.
 
-I will use examples from R, because that is where I have developed the computational tools to support this philosophy of data, but I believe the principles apply to any programming language which deals with data. These principles are a particularly good fit to SQL, although the types of processing (set based) easy in SQL, are not always the operations that are most useful for statistics. Many of the tools from R that I discuss can be used in other ways for other purposes, here I focus only on their use for manipulating data for analysis (not, e.g. presentation/communication/display).
+In R, the plyr, reshape2 and ggplot2 packages have been written in light of this philosophy and naturally fit together. These tools can be used in other ways, for other purposes, here I focus only on their use for manipulating data for analysis, not presentation or communication. The majority of modelling families also work this way. 
 
-In R, the plyr, reshape2 and ggplot2 packages have been written in light of this philosophy and naturally fit together. The majority of modelling families also work this way. Allows to focus on the problems you are trying to solve, not on data wrangling. (May not be perfect for every situation, but should save enough time to be worth the investment in learning)
-
-Principles:
+<!-- Principles:
 
   * it's better to be explicit than implicit
     * explicit variables not row names
     * do data transformation yourself
   * don't worry about efficiency (speed or time) unless it actually matters
   * consistency
+ -->
 
 ## Data formats
 
-Data frame: rectangular structure, each column homogeneous, but different columns may have different data types.  This is the data frame of R, and the table of SQL.
+"Happy families are all alike; every unhappy family is unhappy in its own way." ---Leo Tolstoy
 
-* Long form: observations in rows, variables in columns
-* Wide form: any other format
+"Clean datasets are all alike; every messy dataset is messy in its own way." ---Hadley Wickham
 
-The first restriction on the data is that it should have observations in rows and variables in the columns. This seems like a simple condition, but it is violated surprisingly often in practice.
+Statistical data usually comes in a rectangular format, made up of rows and columns. Such data is made up of values, each which belong to a variable, and describe something about a class of entities. A variable is a homogenous collection of values. In clean data, these structures are arranged in a particular format: each type of entity has its own table, each variable lives in a column, and the values are stored in rows corresponding for each observation. The first row of the data, lists the variable name, and the file name normally provides information about the class.
 
-A couple of examples - e.g. tb from WHO.
+I call this form of data long data.  Other useful descriptions are molten data and wide data. To get data from wide form to long form, it's typically easiest to go through an intermediate form I call molten form, where we have single column of values, identified by other variables (useful intermediate form). The reshape package provides tools to do these sorts of reshaping operations in R.
 
-Often this form is not the most natural for data collection or recording because it can require a lot of duplication.
+Data in the wild violates these restrictions in almost every way imaginable, often because this form is not the most natural for data collection or recording. Here I want to focus on some of the most common problems, illustrated with specific datasets that I have worked with:
 
-Variables come in two types: id or measured. ID variables describe the experimental design and are known in advance. ID variables can not contain missing values - that would indicate that we don't know what our experimental design is. Measured variables are (as the name suggested) those things that we don't know and must measure.
+  * one variable is spread over multiple columns (billboard)
+  * variables are placed in both rows and columns (weather, pew religion)
+  * multiple variables are stored in one column (tb, renae)
+  * columns represent values, not variables (tb, pew religion)
 
-To get data from wide form to long form, it's typically easiest to go through an intermediate form I call molten form, where we have single column of values, identified by other variables (useful intermediate form). The reshape package provides tools to do these sorts of reshaping operations in R.
+These wide range of problems can be resolved with a surprisingly small set of tools: melting, casting, and string manipulation/joining. (An algebra of data cleaning)
 
-Crossing vs. nesting.
+Dealing with problems related to entities:
+
+* multiple classes are stored in the same file (billboard)
+* data about a single class is spread over multiple files (simat2 weather)
+
+only requires two more tools: the ability to combine multiple files into a single
+
+Ordering: while order of variables and observations does not affect analysis, it can make it difficult to read the data. It's best to group variables into two sets: id and measured. ID variables describe the experimental design and are known in advance. ID variables can not contain missing values - that would indicate that we don't know what our experimental design is. Measured variables are (as the name suggested) those things that we don't know and must measure. The table should list ID variables first, ordered in terms of their natural hierarchy, or alphabetically if none present. Measured variables come next, ordered alphabetically. In user interfaces, id variables (or dimensions) should always be visible.  Rows should be ordered by the values of the id variable.
 
 # Use
 
 ## Reformulation
 
-transform, summarise (+ colwise), arrange and subset.
+mutate, summarise (+ colwise), arrange and subset.
 group by
 join
 
