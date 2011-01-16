@@ -24,23 +24,42 @@ The paper is divided into three sections:
 
 The examples will use R, because that is where I have developed the computational tools to support this philosophy of data, but I believe the principles apply to any programming language which deals with data. In R, the plyr and ggplot2 packages work well with clean data, and the reshape package provides tools useful for making dirty data clean. The principles of clean data will also help us critique existing R functions, and I will highlight some R functions that cause unnecessary work for the analyst.
 
-# Clean data
+# Defining clean data
 
 "Happy families are all alike; every unhappy family is unhappy in its own way." ---Leo Tolstoy
 
 "Clean datasets are all alike; every messy dataset is messy in its own way." ---Hadley Wickham
 
-Statistical data usually comes in a rectangular format, made up of rows and columns. Such data is made up of values, each which belong to a variable, and describe something about a class of entities. 
+Statistical data usually comes in a rectangular format, made up of rows and columns. It is usually labelled with column names, and sometimes with row names. Such data is a collection of __value__s, each either a single number (if quantitative) or a single string (if qualitative). Multiple measurements made on the same __experimental unit__ form an __observation__. 
 
-* A value is a single measurement, where continuous or discrete.
+The following table shows a common data format.  What are the values and variables in this data set?  There are three variables: sex, pregnancy status and a count.
 
-* A variable is a homogenous collection of values, multiple measurements of the same underlying property.
+             | Pregnant  Not-Pregnant
+      -------+-----------------------
+      Male   |        0             5
+      Female |        1             4
 
-* An entity, or experimental unit, ...
+Data is messy or clean depending on how these structures are arranged. In clean, __long form__ data, these structures are arranged in a particular format: each variable lies in a column, and the values are organised in rows by observation. The following table shows how we'd represent the data above in long form:
 
-Clean data is defined by how these structures are arranged. In clean data, these structures are arranged in a particular format: each type of entity has its own table, each variable lives in a column, and the values are stored in rows corresponding for each observation. The first row of the data, lists the variable name, and the file name normally provides information about the class.
+      pregnant  sex    | n
+      -----------------+-
+      No        Female | 4
+      No        Male   | 5
+      Yes       Female | 1
+      Yes       Male   | 0
 
-I call this form of data long data.  Other useful descriptions are molten data and wide data. To get data from wide form to long form, it's typically easiest to go through an intermediate form I call molten form, where we have single column of values, identified by other variables (useful intermediate form). The reshape package provides tools to do these sorts of reshaping operations in R.
+While order of variables and observations does not affect analysis, a good ordering makes it easier to scan the raw data. Variables can be ordered by grouping them into identifier and measured variables. Identifier variables describe the experimental design and are known in advance (in a sense they're not really measurements). Measured variables are what we actually measure in the study. Identifier variables should come first first, ordered in terms of their natural hierarchy if present, otherwise alphabetically. Measured variables come next, ordered alphabetically. Rows can then be ordered so that the first id variable varies slowest, followed by the second, and so on.
+
+# Cleaning dirty data
+
+The complement of long data is __wide__, or messy, data. Messy data can be messy in any number of ways - it just needs to somehow violate the restriction of variables in columns and observations in rows. The real data violates these restrictions in almost every way imaginable. In this section, I will focus on some of the most common problems, illustrated with specific datasets that I have worked with:
+
+* column headers are values, not variable names (pew religion)
+* one variable is spread over multiple columns (billboard)
+* variables are stored in both rows and columns (weather)
+* multiple variables are stored in one column (tb)
+
+Messy data, including types of messiness not explicitly described above, can be cleaned in a surprisingly small set of tools: stacking, unstacking, and string splitting. 
 
 # Working with clean data
 
@@ -68,22 +87,3 @@ Lattice graphics tries to stick too closely to the modelling structure.
 
 ggplot2: map variables to different 
 
-# Cleaning dirty data
-
-Data in the wild violates these restrictions in almost every way imaginable, often because this form is not the most natural for data collection or recording. Here I want to focus on some of the most common problems, illustrated with specific datasets that I have worked with:
-
-  * one variable is spread over multiple columns (billboard)
-  * variables are placed in both rows and columns (weather, pew religion)
-  * multiple variables are stored in one column (tb, renae)
-  * columns represent values, not variables (tb, pew religion)
-
-These wide range of problems can be resolved with a surprisingly small set of tools: melting, casting, and string manipulation/joining. (An algebra of data cleaning)
-
-Dealing with problems related to entities:
-
-* multiple classes are stored in the same file (billboard)
-* data about a single class is spread over multiple files (simat2 weather)
-
-only requires two more tools: the ability to combine multiple files into a single
-
-Ordering: while order of variables and observations does not affect analysis, it can make it difficult to read the data. It's best to group variables into two sets: id and measured. ID variables describe the experimental design and are known in advance. ID variables can not contain missing values - that would indicate that we don't know what our experimental design is. Measured variables are (as the name suggested) those things that we don't know and must measure. The table should list ID variables first, ordered in terms of their natural hierarchy, or alphabetically if none present. Measured variables come next, ordered alphabetically. In user interfaces, id variables (or dimensions) should always be visible.  Rows should be ordered by the values of the id variable.
