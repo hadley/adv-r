@@ -1,6 +1,6 @@
 # The package development cycle
 
-How do you write code when you are developing a package? How do you make sure that the code is correct, without constantly running `R CMD install` or `R CMD check`? This chapter discusses the development cycle of an R package, and introduces an software to supports it: the `devtools` package.
+How do you write code when you are developing a package? How do you make sure that the code is correct, without constantly running `R CMD install` or `R CMD check`? This chapter discusses the development cycle of a R package, and introduces an software to supports it: the `devtools` package.
 
 ## Development cycles
 
