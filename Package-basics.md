@@ -16,7 +16,7 @@ There are only three elements that you must have:
 * the `man/` directory where your [[function documentation|docs-function]],
   produced with roxygen, lives.
 
-After the code and function documentation, the most important optional components of an R package help your users learn how to use your package. The following files and directories and described in more detail in [[package documentation|docs-package]].
+After the code and function documentation, the most important optional components of an R package help your users learn how to use your package. The following files and directories are described in more detail in [[package documentation|docs-package]].
 
 * the `NEWS` file describes the changes in each version of the package. Using
   the standard R format will allow you to take advantage of many automated

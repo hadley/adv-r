@@ -28,7 +28,7 @@ plyr package. The documentation is stored in comments with a special form
 provides more details and then specific tags provide additional information
 about the function.
 
-    #' Order a data frame by its colums.
+    #' Order a data frame by its columns.
     #'
     #' This function completes the subsetting, transforming and ordering triad
     #' with a function that works in a similar way to \code{\link{subset}} and 
