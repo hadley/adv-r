@@ -227,8 +227,13 @@ But hopefully a little thought, or maybe some experimentation, will show why thi
       any(c("substitute", "match.call") %in% funs(get(x)))
     }
     
-    fs <- ls("package:base")
-    fs[sapply(fs, is.interactive)] -->
+    fs <- ls("package:stats")
+    fs[sapply(fs, is.interactive)]
+    
+    # Examples of what you shouldn't do
+    #  data.frame
+    #  write.csv
+     -->
 
 ## Conclusion
 

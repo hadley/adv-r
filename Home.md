@@ -20,6 +20,7 @@ In the following pages I try and explain how fundamental R components work, taki
   * [[The S4 object system|S4]]  (draft)
   * [[Reference based classes|R5]]  (outline)
   * [[Scoping, environments and closures|Scoping]]  (draft)
+  * Connections
   * [[Controlling evaluation|Evaluation]]  (complete)
   * [[Lazy evaluation|Lazy-evaluation]]  (draft)
   * [[Computing on the language|Computing-on-the-language]]  (outline)
@@ -62,7 +63,6 @@ These types of data come up so frequently it's useful to know a little about the
 ## Miscellaneous
 
 * [[How to make a reproducible example|Reproducibility]]
-* [[A philosophy of data|data-philosophy]]
 * Mastering the command line
 
   [lang-def]:http://cran.r-project.org/doc/manuals/R-lang.html

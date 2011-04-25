@@ -2,7 +2,7 @@
 
 ## Scoping
 
-Scoping is the set of rules that govern how R looks up the value of a symbol, or name, how R goes from the symbol `x`, to its value `10` in the following example.
+Scoping is the set of rules that govern how R looks up the value of a symbol, or name.  That is, the rules that R applies to go from the symbol `x`, to its value `10` in the following example.
 
     x <- 10
     x
@@ -12,9 +12,9 @@ R has two types of scoping: __lexical scoping__, implemented automatically at th
 
 ## Basic rules
 
-Lexical scoping looks up variable values using how functions are nested when they are written, not how they are called. With lexical scoping, you can figure out where the value of each variable will be looked up only by looking at the definition of the function, you don't need to know anything about how the function is called.
+Lexical scoping looks up symbol values using how functions are nested when they were written, not when they were called. With lexical scoping, you can figure out where the value of each variable will be looked up only by looking at the definition of the function, you don't need to know anything about how the function is called.
 
-The "lexical" in lexical scoping doesn't correspond to the usual English definition ("of or relating to words or the vocabulary of a language as distinguished from its grammar and construction") but comes from the computer science term "lexing", which is part of the process that converts code represented as text to meaningful pieces that the programming language understands.
+The "lexical" in lexical scoping doesn't correspond to the usual English definition ("of or relating to words or the vocabulary of a language as distinguished from its grammar and construction") but comes from the computer science term "lexing", which is part of the process that converts code represented as text to meaningful pieces that the programming language understands.  It's lexical in this sense, because you only need the definition of the functions, not how they are called.
 
 The following example illustrates the basic principle:
 
@@ -43,7 +43,7 @@ If a name is defined inside a function, it will mask the top-level definition:
     }
     f()
     #  x  y 
-    # 20 10
+    # 15 10
 
 The same principle applies regardless of the degree of nesting. See if you can predict what the following function will return before trying it out yourself.
 
@@ -148,7 +148,7 @@ A closure is a function written by another function. Closures are so called beca
 
     square <- power(2)
     square(2) # -> [1] 4
-    square(4) # -> [1] 8
+    square(4) # -> [1] 16
 
     cube <- power(3)
     cube(2) # -> [1] 8
