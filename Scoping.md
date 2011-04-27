@@ -119,6 +119,10 @@ There are also a few special environments that you can access directly:
   * `baseenv()`: the environment of the base package
   * `emptyenv()`: the ultimate ancestor of all environments
 
+The only environment that doesn't have a parent is emptyenv(), which is the eventual parent of every other environment.  The most common environment is the global environment (globalenv()) which corresponds to the to your top-level workspace.  The parent of the global environment is one of the packages you have loaded (the exact order will depend on which packages you have loaded in which order).  The eventual parent will be the base environment, which is the environment of "base R" functionality, which has the empty environment as a parent.
+
+Apart from that, the environment hierarchy is created by function definition. When you create a function, f, in the global environment, the environment of the function f will have the global environment as a parent.  If you create a function g inside f, then the environment of g will have have the environment of f as a parent, and the global environment as a grandparent.
+
 ## Lazy evaluation
 
 In R, function arguments are evaluated [[lazily|lazy-evaluation]], only when they are needed. This evaluation takes place in their original environment, not the environment of the function:
