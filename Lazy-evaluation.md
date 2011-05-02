@@ -1,8 +1,6 @@
 # Lazy loading
 
-R has a number of features designed to help you do as little work as possible.  These are collectively known as lazy loading tools, and allow you to put off doing work as long as possible (so hopefully you never have to do it).  You are probably familiar with lazy function arguments, but there are a few other ways you can make operations lazy by hand.
-
-Example creating a cache function that lazy loads its contents.
+R has a number of features designed to help you do as little work as possible. These are collectively known as lazy loading tools, and allow you to put off doing work as long as possible (so hopefully you never have to do it). You are probably familiar with lazy function arguments, but there are a few other ways you can make operations lazy by hand.
 
 ## Function arguments
 
@@ -25,10 +23,31 @@ If you want to ensure that an argument is evaluated you can use `force`:
     # user  system elapsed 
     #    0       0  10.001  
 
-More technically, an unevaluated argument is called a __promise__ (also known as a thunk).  A promise is made up of two parts:
+But note that `force` is just syntactic sugar.  The definition of force is:
 
-  * an expression giving the delayed computation (can be accessed with `substitute`)
-  * the environment in which the expression is evaluated
+    force <- function(x) x
+    
+The argument is evaluated in the environment in it was created, not the environment of the function:
+
+        f <- function() {
+          y <- "f"
+          g(y)
+        }    
+        g <- function(x) {
+          y <- "g"
+          x
+        }
+        y <- "toplevel"
+        f()
+        # [1] "f"
+
+More technically, an unevaluated argument is called a __promise__, or a thunk. A promise is made up of two parts:
+
+* an expression giving the delayed computation, which can be accessed with
+  `substitute` (see [[controlling evaluation|evaluation]] for more details)
+
+* the environment where the expression was created and where it should be
+  evaluated
 
 You may notice this is rather similar to a closure with no arguments, and in many languages that don't have laziness built in like R, this is how you can implement laziness.
 
@@ -53,9 +72,14 @@ Delayed assign is particularly useful for doing expensive operations that
 you're not sure you'll need. This is the essence of lazyness - put off doing
 any work until the last possible minute.
 
-To create a variable `x`, that is the 
+To create a variable `x`, that is the sum of the values `a` and `b`, but is not evaluated until we need, we use `delayedAssign`:
 
+  a <- 1
+  b <- 2
   delayedAssign("x", a + b)
+  a <- 10
+  x
+  # [1] 12
 
 `delayedAssign` also provides two parameters that control where the evaluation happens (`eval.env`) and which in environment the variable is assigned in (`assign.env`).
 
@@ -63,7 +87,7 @@ To demonstrate the use of `delayedAssign` we're going to create a caching functi
 
 Challenge: if we do it one file per object, how do we know whether the cache has been run before or not?
 
-    cache <- function(code, cache_dir = ".cache") {
+    cache <- function(name, code, cache_dir = ".cache") {
       if (!file.exists(cache_dir)) dir.create(cache_dir)
   
       # Create a new environment and evaluate the code in it, so we know
@@ -79,18 +103,16 @@ Challenge: if we do it one file per object, how do we know whether the cache has
         assign(obj, res[[obj]], env = parent)
     
         file_path <- file.path(cache_dir, paste(obj, ".rds", sep =""))
-        f <- file(file_path, "w")
-        on.exit(close(f))
-        serialize(res[[obj]], f)
+        saveRDS(res[[obj]], f)
       }
       
     }
     
-    clear_cache <- function(cache_dir = ".cache") {
+    clear_cache <- function(name, cache_dir = ".cache") {
       file.remove(dir(cache_dir, full.names = T))
     }
 
-Should print message when loading from cache.  Can we make caching robust enough that some objects can be retrieved from disk and some can be computed afresh?
+Should print message when loading from cache. Can we make caching robust enough that some objects can be retrieved from disk and some can be computed afresh?
 
 Autoload is an example of this, it's a wrapper around `delayedAssign` for functions or data in a package - it makes R behave as if the package is loaded, but it doesn't actually load it (i.e. do any work) until you call one of the functions.  This is the way that data sets in most packages work - you can call (e.g.) `diamonds` after `library(ggplot2)` and it just works, but it isn't loaded into memory unless you actually use it.
 

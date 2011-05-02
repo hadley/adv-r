@@ -28,6 +28,8 @@ Examples:
   * capturing all messages or warnings produced by a function
   * capturing user interrupts: `Ctrl + C`
 
+`suppressWarnings`, `suppressMessages`
+
 ## Debugging
 
 * `traceback`: show where error occurred

@@ -215,29 +215,17 @@ As a developer you should also provide an alternative version that works when pa
 
 But hopefully a little thought, or maybe some experimentation, will show why this doesn't work.
 
-<!-- We can use this idea to crudely identify R functions that may be problematic to program with:
-  
-    library(parser)
-    funs <- function(x) {
-      if (!is.function(x)) return()
-      parsed <- attr(parser(x), "data")
-      subset(parsed, token.desc == "SYMBOL_FUNCTION_CALL")$text
-    }
-    is.interactive <- function(x) {
-      any(c("substitute", "match.call") %in% funs(get(x)))
-    }
-    
-    fs <- ls("package:stats")
-    fs[sapply(fs, is.interactive)]
-    
-    # Examples of what you shouldn't do
-    #  data.frame
-    #  write.csv
-     -->
-
 ## Conclusion
 
 Now you understand how our version of subset works, go back and read the source code for `subset.data.frame`, the base R version which does a little more. Other functions that work similarly are `with.default`, `within.data.frame`, `transform.data.frame`, and in the plyr package `.`, `arrange`, and `summarise`. Look at the source code for these functions and see if you can figure out how they work.
+
+## Excercises
+
+1. Compare the simplified `subset` function described in this chapter with the real `subset.data.frame`.  What's different? Why? How does the select parameter work?
+
+2. Read the code for `transform.data.frame` and `subset.data.frame`. What do they do and how do they work? Compare `transform.data.frame` to `plyr::mutate` what's different?
+
+3. Read the code for `write.csv`. How does it work? What are the advantages/disadvantages of this approach over calling `write.table` in the usual manner?
 
 <!-- # Appendix A: symbols, calls, expressions
 
