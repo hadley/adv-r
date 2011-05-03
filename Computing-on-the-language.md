@@ -208,20 +208,20 @@ For each we'll tackle it first just looking at the raw code, and next we'll figu
 
 ### Find assignment
 
-  find_assign <- function(obj) {  
-    assigns <- character(0)
-    if (!is.call(obj)) return(assigns)
+    find_assign <- function(obj) {  
+      assigns <- character(0)
+      if (!is.call(obj)) return(assigns)
 
-    f <- deparse(obj[[1]])
+      f <- deparse(obj'[[1]])
     
-    # Have to check for name to eliminate statements like `names(x) <- c("a")`
-    if (f == "<-" && is.name(obj[[2]])) {
-      assigns <- deparse(obj[[2]])
+      # Have to check for name to eliminate statements like `names(x) <- c("a")`
+      if (f == "<-" && is.name(obj'[[2]])) {
+        assigns <- deparse(obj'[[2]])
+      }
+      unique(c(assigns, unlist(lapply(as.list(obj[-1]), find_assign))))
     }
-    unique(c(assigns, unlist(lapply(as.list(obj[-1]), find_assign))))
-  }
-  find_assign(body(write.csv))
-  find_assign(body(read.table))
+    find_assign(body(write.csv))
+    find_assign(body(read.table))
 
 ### Replacing logical shortcuts 
 
@@ -262,7 +262,7 @@ To replace `T` with `TRUE` and `F` with `FALSE`, we need to make our recursive f
         }
       } else if (is.call(obj)) {
         args <- lapply(obj[-1], fix_logical_abbr)
-        as.call(c(list(obj[[1]]), args))
+        as.call(c(list(obj'[[1]]), args))
       } else if (is.pairlist(obj)) {
         as.pairlist(lapply(obj, fix_logical_abbr))
       } else if (is.list(obj)) {
