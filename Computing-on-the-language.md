@@ -6,9 +6,9 @@ Writing R code that modifies R code.
 
 There are three fundamental building blocks of R code:
 
-* __names__s, which represent the name, not value, of a variable
-* __constants__s, like `"a"` or `1:10`
-* __calls__s, which represents a function call
+* __names__, which represent the name, not value, of a variable
+* __constants__, like `"a"` or `1:10`
+* __calls__, which represents a function call
 
 Collectively I'll call these three things parsed code, because they each represent a stand-alone piece of R code that you could run from the command line. 
 
