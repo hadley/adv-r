@@ -108,7 +108,7 @@ We've seen `substitute` used for it's ability to capture the unevalated expressi
     substitute(a + b, list(a = 1, b = 2))
     # 1 + 2
 
-Note that `substitute` expects R code in it's first, not parsed code:
+Note that `substitute` expects R code in it's first argument, not parsed code:
 
     x <- quote(a + b)
     substitute(x, list(a = 1, b = 2))
