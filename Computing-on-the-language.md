@@ -1,12 +1,6 @@
 # Computing on the language
 
-Manipulating calls, expressions, formula and functions
-
-* Code to text and back again
-* Modifying an expression with `substitute` and `bquote`
-* Extracting components of an expression
-* Walking the code tree
-* The parser package
+Writing R code that modifies R code.
 
 ## Basics of R code
 
@@ -32,7 +26,7 @@ Calls are recursive because the arguments to a call can be other calls, e.g. `f(
        \- h()
           \- i()
 
-Everything in R parses into this tree structure - even things that don't look like calls such as `{`, `function`, control flow, infix operators and assignment. The figure below shows the parse tree for some of these special constructs.
+Everything in R parses into this tree structure - even things that don't look like calls such as `{`, `function`, control flow, infix operators and assignment. The figure below shows the parse tree for some of these special constructs. All calls are labelled with "()" even if we don't normally think of them as function calls.
 
     draw_tree(expression(
       { a + b; 2},
@@ -105,7 +99,7 @@ The `deparse` function is an almost inverse of `parse` - it converts an call int
 
 A common idiom in R functions is `deparse(substitute(x))` - this will capture the character representation of the code provided for the argument `x`. Note that you must run this code before you do anything to `x`, because substitute can only access the code which will be used to compute `x` before the promise is evaluated.
 
-## Modifying an expression
+## Modifying calls
 
 It's a bad idea to create code by operating on it's string representation: there is no guarantee that you'll create valid code. Instead, you should use tools like `substitute` and `bquote` to modify expressions, where you are guaranteed to produce syntactically correct code (although of course it's still easy to make code that doesn't work).
 
@@ -152,18 +146,56 @@ Another useful tool is `bquote`.  It quotes an expression apart from any terms w
     bquote(y + .(x))
     # y + 5
 
-## Extracting components of an expression
+You can also modify calls because of their list-like behaviour: just like a list, a call has `length`, `[[` and `[` methods. The length of a call minus 1 gives the number of arguments:
 
-Using srccode refs to provide information about location in original file.
+    x <- quote(write.csv(x, "important.csv", row.names = FALSE))
+    length(x) - 1
+    # [1] 3
 
-* function calls
-* ?
-* control flow: if, while, etc.
-* function "function"
-* bracketed expressions
-* replacement
-* binary operators
-* unary operators
+The first element of the call is the name of the function:
+
+    x[[1]]
+    # write.csv
+
+    is.name(x[[1]])
+    # [1] TRUE
+
+The remaining elements are the arguments to the function, which can be extracted by name or by position.
+
+    x$row.names
+    # FALSE
+    x[[3]]
+    # [1] "important.csv"
+
+You can modify elements of the call with replacement operators:
+
+    x$col.names <- FALSE
+    x
+    # write.csv(x, "important.csv", row.names = FALSE, col.names = FALSE)
+
+    x[[5]] <- NULL
+    x[[3]] <- "less-imporant.csv"
+    x
+    # write.csv(x, "less-imporant.csv", row.names = FALSE)
+
+Calls also support the `[` method, but use it with care: it produces a call object, and it's easy to produce invalid calls. If you want to get a list of the arguments, explicitly convert to a list.
+
+    x[-3] # remove the second arugment
+    # write.csv(x, row.names = FALSE)
+
+    x[-1] # just look at the arguments - but is still a call!
+    x("important.csv", row.names = FALSE)
+
+    as.list(x[-1])
+    # [[1]]
+    # x
+    # 
+    # [[2]]
+    # [1] "important.csv"
+    # 
+    # $row.names
+    # [1] FALSE
+
 
 ## Walking the code tree
 
