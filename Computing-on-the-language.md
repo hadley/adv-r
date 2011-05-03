@@ -199,9 +199,117 @@ Calls also support the `[` method, but use it with care: it produces a call obje
 
 ## Walking the code tree
 
-Code as a tree.  So need recursive function to walk it.
+Because code is a tree, we're going to need recursive functions to work with it. You now have basic understanding of how code in R is put together internally, and so we can now start to write some useful functions. In this section we'll write some functions to tackle some useful problems.  In particular, we will look at two common development mistakes.
 
-Example: given a code block, find all the locations where assignment happens, or all function calls. Or all uses of T and F. Or all assignment. Or build a graph that shows dependencies within a code block.
+* Find assignments
+* Replace `T` with `TRUE` and `F` with `FALSE`
+
+For each we'll tackle it first just looking at the raw code, and next we'll figure out how to use source refs to modify the code to keep as much of the original formatting, comments etc as possible.
+
+### Find assignment
+
+  find_assign <- function(obj) {  
+    assigns <- character(0)
+    if (!is.call(obj)) return(assigns)
+
+    f <- deparse(obj[[1]])
+    
+    # Have to check for name to eliminate statements like `names(x) <- c("a")`
+    if (f == "<-" && is.name(obj[[2]])) {
+      assigns <- deparse(obj[[2]])
+    }
+    unique(c(assigns, unlist(lapply(as.list(obj[-1]), find_assign))))
+  }
+  find_assign(body(write.csv))
+  find_assign(body(read.table))
+
+### Replacing logical shortcuts 
+
+First we'll start just by locating logical abbreviations. A logical abbreviation is the name `T` or `F`. We need to recursively breakup any recursive objects, anything else is not a short cut.
+
+    find_logical_abbr <- function(obj) {
+      if (is.name(obj)) {
+        identical(obj, as.name("T")) || identical(obj, as.name("F"))
+      } else if (is.recursive(obj)) {
+        any(vapply(obj, find_logical_abbr, logical(1)))
+      } else {
+        FALSE
+      }
+    }
+
+    
+    f <- function(x = T) 1
+    g <- function(x = 1) 2
+    h <- function(x = 3) T
+    
+    find_logical_abbr(body(f))
+    find_logical_abbr(formals(f))
+    find_logical_abbr(body(g))
+    find_logical_abbr(formals(g))
+    find_logical_abbr(body(h))
+    find_logical_abbr(formals(h))
+  
+To replace `T` with `TRUE` and `F` with `FALSE`, we need to make our recursive function return either the original object or the modified object, making sure to put calls back together appropriately. The main difference here is that we need to be much more careful with recursive objects, because each type needs to be treated differently:
+
+    fix_logical_abbr <- function(obj) {
+      if (is.name(obj)) {
+        if (identical(obj, as.name("T"))) {
+          quote(TRUE)
+        } else if (identical(obj, as.name("F"))) {
+          quote(FALSE)
+        } else {
+          obj
+        }
+      } else if (is.call(obj)) {
+        args <- lapply(obj[-1], fix_logical_abbr)
+        as.call(c(list(obj[[1]]), args))
+      } else if (is.pairlist(obj)) {
+        as.pairlist(lapply(obj, fix_logical_abbr))
+      } else if (is.list(obj)) {
+        lapply(obj, fix_logical_abbr)
+      } else if (is.expression(obj)) {
+        as.expression(lapply(obj, fix_logical_abbr))
+      } else {
+        obj
+      }
+    }
+
+
+* lists
+
+* pairlists, are used for function formals, and need to be kept as pairlists
+
+* expressions, need to be turned back into expressions
+
+* calls, don't process first element (the function name), and turn back into a call
+
+However, this function is still not that useful because it loses all non-code structure:
+
+    g <- quote(f <- function(x = T) {
+      # This is a comment
+      if (x)                  return(4)
+      if (emergency_status()) return(T)
+    })
+    fix_logical_abbr(g)
+    # f <- function(x = TRUE) {
+    #     if (x) 
+    #         return(4)
+    #     if (emergency_status()) 
+    #         return(TRUE)
+    # }
+
+    g <- parse(text = "f <- function(x = T) {
+      # This is a comment
+      if (x)                  return(4)
+      if (emergency_status()) return(T)
+    }")
+
+
+If we want to be able to apply this function to an existing code base, we need to be able to maintain all the non-code structure.  This leads us to our next code: srcrefs.
+
+## Source references
+
+
 
 ### Codetools
 
