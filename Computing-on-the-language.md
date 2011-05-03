@@ -146,7 +146,7 @@ Another useful tool is `bquote`.  It quotes an expression apart from any terms w
     bquote(y + .(x))
     # y + 5
 
-You can also modify calls because of their list-like behaviour: just like a list, a call has `length`, `[[` and `[` methods. The length of a call minus 1 gives the number of arguments:
+You can also modify calls because of their list-like behaviour: just like a list, a call has `length`, `\[\[` and `[` methods. The length of a call minus 1 gives the number of arguments:
 
     x <- quote(write.csv(x, "important.csv", row.names = FALSE))
     length(x) - 1
@@ -154,17 +154,17 @@ You can also modify calls because of their list-like behaviour: just like a list
 
 The first element of the call is the name of the function:
 
-    x[[1]]
+    x'[[1]]
     # write.csv
 
-    is.name(x[[1]])
+    is.name(x'[[1]])
     # [1] TRUE
 
 The remaining elements are the arguments to the function, which can be extracted by name or by position.
 
     x$row.names
     # FALSE
-    x[[3]]
+    x'[[3]]
     # [1] "important.csv"
 
 You can modify elements of the call with replacement operators:
@@ -173,8 +173,8 @@ You can modify elements of the call with replacement operators:
     x
     # write.csv(x, "important.csv", row.names = FALSE, col.names = FALSE)
 
-    x[[5]] <- NULL
-    x[[3]] <- "less-imporant.csv"
+    x'[[5]] <- NULL
+    x'[[3]] <- "less-imporant.csv"
     x
     # write.csv(x, "less-imporant.csv", row.names = FALSE)
 
@@ -187,10 +187,10 @@ Calls also support the `[` method, but use it with care: it produces a call obje
     x("important.csv", row.names = FALSE)
 
     as.list(x[-1])
-    # [[1]]
+    # '[[1]]
     # x
     # 
-    # [[2]]
+    # '[[2]]
     # [1] "important.csv"
     # 
     # $row.names
