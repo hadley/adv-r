@@ -146,7 +146,7 @@ Another useful tool is `bquote`.  It quotes an expression apart from any terms w
     bquote(y + .(x))
     # y + 5
 
-You can also modify calls because of their list-like behaviour: just like a list, a call has `length`, `[[` and `[` methods. The length of a call minus 1 gives the number of arguments:
+You can also modify calls because of their list-like behaviour: just like a list, a call has `length`, `'[[` and `[` methods. The length of a call minus 1 gives the number of arguments:
 
     x <- quote(write.csv(x, "important.csv", row.names = FALSE))
     length(x) - 1
