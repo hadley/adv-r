@@ -121,4 +121,6 @@ The only environment that doesn't have a parent is emptyenv(), which is the even
 
 Apart from that, the environment hierarchy is created by function definition. When you create a function, f, in the global environment, the environment of the function f will have the global environment as a parent.  If you create a function g inside f, then the environment of g will have have the environment of f as a parent, and the global environment as a grandparent.
 
-# Explicit scoping with `local`
+## Explicit scoping with `local`
+
+## Namespaces

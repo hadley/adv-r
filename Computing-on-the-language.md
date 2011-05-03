@@ -8,25 +8,113 @@ Manipulating calls, expressions, formula and functions
 * Walking the code tree
 * The parser package
 
-Make sure that you're familiar with:
+## Basics of R code
 
-* symbols:
-* calls:
-* expressions:
+There are three fundamental building blocks of R code:
+
+* __names__s, which represent the name, not value, of a variable
+* __constants__s, like `"a"` or `1:10`
+* __calls__s, which represents a function call
+
+Collectively I'll call these three thing code chunks, because they each represent a stand-alone piece of R code that you could run from the command line. 
+
+A call is made up of two parts:
+
+* a name, giving the name of the function to be called
+* arguments, a list of code chunks
+
+Calls are recursive because the arguments to a call can be other calls, e.g. `f(x, 1, g(), h(i()))`. This means we can think about calls as trees. For example, we can represent that call as:
+
+    \- f()
+       \- x
+       \- 1
+       \- g()
+       \- h()
+          \- i()
+
+Everything in R parses into this tree structure - even things that don't look like calls such as `{`, `function`, control flow, infix operators and assignment. The figure below shows the parse tree for some of these special constructs.
+
+    draw_tree(expression(
+      { a + b; 2},
+      function(x, y = 2) 3,
+      (a - b) * 3,
+      if (x < 3) y <- 3 else z <- 4,
+      name(df) <- c("a", "b", "c"),
+      -x
+    ))
+    
+    # \- {()
+    #    \- +()
+    #       \- a
+    #       \- b
+    #    \- 2
+    # 
+    # \- function()
+    #    \- list(x = , y = 2)
+    #    \- 3
+    #    \- "function(x, y = 2) 3"
+    # 
+    # \- *()
+    #    \- (()
+    #       \- -()
+    #          \- a
+    #          \- b
+    #    \- 3
+    # 
+    # \- if()
+    #    \- <()
+    #       \- x
+    #       \- 3
+    #    \- <-()
+    #       \- y
+    #       \- 3
+    #    \- <-()
+    #       \- z
+    #       \- 4
+    # 
+    # \- <-()
+    #    \- name()
+    #       \- df
+    #    \- c()
+    #       \- "a"
+    #       \- "b"
+    #       \- "c"
+    # 
+    # \- -()
+    #    \- x
+
+Code chunks can be built up into larger structures in two ways: with expressions or braced expressions. Expressions are lists of code chunks, and are created when you parse a file. Braced expressions represent complex multiline functions as a call to the special function `{`, with one argument for each code chunk in the function. Despite the name, braced expressions are not actually expressions, although the accomplish much the same task.  
+
+
 
 ## Code to text and back again
 
-`deparse`, `as.character`
+`deparse`, `as.character`.  Be careful that you're prepared for multiple lines.
+
+Common idiom: `deparse(substitute(x))`, but must be before the promise is evaluated.
 
 Why you shouldn't use regular expressions on the textual representation of code.
 
+`parse(text = ...)`
+
 ## Modifying an expression
+
+Substitute.
 
 A useful shorthand is bquote.
 
 ## Extracting components of an expression
 
 Using srccode refs to provide information about location in original file.
+
+* function calls
+* ?
+* control flow: if, while, etc.
+* function "function"
+* bracketed expressions
+* replacement
+* binary operators
+* unary operators
 
 ## Walking the code tree
 
