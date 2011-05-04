@@ -4,6 +4,8 @@
 
 * Rely on built in vectorised operations
 
+## Byte code compilation
+
 ## Profiling
 
 ## Benchmarking

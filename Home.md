@@ -19,16 +19,14 @@ I outline some of the more base skills more briefly in  [[prerequisites|prereqs]
 In the following pages I try and explain how fundamental R components work, taking the [R language definition][lang-def] and making it easier to understand with plenty of examples to illustrate each idea.
 
   * [[Scoping and environments|Scoping]]  (draft)
-  * [[First class functions|First-class-functions]]  (draft)
+  * [[First class functions|First-class-functions]]  (outline)
   * [[Controlling evaluation|Evaluation]]  (complete)
   * [[Lazy evaluation|Lazy-evaluation]]  (draft)
-  * [[Computing on the language|Computing-on-the-language]]  (outline)
+  * [[Computing on the language|Computing-on-the-language]]  (draft)
   * [[Exceptions and debugging|Exceptions-debugging]]  (outline)
-
   * [[The S3 object system|S3]]  (draft)
   * [[The S4 object system|S4]]  (draft)
   * [[Reference based classes|R5]]  (outline)
-
   * [[Performance and profiling|performance]]  (outline)
   * [[High performance functions with Rcpp|Rcpp]]  (outline)
 
