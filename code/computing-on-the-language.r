@@ -1,63 +1,3 @@
-
-find_calls <- function(obj) {  
-  if (is.call(obj)) {
-    f <- deparse(obj[[1]])
-    c(f, compact(lapply(as.list(obj[-1]), find_calls)))
-  }
-}
-
-funs <- function(x) {
-  if (!is.function(x)) return()
-  unlist(find_calls(body(x)))
-  # parsed <- attr(parser::parser(text = deparse(body(x))), "data")
-  # subset(parsed, token.desc == "SYMBOL_FUNCTION_CALL")$text
-}
-is.interactive <- function(x) {
-  any("match.call" %in% funs(get(x)))
-  # any(c("substitute", "match.call") %in% funs(get(x)))
-}
-
-fs <- ls("package:stats")
-fs[sapply(fs, is.interactive)]
-
-# Examples of what you shouldn't do
-#  data.framedas
-#  write.csv
- -->
-
-
-bdy <- body(write.csv)
-is.call(bdy)
-bdy[[1]]
-
-as.list(body(write.csv)[-1]))
-
-f <- function() { 
-  x <- 1
-  y <- 2
-  
-  g <- function() {
-    x + y
-  }
-  
-  z <- 3
-  g()
-}
-
-bdy <- as.expression(as.list(body(f)[-1]))
-compact <- function(x) Filter(Negate(is.null), x)
-
-
-find_calls <- function(obj) {  
-  if (is.call(obj)) {
-    f <- deparse(obj[[1]])
-    c(f, compact(lapply(as.list(obj[-1]), find_calls)))
-  }
-}
-find_calls(body(match.call))
-find_calls(body(write.csv))
-
-
 find_assign <- function(obj) {  
   assigns <- character(0)
   
@@ -105,7 +45,6 @@ find_logical_abbr <- function(obj) {
   }
 }
 
-
 fix_logical_abbr <- function(obj) {
   if (is.name(obj)) {
     if (identical(obj, as.name("T"))) {
@@ -128,7 +67,6 @@ fix_logical_abbr <- function(obj) {
     obj
   }
 }
-
 
 f <- quote(function(x = T) 3)
 fix_logical_abbr(f)

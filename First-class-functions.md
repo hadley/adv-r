@@ -17,7 +17,7 @@ The key to all more advanced techniques described below is that in R, functions 
 
 Anonymous functions are not that useful by themselves, so this section will introduce the basic ideas, and show useful applications in the following sections.
 
-Given the name of a function as a string, you can retrieve the function using `match.fun`.  Given a function, there is no general way to retrieve its name because it may not have a name, or may have more than one name.  Named functions are a subclass of all functions in R.
+Given the name of a function as a string, you can retrieve the function using `match.fun`. You can also construct a call completely from scratch as outlined in [[computing on the language]].  Given a function, there is no general way to retrieve its name because it may not have a name, or may have more than one name. Named functions are a subset of all functions in R.
 
 The tool we use for creating functions is `function` - it is very close to being an ordinary R function, but it has special syntax: the last argument to the function is outside the call to function and provides the body of the new function.
 
@@ -59,6 +59,9 @@ These are illustrated below:
 
     body(function(x = 4) g(x) + h(x))
     # g(x) + h(x)
+    
+    environment(function(x = 4) g(x) + h(x))
+    # <environment: R_GlobalEnv>
 
 ## Closures 
 
@@ -123,26 +126,114 @@ Basically every function in R is a closure, because all functions remember the e
     #         i
     #       }
     # <environment: 0x1022be7f0>
-    
+
 
 A more technical description is available in [Frames, Environments, and Scope in R and S-PLUS](http://cran.r-project.org/doc/contrib/Fox-Companion/appendix-scope.pdf). Section 2 is recommended as a good introduction to the formal vocabulary used in much of the R documentation. [Lexical scope and statistical computing](http://www.stat.auckland.ac.nz/~ihaka/downloads/lexical.pdf) gives more examples of the power and utility of closures.
 
+### Built-in functions that write functions
+
+There are two useful built-in functions that write functions:
+
+* `Negate`: takes a function that returns a logical vector, and returns a
+  function that returns the negation of that vector. This can be a useful
+  shortcut when the function you have returns the opposite of what you need.
+
+      Negate <- function(f) {
+        f <- match.fun(f)
+        function(...) !f(...)
+      }
+      
+      (Negate(is.null))(NULL)
+
+  `Negate` is a general example of the Compose pattern:
+  
+      Compose <- function(f, g) {
+        f <- match.fun(f)
+        g <- match.fun(g)
+        function(...) f(g(...))
+      }
+      
+      Compose(sqrt, "+")(1, 8)
+
+* `Vectorize`: takes a non-vectorised function and makes it vectorised. This
+  doesn't get you any magical performance improvements, but it is useful if
+  you want a quick and dirty way of making a vectorised function, as you need
+  (for example) with `outer`
+
 ## Higher-order functions
 
-The power of closures is tightly connected to another important class of functions: higher-order functions (hofs), also known as functionals. HOFs are functions that take a function as an argument. These typically come from a mathematical or CS background.  In this section we will explore some of their properties and uses.
+The power of closures is tightly connected to another important class of functions: higher-order functions (HOFs), also known as functionals. HOFs are functions that take a function as an argument. Higher-order functionals of use to R programmers fall into three main camps: data structure manipulation, mathematical tools and statistical tools. In this section we will explore some of their properties and uses.
 
-### List manipulation
+### Data structure manipulation
 
-* apply family of functions
+The first important family of higher-order functions that manipulate vectors.  They each take a function as their first argument, and a vector as their second argument.  These function come from functional programming languages like Lisp and Haskell.
 
-* filter
-* map
-* find
-* position
-* reduce 
+For the first three, the function should be a logical predicate, either returning `TRUE` or `FALSE`. The predicate function does not need to be vectorised, as all three functions call it element by element.
 
-* negate
+* `Filter`: returns a new vector containing only elements where the predicate
+  is `TRUE`.
 
+* `Find`: return the first element that matches the predicate (or the last
+  element if `right = TRUE`).
+
+* `Position`: return the position of the first element that matches the
+  predicate (or the last element if `right = TRUE`).
+
+The following example shows some simple uses:
+
+    x <- 200:250
+    
+    is.even <- function(x) x %% 2 == 0
+    is.odd <- Negate(is.even)
+    is.prime <- function(x) gmp::isprime(x) > 1
+    
+    Filter(is.prime, x)
+    # [1] 211 223 227 229 233 239 241
+    
+    Find(is.even, x)
+    # 200
+    Find(is.odd, x)
+    # 201
+    
+    Position(is.prime, x, right = T)
+    # 42
+
+The next two functions work with more general classes of functions:
+
+* `Map`: can take more than one vector as an input and calls `f`
+  element-by-element on each input. It returns a list.
+
+* `Reduce` recursively reduces a vector to a single value by first calling `f`
+  with the first two elements, then the result of `f` and the second element
+  and so on. If `x = 1:5` then the result would be `f(f(f(f(1, 2), 3), 4),
+  5)`. If `right = TRUE` then you get `f(1, f(2, f(3, f(4, 5))))`. You can
+  also specify an `init` value in which case the operation is `f(f(f(f(f(init,
+  1), 2),3), 4), 5)`
+
+  Reduce is useful for implementing many types of recursive operations:
+  merges, taking unique, finding smallest values.
+
+<!-- 
+  find_uses("package:base", "match.fun")
+  find_uses("package:stats", "match.fun")
+  find_args("package:base", "FUN")
+  find_args("package:stats", "FUN")
+-->
+
+Other families of higher-order functions include:
+
+* The `apply` family: `eapply`, `lapply`, `mapply`, `tapply`, `sapply`,
+  `vapply`, `by`. Each of these functions processes breaks up a data structure
+  in some way, applies the function to each piece and then joins them back
+  together again.
+
+* The array manipulation functions modify arrays to compute various margins or
+  other summaries, or generalise matrix multiplication in various ways:
+  `apply`, `outer`, `kronecker`, `sweep`, `addmargins`.
+
+* The `**ply` functions of the `plyr` package which attempt to unify the base
+  apply functions by cleanly separating based on the type of input they break
+  up and the type of output that they produce.
 
 ### Mathematical higher order functions
 
@@ -264,3 +355,10 @@ A similar is approach is to use `plyr::mlply`
     
     plyr::mlply(data.frame(FUN = "mean", trim = trims, stringsAsFactors = F), Curry)
     ldply(funs3, funcall, c(1:100, (1:50) * 100))
+
+
+## Summary
+
+## Exercises
+
+1. Write an `And` function that given two logical functions, returns a logical And of all their results. Extend the function to work with any number of logical functions. Write similar `Or` and `Not` functions.
