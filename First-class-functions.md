@@ -237,11 +237,61 @@ Other families of higher-order functions include:
 
 ### Mathematical higher order functions
 
-* find minimum/maximum/zero
-* derivative
+Higher order functions arise often in mathematics. In this section we'll explore some of the built in mathematical HOF functions in R, as well as deriving some of our simpler approximations to learn more about programming with functions.
 
-* integral: midpoint, trapezoid, Simpson's rule, Boole's rule: two functional inputs: function to derive, and rule to use for approximation 
+<!-- 
+  find_args("package:stats", "^f$")
+  find_args("package:stats", "upper")
+-->
 
+There are three functions that work with a 1d numeric function:
+
+* `integrate`: integrate it over a given range
+* `uniroot`: find where it hits zero over a given range
+* `optmise`: find location of minima (or maxima)
+
+And one function that works with a more general function
+
+* `optim`: given a numeric function, find the location of a minima
+
+We will develop simple version of `itegrate` to explore how we can use higher order functions to integrate a given function over a range.
+
+<!-- * integral: midpoint, trapezoid, Simpson's rule, Boole's rule: two functional inputs: function to derive, and rule to use for approximation  -->
+
+    trapezoid <- function(f, a, b) {
+      (b - a) / 2 * (f(a) + f(b))
+    }
+    
+    midpoint <- function(f, a, b) {
+      
+    }
+    
+Neither of these gives a terribly good result for anything other than the most simple functions.  We need to break up a function into smaller pieces and evaluate on those. 
+
+    midpoint_composite
+
+    trapezoid_composite
+      
+But notice that there's a lot of duplication these functions: they are basically the same apart from the internal rule used to integrate over a simple range.  Let's extract that rule into it's own component.
+
+    composite
+
+With this generalisation in place we can also generalise the approximation rules.  The Newton-Cotes
+    
+    # http://en.wikipedia.org/wiki/Newton%E2%80%93Cotes_formulas
+    newton_cotes <- function(coef, open = FALSE) {
+      n <- length(coef) + open
+      
+      fuction(f, a, b) {
+        if (open) {
+          points <- seq(a, b)
+        }
+        
+        (b - a) * sum(f(points) * coef) / sum(coef)
+      }
+    }
+
+The integrate function takes a somewhat different approach. Instead of making the approximation method better (and more complicated), it varies the position of the points so they are no longer evenly spaced.  This is known as quadrature and it has appealing theoretical properties.
 
 ### Statistical applications
 
