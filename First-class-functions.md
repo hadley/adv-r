@@ -130,7 +130,7 @@ Basically every function in R is a closure, because all functions remember the e
 
 A more technical description is available in [Frames, Environments, and Scope in R and S-PLUS](http://cran.r-project.org/doc/contrib/Fox-Companion/appendix-scope.pdf). Section 2 is recommended as a good introduction to the formal vocabulary used in much of the R documentation. [Lexical scope and statistical computing](http://www.stat.auckland.ac.nz/~ihaka/downloads/lexical.pdf) gives more examples of the power and utility of closures.
 
-### Built-in functions that write functions
+### Built-in functions
 
 There are two useful built-in functions that write functions:
 
@@ -162,7 +162,7 @@ There are two useful built-in functions that write functions:
 
 ## Higher-order functions
 
-The power of closures is tightly connected to another important class of functions: higher-order functions (HOFs), also known as functionals. HOFs are functions that take a function as an argument. Higher-order functionals of use to R programmers fall into three main camps: data structure manipulation, mathematical tools and statistical tools. In this section we will explore some of their properties and uses.
+The power of closures is tightly connected to another important class of functions: higher-order functions (HOFs), also known as functionals. HOFs are functions that take a function as an argument. Higher-order functionals of use to R programmers fall into two main camps: data structure manipulation and mathematical tools. In this section we will explore some of their properties and uses.
 
 ### Data structure manipulation
 
@@ -247,23 +247,30 @@ Higher order functions are an important mathematics  arise often in mathematics.
   find_args("package:stats", "upper")
 -->
 
-#### Built-in
-
 There are three functions that work with a 1d numeric function:
 
 * `integrate`: integrate it over a given range
 * `uniroot`: find where it hits zero over a given range
 * `optmise`: find location of minima (or maxima)
 
-And one function that works with a more general function
+And one function that works with a more general an nd numeric function:
 
 * `optim`: given a numeric function, find the location of a minima
 
-### Statistical applications
+In statistics, optimisation is often used for maximum likelihood estimation. MLE are natural use of closures because the arguments to a likelihood fall into two groups: the data, which is fixed for a given problem, and the parameters, which will typically vary as we try to find a maximum numerically.  This naturally gives rise to an approach like the following:
 
-* approxfun + ecdf, stepfun
-* maximum likelihood estimation
-
+    # Negative log-likelihood for Poisson distribution
+    poisson_nll <- function(x) {
+      function(lambda) {
+        n * lambda - sum(x) * log(lambda) # + terms not involving lambda
+      }
+    }
+    
+    nll1 <- poisson_nll(c(41, 30, 31, 38, 29, 24, 30, 29, 31, 38)) 
+    nll2 <- poisson_nll(c(6, 4, 7, 3, 3, 7, 5, 2, 2, 7, 5, 4, 12, 6, 9)) 
+    
+    optimize(nll1, c(0, 100))
+    optimize(nll2, c(0, 100))
 
 ## Lists of functions
 
@@ -374,8 +381,6 @@ A similar is approach is to use `plyr::mlply`
 
 
 ## Case study
-
-#### Building our own
 
 In this case study, we will develop a simple numerical integration tool, and along the way, illustrate the use of many properties of first-class functions: we'll use anonymous functions, lists of functions, functions that return functions as output and functions that take functions as input.  Each step is driven by a desire to reduce duplication in our code, and to make our code more general so that it can deal with a wider variety of problems.
 
@@ -504,3 +509,5 @@ Mathematically, the next step in improving numerical integration is to move from
 1. Read the source code for `Filter`, `Negate`, `Find` and `Position`. Write a couple of sentences for each describing how they work.
 
 1. Write an `And` function that given two logical functions, returns a logical And of all their results. Extend the function to work with any number of logical functions. Write similar `Or` and `Not` functions.
+
+1. Write a general compose function that composes together an arbitrary number of functions. Write it using both recursion and looping.
