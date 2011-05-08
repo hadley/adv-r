@@ -16,10 +16,10 @@ I outline some of the more base skills more briefly in  [[prerequisites|prereqs]
 
 ## R fundamentals
 
-In the following pages I try and explain how fundamental R components work, taking the [R language definition][lang-def] and making it easier to understand with plenty of examples to illustrate each idea.
+In the following pages I try and explain how fundamental R components work, taking the [R language definition][lang-def] and making it easier to understand with plenty of examples to illustrate each idea. These tools are important because they allow to identify and reduce duplication in a wider variety of settings.
 
   * [[Scoping and environments|Scoping]]  (draft)
-  * [[First class functions|First-class-functions]]  (outline)
+  * [[First class functions|First-class-functions]]  (draft)
   * [[Controlling evaluation|Evaluation]]  (complete)
   * [[Lazy evaluation|Lazy-evaluation]]  (draft)
   * [[Computing on the language|Computing-on-the-language]]  (draft)

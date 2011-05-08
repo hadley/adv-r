@@ -1,6 +1,8 @@
 # Controlling evaluation
 
-In this document, we're going to write our own (slightly) simplified version of subset, and along the way, learn how we can capture and control evaluation in R. You might already be familiar with the `subset` function. If not sure, it's a useful interactive shortcut for subsetting data frames: instead of repeating the data frame you're working with again and again, you can save some typing:
+In this document, we're going to write our own (slightly) simplified version of subset, and along the way, learn how we can capture and control evaluation in R. These tools are very useful for developing convenient user-facing functions because they dramatically reduce the amount of typing required to specify an action.  This abbreviation comes at a cost of somewhat increasing ambiguity in the function call, and by making the function difficult to call from another function.
+
+You might already be familiar with the `subset` function. If not sure, it's a useful interactive shortcut for subsetting data frames: instead of repeating the data frame you're working with again and again, you can save some typing:
 
     subset(mtcars, vs == am)
     # equivalent to:

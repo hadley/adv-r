@@ -276,19 +276,50 @@ In statistics, optimisation is often used for maximum likelihood estimation. MLE
 
 These components join together to make lists of functions surprisingly powerful.
 
-Storing functions in lists is also useful for benchmarking, when you are comparing the performance of multiple different approaches to the same problem.  For example, if 
+Storing functions in lists is also useful for benchmarking, when you are comparing the performance of multiple approaches to the same problem.  For example, if you wanted to compare a few approaches to computing the mean:
 
-Using lapply etc. to generate lists of functions. Need helper function to actually call them elegantly.
+    compute_mean <- list(
+      base = function(x) mean(x),
+      sum = function(x) sum(x) / length(x),
+      manual = function(x) {
+        total <- 0
+        n <- length(x)
+        for (i in seq_along(x)) {
+          total <- total + x[i] / n
+        }
+        total
+      }
+    )
+      
+    x <- runif(1e5)
+    system.time(compute_mean$base(x))
+    system.time(compute_mean$manual(x))
+    
+    lapply(compute_mean, function(f) system.time(f(x)))
+
+If this is the sort of thing we want to do a lot, we can add another layer of abstraction: a closure that automatically times how long a function takes.
+
+    timer <- function(f) {
+      force(f)
+      function(...) system.time(f(...))
+    }
+    timers <- lapply(compute_mean, timer)
+    lapply(timers, callfun, x)
+
+Another useful case is when we want to summarise an object in multiple ways.  We could store each summary function in a list:
 
     funs <- list(
       sum = sum,
       mean = mean,
       median = median
     )
+
+To call each function in turn we can use `lapply`, either with an anonymous function or a new helper function that calls it's first argument with all other arguments:
+
     lapply(funs, function(x) x(1:10))
 
-    callfun <- function(f, ...) f(...)
-    lapply(funs, funcall, 1:10)
+    call_fun <- function(f, ...) f(...)
+    lapply(funs, call_fun, 1:10)
 
 If we wanted to add parameters we have to duplicate a lot of code:
 
@@ -304,7 +335,7 @@ How could we reduce this duplication?  A useful function here is `Curry` (named 
     addOne <- funtion(x) add(x, 1)
     addOne <- Curry(add, y = 1)
 
-A possible way to implement `Curry` is as follows:
+One way to implement `Curry` is as follows:
 
     Curry <- function(FUN,...) { 
       .orig <- list(...)
@@ -313,6 +344,8 @@ A possible way to implement `Curry` is as follows:
         do.call(FUN, c(.orig, list(...)))
       }
     }
+
+(You should be able to figure out how this works.  See the exercises.)
 
 But implementing it like this prevents arguments from being lazily evaluated, so it has a somewhat more complicated implementation, basically working by building up an anonymous function by hand. You should be able to work out how this works after you've read the [[computing on the language]] chapter.  (Hopefully this function will be included in a future version of R.)
 
@@ -360,25 +393,18 @@ Let's think about a similar, but subtly different case. Let's take a vector of n
 Instead we could use an anonymous function
 
     funs3 <- lapply(trims, function(t) Curry("mean", trim = t))
-    lapply(funs3, funcall, c(1:100, (1:50) * 100))
+    lapply(funs3, call_fun, c(1:100, (1:50) * 100))
 
 But that doesn't work because each function gets a promise to evaluate `t`, and that promise isn't evaluated until all of the functions are run.  To make it work you need to manually force the evaluation of t:
 
     funs3 <- lapply(trims, function(t) {force(t); Curry("mean", trim = t)})
-    lapply(funs3, funcall, c(1:100, (1:50) * 100))
+    lapply(funs3, call_fun, c(1:100, (1:50) * 100))
 
-A somewhat simpler solution in this case is to use `mapply` which is a special version of lapply which allows you call vary multiple arguments, not just the first one.
+A simpler solution in this case is to use `Map`, as described previously, which works similarly to `lapply` except that you can supply multiple arguments by both name and position. For this example, it doesn't do a good job of figuring out how to name the functions, but that's easily fixed.
 
-    funs3 <- mapply(Curry, "mean", trim = trims,
-      SIMPLIFY = FALSE, USE.NAMES = FALSE)
+    funs3 <- Map(Curry, "mean", trim = trims)
     names(funs3) <- trims
-    lapply(funs3, funcall, c(1:100, (1:50) * 100))
-
-A similar is approach is to use `plyr::mlply`
-    
-    plyr::mlply(data.frame(FUN = "mean", trim = trims, stringsAsFactors = F), Curry)
-    ldply(funs3, funcall, c(1:100, (1:50) * 100))
-
+    lapply(funs3, call_fun, c(1:100, (1:50) * 100))
 
 ## Case study
 
@@ -511,3 +537,5 @@ Mathematically, the next step in improving numerical integration is to move from
 1. Write an `And` function that given two logical functions, returns a logical And of all their results. Extend the function to work with any number of logical functions. Write similar `Or` and `Not` functions.
 
 1. Write a general compose function that composes together an arbitrary number of functions. Write it using both recursion and looping.
+
+1. How does the first version of `Curry` work?
