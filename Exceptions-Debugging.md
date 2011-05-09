@@ -85,40 +85,46 @@ It's also possible to start `browser` automatically when an error occurs, by set
 
 * `NULL`: the default. Prints an error message and stops function execution.
 
-### Create uses of trace
+### Creative uses of trace
 
 Trace is a useful debugging function that along with some of our computing on the language tools can be used to set up warnings on a large number of functions at a time. This is useful if you for automatically detecting some of the errors described above. The first step is to find all functions that have a `na.rm` argument. We'll do this by first building a list of all functions in base and stats, then inspecting their formals.
 
-  objs <- c(ls("package:base", "package:stats"))
-  has_missing_arg <- function(name) {
-    x <- get(name)
-    if (!is.function(x)) return(FALSE)
+    objs <- c(ls("package:base", "package:stats"))
+    has_missing_arg <- function(name) {
+      x <- get(name)
+      if (!is.function(x)) return(FALSE)
     
-    args <- names(formals(x))
-    "na.rm" %in% args
-  }
-  f_miss <- Filter(has_missing_arg, objs)
+      args <- names(formals(x))
+      "na.rm" %in% args
+    }
+    f_miss <- Filter(has_missing_arg, objs)
 
 Next, we write a version of trace vectorised over the function name, and then use that function to add a warning to every function that we found above.
 
-  trace_all <- function(fs, tracer, ...) {
-    lapply(fs, trace, tracer = tracer, print = FALSE, ...)
-    invisible(return())
-  }
+    trace_all <- function(fs, tracer, ...) {
+      lapply(fs, trace, tracer = tracer, print = FALSE, ...)
+      invisible(return())
+    }
   
-  trace_all(f_miss, quote(if(missing(na.rm)) stop("na.rm not set")))
-  # But misses primitives
+    trace_all(f_miss, quote(if(missing(na.rm)) stop("na.rm not set")))
+    # But misses primitives
   
-  pmin(1:10, 1:10)
-  # Error in eval(expr, envir, enclos) : na.rm not set
-  pmin(1:10, 1:10, na.rm = T)
-  # [1]  1  2  3  4  5  6  7  8  9 10
+    pmin(1:10, 1:10)
+    # Error in eval(expr, envir, enclos) : na.rm not set
+    pmin(1:10, 1:10, na.rm = T)
+    # [1]  1  2  3  4  5  6  7  8  9 10
 
-One disadvantage of this approach is that we don't automatically pick up any `primitive` functions, because for these functions formals returns `NULL`.
+One problem of this approach is that we don't automatically pick up any `primitive` functions, because for these functions formals returns `NULL`.
 
 ## Exceptions
 
+Defensive programming is the art of making code fail in a well-defined manner even when something unexpected occurs. There are two components of this art related to exceptions: raising exceptions as soon as you notice something has gone wrong, and responding to errors as cleanly as possible.
+
+A general principle for errors is to "fail fast" - as soon as you figure out something as wrong, and your inputs are not as expected, you should raise an error.  
+
 ### Creating
+
+There are a number of options for letting the user know when something has gone wrong:
 
 * don't use `cat()` or `print()`, except for print methods, or for optional
   debugging information.
@@ -130,16 +136,138 @@ One disadvantage of this approach is that we don't automatically pick up any `pr
   `plyr::join` which informs which variables where used to join the two
   tables.
 
-* use `warning()` for unexpected problems that aren't show stoppers.  `options(warning = 2)` will turn errors into warnings
+* use `warning()` for unexpected problems that aren't show stoppers.
+  `options(warning = 2)` will turn errors into warnings. Warnings are often
+  more appropriate for vectorised functions when a single value in the vector
+  is incorrect, e.g. `log(-1:2)` and `sqrt(-1:2)`.
 
 * use `stop()` when the problem is so big you can't continue
 
-* `stopifnot`
+* `stopifnot()` is a quick and dirty way of checking that pre-conditions for
+  your function are met. The problem with `stopifnot` is that if they aren't
+  met, it will display the test code as an error, not a more informative
+  message. Checking pre-conditions with `stopifnot` is better than nothing,
+  but it's better still to check the condition yourself and return an
+  informative message with `stop()`
 
 ### Handling
 
-  * `try`
-  * `tryCatch`
+Error handling is performed with the `try` and `tryCatch` functions. `try` is a simpler version, so we'll start with that first. The `try` functions allows execution to continue even if an exception occurs, and is particularly useful when operating on elements in a loop. The `silent` argument controls whether or not the error is still printed. 
+
+    results <- lapply()
+
+If code fails, `try` invisibly returns an object of class `try-error`. There isn't a built in function for testing for this class, so we'll define one. Then we can easily strip all errors out of a list with `Filter`:
+
+    is.error <- function(x) inherits(x, "try-error")
+    successful <- Filter(Negate(is.error), results)
+    
+If we wanted to avoid the anonymous function call, we could create our own function to automatically wrap a call in a `try`:
+
+    try_f <- function(f, silent = FALSE) try(f(...), silent = silent)
+
+The `tryCatch` function gives more control than `try`.  To understand how it works, we first need to learn a little about conditions, the S3 objects that represent errors, warnings and messages.  
+
+    is.condition <- function(x) inherits(x, "condition")
+    
+    simpleError
+    simpleWarning
+    simpleMessage
+    
+    conditionMessage
+    conditionCall
+
+    signalCondition
+    
+Another class of conditions that can't be created directly are interrupts - created when the user presses Ctrl + Break, Escape, or Ctrl + C (depending on the platform) to terminate execution.
+
+
+The `tryCatch` call has three components:
+
+* `expr`: the code to run.
+
+* `...`: a set of named arguments setting up error handlers. If an error
+  occurs, `tryCatch` will call the first handler whose name matches one of the
+  classes of the condition. Currently, the only useful names are `interrupt`,
+  `error`, `warning` and `message`.
+
+* `finally`: code regardless of whether `expr` succeeds or fails. This is
+  useful for clean up, as described below. All handlers have been turned off
+  by the time the `finally` code is run, so errors will propagate as usual.
+
+Handler functions accept a single argument, the condition raised by the code. What can handler functions do?
+
+* Return a value
+
+* `invokeRestart("abort")`
+
+* Re-raise the error with `stop`
+
+* For messages and warnings, `invokeRestart("muffleWarning")`,
+  `invokeRestart("muffleMessage")` which will continue execution, ignoring the
+  warning or message, respectively.
+
+Some examples are listed below:
+
+    tryCatch(stop(a), 
+      error = function(...) list(...)
+    )
+
+    f <- function() {
+      tryCatch(stop("a"), 
+        error = function(e) invokeRestart("abort")
+      )
+      4
+    }
+
+    g <- function(...) stop("Error!")
+    f <- function() {
+      tryCatch(g(), 
+        error = function(e) stop(e)
+      )
+      4
+    }
+    f()
+    
+    f <- function() {
+      tryCatch(stop("a"), 
+        error = function(e) conditionCall(e)
+      )
+    }
+
+
+    a <- structure(list(message = "a", call = quote(a)), 
+      class = c("a", "error", "condition"))
+    b <- simpleError("b")
+
+    # What does signalling a condition mean?
+    signalCondition(a)
+    signalCondition(b)
+
+    # I expect the same behaviour as 
+    stop(a)
+    stop(b)
+
+If you're developing your own hierarchy of exceptions, note that tryCatch makes no effort to find the handler that best matches the condition.  It just uses the first match:
+
+      tryCatch(stop(a), 
+        error = function(...) "error",
+        a = function(...) "a"
+      )
+      # [1] error
+
+
+      tryCatch(message("a"), 
+        error = function(...) "error",
+        a = function(...) "a",
+        message = function(...) "message"
+      )
+      # [1] error
+      
+      tryCatch
+
+# Using `tryCatch`
+
+With the basics in place, we now start develop some useful capabilities on top of `tryCatch`.  In this section, we will 
 
 Examples:
 
@@ -148,12 +276,7 @@ Examples:
 
 `suppressWarnings`, `suppressMessages`
 
-### Fail fast
-
-A general principle for errors is to "fail fast" - as soon as you figure out something as wrong, and your inputs are not as expected, you should raise an error.
-
-
-### Ensuring stuff happens
+Ensuring things happen
 
 When 
 
@@ -171,6 +294,17 @@ When
 
 stackoverflow
 r-help
+
+While you can get some excellent advice on R-help, you Tips for getting help on R-help:
+
+* Make sure you have the latest version of R, and the package (or packages)
+  you are having problems with. It may be that your problem is the result of a
+  bug that has been fixed recently.  
+
+* If it's not clear where the problem is, include the results of
+  `sessionInfo()` so others can see your R setup.
+
+* Spend some time creating a reproducible example.  Make sure you have run your script in a vanilla R sessions (`R --version`)
 
 ## Exercises
 
