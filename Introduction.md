@@ -78,7 +78,7 @@ Another extremely important data structure is the data.frame. A data frame is a 
 * Five types of subsetting.
 * Extensions to more than 1d.
 
-All basic data structures can be teased apart using the subsetting operators: `[`, `[[` and `$`. It's easiest to explain subsetting for 1d first, and then show how it generalises to higher dimensions. You can subset by 5 different things:
+All basic data structures can be teased apart using the subsetting operators: `[`, `'[[` and `$`. It's easiest to explain subsetting for 1d first, and then show how it generalises to higher dimensions. You can subset by 5 different things:
 
 * blank: return everything
 * positive integers: return elements at those positions
@@ -89,8 +89,8 @@ All basic data structures can be teased apart using the subsetting operators: `[
 For higher dimensions these are separated by commas.
 
 * `[` .  Drop argument controls simplification.
-* `[[` returns an element
-* `x$y` is equivalent to `x[["y"]]`
+* `'[[` returns an element
+* `x$y` is equivalent to `x'[["y"]]`
 
 ### Functions
 
