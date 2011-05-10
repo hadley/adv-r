@@ -12,6 +12,8 @@ This chapter describes techniques to use when things go wrong:
 
 * Getting help: what to do if you can't figure out what the problem is
 
+As with many other parts of R, the approach to dealing with errors and exceptions comes from a LISP-heritage, and is quite different (although some of the terminology is the same) to that of languages like Java.
+
 ## Interactive analysis vs. programming
 
 There is a tension between interactive analysis and programming. When you a doing an analysis, you want R to do what you mean, and if it guesses wrong, then you'll discover it right away and can fix it. If you're creating a function, then you want to make it as robust as possible so that any problems become apparent right away (see fail fast below).
@@ -71,7 +73,7 @@ Locating warnings is a little trickier. The easiest way to turn it in an error w
 
 ### Browsing on error
 
-It's also possible to start `browser` automatically when an error occurs, by setting `option(error = browser)`. This will start the interactive debugger in the environment in which the error occurred. Other functions that you can supply to `error` is:
+It's also possible to  start `browser` automatically when an error occurs, by setting `option(error = browser)`. This will start the interactive debugger in the environment in which the error occurred. Other functions that you can supply to `error` are:
 
 * `recover`: a step up from `browser`, as it allows you to drill down into any
   of the calls in the call stack. This is useful because often the cause of
@@ -85,13 +87,18 @@ It's also possible to start `browser` automatically when an error occurs, by set
 
 * `NULL`: the default. Prints an error message and stops function execution.
 
-We can use `withCallingHandlers` to set up something similar for warnings.  The following function will call the specified action w
+We can use `withCallingHandlers` to set up something similar for warnings. The following function will call the specified action when a warning is generated. The code is slightly tricky because we need to find the right environment to evaluate the action - it should be the function that calls warning.
 
     on_warning <- function(action, code) {
       q_action <- substitute(action)
       
       withCallingHandlers(code, warning = function(c) {
-        eval(q_action, parent.frame(9))
+        for(i in seq_len(sys.nframe())) {
+          f <- as.character(sys.call(i)[[1]])
+          if (f == "warning") break;
+        }
+        
+        eval(q_action, sys.frame(i - 1))
       })
     }
     
@@ -104,8 +111,8 @@ We can use `withCallingHandlers` to set up something similar for warnings.  The 
       x <- 3
       warning("Leaving g")
     }
-    on_warning(browser, f())
-    on_warning(recover, f())
+    on_warning(browser(), f())
+    on_warning(recover(), f())
 
 ### Creative uses of trace
 
@@ -174,7 +181,10 @@ There are a number of options for letting the user know when something has gone 
 
 ### Handling
 
-<!-- http://www.stat.uiowa.edu/~luke/R/exceptions/simpcond.html -->
+<!-- 
+http://www.nhplace.com/kent/Papers/Condition-Handling-2001.html
+http://www.stat.uiowa.edu/~luke/R/exceptions/simpcond.html 
+-->
 
 Error handling is performed with the `try` and `tryCatch` functions. `try` is a simpler version, so we'll start with that first. The `try` functions allows execution to continue even if an exception occurs, and is particularly useful when operating on elements in a loop. The `silent` argument controls whether or not the error is still printed. 
 
