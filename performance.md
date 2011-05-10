@@ -8,4 +8,8 @@
 
 ## Profiling
 
+Rprof, system.time
+tracemem
+object.size
+
 ## Benchmarking

@@ -1,18 +1,7 @@
 # Advanced R development
 (Making reproducible code)
 
-This wiki describes the skills that I think you need to be an advanced R developer, producing reproducible code that can be used in a wide variety of circumstances.
-
-* You are familiar with the fundamentals of R, so that you can represent
-  complex data types and simplify the operations performed on them. You have a
-  deep understanding of the language, and know how to override default
-  behaviours when necessary
-
-* You know how to produce packages to make your work available to a wider
-  audience, and how to efficiently program "in the large", so you spend your
-  time solving new problems not struggling with old code.
-
-I outline some of the more basic skills more briefly in the [[introduction]].
+[[Introduction]]  (outline)
 
 ## R fundamentals
 
