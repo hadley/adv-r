@@ -12,7 +12,7 @@ This wiki describes the skills that I think you need to be an advanced R develop
   audience, and how to efficiently program "in the large", so you spend your
   time solving new problems not struggling with old code.
 
-I outline some of the more base skills more briefly in  [[prerequisites|prereqs]].
+I outline some of the more basic skills more briefly in the [[introduction]].
 
 ## R fundamentals
 
