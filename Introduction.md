@@ -1,6 +1,6 @@
 # Introduction
 
-This book has grown out of over 10 years of programming in R, and constantly struggling to understand the best way of doing things. I would particularly like to thank the tireless contributors to R-help. There are too many that have helped me over the years to list individually, but I'd particularly like to thank Luke Tierney and Brian Ripley for correcting countless of my misunderstandings and helping me to deeply understand R.
+This book has grown out of over 10 years of programming in R, and constantly struggling to understand the best way of doing things. I would particularly like to thank the tireless contributors to R-help. There are too many that have helped me over the years to list individually, but I'd particularly like to thank Luke Tierney, John Chambers, and Brian Ripley for correcting countless of my misunderstandings and helping me to deeply understand R.
 
 R is still a relatively young language, and the resources to help you understand it are still maturing. In my personal journey to understand R, I've found it particularly helpful to refer to resources that describe how other programming languages work.  I found the following two books particularly helpful:
 
@@ -17,6 +17,8 @@ Other websites that helped me to understand smaller pieces of R are:
 * [Getting Started with Dylan](http://www.opendylan.org/gdref/tutorial.html)
   for understanding S4
 
+## Goal
+
 This book describes the skills that I think you need to be an advanced R developer, producing reproducible code that can be used in a wide variety of circumstances.
 
 * You are familiar with the fundamentals of R, so that you can represent
@@ -30,34 +32,47 @@ This book describes the skills that I think you need to be an advanced R develop
 
 In the remainder of the introduction, I will give a very quick revision of the basic skills that you already posses.
 
-## Data structures
+## Basics
 
-The basic data structure in R is the vector, which comes in two basic flavours: atomic vectors and lists. Atomic vectors are logical, integer, numeric, character and raw. Vectors have names and mode. 
+### Data structures
+
+The basic data structure in R is the vector, which comes in two basic flavours: atomic vectors and lists. Atomic vectors are logical, integer, numeric, character and raw. Common vector properties are mode, length and names:
+
+    x <- 1:10
+    mode(x)
+    length(x)
+    names(x)
+    
+    names(x) <- letters[1:10]
+    x
+    names(x)
 
 Lists are different from atomic vectors in that they can contain any other type of vector. This makes them __recursive__, because a list can contain other lists. 
 
-Vectors can be extended into multiple dimensions. If 2d they are called matrices, if more than 2d they are called arrays.
+    x <- list(list(list(list())))
+    x
+    str(x)
 
-      x <- 1:10
-      y <- matrix(1:20, nrow = 4, ncol = 5)
-      z <- matrix(1:24, dims = c(3, 4, 5))
-      
-      length(x)
-      names(x)
+`str` is one of the most important functions in R: it gives a human readable description of any R data structure.
 
-      nrow(y)
-      rownames(y)
-      ncol(y)
-      colnames(y)
+Vectors can be extended into multiple dimensions. If 2d they are called matrices, if more than 2d they are called arrays.  Length generalises to `nrow` and `ncol` for matrices, and `dim` for arrays.  Names generalises to `rownames` and `colnames` for matrices, a `dimnames` for arrays.
 
-      dim(z)
-      dimnames(z)
+    y <- matrix(1:20, nrow = 4, ncol = 5)
+    z <- matrix(1:24, dims = c(3, 4, 5))
 
-All vectors can also have additional arbitrary attributes - these are stored in a named list.
+    nrow(y)
+    rownames(y)
+    ncol(y)
+    colnames(y)
 
-Another important 2d data structure is a data.frame. A data frame is a named list with the restriction that all elements must be vectors of the same length. Each element in the list represents a column, which means that each column must be one type, but a row may contain values of different types.
+    dim(z)
+    dimnames(z)
 
-## Subsetting
+All vectors can also have additional arbitrary attributes - these can be thought of as a named list (although the names must be unique), and can be accessed individual with `attr` or all at once with `attributes`.  `structure` returns a new object with modified attributes.
+
+Another extremely important data structure is the data.frame. A data frame is a named list with a restriction that all elements must be vectors of the same length. Each element in the list represents a column, which means that each column must be one type, but a row may contain values of different types.
+
+### Subsetting
 
 * Three subsetting operators.
 * Five types of subsetting.
@@ -77,21 +92,48 @@ For higher dimensions these are separated by commas.
 * `[[` returns an element
 * `x$y` is equivalent to `x[["y"]]`
 
-## Functions
+### Functions
 
-* copy on modify
-* returning multiple objects
-* ...
+Functions in R are created by `function`. They consist of an argument list (which can include default values), and a body of code to execute when evaluated. In R arguments are passed-by-value, so the only way a function can affect the outside world is through its return value:
 
-Calling a function:
+    f <- function(x) {
+      x$a <- 2
+    }
+    x <- list(a = 1)
+    f()
+    x$a
 
-* argument matching: exact, partial, position
-* recursion (+ recall)
+Functions can return only a single value, but this is not a limitation in practice because you can always return a list containing any number of objects.
 
-Special functions
+When calling a function you can specify arguments by position, or by name:
 
-* binary operators
-* replacement functions
+    mean(1:10)
+    mean(x = 1:10)
+    mean(x = 1:10, trim = 0.05)
 
-## Vocabulary
+Arguments are matched first by exact name, then by prefix matching and finally by position.
 
+You can define new infix operators with a special syntax:
+
+    "%+%" <- function(a, b) paste(a, b)
+    "new" %+% "string"
+
+And replacement functions to modify arguments "in-place":
+
+    "second<-" <- function(x, value) {
+      x[2] <- value
+      x
+    }
+    x <- 1:10
+    second(x) <- 5
+    x
+
+But this is really the same as 
+
+    x <- "second<-"(x, 5)
+
+and actual modification in place should be considered a performance optimisation, not a fundamental property of the language.
+
+### Vocabulary
+
+You should also have a decent [[vocabulary]].

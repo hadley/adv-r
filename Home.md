@@ -1,7 +1,7 @@
 # Advanced R development
 (Making reproducible code)
 
-[[Introduction]]  (outline)
+[[Introduction]]  (outline)  
 [[Vocabulary]]  (draft)
 
 ## R fundamentals
