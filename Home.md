@@ -2,6 +2,7 @@
 (Making reproducible code)
 
 [[Introduction]]  (outline)
+[[Vocabulary]]  (draft)
 
 ## R fundamentals
 
