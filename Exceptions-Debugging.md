@@ -352,6 +352,13 @@ With the basics in place, we'll next develop some useful tools based the ideas w
 <!-- * capturing all messages or warnings produced by a function
 * returning a value even when a user interrupts: `Ctrl + C` -->
 
+      browse_on_error <- function(f) {
+        function(...) {
+          tryCatch(f(...), error = function(c) browser())
+        }
+      }
+
+
 The `finally` argument to `tryCatch` is very useful for clean up, because it is always called, regardless of whether the code executed successfully or not. This is useful when you have:
 
 * modified `options`, `par` or locale
