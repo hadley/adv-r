@@ -399,7 +399,7 @@ While you can get some excellent advice on R-help, fools are not tolerated gladl
   `sessionInfo()` so others can see your R setup.
 
 * Spend some time creating a reproducible example. Make sure you have run your
-  script in a vanilla R sessions (`R --version`). This is often a useful
+  script in a vanilla R sessions (`R --vanilla`). This is often a useful
   example by itself, because in the course of making the problem reproducible
   you figure out what's causing the problem.
 
