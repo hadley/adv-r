@@ -1,6 +1,6 @@
 # Vocabulary
 
-The following functions outline my expectation for a working vocabulary of R functions. I don't expect you to be intimately conscious of the details of every function, but you should at least be aware that they all exist, so that if you do encounter a problem that requires a special tool, you're already aware of it.
+The following functions outline my expectation for a working vocabulary of R functions. I don't expect you to be intimately conscious of the details of every function, but you should at least be aware that they all exist, so that if you do encounter a problem that requires a special tool, you're already aware of it. The functions come from the `base` and `stats` packages, but include a few pointers to other packages and important options.
 
 To get the most out of this book, you should be familiar with "the basics".  For data analysis, you also need I/O and special data.  
 
@@ -83,8 +83,11 @@ To get the most out of this book, you should be familiar with "the basics".  For
     hat, influence.measures
     logLik, df, deviance
     formula, ~, I
-    anova, coef, confint
+    anova, coef, confint, vcov
     contrasts
+    
+    # Miscellaneous tests
+    apropos("\\.test$")
 
     # Random variables 
     beta, binom, cauchy, chisq, exp, f, gamma, geom, hyper, lnorm, logis,
@@ -117,6 +120,7 @@ To get the most out of this book, you should be familiar with "the basics".  For
     # Help
     help, ?
     help.search
+    apropos
     RSiteSearch
     citation
     demo
@@ -133,7 +137,7 @@ To get the most out of this book, you should be familiar with "the basics".  For
     summary
     sink
 
-    # Reading and writing data -
+    # Reading and writing data
     data
     count.fields
     read.csv, read.delim, read.fwf, read.table
@@ -173,11 +177,12 @@ To get the most out of this book, you should be familiar with "the basics".  For
 
     # Factors 
     factor, levels
+    reorder, relevel
     cut, findInterval
     interaction
     options(stringsAsFactors = FALSE)
 
-    # Arrays manipulation
+    # Array manipulation
     array
     dim
     dimnames
