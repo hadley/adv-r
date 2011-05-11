@@ -2,7 +2,7 @@
 
 The following functions outline my expectation for a working vocabulary of R functions. I don't expect you to be intimately conscious of the details of every function, but you should at least be aware that they all exist, so that if you do encounter a problem that requires a special tool, you're already aware of it. The functions come from the `base` and `stats` packages, but include a few pointers to other packages and important options.
 
-To get the most out of this book, you should be familiar with "the basics".  For data analysis, you also need I/O and special data.  
+To get the most out of this book, you should be familiar with "the basics".  For data analysis, you also need I/O and special data.  My current favourite reference for this level of introduction to R is the [R Cookbook](http://amzn.com/0596809158?tag=hadlwick-20) by Paul Teetor.
 
 ## The basics
 

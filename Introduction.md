@@ -4,9 +4,9 @@ This book has grown out of over 10 years of programming in R, and constantly str
 
 R is still a relatively young language, and the resources to help you understand it are still maturing. In my personal journey to understand R, I've found it particularly helpful to refer to resources that describe how other programming languages work.  I found the following two books particularly helpful:
 
-* The structure and interpretation of computer programs.
+* [The structure and interpretation of computer programs](http://mitpress.mit.edu/sicp/full-text/book/book.html) by Harold Abelson and Gerald Jay Sussman.
 
-* P. van Roy and S. Haridi. Concepts, Techniques and Models of Computer Programming. The MIT Press, 2004.
+* [Concepts, Techniques and Models of Computer Programming](http://amzn.com/0262220695?tag=hadlwick-20) by Peter van Roy and Sef Haridi
 
 It's also very useful to learn a little about LISP, because many of the ideas in R are adapted from lisp, and there are often good descriptions of the basic ideas, even if the implementation differs somewhat.
 
@@ -16,6 +16,10 @@ Other websites that helped me to understand smaller pieces of R are:
 
 * [Getting Started with Dylan](http://www.opendylan.org/gdref/tutorial.html)
   for understanding S4
+
+Other recommendations for becoming a better programmer:
+
+* [The pragmatic programmer](http://amzn.com/020161622X?tag=hadlwick-20), by Andrew Hunt and David Thomas.
 
 ## Goal
 
@@ -112,6 +116,8 @@ When calling a function you can specify arguments by position, or by name:
     mean(x = 1:10, trim = 0.05)
 
 Arguments are matched first by exact name, then by prefix matching and finally by position.
+
+There is a special argument called `...`.  This argument will match any arguments not otherwise specifically matched, and can be used to call other functions.  This is useful if you want to collect arguments to call another function, but you don't want to prespecify their possible names.
 
 You can define new infix operators with a special syntax:
 
