@@ -36,6 +36,20 @@ This book describes the skills that I think you need to be an advanced R develop
 
 In the remainder of the introduction, I will give a very quick revision of the basic skills that you already posses.
 
+## Programming styles in R
+
+### Functional
+
+* First class functions
+* Pure functions: a goal, not a prerequisite
+* Recursion: no tail call elimination. Slow
+* Lazy evaluation: but only of function arguments. No infinite streams
+* Untyped
+
+### Object oriented
+
+* Has three distinct OO frameworks built in to base. And more available in add on packages.  Two of the OO styles are built around generic functions, a style of OO that comes from lisp.
+
 ## Basics
 
 ### Data structures

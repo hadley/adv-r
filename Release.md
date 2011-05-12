@@ -7,7 +7,7 @@
 
 * from the command line, run `R CMD check`
 
-Passing `R CMD check` is the most frustrating part of package development, and it usually takes some time the first time. Hopefully by following the tips elsewhere in this document you'll be in a good place to start - in particular, using roxygen and only exporting the minimal number of function is likely to save a lot of work.
+Passing `R CMD check` is the most frustrating part of package development, and it usually takes some time the first time. Hopefully by following the tips elsewhere in this document you'll be in a good place to start - in particular, using roxygen and only exporting the minimal number of functions is likely to save a lot of work.
 
 One place that it is frustrating to have problems with is the examples. If you discover a mistake, you need to fix it in the roxygen comments, rerun roxygen and then rerun `R CMD check`. The examples are one of the last things checked, so this process can be very time consuming, particularly if you have more than one bug. The `devtools` package contains a function, `run_examples` designed to make this somewhat less painful: all it does is run functions. It also has an optional parameter which tells it which function to start at - that way once you've discovered an error, you can rerun from just that file, not all the files that lead up to.
 

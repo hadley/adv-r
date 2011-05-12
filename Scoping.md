@@ -121,6 +121,19 @@ The only environment that doesn't have a parent is emptyenv(), which is the even
 
 Apart from that, the environment hierarchy is created by function definition. When you create a function, f, in the global environment, the environment of the function f will have the global environment as a parent.  If you create a function g inside f, then the environment of g will have have the environment of f as a parent, and the global environment as a grandparent.
 
+### Active bindings
+
+`makeActiveBinding` allows you to create names that look like variables, but act like functions. Every time you access the object a function is run. This lets you do crazy things like:
+
+      makeActiveBinding("x", function(...) rnorm(1), globalenv())
+      x
+      # [1] 0.4754442
+      x
+      # [1] -1.659971
+      x
+      # [1] -1.040291
+
+
 ## Dynamic scoping
 
 `parent.frames`, `sys.calls` etc

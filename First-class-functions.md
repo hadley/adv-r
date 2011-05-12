@@ -406,7 +406,7 @@ A simpler solution in this case is to use `Map`, as described previously, which 
     names(funs3) <- trims
     lapply(funs3, call_fun, c(1:100, (1:50) * 100))
 
-## Case study
+## Case study: numerical integration
 
 In this case study, we will develop a simple numerical integration tool, and along the way, illustrate the use of many properties of first-class functions: we'll use anonymous functions, lists of functions, functions that return functions as output and functions that take functions as input.  Each step is driven by a desire to reduce duplication in our code, and to make our code more general so that it can deal with a wider variety of problems.
 
@@ -525,6 +525,17 @@ It turns out that the midpoint, trapezoid, Simpson and Boole rules are all examp
     simpson <- newton_cotes(c(1, 4, 1))
     boole <- newton_cotes(c(7, 32, 12, 32, 7))
     milne <- newton_cotes(c(2, -1, 2), open = TRUE)
+    
+    # Alternatively, make list then use lapply
+    lapply(values, newton_cotes, closed)
+    lapply(values, newton_cotes, open, open = TRUE)
+    lapply(values, do.call, what = "newton_cotes")
+    
+    expt1 <- expand.grid(n = 5:50, rule = names(rules), stringsAsFactors = F)
+    run_expt <- function(n, rule) {
+      composite(abs_sin, 0, 4 * pi, n = n, rule = rules[[rule]])
+    }
+    
 
 Mathematically, the next step in improving numerical integration is to move from a grid of evenly spaced points to a grid where the points are closer together near the end of the range. 
 
