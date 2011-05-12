@@ -6,6 +6,10 @@ To get the most out of this book, you should be familiar with "the basics".  For
 
 ## The basics
 
+    # The first functions to learn
+    ?
+    str
+
     # Operators
     %in%, match
     =, <-, <<-, assign
@@ -55,13 +59,14 @@ To get the most out of this book, you should be familiar with "the basics".  For
     t
     diag
     sweep
-    as.matrix, data.matrix    
+    as.matrix, data.matrix
     
     # Making vectors 
     c, rep, seq, seq_along, seq_len
     rev
     sample
     choose, factorial, combn
+    (is/as).(character/numeric/logical)
     
     # Lists & data.frames 
     list, unlist
@@ -144,7 +149,6 @@ To get the most out of this book, you should be familiar with "the basics".  For
     message, warning
     dput
     format
-    summary
     sink
 
     # Reading and writing data
