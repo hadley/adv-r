@@ -131,6 +131,14 @@ To get the most out of this book, you should be familiar with "the basics".  For
     example
     vignette
 
+    # Debugging
+    traceback
+    browser
+    recover
+    options(error = )
+    stop, warning, message
+    tryCatch, try
+
 ## I/O
 
     # Output
