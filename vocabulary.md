@@ -69,11 +69,15 @@ To get the most out of this book, you should be familiar with "the basics".  For
     
     # Control flow 
     if, &&, || (short circuiting)
-    for, while
+    for, while, repeat
     next, break
 
     switch
     ifelse
+
+    # Classes
+    class
+    is.*, as.*
     
 ## Statistics
 
@@ -176,7 +180,7 @@ To get the most out of this book, you should be familiar with "the basics".  For
     library(stringr)
 
     # Factors 
-    factor, levels
+    factor, levels, nlevels
     reorder, relevel
     cut, findInterval
     interaction
