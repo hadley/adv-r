@@ -48,36 +48,34 @@ To get the most out of this book, you should be familiar with "the basics".  For
 
     # Vectors and matrices
     c, matrix
+    # automatic coercion rules character > numeric > logical
     length, dim, ncol, nrow
     cbind, rbind
     names, colnames, rownames
     t
     diag
     sweep
+    as.matrix, data.matrix    
     
     # Making vectors 
-    rep, seq, seq_along, seq_len
+    c, rep, seq, seq_along, seq_len
     rev
     sample
     choose, factorial, combn
     
     # Lists & data.frames 
     list, unlist
-    data.frame
+    data.frame, as.data.frame
     split
     expand.grid
     
     # Control flow 
     if, &&, || (short circuiting)
-    for, while, repeat
+    for, while
     next, break
 
     switch
     ifelse
-
-    # Classes
-    class
-    is.*, as.*
     
 ## Statistics
 
