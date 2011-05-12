@@ -8,7 +8,7 @@ It's useful to distinguish between exploratory programming and confirmatory prog
 
 ### Confirmatory programming
 
-Confirmatory programming happens when you know what you need to do, and what the results of yours changes will be (new feature X appears or known bug Y disappears) you just need to figure out the way to do it. Confirmatory programming is also known as [test driven development][tdd] (TDD), a development style that grew out of extreme programming. The basic idea is that before you implement any new feature, or fix a known bug, you first write an automated
+Confirmatory programming happens when you know what you need to do, and what the results of yours changes will be (new feature X appears or known bug Y disappears) you just need to figure out the way to do it. Confirmatory programming is also known as [test driven development][tdd] (TDD), a development style that grew out of extreme programming. The basic idea is that before you implement any new feature, or fix a known bug, you should:
 
 1. Write automated test, and run `test()` to make sure test fails (so you know
    you've captured the bug correctly)
@@ -17,7 +17,7 @@ Confirmatory programming happens when you know what you need to do, and what the
 
 3. Run `load_all(pkg) && test(pkg)` to reload the file and re-run the tests.
 
-4. Repeat 2-4 until all tests pass.
+4. Repeat 2&ndash;4 until all tests pass.
 
 You might also want to use the `testthat::autotest()` which will watch your tests and code and will automatically rerun the tests when either changes. This allows you to skip step three - you just modify your code and watch to see if the tests pass or fail.
 
@@ -29,7 +29,7 @@ The exploratory programming cycle is similar to confirmatory, but it's not usual
 
 1. Edit code and reload with `load_all()`.
 2. Test interactively.
-3. Repeat 1-4 until code works..
+3. Repeat 1&ndash;2 until code works.
 4. Write automated tests and `test()`.
 
 ## devtools package
@@ -61,7 +61,7 @@ The functions that you'll use most often are:
 * `load_all(pkg)`, which loads code (`load_code`), data (`load_data`) and C
   files (`load_c`). These are loaded into a non-global environment to avoid
   conflicts, and so all functions can easily be removed. By default `load_all`
-  will only load changed files to save time - if you want to reload everything
+  will only load changed files to save time&mdash;if you want to reload everything
   from scratch, run `load_all(pkg, T)`
 
 * `test(pkg)` runs all tests in `inst/test/` and reports the results
