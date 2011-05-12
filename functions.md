@@ -1,5 +1,58 @@
 # Functions
 
+## Creating functions 
+
+## Anonymous functions
+
+In R, functions are objects in their own right. Unlike many other programming languages, functions aren't automatically bound to a name: they can exist independently. You might have noticed this already, because when you create a function, you use the usual assignment operator to give it a name. 
+
+Given the name of a function as a string, you can find that function using `match.fun`. The inverse is not possible: because not all functions have a name, or functions may have more than one name. Functions that don't have a name are called __anonymous functions__. Anonymous functions are not that useful by themselves, so in this section you'll learn about their basic properties, and then see how they are used in subsequence sections.
+
+The tool we use for creating functions is `function`. It is very close to being an ordinary R function, but it has special syntax: the last argument to the function is outside the call and provides the body of the new function.  If we don't assign the results of `function` to a variable we get an anonymous function:
+
+    function(x) 3
+    # function(x) 3
+
+You can call anonymous functions, but the code is a little tricky to read because you must use parentheses in two different ways: to call a function, and to make it clear that we want to call the anonymous function `function(x) 3` not inside our anonymous function call a function called `3` (not a valid function name):
+
+    (function(x) 3)()
+    # [1] 3
+    
+    # Exactly the same as
+    f <- function(x) 3
+    f()
+    
+    function(x) 3()
+    # function(x) 3()
+
+The syntax extends in a straightforward way if the function has parameters
+
+    (function(x) x)(3)
+    # [1] 3
+    (function(x) x)(x = 4)
+    # [1] 4
+
+Functions have three important components
+
+* `body()`: the quoted object representing the code inside the function
+* `formals()`: the argument list to the function
+* `environment()`: the environment in which the function was defined
+
+These can both also be used to modify the structure of the function in their assignment form.
+  
+These are illustrated below:
+  
+    formals(function(x = 4) g(x) + h(x))
+    # $x
+    # [1] 4
+
+    body(function(x = 4) g(x) + h(x))
+    # g(x) + h(x)
+    
+    environment(function(x = 4) g(x) + h(x))
+    # <environment: R_GlobalEnv>
+
+
 ## Pure functions
 
 Why pure functions are easy to reason about.

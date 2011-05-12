@@ -17,6 +17,11 @@ Other websites that helped me to understand smaller pieces of R are:
 * [Getting Started with Dylan](http://www.opendylan.org/gdref/tutorial.html)
   for understanding S4
 
+* [Frames, Environments, and Scope in R and S-PLUS](http://cran.r-project.org/doc/contrib/Fox-Companion/appendix-scope.pdf). Section 2 is recommended as a good introduction to the formal vocabulary used in much of the R documentation. 
+
+* [Lexical scope and statistical computing](http://www.stat.auckland.ac.nz/~ihaka/downloads/lexical.pdf) gives more examples of the power and utility of closures.
+
+
 Other recommendations for becoming a better programmer:
 
 * [The pragmatic programmer](http://amzn.com/020161622X?tag=hadlwick-20), by Andrew Hunt and David Thomas.
