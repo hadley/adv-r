@@ -24,6 +24,9 @@
 # PARTS() = rep(c(PATTERN("a"), ANY()))
 # MODE() == "character", IS_A(x, character)
 
+# Exercises:
+#  * do a similar thing for regular expressions or xpath (small part of each)
+
 new_check <- function(attr, subclass = NULL) {
   structure(attr, class = c(subclass, "check"))
 } 

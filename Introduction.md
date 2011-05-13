@@ -2,15 +2,27 @@
 
 This book has grown out of over 10 years of programming in R, and constantly struggling to understand the best way of doing things. I would particularly like to thank the tireless contributors to R-help. There are too many that have helped me over the years to list individually, but I'd particularly like to thank Luke Tierney, John Chambers, and Brian Ripley for correcting countless of my misunderstandings and helping me to deeply understand R.
 
-R is still a relatively young language, and the resources to help you understand it are still maturing. In my personal journey to understand R, I've found it particularly helpful to refer to resources that describe how other programming languages work.  I found the following two books particularly helpful:
+R is still a relatively young language, and the resources to help you understand it are still maturing. In my personal journey to understand R, I've found it particularly helpful to refer to resources that describe how other programming languages work. R has aspects of both functional and object-oriented (OO) programming languages, and learning how these aspects are expressed in R, will help you translate your existing knowledge from other programming languages, and to help you identify areas where you can improve.
+
+Functional
+
+* First class functions
+* Pure functions: a goal, not a prerequisite
+* Recursion: no tail call elimination. Slow
+* Lazy evaluation: but only of function arguments. No infinite streams
+* Untyped
+
+OO
+
+* Has three distinct OO frameworks built in to base. And more available in add on packages.  Two of the OO styles are built around generic functions, a style of OO that comes from lisp.
+
+I found the following two books particularly helpful:
 
 * [The structure and interpretation of computer programs](http://mitpress.mit.edu/sicp/full-text/book/book.html) by Harold Abelson and Gerald Jay Sussman.
 
 * [Concepts, Techniques and Models of Computer Programming](http://amzn.com/0262220695?tag=hadlwick-20) by Peter van Roy and Sef Haridi
 
-It's also very useful to learn a little about LISP, because many of the ideas in R are adapted from lisp, and there are often good descriptions of the basic ideas, even if the implementation differs somewhat.
-
-Part of the purpose of this book is so that you don't have to consult these original source, but if you want to learn more, this is a great way to develop a deeper understanding of how R works.
+It's also very useful to learn a little about lisp, because many of the ideas in R are adapted from lisp, and there are often good descriptions of the basic ideas, even if the implementation differs somewhat. Part of the purpose of this book is so that you don't have to consult these original source, but if you want to learn more, this is a great way to develop a deeper understanding of how R works.
 
 Other websites that helped me to understand smaller pieces of R are:
 
@@ -21,39 +33,40 @@ Other websites that helped me to understand smaller pieces of R are:
 
 * [Lexical scope and statistical computing](http://www.stat.auckland.ac.nz/~ihaka/downloads/lexical.pdf) gives more examples of the power and utility of closures.
 
-
 Other recommendations for becoming a better programmer:
 
 * [The pragmatic programmer](http://amzn.com/020161622X?tag=hadlwick-20), by Andrew Hunt and David Thomas.
 
-## Goal
+
+## What you will get out of this book
 
 This book describes the skills that I think you need to be an advanced R developer, producing reproducible code that can be used in a wide variety of circumstances.
 
-* You are familiar with the fundamentals of R, so that you can represent
-  complex data types and simplify the operations performed on them. You have a
-  deep understanding of the language, and know how to override default
-  behaviours when necessary
+After reading this book, you will be:
 
-* You know how to produce packages to make your work available to a wider
-  audience, and how to efficiently program "in the large", so you spend your
-  time solving new problems not struggling with old code.
+* Familiar with the fundamentals of R, so that you can represent complex data
+  types and simplify the operations performed on them. You have a deep
+  understanding of the language, and know how to override default behaviours
+  when necessary
 
-In the remainder of the introduction, I will give a very quick revision of the basic skills that you already posses.
+* Able to produce packages to make your work available to a wider audience,
+  and how to efficiently program "in the large", so you spend your time
+  solving new problems not struggling with old code.
 
-## Programming styles in R
+* Comfortable reading and understanding the majority of R code. Important so
+  you can learn from and critique others code.
 
-### Functional
+## Who should read this book
 
-* First class functions
-* Pure functions: a goal, not a prerequisite
-* Recursion: no tail call elimination. Slow
-* Lazy evaluation: but only of function arguments. No infinite streams
-* Untyped
+* Experienced programmers from other languages who want to learn about the
+  features of R that make it special
 
-### Object oriented
+* Existing package developers who want to make it less work.
 
-* Has three distinct OO frameworks built in to base. And more available in add on packages.  Two of the OO styles are built around generic functions, a style of OO that comes from lisp.
+* R developers who want to take it to the next level - who are ready to
+  release their own code into the wild
+
+To get the most out of this look you should already be familiar with the basics of R as described in the next section, and you should have started developing your R [[vocabulary]].
 
 ## Basics
 
@@ -158,7 +171,3 @@ But this is really the same as
     x <- "second<-"(x, 5)
 
 and actual modification in place should be considered a performance optimisation, not a fundamental property of the language.
-
-### Vocabulary
-
-You should also have a decent [[vocabulary]].

@@ -451,12 +451,23 @@ However, this function is still not that useful because it loses all non-code st
       if (x)                  return(4)
       if (emergency_status()) return(T)
     }")
+    attr(g, "srcref")
+    attr(g, "srcref")[[1]]
+    as.character(attr(g, "srcref")[[1]])
+    source(textConnection("f <- function(x = T) {
+      # This is a comment
+      if (x)                  return(4)
+      if (emergency_status()) return(T)
+    }"))
 
 
 If we want to be able to apply this function to an existing code base, we need to be able to maintain all the non-code structure.  This leads us to our next code: srcrefs.
 
 ## Source references
 
+<!-- http://journal.r-project.org/archive/2010-2/RJournal_2010-2_Murdoch.pdf -->
+
+Would have to recursively parse.
 
 ## The parser package
 
