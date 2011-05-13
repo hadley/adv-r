@@ -69,6 +69,8 @@ The `NEWS` file should list all changes that have occurred since the last releas
 
 If you have many changes, you can use subheadings to divide them into sections.  A subheading should be ...
 
+Use `devtools::show_news` to automatically load your news file and show that it works correctly.
+
 ## `CITATION`
 
 Should be located in the `inst` directory. Describes how to cite the package.
