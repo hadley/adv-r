@@ -17,9 +17,11 @@ Confirmatory programming happens when you know what you need to do, and what the
 
 3. Run `load_all(pkg) && test(pkg)` to reload the file and re-run the tests.
 
-4. Repeat 2&ndash;4 until all tests pass.
+4. Repeat 2--4 until all tests pass.
 
-You might also want to use the `testthat::autotest()` which will watch your tests and code and will automatically rerun the tests when either changes. This allows you to skip step three - you just modify your code and watch to see if the tests pass or fail.
+5. Update documentation, re-roxygenise, update `NEWS` and check modified source into your VCS
+
+For this paradigm, you might also want to use `testthat::autotest()` which will watch your tests and code and will automatically rerun your tests when either changes. This allows you to skip step three: you just modify your code and watch to see if the tests pass or fail.
 
 ### Exploratory programming
 
@@ -28,17 +30,24 @@ Exploratory programming is the complement of confirmatory programming, when you 
 The exploratory programming cycle is similar to confirmatory, but it's not usually worth writing the tests before writing the code, because the interface will change so much:
 
 1. Edit code and reload with `load_all()`.
+
 2. Test interactively.
-3. Repeat 1&ndash;2 until code works.
+
+3. Repeat 1--2 until code works.
+
 4. Write automated tests and `test()`.
+
+5. Update documentation, re-roxygenise, update `NEWS` and check modified source into your VCS
+
+The automated tests are still vitally important because they are what will prevent your code from failing silently in the future.
 
 ## devtools package
 
-I developed the `devtools` package to simplify the package development cycle. Currently `devtools` is only available from github (not CRAN). To install, [download the latest version][devtools-down] and install with `R CMD install`.
+I developed the `devtools` package to simplify the package development cycle. Currently `devtools` is only available from github (not CRAN). To install, [download the latest version][devtools-down] and install from the command line with `R CMD install`.
 
 ### Set up
 
-All `devtools` functions accept either a path or a package name. If you specify a name it will load `~/.Rpackages`, and try the path given by the default function, if it's not there, it will look up the package name in the list and use that path.  
+All `devtools` functions accept either a path or a package name. If you specify a name it will load the configuration file `~/.Rpackages`, and try the path given by the default function, if it's not there, it will look up the package name in the list and use that path.  
 
 For example, a small section of my `~/.Rpackages` looks like this:
 
@@ -52,22 +61,23 @@ For example, a small section of my `~/.Rpackages` looks like this:
       "mutatr" = "~/documents/oo/mutatr"
     )
 
-This means by default devtools will look for a package called `pkg` in `~/document/pkg/pkg`. (I use the other directories to store related files like conference presentations or journal articles.) Other packages that don't follow this same pattern are listed explicitly.
+This means by default devtools will look for a package called `pkg` in `~/documents/pkg/pkg`. (I use the other package directories to store related files like conference presentations or journal articles.) Other packages that don't follow this same pattern are listed explicitly.
 
 ### Useful functions
 
-The functions that you'll use most often are:
+The three functions that you'll use most often are:
 
-* `load_all(pkg)`, which loads code (`load_code`), data (`load_data`) and C
+* `load_all("pkg")`, which loads code (`load_code`), data (`load_data`) and C
   files (`load_c`). These are loaded into a non-global environment to avoid
   conflicts, and so all functions can easily be removed. By default `load_all`
-  will only load changed files to save time&mdash;if you want to reload everything
-  from scratch, run `load_all(pkg, T)`
+  will only load changed files to save time: if you want to reload
+  everything from scratch, run `load_all("pkg", T)`
 
-* `test(pkg)` runs all tests in `inst/test/` and reports the results
+* `test("pkg")` runs all tests in `inst/test/` and reports the results
 
+* `document("pkg")` runs roxygen on the package to update all documentation.
 
-* `document(pkg)` runs roxygen on the package to update all documentation. 
+This makes the development process very easy. After you've modified the code, you run `load_all("pkg")` to load it in to R. You can explore it interactively from the command line, or type `test("pkg")` to run all your automated tests.
 
 [devtools-down]:https://github.com/hadley/devtools/tarball/master
 [tdd]:http://en.wikipedia.org/wiki/Test-driven_development
