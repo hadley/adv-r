@@ -22,7 +22,7 @@ To convert roxygen comments to the official `.Rd` files, you can use one of the 
 
 Please note that the chapter currently works best with my [unofficial roxygen fork](https://github.com/hadley/roxygen). My modifications will be ported to the main trunk in the near future.
 
-This chapter is broken down into two main segments.  First you'll see how to 
+This chapter is broken down into two main segments. First you'll see how to
 
 ## Documenting
 
@@ -187,7 +187,7 @@ The example below shows the basic structure, as taken from the documentation for
     #' @import plyr stringr
     #' @docType package
     #' @name lubridate
-    #' @aliases lubridate package-lubridate
+    #' @aliases lubridate lubridate-package
     NULL
 
 Important components are:
@@ -196,7 +196,7 @@ Important components are:
   important pieces.
 
 * `@docType package` to indicate that it's documentation for a package and
-  `@aliases lubridate package-lubridate` so users can find it using either
+  `@aliases lubridate lubridate-package` so users can find it using either
   standard form.
 
 * `@name` is needed because we're not documenting a real object, and that's
@@ -205,11 +205,13 @@ Important components are:
 * `@references` point to any published material about the package that users
   might find help.
 
+The package documentation should not contain a verbatim list of functions or copy of `DESCRIPTION`. This file is for human reading, so pick the most important elements of your package.
+
 ## Text formatting 
 
-Within roxygen text you use the usual R documentation formatting rules, as summarised below. A fuller description is available in the [R extensions](http://cran.r-project.org/doc/manuals/R-exts.html#Sectioning) manual.
+Within roxygen text, you use the usual R documentation formatting rules, as summarised below. A fuller description is available in the [R extensions](http://cran.r-project.org/doc/manuals/R-exts.html#Sectioning) manual.
 
-Sections and subsections are similar to latex, but take a second argument which is the contents of the section. Section titles should be in sentence case.
+Sections and subsections are similar to latex, but take a second argument which is the contents of the section. Section titles should be in sentence case.  It is currently not possible to add section tags with roxygen.
 
     \section{Warning}{
       You must not call this function unless ...
@@ -245,7 +247,30 @@ Sections and subsections are similar to latex, but take a second argument which 
 
 ### Tables
 
+Tables are created with the tabular command which has two arguments:
+
+* Column alignment: a letter for each column. `l` = left alignment, `c` = centre, `r` = right.
+
+* Table contents.  Columns separated by `\tab`, rows separated by `\cr`.
+
+The following function will turn an R data frame into the correct format.  It ignores column and row names, but should get you started.
+
+    tabular <- function(df) {
+      stopifnot(is.data.frame(df))
+      align <- function(x) if (is.numeric(x)) "r" else "l"
+      col_align <- vapply(df, align, character(1))
+      
+      contents <- do.call("paste", c(lapply(df, format), 
+        list(sep = " \\tab ", collapse = "\\cr\n")))
+      
+      mat <- matrix(unlist(lapply(df, format)), ncol = ncol(df))
+      paste("\\tabular{", paste(col_align, collapse = ""), "}{\n",
+        contents, "}\n", sep = "")
+    }
+
 ### Mathematics
+
+`\eqn` for inline, `\deqn` for display.  Standard latex (no extensions).
 
 ### Character formatting
 
@@ -255,7 +280,13 @@ Sections and subsections are similar to latex, but take a second argument which 
 
 * `\code{text}`, `\pkg{package_name}`, `\file{file_name}`
 
-* External links: `\email{email_address}`, `\url{uniform_resource_locator}`
+* External links: `\email{email_address}`, `\url{url}`, `\href{url}{text}`
 
 * `\link[package]{function}` - the first argument can be omitted if the link
-  is in the current package, or a base package.
+  is in the current package, or a base package.  Will usually be wrapped inside `\code`: `\code{\link{fun}}`
+
+
+## Dynamic help
+
+Since R.XX, help has been...
+
