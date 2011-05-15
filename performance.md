@@ -16,7 +16,28 @@ There are two contributed packages that provide useful additional functionality:
 
 * The [rbenchmark](http://code.google.com/p/rbenchmark/) package provides a convenient wrapper around `system.time` that allows you to compare multiple functions and run them multiple times
 
-* The [microbenchmark][microbenchmark] function uses a more precise timing mechanism than `system.time` allowing it to accurately compare functions that take a small amount of time without having to repeat the function millions of time.  It also takes care to estimate the overhead associated with timing.
+* The [microbenchmark][microbenchmark] function uses a more precise timing mechanism than `system.time` allowing it to accurately compare functions that take a small amount of time without having to repeat the function millions of time.  It also takes care to estimate the overhead associated with timing, and randomly orders the evaluation of each expression. It also times each expression individually, so you get a distribution of times, which helps estimate error.
+
+The following example compares two different ways of computing means of random uniform numbers, as you might use for simulations teaching the central limit theorem (inspired by the rbenchmark documentation)
+
+    sequential <- function(n, m) mean(replicate(n, runif(m)))
+    parallel   <- function(n, m) colMeans(matrix(runif(n*m), m, n))
+
+    library(rbenchmark)
+    res1 <- benchmark(
+      seq = sequential(100, 100),
+      par = parallel(100, 100),
+      replications=10^(0:2),
+      order = c('replications', 'elapsed'))
+    res1$elapsed <- res1$elapsed / res1$replications
+    
+    library(microbenchmark)
+    res2 <- microbenchmark(
+      seq = sequential(100, 100),
+      par = parallel(100, 100),
+      times = 100
+    )
+    print(res2, unit = "s")
 
 ## Performance profiling
 
