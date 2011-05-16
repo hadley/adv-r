@@ -226,24 +226,24 @@ Sections and subsections are similar to latex, but take a second argument which 
 
 * Ordered (numbered) lists:
 
-      \enumerate{
-        \item First item
-        \item Second item
-      }
+        \enumerate{
+          \item First item
+          \item Second item
+        }
       
 * Unordered (bulleted) lists
 
-      \itemised{
-        \item First item
-        \item Second item
-      }
+        \itemised{
+          \item First item
+          \item Second item
+        }
       
 * Definition (named) lists
 
-      \describe{
-        \item{One}{First item}
-        \item{Two}{Second item}
-      }
+        \describe{
+          \item{One}{First item}
+          \item{Two}{Second item}
+        }
 
 ### Tables
 
