@@ -94,7 +94,7 @@ Lists are different from atomic vectors in that they can contain any other type 
 Vectors can be extended into multiple dimensions. If 2d they are called matrices, if more than 2d they are called arrays.  Length generalises to `nrow` and `ncol` for matrices, and `dim` for arrays.  Names generalises to `rownames` and `colnames` for matrices, a `dimnames` for arrays.
 
     y <- matrix(1:20, nrow = 4, ncol = 5)
-    z <- matrix(1:24, dims = c(3, 4, 5))
+    z <- array(1:24, dim = c(3, 4, 5))
 
     nrow(y)
     rownames(y)
