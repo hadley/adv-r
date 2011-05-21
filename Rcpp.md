@@ -1,6 +1,6 @@
 # High performance functions with Rcpp
 
-Sometimes R code just isn't fast enough - you've already used all of the tips and tricks you know and you've used profiling to find the bottleneck, and there's simply no way to make the code any faster.  This chapter is the answer to that situation: use Rcpp to easily write key functions in C++ to get all the performance of C, while sacrificing the minimum of convenience.
+Sometimes R code just isn't fast enough - you've already used all of the tips and tricks you know and you've used profiling to find the bottleneck, and there's simply no way to make the code any faster. This chapter is the answer to that problem: use Rcpp to easily write key functions in C++ to get all the performance of C, while sacrificing the minimum of convenience. [Rcpp](http://dirk.eddelbuettel.com/code/rcpp.html) is a fantastic tool written by Dirk Eddelbuettel and Romain Francois that makes it dead simple to write high-performance code in C++ that easily interfaces with the R-level data structures.
 
 You can also write high performance code in straight C or Fortran. These may (or may not) be more performant than C++, but you have to sacrifice a lot of convenience and master the complex C internals of R, as well as doing memory management yourself. In my opinion, using Rcpp is currently the best balance between speed and convenience.
 
@@ -24,6 +24,9 @@ Typically bottlenecks involve:
  
  * recursive functions
 
+The aim of this chapter is to give you the absolute basics to get up and running with Rcpp for the purpose of speeding up slow parts of your code. Other resources that I found helpful when writing this chapter and you might too are:
+
+* Slides from the [Rcpp master class ](http://dirk.eddelbuettel.com/blog/2011/04/29/#rcpp_class_2011-04_slides) taught by Dirk Eddelbuettel and Romain Francois in April 2011.
 
 ## Essentials of C++
 
@@ -63,6 +66,8 @@ Conversions
 * vectorised operations: ifelse, sapply
 * lazy functions: any, all
 
+More details are available in the [Rcpp syntactic sugar](http://dirk.eddelbuettel.com/code/rcpp/Rcpp-sugar.pdf) vignette.
+
 ## Building
 
 Prerequisites: R development environment (which you need for package building any).  C++ compiler (e.g. g++).
@@ -82,6 +87,8 @@ Inline package is the absolute easiest way to
       body = src, plugin = "Rcpp")
 
 ### In package
+
+For more details see the vignette, [Writing a package that uses Rcpp](http://dirk.eddelbuettel.com/code/rcpp/Rcpp-package.pdf).
 
     Rcpp.package.skeleton( "mypackage" )
 
@@ -131,6 +138,8 @@ Useful algorithms
 This chapter has only touched on a small part of Rcpp, giving you the basic tools to rewrite poorly performing R code in C++.  Rcpp has many other capabilities that make it easy to interface R to existing C++ code, including:
 
 * automatically creating the wrappers between R data structures and C++ data
-  structures (modules)
+  structures (modules).  A good introduction to this topic is the vignette of [Rcpp modules](http://dirk.eddelbuettel.com/code/rcpp/Rcpp-modules.pdf)
 
 * mapping of C++ classes to reference classes.
+
+I strongly recommend keeping an eye on the [Rcpp homepage](http://dirk.eddelbuettel.com/code/rcpp.html) and signing up for the [Rcpp mailing list](http://lists.r-forge.r-project.org/cgi-bin/mailman/listinfo/rcpp-devel). Rcpp is still under active development, and is getting better with every release.
