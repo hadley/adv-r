@@ -40,7 +40,7 @@ We could also build a call manually, using `call`:
 
 Or we could create it from a string, with `parse`:
 
-    parse(text = "vs == am")[[1]]
+    parse(text = "vs == am")'[[1]]
     # vs == am
     # Parse returns an expression, but we just want the first element, a call
 
@@ -132,7 +132,7 @@ When evaluating code in a non-standard way, it's also a good idea to test your c
 
     f <- function() {
       x <- 6
-      subset(mtcars, cyl == 6)
+      subset(mtcars, cyl == x)
     }
     f()
 
