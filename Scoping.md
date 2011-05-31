@@ -25,12 +25,16 @@ The following example illustrates the basic principle:
     #  x  y 
     #  5 10
 
-Unlike some languages, R looks up at the values at run-time, not when the function is created:
+Lexical scoping is the rule that determines where values are looked for, not when. Unlike some languages, R looks up at the values at run-time, not when the function is created.  This means results from a function can be different depending on objects outside its environment:
 
     x <- 15
     f()
     #  x  y 
     # 15 10
+    x <- 20
+    f()
+    #  x  y 
+    # 20 10
 
 If a name is defined inside a function, it will mask the top-level definition:
 
@@ -90,6 +94,11 @@ Every time a function is called, a new environment is created to host execution.
     f()
     # Defining a
     # [1] 1
+    a <- 2
+    f()
+    # [1] 3
+    a
+    # [1] 2
 
 The section on closures describes how to work around this limitation by using a parent environment that stays the same between runs.
 
@@ -119,7 +128,7 @@ There are also a few special environments that you can access directly:
 
 The only environment that doesn't have a parent is emptyenv(), which is the eventual parent of every other environment. The most common environment is the global environment (globalenv()) which corresponds to the to your top-level workspace. The parent of the global environment is one of the packages you have loaded (the exact order will depend on which packages you have loaded in which order). The eventual parent will be the base environment, which is the environment of "base R" functionality, which has the empty environment as a parent.
 
-Apart from that, the environment hierarchy is created by function definition. When you create a function, f, in the global environment, the environment of the function f will have the global environment as a parent.  If you create a function g inside f, then the environment of g will have have the environment of f as a parent, and the global environment as a grandparent.
+Apart from that, the environment hierarchy is created by function definition. When you create a function, `f`, in the global environment, the environment of the function `f` will have the global environment as a parent.  If you create a function `g` inside `f`, then the environment of `g` will have the environment of `f` as a parent, and the global environment as a grandparent.
 
 ### Active bindings
 
