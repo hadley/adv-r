@@ -2,6 +2,9 @@
 
 "We should forget about small efficiencies, say about 97% of the time: premature optimization is the root of all evil" --- Donald Knuth.
 
+
+Your code should be correct, maintainable and fast. Notice that speed comes last - if your function is incorrect or unmaintainable (i.e. will eventually become incorrect) it doesn't matter if it's fast. As computers get faster and R is optimised, your code will get faster all by itself. Your code is never going to automatically become correct or elegant if it is not already.
+
 What can you do if your code is slow?  Before you can figure out how to improve it, you first need to figure out why it's slow.  That's what this chapter will teach you.
 
 * Build up your vocab, and use built-in vectorised operations where possible.

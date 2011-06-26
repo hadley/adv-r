@@ -31,13 +31,24 @@ new_check <- function(attr, subclass = NULL) {
   structure(attr, class = c(subclass, "check"))
 } 
 
-print.check <- function(x) print(format(x))
+is.check <- function(x) 
+print.check <- function(x) cat(format(x), "\n")
 
 length_equals <- function(n) {
   new_check(list(n = n), "length_equal")
 }
 check.length_equal <- function(check, x) length(x) == check$n
 format.length_equal <- function(check) paste("length(x) ==", check$n)
+
+NOT <- function(check) {
+  stopifnot(is.check(check))
+  new_check(list(check = check), "NOT")
+}
+
+check.NOT <- function(check, x) !(check$check(x))
+format.NOT <- function(check) {
+  paste("NOT: ", NextMethod())
+}
 
 length_between <- function(min = -Inf, max = Inf) {
   new_check(list(min = min, max = max), "length_between")
