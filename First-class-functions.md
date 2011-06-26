@@ -330,7 +330,7 @@ But this leads to a lot of duplication - each function is almost identical apart
 We could also take a more general approach. A useful function here is `Curry` (named after a famous computer scientist Haskell Curry, not the food), which implements "partial function application". What the curry function does is create a new function that passes on the arguments you specify. A example will make this more clear:
 
     add <- function(x, y) x + y
-    addOne <- funtion(x) add(x, 1)
+    addOne <- function(x) add(x, 1)
     addOne <- Curry(add, y = 1)
 
 One way to implement `Curry` is as follows:
@@ -338,7 +338,6 @@ One way to implement `Curry` is as follows:
     Curry <- function(FUN,...) { 
       .orig <- list(...)
       function(...) {
-        args <- list(...)
         do.call(FUN, c(.orig, list(...)))
       }
     }
