@@ -350,7 +350,7 @@ But implementing it like this prevents arguments from being lazily evaluated, so
       args <- match.call(expand.dots = FALSE)$...
       args$... <- as.name("...")
       
-      env <- parent.frame()
+      env <- new.env(parent = parent.frame())
       
       if (is.name(FUN)) {
         fname <- FUN
