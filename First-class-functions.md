@@ -276,7 +276,7 @@ We'll start with a simple example: benchmarking, when you are comparing the perf
       }
     )
 
-Calling a function from is straightforward: just get it out of the list first:
+Calling a function from a list is straightforward: just get it out of the list first:
 
     x <- runif(1e5)
     system.time(compute_mean$base(x))
@@ -407,7 +407,7 @@ It's usually better to use `lapply` because it is more familiar to most R progra
 
 ## Case study: numerical integration
 
-To conclude this chapter, we will develop a simple numerical integration tool, and along the way, illustrate the use of many properties of first-class functions: we'll use anonymous functions, lists of functions, functions that make closures and functions that take functions as input. Each step is driven by a desire make our approach more general and to reduce duplication.
+To conclude this chapter, we will develop a simple numerical integration tool, and along the way, illustrate the use of many properties of first-class functions: we'll use anonymous functions, lists of functions, functions that make closures and functions that take functions as input. Each step is driven by a desire to make our approach more general and to reduce duplication.
 
 We'll start with two very simple approaches: the midpoint and trapezoid rules. Each takes a function we want to integrate, `f`, and a range to integrate over, from `a` to `b`. For this example we'll try to integrate `sin x` from 0 to pi, because it has a simple answer: 2
 
@@ -442,7 +442,7 @@ Neither of functions gives a very good approximation, so we'll do what we normal
       
       area <- 0
       for (i in seq_len(n)) {
-        area <- area + h / 2 * (f(points[i]) + f(points[i + 1])))
+        area <- area + h / 2 * (f(points[i]) + f(points[i + 1]))
       }
       area
     }
