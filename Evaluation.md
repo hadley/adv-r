@@ -89,7 +89,7 @@ Now we've have the call that represents the subset condition we want, we want to
     eval(cyl, mtcars)
     # Error in eval(cyk, mtcars) : object 'cyl' not found
     cyl <- quote(cyl)
-    eval(cy, mtcars)
+    eval(cyl, mtcars)
     #  [1] 6 6 4 6 8 6 8 4 4 6 6 8 8 ...
 
 The first argument to `eval` is the language object to evaluate, and the second argument is the environment to use for evaluation.  If the second argument is a list or data frame, `eval` will convert it to a environment for you. (There are a number of short cut functions: `evalq`, `eval.parent`, and `local` that are also documented with `eval` - I won't use or explain these here, I'd recommend you read about them and figure out what they do.)
