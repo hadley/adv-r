@@ -30,7 +30,7 @@ A closure is a function written by another function. Closures are so called beca
     cube(2) # -> [1] 8
     cube(4) # -> [1] 64
 
-The ability to manage variables at two levels makes it possible to maintain the state across function invocations by allowing a function to modify variables in the environment of its parent. Key to managing variables at different levels is the double arrow assignment operator (`<<-`). Unlike the usual single arrow assignment (`<-`) that always assigns in the current environment, the double arrow operator will look keep looking up the chain of parent environments until it finds a matching name.
+The ability to manage variables at two levels makes it possible to maintain the state across function invocations by allowing a function to modify variables in the environment of its parent. Key to managing variables at different levels is the double arrow assignment operator (`<<-`). Unlike the usual single arrow assignment (`<-`) that always assigns in the current environment, the double arrow operator will keep looking up the chain of parent environments until it finds a matching name.
 
 This makes it possible to maintain a counter that records how many times a function has been called, as shown in the following example. Each time `new_counter` is run, it creates an environment, initialises the counter `i` in this environment, and then creates a new function.
 
@@ -259,7 +259,7 @@ In statistics, optimisation is often used for maximum likelihood estimation. Max
 
 ## Lists of functions
 
-In R, functions can be stored in lists. Together with closures and higher-order functions, this gives us a set of powerful for reducing duplication in code.
+In R, functions can be stored in lists. Together with closures and higher-order functions, this gives us a set of powerful tools for reducing duplication in code.
 
 We'll start with a simple example: benchmarking, when you are comparing the performance of multiple approaches to the same problem. For example, if you wanted to compare a few approaches to computing the mean, you could store each approach (function) in a list:
 
@@ -423,7 +423,7 @@ We'll start with two very simple approaches: the midpoint and trapezoid rules. E
     trapezoid(sin, 0, pi)
 
 
-Neither of functions gives a very good approximation, so we'll do what we normally do in calculus: break up the range into smaller pieces and integrate each piece using one of the simple rules. To do that we create two new functions for performing composite integration:
+Neither of these functions gives a very good approximation, so we'll do what we normally do in calculus: break up the range into smaller pieces and integrate each piece using one of the simple rules. To do that we create two new functions for performing composite integration:
 
     midpoint_composite <- function(f, a, b, n = 10) {
       points <- seq(a, b, length = n + 1)
