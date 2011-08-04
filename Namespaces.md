@@ -47,11 +47,11 @@ There are two places you need to record your package's dependency:
 * In the `NAMESPACE` file, to make all the functions in the dependency
   available to your code. The easiest way to do this is to add `@imports
   package-name` to your package documentation:
-
+  <pre>
       #' @docType package
       #' ...
       #' @imports stringr MASS
-
+  </pre>
 There are two alternatives to using `@imports`, but these are not currently
 recommended:
 
