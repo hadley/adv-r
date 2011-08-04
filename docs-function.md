@@ -20,7 +20,7 @@ To convert roxygen comments to the official `.Rd` files, you can use one of the 
 
 * Using the [[devtools package|development]]: `document("mypackage")`
 
-Please note that the chapter currently works best with my [unofficial roxygen fork](https://github.com/hadley/roxygen). My modifications will be ported to the main trunk in the near future.
+Please note that the chapter currently works best with my [unofficial roxygen fork](https://github.com/klutometis/roxygen). My modifications will be ported to the main trunk in the near future.
 
 This chapter is broken down into two main segments. First you'll see how to
 
