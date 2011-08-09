@@ -39,13 +39,16 @@ Lexical scoping is the rule that determines where values are looked for, not whe
 If a name is defined inside a function, it will mask the top-level definition:
 
     g <- function() { 
-      x <- 20
-      y <- 10
+      x <- 21
+      y <- 11
       c(x = x, y = y)
     }
     f()
     #  x  y 
     # 20 10
+    g()
+    #  x  y 
+    # 21 11
 
 The same principle applies regardless of the degree of nesting. See if you can predict what the following function will return before trying it out yourself.
 
