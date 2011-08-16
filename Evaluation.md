@@ -60,10 +60,24 @@ We need a new approach. One way is to capture the ensure function call and then 
     # subset(x = mtcars, condition = vs == am)
     
     subset <- function(x, condition) {
+      match.call()$x
+    }
+    subset(mtcars, vs == am)
+    # mtcars
+
+    subset <- function(x, condition) {
       match.call()$condition
     }
     subset(mtcars, vs == am)
-    # subset(x = mtcars, condition = vs == am)
+    # vs == am
+
+> subset <- function(x, condition) {  class(match.call()$x) }
+> subset(mtcars, vs == am)
+[1] "name"
+ 
+> subset <- function(x, condition) {  class(match.call()$condition) }
+> subset(mtcars, vs == am)
+[1] "call"
 
 Another function that can capture the original call is `substitute`:
 
