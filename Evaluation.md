@@ -104,6 +104,10 @@ Now we've have the call that represents the subset condition we want, we want to
 
     eval(cyl, mtcars)
     # Error in eval(cyk, mtcars) : object 'cyl' not found
+
+    eval(as.name('cyl'), mtcars)
+    # [1] 6 6 4 6 8 6 8 4 4 6 6 8 8 8 8 8 8 4 4 4 4 8 8 8 8 4 4 4 8 6 8 4
+
     cyl <- quote(cyl)
     eval(cyl, mtcars)
     #  [1] 6 6 4 6 8 6 8 4 4 6 6 8 8 ...
