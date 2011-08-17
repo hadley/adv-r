@@ -77,9 +77,9 @@ Also advisable to see the classes of what we are dealing with:
     subset(mtcars, vs == am)
     # "name"
  
-    > subset <- function(x, condition) {  class(match.call()$condition) }
-    > subset(mtcars, vs == am)
-    [1] "call"
+    subset <- function(x, condition) {  class(match.call()$condition) }
+    subset(mtcars, vs == am)
+    # "call"
 
 Another function that can capture the original call is `substitute`:
 
@@ -87,6 +87,7 @@ Another function that can capture the original call is `substitute`:
       substitute(condition)
     }    
     subset(mtcars, vs == am)
+    # vs == am
 
 Substitute is the tool most commonly used for this task, but it's the hardest to explain because it relies on lazy evaluation. In R, function arguments are only evaluated when they are needed, not automatically when the function is called. Before the argument is evaluated (aka forced), it is stored as a __promise__. A promise stores two things: the call that should be evaluated and the environment in which to evaluate it. When substitute is passed a promise, it extracts the call, which is the thing we're looking for.
 
