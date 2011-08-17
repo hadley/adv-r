@@ -73,9 +73,9 @@ We need a new approach. One way is to capture the ensure function call and then 
 
 Also advisable to see the classes of what we are dealing with:
 
-    > subset <- function(x, condition) {  class(match.call()$x) }
-    > subset(mtcars, vs == am)
-    [1] "name"
+    subset <- function(x, condition) {  class(match.call()$x) }
+    subset(mtcars, vs == am)
+    # "name"
  
     > subset <- function(x, condition) {  class(match.call()$condition) }
     > subset(mtcars, vs == am)
