@@ -122,10 +122,17 @@ Now we have all the pieces we need to write the `subset` function: we can captur
       r <- eval(condition_call, x)
       x[r, ]
     }
-    
-    subset(mtcars, cyl == 4)
-
+ 
 Unfortunately, we're not quite done because this function doesn't work as we always expect.
+
+    subset(mtcars, cyl == 4)
+    #      mpg cyl disp hp drat wt qsec vs am gear carb
+    # NA     NA  NA   NA NA   NA NA   NA NA NA   NA   NA
+    # NA.1   NA  NA   NA NA   NA NA   NA NA NA   NA   NA
+    # NA.2   NA  NA   NA NA   NA NA   NA NA NA   NA   NA
+    # NA.3   NA  NA   NA NA   NA NA   NA NA NA   NA   NA
+    # NA.4   NA  NA   NA NA   NA NA   NA NA NA   NA   NA
+    # NA.5   NA  NA   NA NA   NA NA   NA NA NA   NA   NA
 
 ## Scoping issues
 
