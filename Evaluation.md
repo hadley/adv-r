@@ -20,7 +20,7 @@ To do this, `subset` must be able to capture the meaning of your condition strin
 
 To talk about quoting, capturing a language object without evaluating it, we need some new vocabulary:
 
-* a __symbol__, or __name__, describes the name of an object, like x or y, not it's value like `5` or `"a"`  (see `is.symbol` & `as.symbol`).
+* a __symbol__, or __name__, describes the name of an object, like x or y, not its value like `5` or `"a"`  (see `is.symbol` & `as.symbol`).
 * a __call__ is an unevaluated expression, like `x == y`, rather than the result of that call (see `is.call` & `as.call`).
 * an __expression__ is a list of calls and/or symbols (see `is.expression` & `as.expression`).
 * a __language object__ is a name, call, or expression (`is.language`).
