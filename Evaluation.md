@@ -25,7 +25,7 @@ To talk about quoting, capturing a language object without evaluating it, we nee
 * an __expression__ is a list of calls and/or symbols (see `is.expression` & `as.expression`).
 * a __language object__ is a name, call, or expression (`is.language`).
 
-The most direct way quote a call is (surprise!) with `quote`:
+The most direct way to quote a call is (surprise!) with `quote`:
 
     quote(vs == am)
     # vs == am
@@ -51,7 +51,7 @@ The simplest way to write `subset` would be to require that the user supply a ca
     }
     subset(mtcars, cyl == 4)
 
-We need a new approach. One way is to capture the ensure function call and then extract then the piece that corresponds to `condition`. This is what the `match.call` function lets us do:
+We need a new approach. One way is to capture the ensure function call and then extract the piece that corresponds to `condition`. This is what the `match.call` function lets us do:
 
     subset <- function(x, condition) {
       match.call()
@@ -95,7 +95,7 @@ Once we have the call, we need to evaluate it in the way we want, as described n
 
 ## Evaluation
 
-Now we've have the call that represents the subset condition we want, we want to evaluate it in the right context, so that `cyl` is interpreted as `mtcars$cyl`.  To do this we need the `eval` function:
+Now that we have the call that represents the subset condition we want, we want to evaluate it in the right context, so that `cyl` is interpreted as `mtcars$cyl`.  To do this we need the `eval` function:
 
     eval(quote(cyl), mtcars)
     #  [1] 6 6 4 6 8 6 8 4 4 6 6 8 8 ...
@@ -113,7 +113,7 @@ Now we've have the call that represents the subset condition we want, we want to
     eval(cyl, mtcars)
     #  [1] 6 6 4 6 8 6 8 4 4 6 6 8 8 ...
 
-The first argument to `eval` is the language object to evaluate, and the second argument is the environment to use for evaluation.  If the second argument is a list or data frame, `eval` will convert it to a environment for you. (There are a number of short cut functions: `evalq`, `eval.parent`, and `local` that are also documented with `eval` - I won't use or explain these here, I'd recommend you read about them and figure out what they do.)
+The first argument to `eval` is the language object to evaluate, and the second argument is the environment to use for evaluation.  If the second argument is a list or data frame, `eval` will convert it to an environment for you. (There are a number of short cut functions: `evalq`, `eval.parent`, and `local` that are also documented with `eval` - I won't use or explain these here, I'd recommend you read about them and figure out what they do.)
 
 Now we have all the pieces we need to write the `subset` function: we can capture the call representing condition then evaluate it in the context of the data frame:
 
@@ -247,7 +247,7 @@ But hopefully a little thought, or maybe some experimentation, will show why thi
 
 ## Conclusion
 
-Now you understand how our version of subset works, go back and read the source code for `subset.data.frame`, the base R version which does a little more. Other functions that work similarly are `with.default`, `within.data.frame`, `transform.data.frame`, and in the plyr package `.`, `arrange`, and `summarise`. Look at the source code for these functions and see if you can figure out how they work.
+Now that you understand how our version of subset works, go back and read the source code for `subset.data.frame`, the base R version which does a little more. Other functions that work similarly are `with.default`, `within.data.frame`, `transform.data.frame`, and in the plyr package `.`, `arrange`, and `summarise`. Look at the source code for these functions and see if you can figure out how they work.
 
 ## Excercises
 
