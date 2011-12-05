@@ -112,18 +112,23 @@ You may notice this is rather similar to a closure with no arguments, and in man
 
 <!-- When is it useful? http://lambda-the-ultimate.org/node/2273 -->
 
-Particularly useful in if statements:
+This is particularly useful in if statements:
 
-      if (!is.null(a) && a > 0)
+      if (!is.null(x) && y > 0)
 
 And you can use it to write functions that are not possible otherwise
 
-      and <- function(a, b) {
-        if (a) TRUE else b
+      and <- function(x, y) {
+        if (!x) FALSE else y
       }
+      
+      a <- 1
       and(!is.null(a), a > 0)
 
-This function would not work without lazy evaluation because both `a` and `b` would always be evaluated, testing if `a > 0` even if `a` was NULL.
+      a <- NULL
+      and(!is.null(a), a > 0)
+
+This function would not work without lazy evaluation because both `x` and `y` would always be evaluated, testing if `a > 0` even if `a` was NULL.
 
 
 ### delayedAssign
