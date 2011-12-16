@@ -166,7 +166,7 @@ There are a number of options for letting the user know when something has gone 
   tables.
 
 * use `warning()` for unexpected problems that aren't show stoppers.
-  `options(warning = 2)` will turn errors into warnings. Warnings are often
+  `options(warn = 2)` will turn warnings into errors into. Warnings are often
   more appropriate for vectorised functions when a single value in the vector
   is incorrect, e.g. `log(-1:2)` and `sqrt(-1:2)`.
 
