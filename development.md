@@ -43,7 +43,7 @@ The automated tests are still vitally important because they are what will preve
 
 ## devtools package
 
-I developed the `devtools` package to simplify the package development cycle. Currently `devtools` is only available from github (not CRAN). To install, [download the latest version][devtools-down] and install from the command line with `R CMD install`.
+I developed the `devtools` package to simplify the package development cycle. It is available from CRAN.
 
 ### Set up
 
