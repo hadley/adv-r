@@ -73,7 +73,7 @@ The three functions that you'll use most often are:
   will only load changed files to save time: if you want to reload
   everything from scratch, run `load_all("pkg", T)`
 
-* `test("pkg")` runs all tests in `inst/test/` and reports the results
+* `test("pkg")` runs all tests in `inst/tests/` and reports the results
 
 * `document("pkg")` runs roxygen on the package to update all documentation.
 
