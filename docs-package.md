@@ -3,8 +3,6 @@
 Shows how to combine individual components to do something useful.  Critical part of package documentation - but a lot of work.  
 
 The following code is an excerpt from the package documentation for lubridate, which is located in the  file
-['odesk_sql/worker_applications/b_job_appl.sql'](https://github.com/johnjosephhorton/odesk_sql/blob/master/worker_applications/worker_applications_panel.sql)
-
 
  [`lubridate/R/help.r`](https://github.com/hadley/lubridate/blob/master/R/help.r)
 
