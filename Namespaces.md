@@ -1,7 +1,7 @@
 # Namespaces
 
 Namespaces control what functions and methods that your package exports for
-use by others. Namespaces make it easier to come up with you own function
+use by others. Namespaces make it easier to come up with your own function
 names without worrying about what names other packages have used. A namespace
 means you can use any name you like for internal functions, and when there is
 a conflict with an exported function, there is a standard disambiguation
