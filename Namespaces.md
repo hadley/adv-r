@@ -50,7 +50,7 @@ There are two places you need to record your package's dependency:
   <pre>
       #' @docType package
       #' ...
-      #' @imports stringr MASS
+      #' @import stringr MASS
   </pre>
   and have `roxygen` generate the `NAMESPACE` file from that.
 
