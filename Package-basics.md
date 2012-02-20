@@ -30,7 +30,7 @@ After the code and function documentation, the most important optional component
   published a peer reviewed article which you'd like people to cite when they
   use your software, this is the place to put it.
 
-* the `inst/demo/` directory contains larger scale demos, that use many 
+* the `demo/` directory contains larger scale demos, that use many 
   features of the package.
 
 * the `inst/doc/` directory is used for larger scale documentation, like

@@ -2,18 +2,9 @@
 
 Shows how to combine individual components to do something useful.  Critical part of package documentation - but a lot of work.  
 
-* package help topic
-* vignette(s)
-* news file
-* citation
-* readme file
-* demos
+The following code is an excerpt from the package documentation for lubridate, which is located in the  file
 
-## Package help topic
-
-Every package should contain an overview documentation topic that describes the overall purpose of the package, and points to the most important functions. This topic should have `@docType package` and be aliased to `package-pkgname` and `pkgname` (unless there is already a function by that name).  Use `@docType package`
-
-The following code is an excerpt from the package documentation for lubridate, which is located in the  file [`lubridate/R/help.r`](https://github.com/hadley/lubridate/blob/master/R/help.r)
+ [`lubridate/R/help.r`](https://github.com/hadley/lubridate/blob/master/R/help.r)
 
     #' Dates and times made easy with lubridate.
     #'

@@ -73,7 +73,7 @@ Locating warnings is a little trickier. The easiest way to turn it in an error w
 
 ### Browsing on error
 
-It's also possible to  start `browser` automatically when an error occurs, by setting `option(error = browser)`. This will start the interactive debugger in the environment in which the error occurred. Other functions that you can supply to `error` are:
+It's also possible to  start `browser` automatically when an error occurs, by setting `options(error = browser)`. This will start the interactive debugger in the environment in which the error occurred. Other functions that you can supply to `error` are:
 
 * `recover`: a step up from `browser`, as it allows you to drill down into any
   of the calls in the call stack. This is useful because often the cause of
@@ -166,7 +166,7 @@ There are a number of options for letting the user know when something has gone 
   tables.
 
 * use `warning()` for unexpected problems that aren't show stoppers.
-  `options(warning = 2)` will turn errors into warnings. Warnings are often
+  `options(warn = 2)` will turn warnings into errors. Warnings are often
   more appropriate for vectorised functions when a single value in the vector
   is incorrect, e.g. `log(-1:2)` and `sqrt(-1:2)`.
 

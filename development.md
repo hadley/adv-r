@@ -43,7 +43,7 @@ The automated tests are still vitally important because they are what will preve
 
 ## devtools package
 
-I developed the `devtools` package to simplify the package development cycle. Currently `devtools` is only available from github (not CRAN). To install, [download the latest version][devtools-down] and install from the command line with `R CMD install`.
+I developed the `devtools` package to simplify the package development cycle. It is available from CRAN.
 
 ### Set up
 
@@ -73,7 +73,7 @@ The three functions that you'll use most often are:
   will only load changed files to save time: if you want to reload
   everything from scratch, run `load_all("pkg", T)`
 
-* `test("pkg")` runs all tests in `inst/test/` and reports the results
+* `test("pkg")` runs all tests in `inst/tests/` and reports the results
 
 * `document("pkg")` runs roxygen on the package to update all documentation.
 
