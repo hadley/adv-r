@@ -112,7 +112,7 @@ There are two useful built-in functions that return closures:
   a quick and dirty way of making a vectorised function.
 
   An mildly useful extension of `sample` would be to vectorize it with respect
-  to size: this would allow you to generate multiple sample in one call.
+  to size: this would allow you to generate multiple samples in one call.
 
         sample2 <- Vectorize(sample, "size", SIMPLIFY = FALSE)
         sample2(1:10, rep(5, 4))
@@ -125,7 +125,7 @@ There are two useful built-in functions that return closures:
 
 ## Higher-order functions
 
-The power of closures is tightly coupled to another important class of functions: higher-order functions (HOFs), functions that take functions arguments. Mathematicians distinguish between functionals, which accept a function and return a scalar, and function operators, which accept a function and return a function. Integration over an interval is a functional, the indefinite integral is a function operator.
+The power of closures is tightly coupled to another important class of functions: higher-order functions (HOFs), functions that take functions as arguments. Mathematicians distinguish between functionals, which accept a function and return a scalar, and function operators, which accept a function and return a function. Integration over an interval is a functional, the indefinite integral is a function operator.
 
 Higher-order functions of use to R programmers fall into two main camps: data structure manipulation and mathematical tools, as described below.
 
@@ -181,7 +181,7 @@ The next two functions work with more general classes of functions:
   `f(f(f(f(f(init, 1), 2),3), 4), 5)`
 
   Reduce is useful for implementing many types of recursive operations:
-  merges, taking unique, finding smallest values, intersections, unions.
+  merges, finding smallest values, intersections, unions.
 
 
 Apart from `Map`, the implementation of these five vector-processing HOFs is straightforward and I encourage you to read the source code to understand how they each work.
@@ -239,9 +239,9 @@ Let's explore how these are used with a simple function:
     optimise(sin, c(0, 2 * pi))
     optimise(sin, c(0, pi), maximum = TRUE)
 
-There is one function that works with a more general an n-dimensional numeric function, `optim`, which finds the location of a minima. 
+There is one function that works with a more general n-dimensional numeric function, `optim`, which finds the location of a minima. 
 
-In statistics, optimisation is often used for maximum likelihood estimation. Maximum likelihood estimation is are natural match to closures because the arguments to a likelihood fall into two groups: the data, which is fixed for a given problem, and the parameters, which will vary as we try to find a maximum numerically. This naturally gives rise to an approach like the following:
+In statistics, optimisation is often used for maximum likelihood estimation. Maximum likelihood estimation is a natural match to closures because the arguments to a likelihood fall into two groups: the data, which is fixed for a given problem, and the parameters, which will vary as we try to find a maximum numerically. This naturally gives rise to an approach like the following:
 
     # Negative log-likelihood for Poisson distribution
     poisson_nll <- function(x) {
@@ -282,7 +282,7 @@ Calling a function from a list is straightforward: just get it out of the list f
     system.time(compute_mean$base(x))
     system.time(compute_mean$manual(x))
     
-If we want to call all functions to check that we've implemented them correctly and they return the same answer, we can use `lapply`, either with an anonymous function, or a new function than calls it's first argument with all other arguments:
+If we want to call all functions to check that we've implemented them correctly and they return the same answer, we can use `lapply`, either with an anonymous function, or a new function that calls it's first argument with all other arguments:
 
     lapply(compute_mean, function(f) f(x))
 
