@@ -39,6 +39,9 @@ You may also want to make the distinction between functions for users and functi
 
 In your package `DESCRIPTION` there are two ways to indicate that you package requires another package to work: by listing it in either `Depends` or `Imports`. `Depends` works just like using library to load a package, but `Imports` is a little more subtle: the dependency doesn't get loaded in a way the user can see. This is good practice because it reduces the chances of conflict, and it makes the code clearer by requiring that every package used be explicitly loaded. For example, ggplot2 currently depends on the plyr package - this means that once you've loaded ggplot2, you don't need to load plyr to get access to (e.g) `ddply`. This is bad because you can't see which packages a block of code uses.
 
+<!-- http://stackoverflow.com/questions/8637993/better-explanation-of-when-to-use-imports-depends 
+>
+
 There are two places you need to record your package's dependency:
 
 * In the `Imports` field in the `DESCRIPTION` file, used by

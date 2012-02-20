@@ -117,7 +117,7 @@ It is basically an empty symbol, but you can't create it directly:
     as.symbol("")
     # Error in as.symbol("") : attempt to use zero-length variable name
     
-You can either capture it from a missing argument of the formals of a function, as above, or create with `substitute()` or `bquote()`.
+You can either capture it from a missing argument of the formals of a function, as above, or create with `substitute()`, `bquote()`.
 
 ## Modifying calls
 
@@ -216,6 +216,11 @@ Calls also support the `[` method, but use it with care: it produces a call obje
     # $row.names
     # [1] FALSE
 
+
+### Tricks and tips
+
+* 
+http://stackoverflow.com/questions/8611080/how-do-i-create-pairlist-with-empty-elements-in-r
 
 ## Walking the code tree
 

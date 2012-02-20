@@ -133,6 +133,8 @@ The only environment that doesn't have a parent is emptyenv(), which is the even
 
 Apart from that, the environment hierarchy is created by function definition. When you create a function, `f`, in the global environment, the environment of the function `f` will have the global environment as a parent.  If you create a function `g` inside `f`, then the environment of `g` will have the environment of `f` as a parent, and the global environment as a grandparent.
 
+<!-- Function to show all parents of an environment -->
+
 ### Active bindings
 
 `makeActiveBinding` allows you to create names that look like variables, but act like functions. Every time you access the object a function is run. This lets you do crazy things like:
@@ -146,6 +148,10 @@ Apart from that, the environment hierarchy is created by function definition. Wh
       # [1] -1.040291
 
 
+### Lazy loading
+
+http://stackoverflow.com/questions/8700619/get-specific-object-from-rdata-file
+
 ## Dynamic scoping
 
 `parent.frames`, `sys.calls` etc
@@ -156,3 +162,27 @@ Apart from that, the environment hierarchy is created by function definition. Wh
 
 ## Namespaces
 
+<!-- 
+http://stackoverflow.com/questions/8661526/permanently-replacing-a-function
+http://stackoverflow.com/questions/8637107/parent-env-x-confusion
+-->
+
+
+<!-- From Peter Brecknock
+1. Darren Wilkinson's blog at
+
+http://darrenjw.wordpress.com/2011/11/23/lexical-scope-and-function-closures
+-in-r/?blogsub=confirming#subscribe-blog
+
+Introduced the basic concepts of dynamic and lexical scoping in bite sized
+chunks (more digestible for people without a background in computer science
+like me).
+
+2. John Fox's "Frames, Environments and Scope in R and S-PLUS" at
+
+http://socserv.mcmaster.ca/jfox/Books/Companion-1E/appendix-scope.pdf
+
+I liked the pictorial representations of the relationships between frames
+(although I found the arrows linking the boxes confusing the first time I
+read through it).
+-->
