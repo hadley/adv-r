@@ -1,6 +1,10 @@
 # Namespaces
 
-Namespaces control the functions and methods that your package make available for use by others. Namespaces make it easier to come up with your own function names without worrying about what names other packages have used. A namespace means you can use any name you like for internal functions, and when there is a conflict with an exported function, there is a standard disambiguation procedure.
+As the name suggest, namespaces provide "spaces" for "names", providing a context for evaluating which object is found when you look for it.  When developing code, they allow you to specify which package to look for for a function when there are multiple packages it could come from, and when developing packages they ensure that your functions always call functions in the same place.
+
+Namespaces provide an extension to the standard way of looking up the value of an object: instead of just typing `objectname`, you type `package::objectname`.  
+
+Namespaces also control the functions and methods that your package make available for use by others. Namespaces make it easier to come up with your own function names without worrying about what names other packages have used. A namespace means you can use any name you like for internal functions, and when there is a conflict with an exported function, there is a standard disambiguation procedure.
 
 The easiest way to use namespaces is with roxygen2, because it keeps the namespace definitions next to the function that it concerns. The translation between roxygen2 tags and `NAMESPACE` directives is usually straightforward: the tag becomes a function name and its space-separated arguments become comma separated arguments to the function.  For example `@import plyr` becomes `import(plyr)` and `@importFrom plyr ddply` becomes `importFrom(plyr, ddply)`.  The chief exception is `@export` which will automatically figure out the function name to export. 
 
