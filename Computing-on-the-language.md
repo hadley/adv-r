@@ -217,10 +217,19 @@ Calls also support the `[` method, but use it with care: it produces a call obje
     # [1] FALSE
 
 
-### Tricks and tips
+## Creating a function
 
-* 
+* when you can't use a closure because you don't know in advance what the arguments will be, and similarly you can't use substitute (need to make sure both of those sections point here)
+
+* the _function_ function, and its two arguments: arglist and body.
+
+* pairlists, and creating arguments with no default values: 
 http://stackoverflow.com/questions/8611080/how-do-i-create-pairlist-with-empty-elements-in-r
+
+* correcting the environment of the function.
+
+* look at examples in email from John Nash and Randy Pruim
+
 
 ## Walking the code tree
 
