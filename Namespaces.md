@@ -1,13 +1,8 @@
 # Namespaces
 
-Namespaces control what functions and methods that your package exports for
-use by others. Namespaces make it easier to come up with your own function
-names without worrying about what names other packages have used. A namespace
-means you can use any name you like for internal functions, and when there is
-a conflict with an exported function, there is a standard disambiguation
-procedure.
+Namespaces control the functions and methods that your package make available for use by others. Namespaces make it easier to come up with your own function names without worrying about what names other packages have used. A namespace means you can use any name you like for internal functions, and when there is a conflict with an exported function, there is a standard disambiguation procedure.
 
-The easiest way to use namespaces is with roxygen, because it keeps the namespace definitions next to the function that it concerns. The translation between roxygen tags and `NAMESPACE` directives is usually straightforward: the tag becomes a function name and its space-separated arguments become comma separated arguments to the function.  For example `@import plyr` becomes `import(plyr)` and `@importFrom plyr ddply` becomes `importFrom(plyr, ddply)`.  The chief exception is `@export` which will automatically figure out the function name to export.
+The easiest way to use namespaces is with roxygen2, because it keeps the namespace definitions next to the function that it concerns. The translation between roxygen2 tags and `NAMESPACE` directives is usually straightforward: the tag becomes a function name and its space-separated arguments become comma separated arguments to the function.  For example `@import plyr` becomes `import(plyr)` and `@importFrom plyr ddply` becomes `importFrom(plyr, ddply)`.  The chief exception is `@export` which will automatically figure out the function name to export. 
 
 ## Exporting 
 
@@ -31,16 +26,17 @@ that you think you won't remember what it does.
 
 To export a function, add the roxygen `@export` tag.
 
-To export a method for a S3 generic function, add `S3method` roxygen tag: `@S3method function class`
+There are two ways to export a method for an S3 method depending on whether it's documented or not:
+
+* If it's documented, you'll already be using the `@method` tag to state that it's an S3 method and you only need the `@export` to generate the correct export flag in the `NAMESPACE`
+
+* If it's not documented, use the `S3method` tag: `@S3method function class`
 
 You may also want to make the distinction between functions for users and functions for other developers.  Functions that might be useful for developers or power users should be exported, but tagged with `@keywords internal` so they don't show up in routine lists of function documentation.
 
 ## Importing 
 
-In your package `DESCRIPTION` there are two ways to indicate that you package requires another package to work: by listing it in either `Depends` or `Imports`. `Depends` works just like using library to load a package, but `Imports` is a little more subtle: the dependency doesn't get loaded in a way the user can see. This is good practice because it reduces the chances of conflict, and it makes the code clearer by requiring that every package used be explicitly loaded. For example, ggplot2 currently depends on the plyr package - this means that once you've loaded ggplot2, you don't need to load plyr to get access to (e.g) `ddply`. This is bad because you can't see which packages a block of code uses.
-
-<!-- http://stackoverflow.com/questions/8637993/better-explanation-of-when-to-use-imports-depends 
->
+In your package `DESCRIPTION` there are two ways to indicate that your package requires another package to work: by listing it in either `Depends` or `Imports`. `Depends` works just like using library to load a package, but `Imports` is a little more subtle: the dependency doesn't get loaded in a way the user can see. This is good practice because it reduces the chances of conflict, and it makes the code clearer by requiring that every package used be explicitly loaded.  Since R 2.14 there is no reason to use `Depends` because all packages have a namespace.
 
 There are two places you need to record your package's dependency:
 
@@ -50,26 +46,25 @@ There are two places you need to record your package's dependency:
 * In the `NAMESPACE` file, to make all the functions in the dependency
   available to your code. The easiest way to do this is to add `@imports
   package-name` to your [package documentation](docs-package):
-  <pre>
-      #' @docType package
-      #' ...
-      #' @import stringr MASS
-  </pre>
-  and have `roxygen` generate the `NAMESPACE` file from that.
 
-There are two alternatives to using `@imports`, but these are not currently
-recommended:
+        #' @docType package
+        #' ...
+        #' @import stringr MASS
 
-* `@importFrom` imports only selected functions from another package. This is
-  currently a pain in roxygen because it doesn't automatically remove
-  duplicates - this means that if you use a function in more than one place,
-  you have to arbitrarily choose where to import it. Hopefully this will be
-  fixed in a future version of roxygen.
+  and have `roxygen2` generate the `NAMESPACE` file from that.
+
+There are two alternatives to using `@imports`:
+
+* Use `@importFrom package fun1 fun2 ...` to only import selected functions
+  from another package. This is important if you are importing two packages
+  share functions with the same name. You can also use it to produce a very
+  specific `NAMESPACE`, but at the cost of having to use `@importFrom` for
+  every function that uses a function from another package.
 
 * `::` refers to a function within a package directly. I don't recommend this
   method because it doesn't work well during package development -- it will
-  always use the installed version of the package, rather than the development
-  version
+  use the installed version of the package, rather than the development
+  version.
 
 Other types of imports:
 
@@ -77,11 +72,6 @@ Other types of imports:
   add `@useDynLib mypackage` to your package documentation to ensure your
   functions can access it. This means you don't need to specify `PACKAGE` in
   `.Call`.
-
-* S3 methods: If you are adding a new S3 method for an existing function, use
-  `@S3method function class` instead of `@export`. If you have created a new
-  generic function, use `@export` to export it, and then `@S3method` for each
-  methods.
 
 * S4 methods: See the [R extensions][S4] manual
 
@@ -94,7 +84,6 @@ Other types of imports:
 ## How do they work
 
 New set of rules on top of ordinary [[scoping]] rules, which deal with lists of environments - each environment belongs to a package. Search path. Variable look up differs depending on whether you're inside or outside a package. If a package has a namespace, then R looks first inside the package namespace, then the imports, then the base namespace and then the normal search path.
-
 
 
 [S4]: http://cran.r-project.org/doc/manuals/R-exts.html#Name-spaces-with-S4-classes-and-methods
