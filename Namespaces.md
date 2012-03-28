@@ -10,8 +10,7 @@ The easiest way to use namespaces is with roxygen2, because it keeps the namespa
 
 ## Exporting 
 
-It's not always easy to tell whether or not a function is internal or
-external. A few rules of thumb:
+For every function in your package, you need to decide whether it is external and available to all users of the package, or internal and only available to other functions within the package. It's not always easy to tell whether or not a function is internal or external. A few rules of thumb:
 
 * Is the purpose of the function different to the purpose of the package? If
   not, make it internal. (A package should provide a set of closely related
@@ -24,17 +23,23 @@ external. A few rules of thumb:
   that that function will continue to exist in the future. If that's not the
   case, don't export it.
 
-If a function isn't exported, you don't need to document it. This doesn't mean
-you shouldn't document it, but you only need to if it's complicated enough
-that you think you won't remember what it does.
+If a function isn't exported, you don't need to document it. This doesn't mean you shouldn't document it, but you only need to if it's complicated enough that you think you won't remember what it does. Generally, you want to export as few functions as possible: this makes it easier to change the package in the future.  
 
-To export a function, add the roxygen `@export` tag.
+As described below, the `@export` tag is all that you need.  There are only a few exceptions:
 
-There are two ways to export a method for an S3 method depending on whether it's documented or not:
+* __Functions__: use the `@export` tag.
 
-* If it's documented, you'll already be using the `@method` tag to state that it's an S3 method and you only need the `@export` to generate the correct export flag in the `NAMESPACE`
+* __S3 methods__: There are two ways to export a method for an S3 method depending on whether it's documented or not:
 
-* If it's not documented, use the `S3method` tag: `@S3method function class`
+    * If it's documented, you'll already be using the `@method` tag to state that it's an S3 method and you only need the `@export` to generate the correct export flag in the `NAMESPACE`
+
+    * If it's not documented, use the `S3method` tag: `@S3method function class`
+
+* __S4 classes__: Use `@export`
+
+* __S4 methods__: If the methods are for classes that you have defined and exported, you don't need to do anything. If they are for classes defined in other packages, you need to use `@export`.
+
+* __Other objects__: For any other types of object that you want to make available to the user, use `@export`.
 
 You may also want to make the distinction between functions for users and functions for other developers.  Functions that might be useful for developers or power users should be exported, but tagged with `@keywords internal` so they don't show up in routine lists of function documentation.
 
@@ -70,20 +75,15 @@ There are two alternatives to using `@imports`:
   use the installed version of the package, rather than the development
   version.
 
-Other types of imports:
 
-* Compiled code: If you have C or Fortran code in your package, you'll need to
-  add `@useDynLib mypackage` to your package documentation to ensure your
-  functions can access it. This means you don't need to specify `PACKAGE` in
-  `.Call`.
 
 * S4 methods: See the [R extensions][S4] manual
 
-* You should very very very rarely use `:::`. This is a sign that you're using
-  an internal function from someone else - and there is no guarantee that that
-  function won't change from version to version. It would be better to
-  encourage the author to make it an external, exported function, or ask if
-  you could include a copy of it in your package.
+You should very very very rarely use `:::`. This is a sign that you're using an internal function from someone else - and there is no guarantee that that function won't change from version to version. It would be better to encourage the author to make it an external, exported function, or ask if you could include a copy of it in your package.
+
+## Compiled code
+
+If you have C or Fortran code in your package, you'll need to add `@useDynLib mypackage` to your package documentation to ensure your functions can access it. This means you don't need to specify `PACKAGE` in `.Call`.
 
 ## How do they work
 
