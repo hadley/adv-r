@@ -26,7 +26,7 @@ It's also very useful to learn a little about lisp, because many of the ideas in
 
 Other websites that helped me to understand smaller pieces of R are:
 
-* [Getting Started with Dylan](http://www.opendylan.org/gdref/tutorial.html)
+* [Getting Started with Dylan](http://opendylan.org/documentation/intro-dylan/index.html)
   for understanding S4
 
 * [Frames, Environments, and Scope in R and S-PLUS](http://cran.r-project.org/doc/contrib/Fox-Companion/appendix-scope.pdf). Section 2 is recommended as a good introduction to the formal vocabulary used in much of the R documentation. 
