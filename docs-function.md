@@ -78,7 +78,7 @@ The content of a tag extends from the tag name to the next tag, and they can spa
 
 Other tags that you might find useful are:
 
-* `@author`, in the form `Firstname Lastname <email@address.com>`. Use this if
+* `@author`, in the form `Firstname Lastname <email@@address.com>`. Use this if
   some of the functions are written by different people
 
 * `@seealso` - to provide pointers to other related topics
