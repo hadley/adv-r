@@ -358,7 +358,7 @@ draw_tree(quote({
 #       \- "b"
 ```
 
-This behaviour might be ok, but we probably just want assignment into whole objects, not assignment that modifies some property of the object. Drawing the tree for that quoted object helps us see what condition we should test for - we want the object on the left hand side of assignment to be a call.  This gives the final version of the `find_assign` function.
+This behaviour might be ok, but we probably just want assignment into whole objects, not assignment that modifies some property of the object. Drawing the tree for that quoted object helps us see what condition we should test for - we want the object on the left hand side of assignment to be a name.  This gives the final version of the `find_assign` function.
 
 ```R
 find_assign <- function(obj) {
