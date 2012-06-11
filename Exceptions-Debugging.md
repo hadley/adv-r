@@ -197,7 +197,7 @@ If code fails, `try` invisibly returns an object of class `try-error`. There isn
     is.error <- function(x) inherits(x, "try-error")
     successful <- Filter(Negate(is.error), results)
     
-Of if we want to know where the successes and failures were, when can use `sapply` or `vapply`:
+Or if we want to know where the successes and failures were, when can use `sapply` or `vapply`:
 
     vapply(results, is.error, logical(1))
     sapply(results, is.error)
