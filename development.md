@@ -21,7 +21,7 @@ Confirmatory programming happens when you know what you need to do, and what the
 
 5. Update documentation, re-roxygenise, update `NEWS` and check modified source into your VCS
 
-For this paradigm, you might also want to use `testthat::autotest()` which will watch your tests and code and will automatically rerun your tests when either changes. This allows you to skip step three: you just modify your code and watch to see if the tests pass or fail.
+For this paradigm, you might also want to use `testthat::auto_test()` which will watch your tests and code and will automatically rerun your tests when either changes. This allows you to skip step three: you just modify your code and watch to see if the tests pass or fail.
 
 ### Exploratory programming
 
