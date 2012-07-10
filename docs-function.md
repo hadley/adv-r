@@ -10,7 +10,7 @@ Documentation is one of the most important aspects of good code. Without it, use
 * roxygen can automatically derive a lot of the required documentation from
   the source code.
 
-* it's easy to automatically generate a [[namespace]] for your package.
+* it's easy to automatically generate a [namespace](Namespaces) for your package.
 
 To convert roxygen comments to the official `.Rd` files, you can use one of the commands below:
 
