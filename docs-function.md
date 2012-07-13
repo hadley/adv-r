@@ -233,7 +233,7 @@ Sections and subsections are similar to latex, but take a second argument which 
       
 * Unordered (bulleted) lists
 
-        \itemised{
+        \itemize{
           \item First item
           \item Second item
         }
