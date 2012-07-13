@@ -211,16 +211,16 @@ The package documentation should not contain a verbatim list of functions or cop
 
 Within roxygen text, you use the usual R documentation formatting rules, as summarised below. A fuller description is available in the [R extensions](http://cran.r-project.org/doc/manuals/R-exts.html#Sectioning) manual.
 
-Sections and subsections are similar to latex, but take a second argument which is the contents of the section. Section titles should be in sentence case.  It is currently not possible to add section tags with roxygen.
+Sections are indicated by the @section tag, followed by the title (which should be in sentence case) and a colon.  Subsections are indicated by latex-style command; the first argument is the subsection title, and the second argument contains the subsection content.  The following example illustrates how to add an arbitrary section:
 
-    \section{Warning}{
+    @section Warning:
       You must not call this function unless ...
       
       \subsection{Exceptions}{
          Apart from the following special cases...
       }
-      
-    }
+
+The section ends when another tag is declared, or when the roxygen2 block ends. 
 
 ### Lists
 
