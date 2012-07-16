@@ -249,7 +249,7 @@ But hopefully a little thought, or maybe some experimentation, will show why thi
 
 Now that you understand how our version of subset works, go back and read the source code for `subset.data.frame`, the base R version which does a little more. Other functions that work similarly are `with.default`, `within.data.frame`, `transform.data.frame`, and in the plyr package `.`, `arrange`, and `summarise`. Look at the source code for these functions and see if you can figure out how they work.
 
-## Excercises
+## Exercises
 
 1. Compare the simplified `subset` function described in this chapter with the real `subset.data.frame`.  What's different? Why? How does the select parameter work?
 
