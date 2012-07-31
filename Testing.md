@@ -239,7 +239,7 @@ There are two situations in which you want to run your tests: interactively whil
 
 ### Testing files and directories
 
-You can run all tests in a file with `test_file(path)`. The following code shows the different between `test_file` and `source` for the `stringr` tests, as well as those same tests for `nchar`. You can see the advantage of `test_file` over `source`: instead of seeing the first failure, you see the performance of all tests.
+You can run all tests in a file with `test_file(path)`. The following code shows the difference between `test_file` and `source` for the `stringr` tests, as well as those same tests for `nchar`. You can see the advantage of `test_file` over `source`: instead of seeing the first failure, you see the performance of all tests.
 
     > source("test-str_length.r")
     > test_file("test-str_length.r")
