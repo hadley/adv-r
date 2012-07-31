@@ -44,7 +44,7 @@ Or we could create it from a string, with `parse`:
     # vs == am
     # Parse returns an expression, but we just want the first element, a call
 
-The simplest way to write `subset` would be to require that the user supply a call created using one of the above techniques. But that requires extra typing, just what we were trying to avoid. We want capture the call inside the function, not outside of it. Think about why `quote` won't work, and then run the following code to check if your guess was correct:
+The simplest way to write `subset` would be to require that the user supply a call created using one of the above techniques. But that requires extra typing, just what we were trying to avoid. We want to capture the call inside the function, not outside of it. Think about why `quote` won't work, and then run the following code to check if your guess was correct:
 
     subset <- function(x, condition) {
       quote(condition)
