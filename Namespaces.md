@@ -53,7 +53,7 @@ There are two places you need to record your package's dependency:
  `install.packages` to download package dependencies automatically.
 
 * In the `NAMESPACE` file, to make all the functions in the dependency
-  available to your code. The easiest way to do this is to add `@imports
+  available to your code. The easiest way to do this is to add `@import
   package-name` to your [package documentation](docs-package):
 
         #' @docType package
@@ -62,7 +62,7 @@ There are two places you need to record your package's dependency:
 
   and have `roxygen2` generate the `NAMESPACE` file from that.
 
-There are two alternatives to using `@imports`:
+There are two alternatives to using `@import`:
 
 * Use `@importFrom package fun1 fun2 ...` to only import selected functions
   from another package. This is important if you are importing two packages
