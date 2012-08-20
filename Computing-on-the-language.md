@@ -221,7 +221,7 @@ Calls also support the `[` method, but use it with care: it produces a call obje
 
 * when you can't use a closure because you don't know in advance what the arguments will be, and similarly you can't use substitute (need to make sure both of those sections point here)
 
-* the _function_ function, and its two arguments: arglist and body.
+* the _function_ function, and its two arguments: arglist and body (and arglist).
 
 * pairlists, and creating arguments with no default values: 
 http://stackoverflow.com/questions/8611080/how-do-i-create-pairlist-with-empty-elements-in-r
@@ -229,6 +229,15 @@ http://stackoverflow.com/questions/8611080/how-do-i-create-pairlist-with-empty-e
 * correcting the environment of the function.
 
 * look at examples in email from John Nash and Randy Pruim
+
+      make_function <- function(args, body, env) {
+        args <- as.pairlist(args)
+        stopifnot(is.language(body))
+        f <- eval(call("function", args, body))
+        environment(f) <- env
+        f
+      }
+
 
 
 ## Walking the code tree

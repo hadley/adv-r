@@ -1,5 +1,7 @@
 # Scoping and environments
 
+<!-- http://obeautifulcode.com/R/How-R-Searches-And-Finds-Stuff/  -->
+
 Scoping is the set of rules that govern how R looks up the value of a symbol, or name. That is, the rules that R applies to go from the symbol `x`, to its value `10` in the following example.
 
     x <- 10
