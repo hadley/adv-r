@@ -1,20 +1,34 @@
 # Package basics
 
-An R package is the basic unit of reusable code. You need to master the art of making R packages if you want others to use your code. This document explains how to get started, with a description of package structure, tips for naming your package, and more details about the `DESCRIPTION` file.
+An R package is the basic unit of reusable code. You need to master the art of making R packages if you want others to use your code. At their heart, packages are quite simple and only have two essential components: 
 
-The best resource for up-to-date details on package development is always the official [writing R extensions][r-ext] guide. Compared to that, this document focusses more on the basics, providing many more examples, and on the most commonly used features. Once you are familiar with the content here, you should find R extensions easier to read.
+* a `DESCRIPTION` file that describes the package, what is does, who's allowed
+  to use it (the license) and who to contact if you need help
+
+* an `R` directory that contains your R code.
+
+If you want to distribute R code to someone else, there's no excuse not to use a simple package: it's a standard structure, and you can easily build it out into a complete package by adding documentation, data and tests.
+
+This document explains how to get started, with a description of package structure, tips for naming your package, and more details about the `DESCRIPTION` file.
+
+The most accurate resource for up-to-date details on package development is always the official [writing R extensions][r-ext] guide. However, it's rather hard to read and follow if you're not already familiar with the basis of packages. It's also exhaustive, covering every possible package component, rather than focussing on the most common and useful components as this package does. Once you are familiar with the content here, you should find R extensions a little easier to read.
 
 ## Package structure
 
-There are only three elements that you must have:
+As mentioned above, there are only two elements that you must have:
 
-* the `DESCRIPTION` file describes the package, and is detailed below.
+* the `DESCRIPTION` file, which provides metadata about the package, and is
+  described in the following section.
 
-* the `R/` directory where your R code lives (in `.R` or `.r` files). See
-  [[style|Style]] for information on how these should be formatted.
+* the `R/` directory where your R code lives (in `.R` or `.r` files).
 
-* the `man/` directory where your [[function documentation|docs-function]],
-  produced with roxygen, lives.
+Almost all R packages also have:
+
+* the `man/` directory where your [[function documentation|docs-function]]. In
+  the style of package development described in this book, you'll never
+  personally touch the files in this directory. Instead, they will be
+  automatically generated from comments in your source code using the
+  `roxygen2` package
 
 After the code and function documentation, the most important optional components of an R package help your users learn how to use your package. The following files and directories are described in more detail in [[package documentation|docs-package]].
 
@@ -24,7 +38,7 @@ After the code and function documentation, the most important optional component
 
 * the `README` file gives a general overview of your package, including why
   it's important. This text should be included in any package announcement, to
-  give people a general idea of why your package is useful.
+  help others understand why they might want to use your package.
 
 * the `inst/CITATION` file describes how to cite your package. If you have
   published a peer reviewed article which you'd like people to cite when they
@@ -34,47 +48,120 @@ After the code and function documentation, the most important optional component
   features of the package.
 
 * the `inst/doc/` directory is used for larger scale documentation, like
-  vignettes.
-  
+  vignettes, long-form documents which show how to combine multiple the parts
+  of your package to solve problems.
+
 Other optional files and directories are part of good development practice:
 
 * a `NAMESPACE` file describes which functions are part of the formal API of
-  the package and are exported for others to use. See [[namespaces]] for more
+  the package and are available for others to use. See [[namespaces]] for more
   details.
 
-* the `inst/tests/` directory contains [[tests|testing]] which ensure that
-  your package is operating as designed.
+* `tests/` and `inst/tests/` contains [[unit tests|testing]] which ensure that
+  your package is operating as designed. In this book, we'll focus on the
+  `testthat` package for writing tests.
 
 * the `data/` directory contains `.rdata` files, used to include sample
   datasets (or other R objects) with your package.
 
-* the `src/` directory includes source code for any C or fortran functions you
-  have written for high-performance computing. Writing these functions is
-  beyond the scope of this text and they will not be described further.
+There are other directories that we won't cover. You might see these in other packages you download from CRAN, but these topics are outside the scope of this book.
+
+* `src/`: C, C++ and fortran source code
+
+* `exec/`: executable scripts
+
+* `po/`: translation files
 
 ## Getting started
 
-When creating a package the first thing (and sometimes the most difficult) is to come up with a name for it. Follow these rules to make a good name:
+When creating a package the first thing (and sometimes the most difficult) is to come up with a name for it.  There's only one formal requirement:
 
 * The package name can only consist of letters and numbers, and must start
   with a letter.
 
-* I strongly recommend making the package name googleable, so that if you
-  google the name you can easily find it. This makes it easy for potential
-  users to find your package, and it's also useful for you, because it makes
-  it easier to find out who is using it.
+But I have a few additional recommendations:
+
+* Make the package name googleable, so that if you google the name you can
+  easily find it. This makes it easy for potential users to find your package,
+  and it's also useful for you, because it makes it easier to find out who is
+  using it.
 
 * Avoid using both upper and lower case letters: they make the package name
   hard to type and hard to remember. For example, I can never remember if it's
   `Rgtk2` or `RGTK2` or `RGtk2`.
 
-Once you have a name, create a directory with that name, and inside that create an `R` subdirectory. Copy your existing code into that directory. It's up to you how you arrange your functions into files, but I suggest grouping related functions into a single file. My rule of thumb is that if I can't remember which file a function lives in, I probably need to split them up into more files - having one function per file is perfectly reasonable, particularly if the functions are large or have a lot of documentation.
+Some strategies I've used in the past to create packages names:
+
+* Use abbreviations: `lvplot` (letter value plots), `meifly` (models explored
+  interactively)
+
+* Add an extra R: `stringr` (string processing), `tourr` (grand tours), `httr`
+  (HTTP requests), `helpr` (alternative documentation view)
+
+* Find a name evocative of the problem and modify it so that it's unique:
+  `plyr` (generalisation of apply tools), `lubridate` (makes dates and times
+  easier), `mutatr` (mutable objects), `classifly` (high-dimensional views of
+  classification)
+
+Once you have a name, create a directory with that name, and inside that create an `R` subdirectory and a `DESCRIPTION` file (note that's there's no extension, and the file name must be all upper case). 
+
+## The `R/` directory
+
+The `R/` directory contains all your R code, so copy in any existing code.
+
+It's up to you how you arrange your functions into files. There are two
+possible extremes: all functions in one file, and each function in it's own
+file. I think these are both too extreme, and I suggest grouping related
+functions into a single file. My rule of thumb is that if I can't remember
+which file a function lives in, I probably need to split them up into more
+files: having only one function in a file is perfectly reasonable,
+particularly if the functions are large or have a lot of documentation. As
+you'll see in the next capture, often the code for the function is small
+compared to it's documentation (it's much easier to do something than it is to
+explain to someone else how to do it.)
 
 The next step is to create a `DESCRIPTION` file that defines package metadata.
 
-## DESCRIPTION
+## A minimal `DESCRIPTION` file
 
-The `DESCRIPTION` contains important information that describes how your package fits into the R ecosystem. I've included the the `DESCRIPTION` file for the `plyr` package below so that you can see what the basic components are. 
+A minimal description file (this one is taken from an early version of plyr) looks like this:
+
+    Package: plyr
+    Title: Tools for splitting, applying and combining data
+    Description: 
+    Version: 0.1
+    Authors@R: 
+    Maintainer: Hadley Wickham <h.wickham@gmail.com>
+    Author: Hadley Wickham <h.wickham@gmail.com>
+    License: MIT
+
+This is the critical subset of package metadata: what it's called (`Package`), what it does (`Title`, `Description`), who's allowed to use and distribute it (`License`), who wrote it (`Author`), and who to contact if you have problems (`Maintainer`). Here I've left the `Description` blank to illustrate that if you haven't decided what the correct value is yet, it's ok to leave it blank. 
+
+Again, the six required elements are:
+
+* `Package`: name of the package. Should be the same as the directory name.
+
+* `Title`: a one line description of the package.
+
+* `Description`: a more detailed paragraph-length description.
+
+* `Version`: the version number, which should be of the the form
+  `major.minor.patchlevel`. See `?package_version` for more details on the
+  package version formats. I recommended following the principles of [semantic
+  versioning](http://semver.org/).
+
+* `Maintainer`: a single name and email address for the person responsible for
+  package maintenance.
+
+* `License`: a standard abbreviation for an open source license, like `GPL-2`
+  or `BSD`. A complete list of possibilities can be found by running
+  `file.show(file.path(R.home(), "share/licenses/license.db"))`. If you are
+  using a non-standard license, put `file LICENSE` and then include the full
+  text of the license in a `LICENSE`.
+
+## Other `DESCRIPTION` components
+
+A more complete `DESCRIPTION` (this one from a more recent version of `plyr`) looks like this:
 
     Package: plyr
     Title: Tools for splitting, applying and combining data
@@ -94,39 +181,30 @@ The `DESCRIPTION` contains important information that describes how your package
     Suggests: abind, testthat (>= 0.2), tcltk, foreach
     Imports: itertools, iterators
     License: MIT
-    LazyData: true
 
-There are six required elements:
-
-* `Package`: name of the package - this should be the same as the directory
-  name.
-
-* `Title`: a one line description of the package.
-
-* `Description`: a more detailed paragraph-length description.
-
-* `Version`: the version number, which should be of the the form
-  `major.minor.patchlevel`. See `?package_version` for more details on the
-  package version formats.  I recommended following the principles of 
-  [semantic versioning](http://semver.org/).
-
-* `Maintainer`: a single name and email address for the person responsible for
-  package maintenance.
-
-* `Author`: a free-form text string listing all contributors to the package.
-
-There are a number of other components that are optional, but still important: 
+This `DESCRIPTION` includes other components that are optional, but still
+important:
 
 * `Depends`, `Suggests`, `Imports` and `Enhances` describe the which packages
   this package needs. They are described in more detail in [[namespaces]].
 
-* `License`: a standard abbreviation for an open source license, like `GPL-2`
-  or `BSD`. A complete list of possibilities can be found by running
-  `file.show(file.path(R.home(), "share/licenses/license.db"))`. If you are
-  using a non-standard license (not recommended), put `file LICENSE` and then
-  include the full text of the license in a `LICENSE`.
-
 * `URL`: a url to the package website. Multiple urls can be separated with a
   comma or whitespace.
 
+Instead of `Maintainer` and `Author`, you can `Authors@R`, which takes a vector of `person()` elements.  Each person object specifies the name of the person and their role in creating the package:
+
+* `aut`: full authors who have contributed much to the package
+
+* `ctb`: people who have made smaller contributions, like patches.
+
+* `cre`: the package creator/maintainer, the person you should bother if you
+  have problems
+
+Other roles are listed in the help for person. Using `Authors@R` is useful when your package gets bigger and you have multiple contributors that you want to acknowledge appropriately. The equivalent `Authors@R` syntax for plyr would be:
+
+      Authors@R: person("Hadley", "Wickham", role = c("aut", "cre"))
+
+There are a number of other less commonly used fields like `BugReports`, `KeepSource`, `OS_type` and `Language`. A complete list of the `DESCRIPTION` fields that R understands can be found in the [R extensions manual][description].
+
 [r-ext]:http://cran.r-project.org/doc/manuals/R-exts.html#Creating-R-packages
+[description]: http://cran.r-project.org/doc/manuals/R-exts.html#The-DESCRIPTION-file
