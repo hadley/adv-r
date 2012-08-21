@@ -13,7 +13,7 @@ This document explains how to get started, with a description of package structu
 
 The most accurate resource for up-to-date details on package development is always the official [writing R extensions][r-ext] guide. However, it's rather hard to read and follow if you're not already familiar with the basis of packages. It's also exhaustive, covering every possible package component, rather than focussing on the most common and useful components as this package does. Once you are familiar with the content here, you should find R extensions a little easier to read.
 
-## Package structure
+## Package essentials
 
 As mentioned above, there are only two elements that you must have:
 
@@ -21,6 +21,10 @@ As mentioned above, there are only two elements that you must have:
   described in the following section.
 
 * the `R/` directory where your R code lives (in `.R` or `.r` files).
+
+If you don't want to create this by hand, you can use `devtools::create` which initialises the directory structure and includes a few other files that most packages have.
+
+## Optional components
 
 Almost all R packages also have:
 
@@ -205,6 +209,73 @@ Other roles are listed in the help for person. Using `Authors@R` is useful when 
       Authors@R: person("Hadley", "Wickham", role = c("aut", "cre"))
 
 There are a number of other less commonly used fields like `BugReports`, `KeepSource`, `OS_type` and `Language`. A complete list of the `DESCRIPTION` fields that R understands can be found in the [R extensions manual][description].
+
+## Source, binary and bundled packages
+
+So far we've just described the structure of a source package: the development version of a package that lives on your computer. There are also two other type of package: bundled packages and binary packages.
+
+A package __bundle__ is a compressed version of a package is a single file. By convention, package bundles in R use the extension `.tar.gz`. This is linux convention indicating multiple files have been collapsed into a single file (`.tar`) and then compressed using gzip (`.gz`). The package bundle is useful if you want to manually distribute your package to another R package developer. It is not OS specific. You can use `devtools::build()` to make a package bundle.
+
+If you want to distribute your package to another R user (i.e. someone who doesn't necessarily have the development tools installed) you need to make a __binary__ package. Like a package bundle, a binary package is a single file, but if you uncompress it, you'll see that the internal structure is a little different to a source package: 
+
+* a `Meta/` directory contains a number of `Rds` files. These contain cached
+  metadata about the package, like what topics the help files cover and a
+  parsed versions of the `DESCRIPTION` files. (If you want to look at what's
+  in these files you can use `readRDS`)
+
+* a `html/` directory contains some files needed for the html help.
+
+* there are no `.R` files in the `R/` directory - instead there are three
+  files that store the parsed functions in an efficient format. This is
+  basically the results of loading all the R code and then saving the
+  functions with `save`, but with a little extra metadata to make things as
+  fast as possible.
+
+* If you had an code in the `src/` directory there will now be a `libs/`
+  directory that contains the results of compiling that code for 32 bit
+  (`i386/`) and 64 bit (`x64`)
+
+Binary packages are platform specific: you can't install a windows binary package on a mac or vice versa. You can use `devtools::build(binary = TRUE)` to make a package bundle.
+
+An __installed__ package is just a binary package that's been uncompressed into a package library, described next.
+
+## Package libraries
+
+A library is a collection of installed packages. You can have multiple libraries on your computer and most people have at least two: one for the recommended packages that come with a base R install (like `base`, `stats` etc), and one library where the packages you've installed live. The default is to make that directory dependent on which version of R you have installed - that's why you normally lose all your packages when you reinstall R. If you want to avoid this behaviour, you can manually set the `R_LIBS` environmental variable to point somewhere else. `.libPaths()` tells you where your current libraries live.
+
+This makes When you use `library(pkg)` to load a package, R looks through each path in `.libPaths()` to see if a directory called `pkg` exists. 
+
+## Installing packages
+
+Package installation is the process whereby a source package gets converted into a binary package and then installed into your local package library.  There are a number of tools that automate this process:
+
+* `install.packages()` installs a package from CRAN. Here CRAN takes care of
+  making the binary package and so installation from CRAN basically is
+  equivalent to downloading the binary package value and unzipping it in
+  `.libPaths()[1]` (but you should never do this by hand because the process
+  also does other checks)
+
+* `devtools::install()` installs a source package from a directory on your
+  computer.
+
+* `devtools::install_github()` installs a package that someone has published
+  on their [github](http://github) account. There are a number of similar
+  functions that make it easy to install packages from other internet
+  locations: `install_url`, `install_gitorious`, `install_bitbucket`, and so
+  on.
+
+## Exercises
+
+(to be integrated throughout the chapter)
+
+* Go to CRAN and download the source and binary for XXX. Unzipped and compare.
+  How do they differ?
+
+* Download the __source__ packages for XXX, YYY, ZZZ. What directories do they
+  contain?
+
+* Where is your default library? What happens if you install a new package
+  from CRAN?
 
 [r-ext]:http://cran.r-project.org/doc/manuals/R-exts.html#Creating-R-packages
 [description]: http://cran.r-project.org/doc/manuals/R-exts.html#The-DESCRIPTION-file

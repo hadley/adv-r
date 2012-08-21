@@ -1,6 +1,21 @@
 # The package development cycle
 
-How do you write code when you are developing a package? How do you make sure that the code is correct, without constantly running `R CMD install` or `R CMD check`? This chapter discusses the development cycle of an R package, and introduces software to support it: the `devtools` package.
+When you are creating a package you typically cycle between writing code, checking it works (testing) and describing what it does (documenting). This chapter describes two common models of programming, and introduces you to some `devtools` functions that makes the process as smooth as possible.
+
+## Dev mode
+
+When you're developing packages, typically you are developing them because you're using them - and that easily leads to confusion. When you're using a package for a data analysis or other project, you probably want to use the released version of the package- you don't want to use the possibly buggy or broken in-development version. But when you're developing and testing a package, you obviously want the development version.
+
+The `dev_mode()` function makes it easier to managing this distinction.  When you're doing development you can run `dev_mode()` to switch to a special library where you can install and test new packages.  When you're doing regular work, you keep it off and R won't find the development packages:
+
+    # During development
+    dev_mode()
+    install("mypackage")
+    library(mypackage) # uses the development version
+    
+    # Fresh R session
+    library(mypackage) # uses the released package you've installed previously
+
 
 ## Development cycles
 
@@ -41,27 +56,9 @@ The exploratory programming cycle is similar to confirmatory, but it's not usual
 
 The automated tests are still vitally important because they are what will prevent your code from failing silently in the future.
 
-## devtools package
-
-I developed the `devtools` package to simplify the package development cycle. It is available from CRAN.
-
 ### Set up
 
-All `devtools` functions accept either a path or a package name. If you specify a name it will load the configuration file `~/.Rpackages`, and try the path given by the default function, if it's not there, it will look up the package name in the list and use that path.  
-
-For example, a small section of my `~/.Rpackages` looks like this:
-
-    list(
-        default = function(x) {
-          file.path("~/documents/", x, x)
-        }, 
-
-      "describedisplay" = "~/ggobi/describedisplay",
-      "tourr" =    "~/documents/tour/tourr", 
-      "mutatr" = "~/documents/oo/mutatr"
-    )
-
-This means by default devtools will look for a package called `pkg` in `~/documents/pkg/pkg`. (I use the other package directories to store related files like conference presentations or journal articles.) Other packages that don't follow this same pattern are listed explicitly.
+All `devtools` functions accept either a path. 
 
 ### Useful functions
 
@@ -79,5 +76,11 @@ The three functions that you'll use most often are:
 
 This makes the development process very easy. After you've modified the code, you run `load_all("pkg")` to load it in to R. You can explore it interactively from the command line, or type `test("pkg")` to run all your automated tests.
 
+## GUI support
+
+Some GUIs have integrated supported for these functions. Rstudio provides the build menu which allows you to easily run `load_all` with a single key press (Ctrl + Shift + L at time of writing).
+
+
 [devtools-down]:https://github.com/hadley/devtools/tarball/master
 [tdd]:http://en.wikipedia.org/wiki/Test-driven_development
+
