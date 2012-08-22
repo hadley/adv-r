@@ -1,6 +1,28 @@
 # The package development cycle
 
-When you are creating a package you typically cycle between writing code, checking it works (testing) and describing what it does (documenting). This chapter describes two common models of programming, and introduces you to some `devtools` functions that makes the process as smooth as possible.
+The package development cycle describes the sequence of operations that you use when developing a package. You probably already have a sequence of operations that you're already comfortable with when developing a single file of R code. It might be:
+
+* Try something out on the command line.
+
+* Modify it until it works, and then copy and paste the command into an R file
+
+* Every now and then, restart R, and source in the R file to make sure you
+  haven't missed anything
+
+Or:
+
+* Write all your functions in an R file.
+
+* `source()` the file into your current session
+
+* Interactively try out the functions and see if they return the correct
+  results
+
+* Repeat the above steps until the functions work the way you expect.
+
+Things get a bit harder when you're working on a package because you have multiple R files. You might also be a little bit more worried about checking that your functions work, not only now, on your computer, but also in the future and on other computers.
+
+The sections below describe useful practices for developing packages, where you might have many R files, and you are also thinking about documentation and testing. Both are supported by the `devtools` function `dev_mode`, which helps to keep your production and development packages separate.
 
 ## Dev mode
 
@@ -16,6 +38,24 @@ The `dev_mode()` function makes it easier to managing this distinction.  When yo
     # Fresh R session
     library(mypackage) # uses the released package you've installed previously
 
+## Key functions
+
+The three functions that you'll use most often are:
+
+* `load_all("pkg")`, which loads code, data and C files. These are loaded into
+  a non-global environment to avoid conflicts, and so all functions can easily
+  be removed. By default `load_all` will only load changed files to save time:
+  if you want to reload everything from scratch, run `load_all("pkg", T)`
+
+* `test("pkg")` runs all tests in `inst/tests/` and reports the results
+
+* `document("pkg")` runs `roxygen` on the package to update all documentation.
+
+This makes the development process very easy. After you've modified the code, you run `load_all("pkg")` to load it in to R. You can explore it interactively from the command line, or type `test("pkg")` to run all your automated tests.
+
+Some GUIs have integrated supported for these functions. Rstudio provides the build menu which allows you to easily run `load_all` with a single key press (Ctrl + Shift + L at time of writing). ESS? 
+
+The following sections describe how you might combine these functions into a process.
 
 ## Development cycles
 
@@ -23,18 +63,18 @@ It's useful to distinguish between exploratory programming and confirmatory prog
 
 ### Confirmatory programming
 
-Confirmatory programming happens when you know what you need to do, and what the results of yours changes will be (new feature X appears or known bug Y disappears) you just need to figure out the way to do it. Confirmatory programming is also known as [test driven development][tdd] (TDD), a development style that grew out of extreme programming. The basic idea is that before you implement any new feature, or fix a known bug, you should:
+Confirmatory programming happens when you know what you need to do, and what the results of your changes will be (new feature X appears or known bug Y disappears) you just need to figure out the way to do it. Confirmatory programming is also known as [test driven development][tdd] (TDD), a development style that grew out of extreme programming. The basic idea is that before you implement any new feature, or fix a known bug, you should:
 
 1. Write automated test, and run `test()` to make sure test fails (so you know
    you've captured the bug correctly)
 
 2. Modify code to fix the bug or implement the new feature.
 
-3. Run `load_all(pkg) && test(pkg)` to reload the file and re-run the tests.
+3. Run `test(pkg)` to reload the package and re-run the tests.
 
 4. Repeat 2--4 until all tests pass.
 
-5. Update documentation, re-roxygenise, update `NEWS` and check modified source into your VCS
+5. Update documentation comments, run `document()`, update `NEWS`
 
 For this paradigm, you might also want to use `testthat::auto_test()` which will watch your tests and code and will automatically rerun your tests when either changes. This allows you to skip step three: you just modify your code and watch to see if the tests pass or fail.
 
@@ -52,34 +92,9 @@ The exploratory programming cycle is similar to confirmatory, but it's not usual
 
 4. Write automated tests and `test()`.
 
-5. Update documentation, re-roxygenise, update `NEWS` and check modified source into your VCS
+5. Update documentation comments, run `document()`, update `NEWS`
 
 The automated tests are still vitally important because they are what will prevent your code from failing silently in the future.
-
-### Set up
-
-All `devtools` functions accept either a path. 
-
-### Useful functions
-
-The three functions that you'll use most often are:
-
-* `load_all("pkg")`, which loads code (`load_code`), data (`load_data`) and C
-  files (`load_c`). These are loaded into a non-global environment to avoid
-  conflicts, and so all functions can easily be removed. By default `load_all`
-  will only load changed files to save time: if you want to reload
-  everything from scratch, run `load_all("pkg", T)`
-
-* `test("pkg")` runs all tests in `inst/tests/` and reports the results
-
-* `document("pkg")` runs roxygen on the package to update all documentation.
-
-This makes the development process very easy. After you've modified the code, you run `load_all("pkg")` to load it in to R. You can explore it interactively from the command line, or type `test("pkg")` to run all your automated tests.
-
-## GUI support
-
-Some GUIs have integrated supported for these functions. Rstudio provides the build menu which allows you to easily run `load_all` with a single key press (Ctrl + Shift + L at time of writing).
-
 
 [devtools-down]:https://github.com/hadley/devtools/tarball/master
 [tdd]:http://en.wikipedia.org/wiki/Test-driven_development
