@@ -311,6 +311,6 @@ When developing a package, put your tests in `inst/tests` and then create a file
     
     test_package("mypackage")
 
-This will evaluates your tests in the package namespace (so you can test non-exported functions), and it will throw an error if there are any test failures. This means you'll see the full report of test failures and `R CMD check` won't pass unless all tests pass.
+This will evaluate your tests in the package namespace (so you can test non-exported functions), and it will throw an error if there are any test failures. This means you'll see the full report of test failures and `R CMD check` won't pass unless all tests pass.
 
 This also makes it easy for your users to check that you package works correctly in their run-time environment.
