@@ -29,9 +29,9 @@ Packages are the fundamental unit of reproducible R code. They include reusable 
   * [[Philosophy]]
   * [[Package basics]]  (complete)
   * [[Development]]  (draft)
-  * [[Testing]]  (draft)
   * Documentation at both the [[function|docs-function]] and
     [[package|docs-package]] levels  (outline)
+  * [[Testing]]  (draft)
   * Good code [[style]]  (complete)
   * [[Namespaces]], to minimise conflict with other packages  (draft)
   * [[Source code control|git]]: git + github  (outline)
