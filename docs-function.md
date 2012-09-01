@@ -2,27 +2,81 @@
 
 Documentation is one of the most important aspects of good code. Without it, users won't know how to use your package, and are unlikely to do so. Documentation is also useful for you in the future (so you remember what the heck you were thinking!), and for other developers working on your package.
 
-[roxygen](http://roxygen.org/) is the best way to make documentation in R. With roxygen, you write the documentation in comments right next to each function. Roxygen has a number of advantages over writing `.Rd` by hand:
+[roxygen2](http://roxygen.org/) is the easiest way to make R documentation. With roxygen, you write the documentation in comments next to each function. Roxygen has a number of advantages over writing `.Rd` by hand:
 
 * code and documentation are adjacent so when you modify your code, it's easy
-  to remember when you need to update the documentation.
+  to remember that you need to update the documentation.
 
-* roxygen can automatically derive a lot of the required documentation from
-  the source code.
+* roxygen2 dynamically inspects the objects that are documenting, so it can
+  figure out a lot of information `.Rd` files need by itself.
 
-* it's easy to automatically generate a [namespace](Namespaces) for your package.
+* it takes care of other files that are fiddly or downright painful to
+  maintain by hand: the [namespace](`NAMESPACE`), collate order in
+  description, and the demos index.
 
-To convert roxygen comments to the official `.Rd` files, you can use one of the commands below:
+This chapter will proceed as follows. First, we'll discuss the basic documentation process, what each step does, and how to see the output at every stage. Next we'll show you at high-level how to document all the different types of R objects (functions, datasets, s3 methods, s4 methods, s4 classes, r5 classes, packages). After that you'll learn how to format text within the documentation
 
-* From the command line: `R CMD roxygen mypackage`
+## Roxygen process
 
-* Within R, with the roxygen package: `roxygenize(path_to_package)`
+R comments -> Rd files -> human readable documentation
 
-* Using the [[devtools package|development]]: `document("mypackage")`
 
-Please note that the chapter currently works best with my [unofficial roxygen fork](https://github.com/klutometis/roxygen). My modifications will be ported to the main trunk in the near future.
+    #' Order a data frame by its columns.
+    #'
+    #' This function completes the subsetting, transforming and ordering triad
+    #' with a function that works in a similar way to \code{\link{subset}} and 
+    #' \code{\link{transform}} but for reordering a data frame by its columns.
+    #' This saves a lot of typing!
+    #'
+    #' @param df data frame to reorder
+    #' @param ... expressions evaluated in the context of \code{df} and 
+    #'   then fed to \code{\link{order}}
+    #' @keywords manip
+    #' @export
+    #' @examples
+    #' mtcars[with(mtcars, order(cyl, disp)), ]
+    #' arrange(mtcars, cyl, disp)
+    #' arrange(mtcars, cyl, desc(disp))
+    arrange <- function(df, ...) {
+      ord <- eval(substitute(order(...)), df, parent.frame())
+      unrowname(df[ord, ])
+    }
 
-This chapter is broken down into two main segments. First you'll see how to
+To convert roxygen comments to the official `.Rd` files, we'll use `devtools::document()`. Like the other devtools functions you've seen so far, it takes a package directory as it's first argument, and if you omit it, it will use the current working directory.
+
+This produces an `.Rd` file in the `man/` directory:
+
+    \name{arrange}
+    \alias{arrange}
+    \title{Order a data frame by its columns.}
+    \usage{arrange(df, ...)}
+
+    \description{
+      Order a data frame by its columns.
+    }
+
+    \details{
+      This function completes the subsetting, transforming and
+      ordering triad with a function that works in a similar
+      way to \code{\link{subset}} and \code{\link{transform}}
+      but for reordering a data frame by its columns. This
+      saves a lot of typing!
+    }
+    \keyword{manip}
+    \arguments{
+      \item{df}{data frame to reorder}
+      \item{...}{expressions evaluated in the context of 
+        \code{df} and then fed to \code{\link{order}}}
+    }
+    \examples{mtcars[with(mtcars, order(cyl, disp)), ]
+    arrange(mtcars, cyl, disp)
+    arrange(mtcars, cyl, desc(disp))}
+
+When you request documentation, R then converts this file into the display you're probably used to seeing:
+
+![](arrange-html.png)
+
+When you use `help` or `example` it looks for the Rd files in the _installed_ package. This isn't very useful for package development, because we want to retrieve the `.Rd` files from the _source_ package. `devtools` provides two functions to do this `dev_help` and `dev_example` - these behave similarly to `help` and `example` but look in source packages you have loaded with `load_all`, rather than installed packages you've loaded with `library`.
 
 ## Documenting
 
@@ -146,9 +200,9 @@ You should also document particularly important or complex methods, and ensure t
   `@method`. This exports the method, not the function - i.e.
   `generic(myobject)` will work, but `generic.mymethod(myobject)` will not.
 
-### Documenting a S4 methods and classes
+### Documenting a S4 method
 
-A consensus has yet to emerge on the best way to document S4 methods and classes. I will update this section as I learn more.
+### Documenting an S4 class
 
 ### Documenting a R5 class
 

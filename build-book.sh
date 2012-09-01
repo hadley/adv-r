@@ -14,9 +14,9 @@ pandoc -o book.pdf \
   Philosophy.md \
   package-basics.md \
   Development.md \
-  Testing.md \
-  docs-function.md \
   docs-package.md \
+  docs-function.md \
+  Testing.md \
   style.md \
   Namespaces.md \
   git.md \
