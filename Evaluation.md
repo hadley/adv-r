@@ -145,7 +145,7 @@ It should be the same as `subset(mtcars, cyl == 4)`, right? But how exactly does
 
 The key is the third argument of `eval`: `enclos`. This allows us to specify the parent (or enclosing) environment for objects that don't have one like lists and data frames (`enclos` is ignored if we pass in a real environment). The `enclos`ing environment is where any objects that aren't found in the data frame will be looked for. By default it uses the current environment, which is not what we want.
 
-We want to look for `x` in the environment in which `subset` was called. In R terminology this is called the __parent frame__ and is accessed with `parent.frame()`. This is an example of [dynamic scope](http://en.wikipedia.org/wiki/Scope_\(programming\)#Dynamic_scoping). With this modification our function works:
+We want to look for `x` in the environment in which `subset` was called. In R terminology this is called the __parent frame__ and is accessed with `parent.frame()`. This is an example of [dynamic scope](http://en.wikipedia.org/wiki/Scope_%28programming%29#Dynamic_scoping). With this modification our function works:
 
     subset <- function(x, condition) {
       condition_call <- substitute(condition)
