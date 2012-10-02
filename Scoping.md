@@ -1,5 +1,7 @@
 # Scoping and environments
 
+(What problem does this solve?)
+
 <!-- http://obeautifulcode.com/R/How-R-Searches-And-Finds-Stuff/  -->
 
 Scoping is the set of rules that govern how R looks up the value of a symbol, or name. That is, the rules that R applies to go from the symbol `x`, to its value `10` in the following example.
@@ -71,6 +73,33 @@ The same principle applies regardless of the degree of nesting. See if you can p
 
 To better understand how scoping works, it's useful to know a little about environments, the data structure that powers scoping.
 
+### Explicit scoping with `local`
+
+
+
+
+### Default arguments and lazy evaluation
+
+
+    f <- function(x) {
+      a <- 1
+      g(x)
+    }
+    g <- function(x) {
+      b <- 2
+      force(x)
+    }
+    f(ls())
+
+Default arguments work a little differently - they are evaluated in the function where they are defined. This means that if the value of the expression depends on the current environment the results will be different depending on whether you use the default value or explicitly provide it.
+
+    f <- function(x = ls()) {
+      a <- 1
+      g(x)
+    }
+    f()
+    f(ls())
+
 ## Environments
 
 An __environment__ is very similar to a list, with two important differences. Firstly, an environment has reference semantics: R's usual copy on modify rules do not apply. Secondly, an environment has a parent: if an object is not found in an environment, then R will look in its parent. Technically, an environment is made up of a __frame__, a collection of named objects (like a list), and link to a parent environment.
@@ -109,7 +138,7 @@ The section on closures describes how to work around this limitation by using a 
 
 Environments can also be useful in their own right, if you want to create a data structure that has reference semantics. This is not something that should be undertaken lightly: it will violate users expectations about how R code works, but it can sometimes be critical. The following example shows how to create an environment for this purpose.
 
-    e <- new.env(hash = T, parent = emptyenv())
+    e <- new.env(parent = emptyenv())
     f <- e
 
     exists("a", e)
@@ -121,6 +150,7 @@ Environments can also be useful in their own right, if you want to create a data
     # do not apply
     e$a <- 10
     ls(e)
+    ls(f)
     f$a
 
 The new [[reference based classes|R5]], introduced in R 2.12, provide a more formal way to do this, with usual inheritance semantics.
@@ -133,9 +163,31 @@ There are also a few special environments that you can access directly:
 
 The only environment that doesn't have a parent is emptyenv(), which is the eventual parent of every other environment. The most common environment is the global environment (globalenv()) which corresponds to the to your top-level workspace. The parent of the global environment is one of the packages you have loaded (the exact order will depend on which packages you have loaded in which order). The eventual parent will be the base environment, which is the environment of "base R" functionality, which has the empty environment as a parent.
 
+The search path.
+
 Apart from that, the environment hierarchy is created by function definition. When you create a function, `f`, in the global environment, the environment of the function `f` will have the global environment as a parent.  If you create a function `g` inside `f`, then the environment of `g` will have the environment of `f` as a parent, and the global environment as a grandparent.
 
 <!-- Function to show all parents of an environment -->
+
+## Namespaces
+
+An additional layer of complication is needed for namespaces.  These make it possible for packages to refer to specific functions in other packages, not the functions that you have defined in the global workspace.
+
+For example, take the simple `nrow` function:
+
+    nrow
+    # function (x) 
+    # dim(x)[1L]
+
+What happens if we create out own dim method? Does `mtcars` break?
+
+    dim <- function(x) c(1, 1)
+    dim(mtcars)
+    nrow(mtcars)
+
+Suprisingly, it does not! That's because when `nrow` looks for an object called `dim`, it finds the function in the base package, not our function.
+
+## Manipulation environments and scoping
 
 ### Active bindings
 
@@ -154,40 +206,6 @@ Apart from that, the environment hierarchy is created by function definition. Wh
 
 http://stackoverflow.com/questions/8700619/get-specific-object-from-rdata-file
 
-## Dynamic scoping
-
-`parent.frames`, `sys.calls` etc
-
-## Explicit scoping with `local`
-
-
-
-## Namespaces
-
-<!-- 
-http://stackoverflow.com/questions/8661526/permanently-replacing-a-function
-http://stackoverflow.com/questions/8637107/parent-env-x-confusion
--->
-
-
-<!-- From Peter Brecknock
-1. Darren Wilkinson's blog at
-
-http://darrenjw.wordpress.com/2011/11/23/lexical-scope-and-function-closures
--in-r/?blogsub=confirming#subscribe-blog
-
-Introduced the basic concepts of dynamic and lexical scoping in bite sized
-chunks (more digestible for people without a background in computer science
-like me).
-
-2. John Fox's "Frames, Environments and Scope in R and S-PLUS" at
-
-http://socserv.mcmaster.ca/jfox/Books/Companion-1E/appendix-scope.pdf
-
-I liked the pictorial representations of the relationships between frames
-(although I found the arrows linking the boxes confusing the first time I
-read through it).
--->
 
 ## Lazyness
 
