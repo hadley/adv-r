@@ -2,24 +2,43 @@
 
 Documentation is one of the most important aspects of good code. Without it, users won't know how to use your package, and are unlikely to do so. Documentation is also useful for you in the future (so you remember what the heck you were thinking!), and for other developers working on your package.
 
-[roxygen2](http://roxygen.org/) is the easiest way to make R documentation. With roxygen, you write the documentation in comments next to each function. Roxygen has a number of advantages over writing `.Rd` by hand:
+The standard way to write R documentation is to create `.Rd` files in the `man/` directory. These files describe each object (function, data set, class, generic or method) in your package, documenting how it works and giving the user examples of how to use it.  Rather than writing Rd files by hand, we're going to use the [roxygen2](http://roxygen.org/) package. With roxygen, you write the documentation in comments next to each function, and then run an R script to create the main files.
 
-* code and documentation are adjacent so when you modify your code, it's easy
+This workflow has a number of advantages over writing `.Rd` files by hand:
+
+* Code and documentation are adjacent so when you modify your code, it's easy
   to remember that you need to update the documentation.
 
-* roxygen2 dynamically inspects the objects that are documenting, so it can
-  figure out a lot of information `.Rd` files need by itself.
+* Roxygen2 dynamically inspects the objects that are documenting, so it can
+  figure out a lot of information `.Rd` files need by itself.  For example, it
+  can automatically add links to super and subclasses.
 
-* it takes care of other files that are fiddly or downright painful to
+* Rt takes care of other files that are fiddly or downright painful to
   maintain by hand: the [namespace](`NAMESPACE`), collate order in
   description, and the demos index.
 
-This chapter will proceed as follows. First, we'll discuss the basic documentation process, what each step does, and how to see the output at every stage. Next we'll show you at high-level how to document all the different types of R objects (functions, datasets, s3 methods, s4 methods, s4 classes, r5 classes, packages). After that you'll learn how to format text within the documentation
+**Note**: this chapter currently describes the use of the in-development [roxygen3](http://github.com/hadley/roxygen3) package. This will be merged back into roxygen2 in the near future.
+
+This chapter will proceed as follows. First, we'll discuss the basic documentation process, what each step does, and how to see the output at every stage. Next we'll show you, at a high-level, how to document all the different types of R objects (functions, datasets, s3 methods, s4 methods, s4 classes, r5 classes, and packages). After that you'll learn how to format text within the documentation
+
+## Help
+
+You've probably used help a lot, but you might not be aware of the more advanced features:
+
+* `package?lubridate`
+* `class?myclass`
+* `methods?`
+* `method?`
+* `method?combo("numeric", "numeric")`
+* `?combo(1:10, letters)`
+
+Roxygen automatically takes care of generating the special aliases needed to make these lookups work.
+
+How does help work? It finds the matching Rd file, and compiles it to either text or html output. It's complicated by the fact that binary packages don't include individual Rd files, they actually included a pre-parsed database of Rd files.
 
 ## Roxygen process
 
-R comments -> Rd files -> human readable documentation
-
+There's a three step process to go from the R comments you write in the source files to Rd files to human readable documentation. The process starts with special comments starting with `#'` that indicate a comment is a roxygen comment:
 
     #' Order a data frame by its columns.
     #'
@@ -72,6 +91,8 @@ This produces an `.Rd` file in the `man/` directory:
     arrange(mtcars, cyl, disp)
     arrange(mtcars, cyl, desc(disp))}
 
+Rd files are a special file format loosely based on latex.
+
 When you request documentation, R then converts this file into the display you're probably used to seeing:
 
 ![](arrange-html.png)
@@ -80,17 +101,61 @@ When you use `help` or `example` it looks for the Rd files in the _installed_ pa
 
 ## Documenting
 
+As you've seen roxygen comments have a special format. They start with `#'` and they include tags of the form `@tagname` that break the documentation up into pieces. The content of a tag extends from the tag name to the next tag, and they can span multiple lines.
+
+Each documentation block starts with a text description.  The first sentence/line becomes the title of the documentation.  That's what you see when you look at `help(package = mypackage)` and is shown at the top of the documentation for each package. It should be succinct. The second paragraph is the description: this is the first thing shown in the documentation and should briefly describe what the function does.  The third and subsequence paragraphs go in the details: this is a (often long) section that comes after the description of the parameters.  If you want to override the default behaviour you can use the `@title`, `@description` and `@details` tags.
+
+Here's an example showing what the documentation for `sum` might look like if it was written using roxygen:
+
+      #' Sum of Vector Elements
+      #'
+      #' \code{sum} returns the sum of all the values present in its arguments.
+      #'
+      #' This is a generic function: methods can be defined for it directly
+      #' or via the \code{Summary} group generic.  For this to work properly,
+      #' the arguments \code{...} should be unnamed, and dispatch is on the
+      #' first argument.'
+      sum <- function(..., na.rm = TRUE) {}
+
+The following documentation is equivalent, but uses explicit tags.  This is not necessary unless you want to have a multiple paragraph description or title, or want to omit the description (in which case roxygen will replace with the title).
+
+      #' @title Sum of Vector Elements
+      #'
+      #' @description
+      #' \code{sum} returns the sum of all the values present in its arguments.
+      #'
+      #' @details
+      #' This is a generic function: methods can be defined for it directly
+      #' or via the \code{Summary} group generic.  For this to work properly,
+      #' the arguments \code{...} should be unnamed, and dispatch is on the
+      #' first argument.'
+      sum <- function(..., na.rm = TRUE) {}
+
+If use explicit tags you can put them in any order and still get the same output.  The following documentation block would produce exactly the same Rd file and final documentation as the previous two.
+
+      #' @details
+      #' This is a generic function: methods can be defined for it directly
+      #' or via the \code{Summary} group generic.  For this to work properly,
+      #' the arguments \code{...} should be unnamed, and dispatch is on the
+      #' first argument.'
+      #'
+      #' @title Sum of Vector Elements
+      #'
+      #' @description
+      #' \code{sum} returns the sum of all the values present in its arguments.
+      #'
+      sum <- function(..., na.rm = TRUE) {}
+
+You can also opt to document multiple functions in one file.  If you want to do so, use the `@rdname` tag to manully specify the name of the rd file (if you omit this it's done automatically in a way that every object gets its own documentation). You should be careful about documenting too many functions in one file because it gets confusing (which parameter belongs to which function?), but it can be useful if the functions are tightly connected.
+
+You can get documentation on a given tag with `?TagName`. For example, if you wanted to get help on the param tag, you'd do `?TagParam`. (Unfortunately you can't do `?@param` because of a technical limitation in Rd files.)
+
 ### Documenting a function
 
-When documenting a function, the first decision you need to make is whether you want to export it or not. Exporting is described more in [[namespaces]], but basically when you export a function you are saying it is ready for use and you are making a commitment to keep it around in a similar form for the near future.
-
-All exported functions need to be documented. It's also a good idea to document your more complicated internal functions, at least so when you come back to them in the future you don't need to struggle to recall what the inputs and outputs are.
+When documenting a function, the first decision you need to make is whether you want to export it or not. Exporting is described more in [[namespaces]], but basically when you export a function you are saying it is ready for use and you are making a commitment to keep it around in a similar form for the near future. All exported functions need to be documented. You don't have to document internal functions, but it can be a good idea if they're particularly complicated.  Few users will read the documentation for internal functions, but it will be useful for you so when come back to them in the future you don't need to struggle to recall what the inputs and outputs are.
 
 The following code shows the arrange function and its documentation from the
-plyr package. Roxygen documentation is stored in comments with a special form
-(`#'`) and starts with a single line description of the function. A paragraph
-provides more details and then specific tags provide additional metadata
-about the function.
+plyr package.
 
     #' Order a data frame by its columns.
     #'
@@ -115,11 +180,8 @@ about the function.
 
 The tags used here are:
 
-* `@param arg description` - a description for each function argument
-
-* `@keywords` - one or more (space-separated) keywords from
-  `file.path(R.home(), "doc/KEYWORDS")`. These are currently only used in very
-  limited ways, but might be used more in the future.
+* `@param arg description` - a description for each function argument. This 
+  can span multiple lines (or even paragraphs) if necessary.
 
 * `@export` - a flag indicating that this function should be exported for use
   by others. Described in more detail in [[namespaces]].
@@ -128,37 +190,28 @@ The tags used here are:
   most important part of the documentation - these are what most people will
   look at first to figure out how to use the function. I always put this last.
 
-The content of a tag extends from the tag name to the next tag, and they can span multiple lines.
-
 Other tags that you might find useful are:
-
-* `@author`, in the form `Firstname Lastname <email@@address.com>`. Use this if
-  some of the functions are written by different people
-
-* `@seealso` - to provide pointers to other related topics
 
 * `@return` - the type of object that the function returns
 
+The following tags apply to all types of documentation
+
+* `@author`, in the form `Firstname Lastname <email@@address.com>`. Use this if
+  some of the functions are written by people other than the author of the 
+  package.
+
+* `@seealso` - to provide pointers to other related topics
+
 * `@references` - references to scientific literature on this topic
 
-* `@alias` - a list of topic names that will be mapped to this documentation
-  when the user looks them up from the command line.
+* `@aliases` - a list of additional topic names that will be mapped to this 
+  documentation when the user looks them up from the command line. 
 
-By default, roxygen will automatically set the name of the topic to the name of the function, the title to the first sentence of the description, and takes the usage string from the function definition. In some cases, it can be useful to override each of these.
-
-* Functions with non alpha-numeric names: the topic name will be the same as
-  the filename, so use `@name` to change it to something that doesn't have
-  special characters, and then use `@alias` to set the alias to the actual
-  function name.
-
-* Multiple functions in a single topic: make sure to set `@alias` to all the
-  function names, and use `@usage` to describe both functions. It's generally
-  better to document functions separately, unless they are particularly
-  closely related.
+* `@family`
 
 ### Documenting a dataset
 
-The following documentation excerpt comes from the diamonds dataset in ggplot2.
+The following documentation excerpt comes from the diamonds dataset in ggplot2. We can't document the object directly (because it lives in the data directory), so we document `NULL` and provide the `@name` of the object we really want to document.
 
     #' Prices of 50,000 round cut diamonds.
     #' 
@@ -174,7 +227,6 @@ The following documentation excerpt comes from the diamonds dataset in ggplot2.
     #' @docType data
     #' @keywords datasets
     #' @name diamonds
-    #' @usage diamonds
     #' @format A data frame with 53940 rows and 10 variables
     NULL
 
@@ -182,23 +234,13 @@ There are a few new tags:
 
 * `@docType data` which indicates that this is documentation for a dataset.
 
-* `@usage diamonds`, which just gives the name of the dataset.
-
-* `@format`, which gives an overview of the structure of the dataset
+* `@format`, which gives an overview of the structure of the dataset. If you omit this, roxygen will automatically add something based on the first line of `str` output
 
 ### Documenting a S3 generic functions and methods
 
 S3 generic functions should be documented in the same way as any other function. You should give a general run down of the purpose of the function, and pointers to the most important methods.
 
 You should also document particularly important or complex methods, and ensure that all methods are appropriately exported
-
-* Use `@method` when you are writing a full documentation topic for this
-  method. It has format `@method function-name class` and tells roxygen that
-  this is a S3 method, not an ordinary function
-
-* All exported methods need the `@S3method` tag. It has the same format as
-  `@method`. This exports the method, not the function - i.e.
-  `generic(myobject)` will work, but `generic.mymethod(myobject)` will not.
 
 ### Documenting a S4 method
 
@@ -241,7 +283,6 @@ The example below shows the basic structure, as taken from the documentation for
     #' @import plyr stringr
     #' @docType package
     #' @name lubridate
-    #' @aliases lubridate lubridate-package
     NULL
 
 Important components are:
@@ -337,8 +378,7 @@ The following function will turn an R data frame into the correct format.  It ig
 * External links: `\email{email_address}`, `\url{url}`, `\href{url}{text}`
 
 * `\link[package]{function}` - the first argument can be omitted if the link
-  is in the current package, or a base package.  Will usually be wrapped inside `\code`: `\code{\link{fun}}`
-
+  is in the current package, or the base package.  Will usually be wrapped inside `\code`: `\code{\link{fun}}`
 
 ## Dynamic help
 
