@@ -17,6 +17,9 @@ This workflow has a number of advantages over writing `.Rd` files by hand:
   maintain by hand: the [namespace](`NAMESPACE`), collate order in
   description, and the demos index.
 
+* Abstracts over the differences in documenting S3 and S4 methods, generics 
+  and classes so that they behave basically the same.
+
 **Note**: this chapter currently describes the use of the in-development [roxygen3](http://github.com/hadley/roxygen3) package. This will be merged back into roxygen2 in the near future.
 
 This chapter will proceed as follows. First, we'll discuss the basic documentation process, what each step does, and how to see the output at every stage. Next we'll show you, at a high-level, how to document all the different types of R objects (functions, datasets, s3 methods, s4 methods, s4 classes, r5 classes, and packages). After that you'll learn how to format text within the documentation
@@ -38,7 +41,7 @@ How does help work? It finds the matching Rd file, and compiles it to either tex
 
 ## Roxygen process
 
-There's a three step process to go from the R comments you write in the source files to Rd files to human readable documentation. The process starts with special comments starting with `#'` that indicate a comment is a roxygen comment:
+There's a three step process to go from the R comments in the source files to Rd files to human readable documentation. The process starts with special comments starting with `#'` that indicate a comment is a roxygen comment:
 
     #' Order a data frame by its columns.
     #'
@@ -91,17 +94,19 @@ This produces an `.Rd` file in the `man/` directory:
     arrange(mtcars, cyl, disp)
     arrange(mtcars, cyl, desc(disp))}
 
-Rd files are a special file format loosely based on latex.
+Rd files are a special file format loosely based on latex. You can read more about the Rd format in the [R extensions](http://cran.r-project.org/doc/manuals/R-exts.html#Rd-format) manual. We'll avoid discussing Rd files as much as possible, focussing instead on what you need to know about roxygen.
 
 When you request documentation, R then converts this file into the display you're probably used to seeing:
 
-![](arrange-html.png)
+![HTML rendering of arrange documentation](arrange-html.png)
 
 When you use `help` or `example` it looks for the Rd files in the _installed_ package. This isn't very useful for package development, because we want to retrieve the `.Rd` files from the _source_ package. `devtools` provides two functions to do this `dev_help` and `dev_example` - these behave similarly to `help` and `example` but look in source packages you have loaded with `load_all`, rather than installed packages you've loaded with `library`.
 
-## Documenting
+## Common documentation tags
 
 As you've seen roxygen comments have a special format. They start with `#'` and they include tags of the form `@tagname` that break the documentation up into pieces. The content of a tag extends from the tag name to the next tag, and they can span multiple lines.
+
+If you want to put a literal `@` in the documentation, use `@@`.
 
 Each documentation block starts with a text description.  The first sentence/line becomes the title of the documentation.  That's what you see when you look at `help(package = mypackage)` and is shown at the top of the documentation for each package. It should be succinct. The second paragraph is the description: this is the first thing shown in the documentation and should briefly describe what the function does.  The third and subsequence paragraphs go in the details: this is a (often long) section that comes after the description of the parameters.  If you want to override the default behaviour you can use the `@title`, `@description` and `@details` tags.
 
@@ -131,7 +136,7 @@ The following documentation is equivalent, but uses explicit tags.  This is not 
       #' first argument.'
       sum <- function(..., na.rm = TRUE) {}
 
-If use explicit tags you can put them in any order and still get the same output.  The following documentation block would produce exactly the same Rd file and final documentation as the previous two.
+If use explicit tags you can put them in any order and still get the same output. The following documentation block would produce exactly the same Rd file and final documentation as the previous two.
 
       #' @details
       #' This is a generic function: methods can be defined for it directly
@@ -146,11 +151,14 @@ If use explicit tags you can put them in any order and still get the same output
       #'
       sum <- function(..., na.rm = TRUE) {}
 
-You can also opt to document multiple functions in one file.  If you want to do so, use the `@rdname` tag to manully specify the name of the rd file (if you omit this it's done automatically in a way that every object gets its own documentation). You should be careful about documenting too many functions in one file because it gets confusing (which parameter belongs to which function?), but it can be useful if the functions are tightly connected.
+You can also opt to document multiple functions in one file.  If you want to do so, use the `@rdname` tag to manully specify the name of the rd file (if you omit this it's done automatically in a way that every object gets its own documentation). You should be careful about documenting too many functions in one file because it gets confusing (which parameter belongs to which function?), but it can be useful if the functions are tightly connected.  
+
+      
+      mean <- function()
 
 You can get documentation on a given tag with `?TagName`. For example, if you wanted to get help on the param tag, you'd do `?TagParam`. (Unfortunately you can't do `?@param` because of a technical limitation in Rd files.)
 
-### Documenting a function
+## Documenting functions (and methods)
 
 When documenting a function, the first decision you need to make is whether you want to export it or not. Exporting is described more in [[namespaces]], but basically when you export a function you are saying it is ready for use and you are making a commitment to keep it around in a similar form for the near future. All exported functions need to be documented. You don't have to document internal functions, but it can be a good idea if they're particularly complicated.  Few users will read the documentation for internal functions, but it will be useful for you so when come back to them in the future you don't need to struggle to recall what the inputs and outputs are.
 
@@ -208,8 +216,62 @@ The following tags apply to all types of documentation
   documentation when the user looks them up from the command line. 
 
 * `@family`
+### Documenting a S4 method
 
-### Documenting a dataset
+## Documenting S3 generic functions and methods
+
+S3 generics are documented in the same way as functions - there is typically no reason for a user to know (or care) that a function is a generic. (Although you may want to mention it in the docs so that other developers know that they can extend it with their own methods).
+
+If you `@export` a S3 method, all methods defined in your package will also get exported appropriately (using the `S3method()` namespace directive): they will be available when you call the generic, but users can not call the methods directly.  For example, the `wday` generic in `lubridate` is exported:
+
+    library(lubridate)
+    wday(Sys.Date(), label = TRUE)
+    wday(1, label = TRUE)
+
+But you can't call any of the methods directly:
+
+    wday.default(Sys.Date(), label = TRUE)
+    wday.numeric(1, label = TRUE)
+
+    lubridate:::wday.default(Sys.Date(), label = TRUE)
+    lubridate:::wday.numeric(1, label = TRUE)
+
+This is good practice because it hides the internal implementation details of your functions.  Users should not rely on specific behaviour (for example, in this case we need to call `wday.default` for Date objects).  This makes it easier for you to change how the functions work in the future - for example, you could change from S3 to S4 dispatch.
+
+You only need to explicitly `@export` a method if it's for a generic defined in another package.  This is one of the easiest things to forget, and it creates subtle bugs that `R CMD check` doesn't report and are hard to track down.  Future versions of roxygen should hopefully make this easier.
+
+Most of the time you don't need document S3 methods - particularly if they are for simple generics like `print`.  However, if your method is more complicated you should document in.  In base R, you can find documentation for more complex methods like `predict.lm`, `predict.glm`, `anova.glm` and so on.
+
+## Documenting S4 generic and methods
+
+The same rules apply when documenting S4 generics and methods:
+
+* Document the generic like you would document any function.  Document methods that are more complex or have significant differences in behaviours.
+
+* You don't need to export methods if they're for a generic you defined (just export the generic). Export all methods for generics defined in other packages.
+
+* Use `@genericMethods` in the generic documentation if you want an automated listing of all methods implemented for the generic.
+
+## Documenting R5 methods
+
+Currently there is no way to use roxygen to document R5 methods.  Use the standard docstring format.
+
+## Documenting classes
+
+### Documenting a S3 class
+
+Since S3 classes have no formal structure, you should document the constructor function.
+
+### Documenting a S4 class
+
+Typically you should the `setClass` call, and if present, the constructor function.  Unless you want to separate out internal documentation for the class and the public interface (for the constructor), I recommend using `@rdname` to document both in the same file.  This will mean that `?classname` and `class?classname` go to the same place.
+
+Export the class if you want other developers to be able to write subclasses of your class.  Export the constructor if you want users to be able to use it.
+
+### Documenting an R5 class
+
+
+## Documenting datasets
 
 The following documentation excerpt comes from the diamonds dataset in ggplot2. We can't document the object directly (because it lives in the data directory), so we document `NULL` and provide the `@name` of the object we really want to document.
 
@@ -226,8 +288,8 @@ The following documentation excerpt comes from the diamonds dataset in ggplot2. 
     #' 
     #' @docType data
     #' @keywords datasets
-    #' @name diamonds
     #' @format A data frame with 53940 rows and 10 variables
+    #' @name diamonds
     NULL
 
 There are a few new tags:
@@ -236,25 +298,15 @@ There are a few new tags:
 
 * `@format`, which gives an overview of the structure of the dataset. If you omit this, roxygen will automatically add something based on the first line of `str` output
 
-### Documenting a S3 generic functions and methods
+* `@source` where you got the data form, often a `\url{}`.
 
-S3 generic functions should be documented in the same way as any other function. You should give a general run down of the purpose of the function, and pointers to the most important methods.
-
-You should also document particularly important or complex methods, and ensure that all methods are appropriately exported
-
-### Documenting a S4 method
-
-### Documenting an S4 class
-
-### Documenting a R5 class
-
-R5 classes are documented in rather different way, similar to the way that python documentation works. Each R5 method should begin with a "doctstring" that describes what the function does. R5 is still under development and I expect that more conventions will emerge in time.
-
-### Documenting a package
+## Documenting packages
 
 As well [[package level documentation|docs-package]] resources, every package should also have it's own documentation page.
 
 This documentation topic should contain an overview documentation topic that describes the overall purpose of the package, and points to the most important functions. This topic should have `@docType package` and be aliased to `package-pkgname` and `pkgname` (unless there is already a function by that name) so that you can get an overview of the package by doing `?pkgname` or `package?pkgname`.
+
+There are still relatively few packages that provide package documentation, but it's an extremely useful tool for users, because instead of just listing functions like `help(package = pkgname)` it organises them and shows the user where to get started.
 
 The example below shows the basic structure, as taken from the documentation for the `lubridate` package:
 
@@ -290,12 +342,10 @@ Important components are:
 * The general overview of the package: what it does, and what are the
   important pieces.
 
-* `@docType package` to indicate that it's documentation for a package and
-  `@aliases lubridate lubridate-package` so users can find it using either
-  standard form.
+* Like for data sets, there isn't a object that we can document directly so 
+  document `NULL` and use `@name` to say what we're actually documenting
 
-* `@name` is needed because we're not documenting a real object, and that's
-  the name that will be used for the file.
+* `@docType package` to indicate that it's documenting a package. This will automatically add the corect aliases so that `package?yourpackage` works.
 
 * `@references` point to any published material about the package that users
   might find help.
@@ -306,7 +356,7 @@ The package documentation should not contain a verbatim list of functions or cop
 
 Within roxygen text, you use the usual R documentation formatting rules, as summarised below. A fuller description is available in the [R extensions](http://cran.r-project.org/doc/manuals/R-exts.html#Sectioning) manual.
 
-Sections are indicated by the @section tag, followed by the title (which should be in sentence case) and a colon.  Subsections are indicated by latex-style command; the first argument is the subsection title, and the second argument contains the subsection content.  The following example illustrates how to add an arbitrary section:
+Sections are indicated by the @section tag, followed by the title (which should be in sentence case) and a colon. Subsections are indicated by latex-style command; the first argument is the subsection title, and the second argument contains the subsection content. The following example illustrates how to add an arbitrary section:
 
     @section Warning:
       You must not call this function unless ...
