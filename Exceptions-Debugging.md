@@ -410,3 +410,4 @@ While you can get some excellent advice on R-help, fools are not tolerated gladl
 1. Write a function that takes code as an argument and runs that code with `options(warn = 2)` and returns options back to their previous values on exit (either from an exception or a normal exit).
 
 1. Write a function that opens a graphics device, runs the supplied code, and closes the graphics device (always, regardless of whether or not the plotting code worked).
+

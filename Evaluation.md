@@ -273,3 +273,4 @@ Now that you understand how our version of subset works, go back and read the so
     # "numeric"
     eval(substitute(mode(x), list(x = expression(2 + 2))))
     # "expression" -->
+

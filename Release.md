@@ -49,3 +49,4 @@ Then you need to publicise your package.  This is vitally important - for you ha
   help resources, videos and talks about the package. If you're using github,
   I'd recommend using [github pages](http://pages.github.com/) to create the
   website.
+  
