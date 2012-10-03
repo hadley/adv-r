@@ -134,6 +134,15 @@ Note that `substitute` expects R code in it's first argument, not parsed code:
     substitute(x, list(a = 1, b = 2))
     # x
 
+We can create our own adaption of substitute (that uses substitute! to work around this):
+
+    substitute2 <- function(x, env) {
+      eval(substitute(substitute(x, env), list(x = x, env = env)))
+    }
+    x <- quote(a + b)
+    substitute2(x, list(a = 1, b = 2))
+
+
 If you want to substitute in a variable or function call, you need to be careful to supply the right type object to substitute:
     
     substitute(a + b, list(a = y))
@@ -219,26 +228,61 @@ Calls also support the `[` method, but use it with care: it produces a call obje
 
 ## Creating a function
 
-* when you can't use a closure because you don't know in advance what the arguments will be, and similarly you can't use substitute (need to make sure both of those sections point here)
+A function has three components: it's arguments, body (code to run) and the environment in which it's defined. There are a few ways we can create a  function from these three components.  The third is probably the most straightforward (create an empty function and then modify it).  But you might want to read the others and figure out how they work - it's good practice for your computing on the language skills.
 
-* the _function_ function, and its two arguments: arglist and body (and arglist).
 
-* pairlists, and creating arguments with no default values: 
-http://stackoverflow.com/questions/8611080/how-do-i-create-pairlist-with-empty-elements-in-r
+    make_function <- function(args, body, env = parent.frame()) {
+      eval(call("function", args, body), env)
+    }
+    make_function2 <- function(args, body, env = parent.frame()) {
+      eval(`function`(args, body), env)
+    }
+    make_function3 <- function(args, body, env = parent.frame()) {
+      f <- function() {}
+      formals(f) <- args
+      body(f) <- body
+      environment(f) <- env
 
-* correcting the environment of the function.
+      f
+    }
+    make_function4 <- function(args, body, env = parent.frame()) {
+      as.function(c(args, body), env)
+    }
+    args <- alist(a = 1, b = 2)
+    body <- quote(a + b)
+    make_function(args, body)
+    make_function2(args, body)
+    make_function3(args, body)
+    make_function4(args, body)
 
-* look at examples in email from John Nash and Randy Pruim
+There are two tricks here: first of all we use the `alist` function to create a **a**rugment list.
 
-      make_function <- function(args, body, env) {
-        args <- as.pairlist(args)
-        stopifnot(is.language(body))
-        f <- eval(call("function", args, body))
-        environment(f) <- env
-        f
+    add <- make_function(alist(a = 1, b = a), quote(a + b))
+    add(1)
+    add(1, 2)
+
+    add2 <- make_function(alist(a = 1, b = a), quote(a + b + d))
+    d <- 3
+    add2(1)
+
+We don't use any special evaluation tricks here because we want `make_function` to be a building block for other functions.  For example, we could create an `unenclose` function that takes a closure and modifies it so when you look at the source you can see what's going on:  (Note we need to use `substitute2` here, because `substitute` doesn't evaluate its arguments).
+
+    unenclose <- function(f) {
+      stopifnot(is.function(f))
+      env <- environment(f)
+
+      make_function(formals(f), substitute2(body(f), env), parent.env(env))
+    }
+
+    f <- function(x) {
+      function(y) { 
+        x + y
       }
+    }
+    f(1)
+    unenclose(f(1))
 
-
+Building up a function by hand is also useful when you can't use a closure because you don't know in advance what the arguments will be, and similarly you can't use substitute.
 
 ## Walking the code tree
 
