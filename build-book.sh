@@ -6,6 +6,7 @@ pandoc -o book.pdf \
   Evaluation.md \
   Computing-on-the-language.md \
   Exceptions-debugging.md \
+  SoftwareSystems.md \
   S3.md \
   S4.md \
   R5.md \
