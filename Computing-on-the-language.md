@@ -329,6 +329,7 @@ A function has three components: it's arguments, body (code to run) and the envi
       make_function4(args, body),
       function(a = 1, b = 2) a + b
     )
+    make_function <- make_function1
 
 
 There are two tricks here: first of all we use the `alist` function to create a **a**rugment list.
@@ -358,7 +359,9 @@ We don't use any special evaluation tricks here because we want `make_function` 
     f(1)
     unenclose(f(1))
 
-Building up a function by hand is also useful when you can't use a closure because you don't know in advance what the arguments will be, and similarly you can't use substitute.
+(Exercise: modify this function so it only substitutes in atomic vectors, not more complicated objects.)
+
+Building up a function by hand is also useful when you can't use a closure because you don't know in advance what the arguments will be.
 
 ## Walking the code tree
 
@@ -366,6 +369,7 @@ Because code is a tree, we're going to need recursive functions to work with it.
 
 * Find assignments
 * Replace `T` with `TRUE` and `F` with `FALSE`
+* Replace all calls with their full form
 
 <!-- For each we'll tackle it first just looking at the raw code, and next we'll figure out how to use source refs to modify the code to keep as much of the original formatting, comments etc as possible. -->
 
@@ -537,9 +541,6 @@ First we'll start just by locating logical abbreviations. A logical abbreviation
     find_logical_abbr(formals(h))
   
 To replace `T` with `TRUE` and `F` with `FALSE`, we need to make our recursive function return either the original object or the modified object, making sure to put calls back together appropriately. The main difference here is that we need to be much more careful with recursive objects, because each type needs to be treated differently:
-
-<!-- * lists - which you might wonder why we need to recurse down into, but we
-  could have a list of functions or a list of calls -->
 
 * pairlists, which are used for function formals, can be processed as lists,
   but need to be turned back into pairlists with `as.pairlist`
