@@ -93,13 +93,13 @@ Code chunks can be built up into larger structures in two ways: with expressions
 
 As well as representation as an AST, code also has a string representation. This section shows how to go from a string to an AST, and from an AST to a string.
 
-The `parse` function converts a string into an expression. It's called parse because this is the formal CS name for converting a string representing code into a format that the computer can work with. Note that parse defaults to work within files - if you want to parse a string, you need to use the `text` argument.
+The `parse` function converts a string into an expression. It's called parse because this is the formal CS name for converting a string representing code into a format that the computer can work with. Note that parse defaults to work within files - if you want to parse a string, you need to use the `text` argument.  Technically, parse returns an expression, or a list of calls. 
 
 The `deparse` function is an almost inverse of `parse` - it converts an call into a text string representing that call. It's an almost inverse because it's impossible to be completely symmetric. Deparse will returns character vector with an entry for each line - if you want a single string be sure to `paste` it back together. 
 
 A common idiom in R functions is `deparse(substitute(x))` - this will capture the character representation of the code provided for the argument `x`. Note that you must run this code before you do anything to `x`, because substitute can only access the code which will be used to compute `x` before the promise is evaluated.
 
-### Missing argument
+### The missing argument
 
 If you experiment with the structure function arguments, you might come across a rather puzzling beast: the "missing" object:
 
@@ -117,31 +117,35 @@ It is basically an empty symbol, but you can't create it directly:
     as.symbol("")
     # Error in as.symbol("") : attempt to use zero-length variable name
     
-You can either capture it from a missing argument of the formals of a function, as above, or create with `substitute()`, `bquote()`.
+You can either capture it from a missing argument of the formals of a function, as above, or create with `substitute()` or `bquote()`.
 
 ## Modifying calls
 
 It's a bad idea to create code by operating on it's string representation: there is no guarantee that you'll create valid code. Instead, you should use tools like `substitute` and `bquote` to modify expressions, where you are guaranteed to produce syntactically correct code (although of course it's still easy to make code that doesn't work).
+
+## `substitute`
 
 We've seen `substitute` used for it's ability to capture the unevalated expression of a promise, but it also has another important role for modifying expressions. The second argument to `substitute`, `env`, can be an environment or list giving a set of replacements. It's easiest to see this with an example:
 
     substitute(a + b, list(a = 1, b = 2))
     # 1 + 2
 
-Note that `substitute` expects R code in it's first argument, not parsed code:
+Note that `substitute` doesn't evaluate its first argument:
 
     x <- quote(a + b)
     substitute(x, list(a = 1, b = 2))
     # x
 
-We can create our own adaption of substitute (that uses substitute! to work around this):
+We can create our own adaption of substitute (that uses substitute!) to work around this:
 
     substitute2 <- function(x, env) {
-      eval(substitute(substitute(x, env), list(x = x, env = env)))
+      call <- substitute(substitute(x, env), list(x = x))
+      eval(call)
     }
     x <- quote(a + b)
     substitute2(x, list(a = 1, b = 2))
 
+When writing functions like this, I find it helpful to do the evaluation last, only after I've made sure that I've constructed the correct substitute call with a few test inputs.
 
 If you want to substitute in a variable or function call, you need to be careful to supply the right type object to substitute:
     
@@ -175,16 +179,22 @@ Another useful tool is `bquote`.  It quotes an expression apart from any terms w
     bquote(y + .(x))
     # y + 5
 
+### Limitations of substitute
+
+Can't change argument names or number.
+
+### Modifying calls directly
+
 You can also modify calls because of their list-like behaviour: just like a list, a call has `length`, `'[[` and `[` methods. The length of a call minus 1 gives the number of arguments:
 
-    x <- quote(write.csv(x, "important.csv", row.names = FALSE))
+    x <- quote(read.csv(x, "important.csv", row.names = FALSE))
     length(x) - 1
     # [1] 3
 
 The first element of the call is the name of the function:
 
     x'[[1]]
-    # write.csv
+    # read.csv
 
     is.name(x'[[1]])
     # [1] TRUE
@@ -196,21 +206,30 @@ The remaining elements are the arguments to the function, which can be extracted
     x'[[3]]
     # [1] "important.csv"
 
-You can modify elements of the call with replacement operators:
+    names(x)
+
+Generally, extract arguments by position is dangerous, because R's function calling semantics are so flexible. It's better to match by name, but all arguments might not be named. The solution to this problem is to use `match.call` which takes a function and a call as arguments:
+
+    match.call(read.csv, x)
+    # Or if you don't know in advance what the function is
+    match.call(eval(x[[1]]), x)
+    # read.csv(file = x, header = "important.csv", row.names = FALSE)
+
+You can modify or add) elements of the call with replacement operators:
 
     x$col.names <- FALSE
     x
-    # write.csv(x, "important.csv", row.names = FALSE, col.names = FALSE)
+    # read.csv(x, "important.csv", row.names = FALSE, col.names = FALSE)
 
     x'[[5]] <- NULL
     x'[[3]] <- "less-imporant.csv"
     x
-    # write.csv(x, "less-imporant.csv", row.names = FALSE)
+    # read.csv(x, "less-imporant.csv", row.names = FALSE)
 
 Calls also support the `[` method, but use it with care: it produces a call object, and it's easy to produce invalid calls. If you want to get a list of the arguments, explicitly convert to a list.
 
     x[-3] # remove the second arugment
-    # write.csv(x, row.names = FALSE)
+    # read.csv(x, row.names = FALSE)
 
     x[-1] # just look at the arguments - but is still a call!
     x("important.csv", row.names = FALSE)
@@ -225,19 +244,61 @@ Calls also support the `[` method, but use it with care: it produces a call obje
     # $row.names
     # [1] FALSE
 
+### Cautions
+
+Substitute + eval is an extremely powerful tool, but it can also create code that is hard for others to understand. Before you use it, make sure that you have exhaustive all other possibilities. This section shows a couple of examples of inappropriate use of computing on the language that you should avoid recreeating.
+
+For example, given the name of a variable and it's desired value, you might write something like this:
+
+      colname <- "cyl"
+      val <- 6
+
+      subset(mtcars, colname == val)
+      # Zero rows because "cyl" != 6
+
+      col <- as.name(colname)
+      substitute(subset(mtcars, col == val), list(col = col, val = val))
+      bquote(subset(mtcars, .(col) == .(val)))
+
+But in this case, there's a much better solution: use subsetting, not the subset function.
+
+      mtcars[mtcars[[colname]] == val, ]
+
+`write.csv` is a base R function where call manipulation is used inappropriately:
+
+     write.csv <- function (...) {
+        Call <- match.call(expand.dots = TRUE)
+        for (argname in c("append", "col.names", "sep", "dec", "qmethod")) if (!is.null(Call[[argname]])) 
+            warning(gettextf("attempt to set '%s' ignored", argname), 
+                domain = NA)
+        rn <- eval.parent(Call$row.names)
+        Call$append <- NULL
+        Call$col.names <- if (is.logical(rn) && !rn) TRUE else NA
+        Call$sep <- ","
+        Call$dec <- "."
+        Call$qmethod <- "double"
+        Call[[1L]] <- as.name("write.table")
+        eval.parent(Call)
+    }
+
+We could write a function that behaves identically using regular function call semantics:
+
+     write.csv <- function(x, file = "", sep = ",", qmethod = "double", ...) {
+      write.table(x = x, file = file, sep = sep, qmethod = qmethod, ...)
+     }
+
+This makes the function much much easier to understand - it's just calling `write.table` with different defaults.  This also fixes a subtle bug in the original `write.csv` - `write.csv(mtcars, row = FALSE)` does not turn off rownames, but `write.csv(mtcars, row.names = FALSE)` does.
 
 ## Creating a function
 
 A function has three components: it's arguments, body (code to run) and the environment in which it's defined. There are a few ways we can create a  function from these three components.  The third is probably the most straightforward (create an empty function and then modify it).  But you might want to read the others and figure out how they work - it's good practice for your computing on the language skills.
 
 
-    make_function <- function(args, body, env = parent.frame()) {
+    make_function1 <- function(args, body, env = parent.frame()) {
+      args <- as.pairlist(args)
       eval(call("function", args, body), env)
     }
     make_function2 <- function(args, body, env = parent.frame()) {
-      eval(`function`(args, body), env)
-    }
-    make_function3 <- function(args, body, env = parent.frame()) {
       f <- function() {}
       formals(f) <- args
       body(f) <- body
@@ -245,15 +306,30 @@ A function has three components: it's arguments, body (code to run) and the envi
 
       f
     }
-    make_function4 <- function(args, body, env = parent.frame()) {
+    make_function3 <- function(args, body, env = parent.frame()) {
       as.function(c(args, body), env)
     }
+    make_function4 <- function(args, body, env = parent.frame()) {
+      subs <- list(args = as.pairlist(args), body = body)
+      eval(substitute(`function`(args, body), subs), env)
+    }
+
     args <- alist(a = 1, b = 2)
     body <- quote(a + b)
-    make_function(args, body)
+    make_function1(args, body)
     make_function2(args, body)
     make_function3(args, body)
     make_function4(args, body)
+    
+    library(microbenchmark)
+    microbenchmark(
+      make_function1(args, body),
+      make_function2(args, body),
+      make_function3(args, body),
+      make_function4(args, body),
+      function(a = 1, b = 2) a + b
+    )
+
 
 There are two tricks here: first of all we use the `alist` function to create a **a**rugment list.
 
