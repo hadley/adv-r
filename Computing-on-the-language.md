@@ -121,7 +121,11 @@ You can either capture it from a missing argument of the formals of a function, 
 
 ## Modifying calls
 
-It's a bad idea to create code by operating on it's string representation: there is no guarantee that you'll create valid code. Instead, you should use tools like `substitute` and `bquote` to modify expressions, where you are guaranteed to produce syntactically correct code (although of course it's still easy to make code that doesn't work).
+It's a bad idea to create code by operating on its string representation: there is no guarantee that you'll create valid code.   
+
+[Some examples]
+
+Instead, you should use tools like `substitute` and `bquote` to modify expressions, where you are guaranteed to produce syntactically correct code (although of course it's still easy to make code that doesn't work).  
 
 ## `substitute`
 
@@ -181,7 +185,7 @@ Another useful tool is `bquote`.  It quotes an expression apart from any terms w
 
 ### Limitations of substitute
 
-Can't change argument names or number.
+Can't change argument names or number.  To do that, you'll need to modify the call directly.
 
 ### Modifying calls directly
 
@@ -287,7 +291,7 @@ We could write a function that behaves identically using regular function call s
       write.table(x = x, file = file, sep = sep, qmethod = qmethod, ...)
      }
 
-This makes the function much much easier to understand - it's just calling `write.table` with different defaults.  This also fixes a subtle bug in the original `write.csv` - `write.csv(mtcars, row = FALSE)` does not turn off rownames, but `write.csv(mtcars, row.names = FALSE)` does.
+This makes the function much much easier to understand - it's just calling `write.table` with different defaults.  This also fixes a subtle bug in the original `write.csv` - `write.csv(mtcars, row = FALSE)` does not turn off rownames, but `write.csv(mtcars, row.names = FALSE)` does. Generally, you always want to use the simplest tool that will solve a problem - that makes it more likely that others will understand your code.
 
 ## Creating a function
 
@@ -365,9 +369,9 @@ Building up a function by hand is also useful when you can't use a closure becau
 
 ## Walking the code tree
 
-Because code is a tree, we're going to need recursive functions to work with it. You now have basic understanding of how code in R is put together internally, and so we can now start to write some useful functions. In this section we'll write some functions to tackle some useful problems.  In particular, we will look at two common development mistakes.
+Because code is a tree, we're going to need recursive functions to work with it. You now have basic understanding of how code in R is put together internally, and so we can now start to write some useful functions. In this section we'll write functions to:
 
-* Find assignments
+* List all assignments in a function
 * Replace `T` with `TRUE` and `F` with `FALSE`
 * Replace all calls with their full form
 
@@ -390,17 +394,22 @@ The `codetools` package, included in the base distribution, provides some other 
 
 The key to any function that works with the parse tree right is getting the recursion right, which means making sure that you know what the base case is (the leaves of the tree) and figuring out how to combine the results from the recursive case. 
 
-The nodes of the tree can be any recursive data structure that can appear in a quoted object: pairlists, calls, and expressions. The leaves can be 0-argument calls (e.g. `f()`), atomic vectors, names or `NULL`. One way to detect a leaf is that it's length is less than or equal to 1. One way to detect a node is to use `is.recursive`.
+The nodes of the tree can be any recursive data structure that can appear in a quoted object: pairlists, calls, and expressions. The leaves can be 0-argument calls (e.g. `f()`), atomic vectors, names or `NULL`. The easiest way to tell the difference is the `is.recursive` function.
 
 In this section, we will write a function that figures out all variables that are created by assignment in an expression. We'll start simply, and make the function progressively more rigorous. One reason to start with this function is because the recursion is a little bit simpler - we never need to go all the way down to the leaves because we are looking for assignment, a call to `<-`.  
 
 This means that our base case is simple: if we're at a leaf, we've gone too far and can immediately return. We have two other cases: we have hit a call, in which case we should check if it's `<-`, otherwise it's some other recursive structure and we should call the function recursively on each element. Note the use of identical to compare the call to the name of the assignment function, and recall that the second element of a call object is the first argument, which for `<-` is the left hand side: the object being assigned to.
 
 ```R
+is_call_to <- function(x, name) {
+  is.call(x) && identical(x[[1]], as.name(name))
+}
+
 find_assign <- function(obj) {
-  if (length(obj) <= 1) {
-    NULL
-  } else if (is.call(obj) && identical(obj[[1]], as.name("<-"))) {
+  # Base case
+  if (!is.recursive(obj)) return(character())
+
+  if (is_call_to(obj, "<-")) {
     obj[[2]]
   } else {
     lapply(obj, find_assign)
@@ -417,9 +426,10 @@ This function seems to work for these simple cases, but it's a bit verbose.  Ins
 
 ```R
 find_assign <- function(obj) {
-  if (length(obj) <= 1) {
-    character(0)
-  } else if (is.call(obj) && identical(obj[[1]], as.name("<-"))) {
+  # Base case
+  if (!is.recursive(obj)) return(character())
+
+  if (is_call_to(obj, "<-")) {
     as.character(obj[[2]])
   } else {
     unlist(lapply(obj, find_assign))
@@ -437,13 +447,14 @@ find_assign(quote({
 # [1] "x"
 ```
 
-The fix for the first problem is easy: we need to wrap `unique` around the recursive case to remove duplicate assignments. The second problem is a bit more subtle: it's possible to do assignment within the arguments to a call, but we're failing to recurse down in to this case. 
+This is better, but we have two problems: repeated names, and we miss assignments inside function calls. The fix for the first problem is easy: we need to wrap `unique` around the recursive case to remove duplicate assignments. The second problem is a bit more subtle: it's possible to do assignment within the arguments to a call, but we're failing to recurse down in to this case. 
 
 ```R
 find_assign <- function(obj) {
-  if (length(obj) <= 1) {
-    character(0)
-  } else if (is.call(obj) && identical(obj[[1]], as.name("<-"))) {
+  # Base case
+  if (!is.recursive(obj)) return(character())
+
+  if (is_call_to(obj, "<-")) {
     call <- as.character(obj[[2]])
     c(call, unlist(lapply(obj[[3]], find_assign)))
   } else {
@@ -495,9 +506,10 @@ This behaviour might be ok, but we probably just want assignment into whole obje
 
 ```R
 find_assign <- function(obj) {
-  if (length(obj) <= 1) {
-    character(0)
-  } else if (is.call(obj) && identical(obj[[1]], as.name("<-"))) {
+  # Base case
+  if (!is.recursive(obj)) return(character())
+
+  if (is_call_to(obj, "<-")) {
     call <- if (is.name(obj[[2]])) as.character(obj[[2]])
     c(call, unlist(lapply(obj[[3]], find_assign)))
   } else {
@@ -514,17 +526,17 @@ find_assign(quote({
 
 Making this function absolutely correct requires quite a lot more work, because we need to figure out all the other ways that assignment might happen: with `=`, `assign`, or `delayedAssign`.
 
-### Replacing logical shortcuts 
+### Replacing logical shortcuts
+
+A more useful function might solve a common problem encountered when running `R CMD check`: you've used `T` and `F` instead of `TRUE` and `FALSE`.  Again, we'll pursue the same strategy of starting simple and then gradually building up our function to deal with more cases.
 
 First we'll start just by locating logical abbreviations. A logical abbreviation is the name `T` or `F`. We need to recursively breakup any recursive objects, anything else is not a short cut.
 
     find_logical_abbr <- function(obj) {
-      if (is.name(obj)) {
+      if (!is.recursive(obj)) {
         identical(obj, as.name("T")) || identical(obj, as.name("F"))
-      } else if (is.recursive(obj)) {
-        any(vapply(obj, find_logical_abbr, logical(1)))
       } else {
-        FALSE
+        any(vapply(obj, find_logical_abbr, logical(1)))
       }
     }
 
@@ -552,66 +564,66 @@ To replace `T` with `TRUE` and `F` with `FALSE`, we need to make our recursive f
 * calls require the most special treatment: don't process first element
   (that's the name of the function), and turn back into a call with `as.call`
 
+We'll wrap this behaviour up into a function
+
+```R
+capply <- function(X, FUN, ...) {
+  if (is.call(X)) {
+    args <- lapply(X[-1], FUN, ...)
+    as.call(c(list(X[[1]]), args))
+  } else {
+    out <- lapply(X, FUN, ...)
+
+    if (is.function(X)) {
+      out <- as.function(out, environment(X))
+    } else {
+      mode(out) <- mode(X)
+    }
+    out
+  }
+}
+capply(expression(1, 2, 3), identity)
+capply(quote(f(1, 2, 3)), identity)
+capply(formals(data.frame), identity)
+capply(function(x) x + 1, identity)
+```  
+
 This leads to:
 
     fix_logical_abbr <- function(obj) {
-      if (is.name(obj)) {
-        if (identical(obj, as.name("T"))) {
-          quote(TRUE)
-        } else if (identical(obj, as.name("F"))) {
-          quote(FALSE)
-        } else {
-          obj
-        }
-      } else if (is.call(obj)) {
-        args <- lapply(obj[-1], fix_logical_abbr)
-        as.call(c(list(obj'[[1]]), args))
-      } else if (is.pairlist(obj)) {
-        as.pairlist(lapply(obj, fix_logical_abbr))
-      } else if (is.expression(obj)) {
-        as.expression(lapply(obj, fix_logical_abbr))
-      } else {
-        obj
+      # Base case
+      if (!is.recursive(obj)) {
+        if (identical(obj, as.name("T"))) return(TRUE)
+        if (identical(obj, as.name("F"))) return(FALSE)
+        return(obj)
       }
+
+      capply(obj, fix_logical_abbr)
     }
 
 However, this function is still not that useful because it loses all non-code structure:
-
-    g <- quote(f <- function(x = T) {
-      # This is a comment
-      if (x)                  return(4)
-      if (emergency_status()) return(T)
-    })
-    fix_logical_abbr(g)
-    # f <- function(x = TRUE) {
-    #     if (x) 
-    #         return(4)
-    #     if (emergency_status()) 
-    #         return(TRUE)
-    # }
 
     g <- parse(text = "f <- function(x = T) {
       # This is a comment
       if (x)                  return(4)
       if (emergency_status()) return(T)
     }")
-    attr(g, "srcref")
-    attr(g, "srcref")[[1]]
-    as.character(attr(g, "srcref")[[1]])
-    source(textConnection("f <- function(x = T) {
+    f <- function(x = T) {
       # This is a comment
       if (x)                  return(4)
       if (emergency_status()) return(T)
-    }"))
+    }
+    fix_logical_abbr(g)
+    fix_logical_abbr(f)
 
-
-If we want to be able to apply this function to an existing code base, we need to be able to maintain all the non-code structure.  This leads us to our next code: srcrefs.
+If we want to be able to apply this function to an existing code base, we need to be able to maintain all the non-code structure. This leads us to our next code: srcrefs.
 
 ## Source references
 
-<!-- http://journal.r-project.org/archive/2010-2/RJournal_2010-2_Murdoch.pdf -->
+Srcrefs are a fourth property of functions. R also stores a pointer to the original location of the function (this is why you can see the comments and when you get errors you see the line number).  You can read more about srcrefs in `?srcref` and in the [R journal][srcrefs].
 
-Would have to recursively parse.
+We're going to focus on `getParseData` (a new feature in R 2.16) which gives us the parsed data in a flat data frame format, and includes all of the original comments.
 
-## The parser package
+
+  [srcrefs]: http://journal.r-project.org/archive/2010-2/RJournal_2010-2_Murdoch.pdf
 
