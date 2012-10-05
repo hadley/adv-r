@@ -266,7 +266,9 @@ For example, given the name of a variable and it's desired value, you might writ
 
 But in this case, there's a much better solution: use subsetting, not the subset function.
 
-      mtcars[mtcars[[colname]] == val, ]
+```R
+mtcars[mtcars[[colname]] == val, ]
+```
 
 `write.csv` is a base R function where call manipulation is used inappropriately:
 
