@@ -197,56 +197,66 @@ You can also modify calls because of their list-like behaviour: just like a list
 
 The first element of the call is the name of the function:
 
-    x'[[1]]
-    # read.csv
+```R
+x[[1]]
+# read.csv
 
-    is.name(x'[[1]])
-    # [1] TRUE
+is.name(x[[1]])
+# [1] TRUE
+```
 
 The remaining elements are the arguments to the function, which can be extracted by name or by position.
 
-    x$row.names
-    # FALSE
-    x'[[3]]
-    # [1] "important.csv"
+```R
+x$row.names
+# FALSE
+x[[3]]
+# [1] "important.csv"
 
-    names(x)
+names(x)
+```
 
 Generally, extract arguments by position is dangerous, because R's function calling semantics are so flexible. It's better to match by name, but all arguments might not be named. The solution to this problem is to use `match.call` which takes a function and a call as arguments:
 
-    match.call(read.csv, x)
-    # Or if you don't know in advance what the function is
-    match.call(eval(x[[1]]), x)
-    # read.csv(file = x, header = "important.csv", row.names = FALSE)
+```R
+match.call(read.csv, x)
+# Or if you don't know in advance what the function is
+match.call(eval(x[[1]]), x)
+# read.csv(file = x, header = "important.csv", row.names = FALSE)
+```
 
 You can modify or add) elements of the call with replacement operators:
 
-    x$col.names <- FALSE
-    x
-    # read.csv(x, "important.csv", row.names = FALSE, col.names = FALSE)
+```R
+x$col.names <- FALSE
+x
+# read.csv(x, "important.csv", row.names = FALSE, col.names = FALSE)
 
-    x'[[5]] <- NULL
-    x'[[3]] <- "less-imporant.csv"
-    x
-    # read.csv(x, "less-imporant.csv", row.names = FALSE)
+x[[5]] <- NULL
+x[[3]] <- "less-imporant.csv"
+x
+# read.csv(x, "less-imporant.csv", row.names = FALSE)
+```
 
 Calls also support the `[` method, but use it with care: it produces a call object, and it's easy to produce invalid calls. If you want to get a list of the arguments, explicitly convert to a list.
 
-    x[-3] # remove the second arugment
-    # read.csv(x, row.names = FALSE)
+```R
+x[-3] # remove the second arugment
+# read.csv(x, row.names = FALSE)
 
-    x[-1] # just look at the arguments - but is still a call!
-    x("important.csv", row.names = FALSE)
+x[-1] # just look at the arguments - but is still a call!
+x("important.csv", row.names = FALSE)
 
-    as.list(x[-1])
-    # '[[1]]
-    # x
-    # 
-    # '[[2]]
-    # [1] "important.csv"
-    # 
-    # $row.names
-    # [1] FALSE
+as.list(x[-1])
+# [[1]]
+# x
+# 
+# [[2]]
+# [1] "important.csv"
+# 
+# $row.names
+# [1] FALSE
+```
 
 ### Cautions
 
@@ -297,7 +307,7 @@ This makes the function much much easier to understand - it's just calling `writ
 
 ## Creating a function
 
-A function has three components: it's arguments, body (code to run) and the environment in which it's defined. There are a few ways we can create a  function from these three components.  The third is probably the most straightforward (create an empty function and then modify it).  But you might want to read the others and figure out how they work - it's good practice for your computing on the language skills.
+A function has three components: its arguments, body (code to run) and the environment in which its defined. There are a few ways we can create a  function from these three components.  The third is probably the most straightforward (create an empty function and then modify it).  But you might want to read the others and figure out how they work - it's good practice for your computing on the language skills.
 
 
     make_function1 <- function(args, body, env = parent.frame()) {
