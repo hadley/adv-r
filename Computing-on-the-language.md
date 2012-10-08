@@ -282,26 +282,32 @@ mtcars[mtcars[[colname]] == val, ]
 
 `write.csv` is a base R function where call manipulation is used inappropriately:
 
-     write.csv <- function (...) {
-        Call <- match.call(expand.dots = TRUE)
-        for (argname in c("append", "col.names", "sep", "dec", "qmethod")) if (!is.null(Call[[argname]])) 
-            warning(gettextf("attempt to set '%s' ignored", argname), 
-                domain = NA)
-        rn <- eval.parent(Call$row.names)
-        Call$append <- NULL
-        Call$col.names <- if (is.logical(rn) && !rn) TRUE else NA
-        Call$sep <- ","
-        Call$dec <- "."
-        Call$qmethod <- "double"
-        Call[[1L]] <- as.name("write.table")
-        eval.parent(Call)
+```R
+write.csv <- function (...) {
+  Call <- match.call(expand.dots = TRUE)
+  for (argname in c("append", "col.names", "sep", "dec", "qmethod")) {
+    if (!is.null(Call[[argname]])) {
+      warning(gettextf("attempt to set '%s' ignored", argname), domain = NA)
     }
+  }
+  rn <- eval.parent(Call$row.names)
+  Call$append <- NULL
+  Call$col.names <- if (is.logical(rn) && !rn) TRUE else NA
+  Call$sep <- ","
+  Call$dec <- "."
+  Call$qmethod <- "double"
+  Call[[1L]] <- as.name("write.table")
+  eval.parent(Call)
+}
+```
 
 We could write a function that behaves identically using regular function call semantics:
 
-     write.csv <- function(x, file = "", sep = ",", qmethod = "double", ...) {
-      write.table(x = x, file = file, sep = sep, qmethod = qmethod, ...)
-     }
+```R
+write.csv <- function(x, file = "", sep = ",", qmethod = "double", ...) {
+  write.table(x = x, file = file, sep = sep, qmethod = qmethod, ...)
+}
+```
 
 This makes the function much much easier to understand - it's just calling `write.table` with different defaults.  This also fixes a subtle bug in the original `write.csv` - `write.csv(mtcars, row = FALSE)` does not turn off rownames, but `write.csv(mtcars, row.names = FALSE)` does. Generally, you always want to use the simplest tool that will solve a problem - that makes it more likely that others will understand your code.
 
