@@ -11,6 +11,20 @@ You've already learned about anonymous functions in [[functions]]. This chapter 
 
 You should be familiar with the basic properties of [[scoping and environments|Scoping]] before reading this chapter.
 
+
+```R
+f <- function(x) {
+  y <- 1
+  function() {
+    c(x = x, y = y)
+  }
+}
+f()
+g <- f()
+g()
+f()()
+```
+
 ## Closures 
 
 "An object is data with functions. A closure is a function with data." 
