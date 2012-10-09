@@ -1,6 +1,6 @@
 # Scoping and environments
 
-Scoping is the set of rules that govern how R looks up the value of a symbol, or name. That is, the rules that R applies to go from the symbol `x`, to its value `10` in the following example.
+Scoping is the set of rules that govern how R looks up the value of a symbol, or name. That is, scoping is the set rules that R applies to go from the symbol `x`, to its value `10` in the following example.
 
     x <- 10
     x
@@ -98,7 +98,7 @@ e[["b"]]
 get("b", e)
 ```
 
-Environments can also useful datastructures because unlike almost every other type of object in R, modification takes place without a copy. This is not something that should be undertaken lightly: it will violate users expectations about how R code works, but it can sometimes be critical for high performance code. The following example shows how you can use an environment to do this. It's important to make the parent environment the empty environment so that you don't accidentally inherit behaviour from the global environment.
+Environments can be also useful datastructures because unlike almost every other type of object in R, modification takes place without a copy. This is not something that should be undertaken lightly: it will violate users expectations about how R code works, but it can sometimes be critical for high performance code. The following example shows how you can use an environment to do this. It's important to make the parent environment the empty environment so that you don't accidentally inherit behaviour from the global environment.
 
 ```R
 e <- new.env(parent = emptyenv())
@@ -115,7 +115,8 @@ ls(e)
 ls(f)
 f$a
 ```
-Environments can be used as hashes.  See the CRAN package hash for an example.
+
+Environments can be used as hashes.  See the CRAN package hash for an example. However, since the addition of [[R5]], you're generally better of using reference classes instead of raw environments.
 
 There are a few special environments that you can access directly:
 
@@ -127,17 +128,15 @@ The only environment that doesn't have a parent is emptyenv(), which is the even
 
 ## Function environments
 
-Environments are the data structure that powers scoping.  There are multiple functions associated with each function, and it's easy to get confused between them.  The following simple case illustrates three of the environments associated with a function:
+Environments are the data structure that powers scoping.  There are multiple environments associated with each function, and it's easy to get confused between them. 
 
-* the environment where the function lives
-* the environment used to look up variables
+* the environment where the function was defined
 * the environment that is created every time a function is run
+* the environment where the function lives
 
-```R
+### The environment where the function was defined.
 
-```
-
-Every function has an environment. You can inspect it using `environment`:
+When a function is created, it gains a pointer to the environment where it was made. You can access this environment with the `environment` function. 
 
 ```R
 x <- 1
@@ -148,16 +147,21 @@ environment(plot)
 environment(t.test)
 ```
 
-This is the environment used to look up values that 
+It's also possible to modify the environment of a function, using the assignment form of `environment`.  This is rarely useful, but we can use it to illustrate how fundamental scoping is to R.
 
-When a function is created, it gains a pointer to the environment where it was made. You can access this environment with the `environment` function. This environment may have access to objects that are not in the global environment: this is how [[namespaces]] work.
+One complaint that people sometimes make about R is that the function `f` defined above really should generate an error, because there is no variable `y` defined inside of R.  Well, we could fix that by manually modifying the environment of `f` so it can't find y inside the global environment:
 
-    environment(plot)
-    ls(environment(plot), all = T)
-    get(".units", environment(plot))
-    get(".units")
+```R
+f <- function(x) x + y
+environment(f) <- emptyenv()
+f(1)
+```
 
-Every time a function is called, a new environment is created to host execution. The following example illustrates that each time a function is run it gets a new environment:
+But when we run it, we don't get the error we expect.  Because R uses its scoping rules consistently for everything (including looking up functions), we get an error that `f` can't find the `+` function.
+
+### The environment created every time a function is run
+
+What do you think the following function will return the first time we run it?  What about the second?
 
     f <- function(x) {
       if (!exists("a")) {
@@ -169,18 +173,8 @@ Every time a function is called, a new environment is created to host execution.
       a
     }
     f()
-    # Defining a
-    # [1] 1
-    f()
-    # Defining a
-    # [1] 1
-    a <- 2
-    f()
-    # [1] 3
-    a
-    # [1] 2
 
-You can see this more easily by returning the environment inside the function: using `environment()` with no arguments returns the current environment (try running it at the top-level)  Each time you run the function a new function is created.  But they all have the same parent environment.
+You might be surprised that it returns the same value every time.  This is because every time a function is called, a new environment is created to host execution. You can see this more easily by returning the environment inside the function: using `environment()` with no arguments returns the current environment (try running it at the top-level)  Each time you run the function a new function is created.  But they all have the same parent environment - that's the environment where the function was defined.
 
 ```R
 f <- function(x) {
@@ -193,13 +187,33 @@ f()
 f()
 ```
 
-The search path.
+### The environment where the function lives
 
-Apart from that, the environment hierarchy is created by function definition. When you create a function, `f`, in the global environment, the environment of the function `f` will have the global environment as a parent.  If you create a function `g` inside `f`, then the environment of `g` will have the environment of `f` as a parent, and the global environment as a grandparent.
+The environment of a function, and the environment where it lives might be different. In the example above, we changed the environment of `f` to be the `emptyenv()`, but it still lived in the `globalenv()`.  
 
-<!-- Function to show all parents of an environment -->
+The environment where the function lives determines how we find the function, the environment of the function determins how it finds values inside the function. This important distinction is what enables package [[namespaces]] to work.
 
-## Get, assign and eval
+## Modifying and assigning values
+
+You already know the standard ways of modifying and accessing values in the current environment (e.g. `x <- 1; x`).  To modify values in other environments we have a few new techniques:
+
+* treating environments like lists
+
+```R
+e <- new.env()
+e$a <- 1
+e$a
+```
+
+* assign and get
+
+```R
+e <- new.env()
+assign("a", 1, envir = e)
+get("a", envir = e)
+```
+
+* evaluating expressions inside an environment
 
 ```R
 e <- new.env()
@@ -208,48 +222,13 @@ eval(quote(a), e)
 # OR 
 evalq(a <- 1, e)
 evalq(a, e)
-
-# Equivalently
-assign("a", 1, envir = e)
-get("a", envir = e)
-
-# Similarly
-ls(envir = e)
-evalq(ls(), e)
-
-library(microbenchmark)
-microbenchmark(
-  get("a", envir = e),
-  e$a,
-  e[["a"]],
-  eval(quote(a), e)
-)
-
 ```
 
-## Namespaces
-
-An additional layer of complication is needed for namespaces.  These make it possible for packages to refer to specific functions in other packages, not the functions that you have defined in the global workspace.
-
-For example, take the simple `nrow` function:
-
-    nrow
-    # function (x) 
-    # dim(x)[1L]
-
-What happens if we create out own dim method? Does `mtcars` break?
-
-    dim <- function(x) c(1, 1)
-    dim(mtcars)
-    nrow(mtcars)
-
-Suprisingly, it does not! That's because when `nrow` looks for an object called `dim`, it finds the function in the base package, not our function.
-
-## Manipulating environments and scoping
+I generally prefer to use the first form, because it is so compact.  However, you'll see all three forms in R code in the wild.
 
 ### `<<-`
 
-The regular assignment arrow, `<-`, always creates a variable in the current scope.  The special assignment arrow, `<<-`, tries to modify an existing variable, by walking up the parent environments.
+Another way to change values is the `<<-`. The regular assignment arrow, `<-`, always creates a variable in the current environmnt.  The special assignment arrow, `<<-`, tries to modify an existing variable by walking up the parent environments. If it doesn't find one, it will create a new variable in the global environment.
 
 ```R
 f <- function() {
@@ -267,6 +246,9 @@ If it doesn't find an existing variable of that name, it will create one in the 
 
 We'll come back to this idea in depth in [[first-class-functions]].
 
+## Manipulating environments and scoping
+
+
 ### Explicit scoping with `local`
 
 Sometimes it's useful to be able to create a new scope without embedding inside a function.  The `local` function allows you to do exactly that - it can be useful if you need some temporary variables to make an operation easier to understand, but want to throw them away afterwards:
@@ -279,7 +261,21 @@ df <- local({
 })
 ```
 
-`local` has relatively limited uses (typically because most of the time scoping is best accomplished using R's regular function based rules) be particularly useful in conjunction with `<<-`.  You can use this if you want to wrap 
+`local` has relatively limited uses (typically because most of the time scoping is best accomplished using R's regular function based rules) be particularly useful in conjunction with `<<-`. You can use this if you want to make a private variable that's shared between two functions:
+
+```R
+get <- NULL
+set <- NULL
+local({
+  a <- 1
+  get <<- function() a
+  set <<- function(value) a <<- value
+})
+get()
+set(10)
+a
+get()
+```
 
 If you have read [[computing-on-the-language]], you should be able to make sense of the source code of `local`:
 
@@ -295,21 +291,15 @@ eval.parent <- function (expr, n = 1) {
 
 ### Default arguments and lazy evaluation
 
-    f <- function(x) {
-      a <- 1
-      g(x)
-    }
-    g <- function(x) {
-      b <- 2
-      force(x)
-    }
-    f(ls())
-
 Default arguments work a little differently - they are evaluated in the environment where they are defined. This means that if the expression depends on the current environment the results will be different depending on whether you use the default value or explicitly provide it.
 
     f <- function(x = ls()) {
       a <- 1
       g(x)
+    }
+    g <- function(x) {
+      b <- 2
+      x
     }
     f()
     f(ls())

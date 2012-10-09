@@ -64,6 +64,10 @@ There are three ways to explore memory usage:
   * `Rprof` + `memory`
   * `Rprofmem`
 
+ Another useful function is:
+
+    .Internal(inspect(z1)) 
+
 
 
 
