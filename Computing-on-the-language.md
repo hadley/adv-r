@@ -129,7 +129,7 @@ Instead, you should use tools like `substitute` and `bquote` to modify expressio
 
 ## `substitute`
 
-We've seen `substitute` used for it's ability to capture the unevalated expression of a promise, but it also has another important role for modifying expressions. The second argument to `substitute`, `env`, can be an environment or list giving a set of replacements. It's easiest to see this with an example:
+We've seen `substitute` used for it's ability to capture the unevaluated expression of a promise, but it also has another important role for modifying expressions. The second argument to `substitute`, `env`, can be an environment or list giving a set of replacements. It's easiest to see this with an example:
 
     substitute(a + b, list(a = 1, b = 2))
     # 1 + 2
@@ -216,7 +216,7 @@ x[[3]]
 names(x)
 ```
 
-Generally, extract arguments by position is dangerous, because R's function calling semantics are so flexible. It's better to match by name, but all arguments might not be named. The solution to this problem is to use `match.call` which takes a function and a call as arguments:
+Generally, extracting arguments by position is dangerous, because R's function calling semantics are so flexible. It's better to match by name, but all arguments might not be named. The solution to this problem is to use `match.call` which takes a function and a call as arguments:
 
 ```R
 match.call(read.csv, x)
@@ -225,7 +225,7 @@ match.call(eval(x[[1]]), x)
 # read.csv(file = x, header = "important.csv", row.names = FALSE)
 ```
 
-You can modify or add) elements of the call with replacement operators:
+You can modify (or add) elements of the call with replacement operators:
 
 ```R
 x$col.names <- FALSE
@@ -260,7 +260,7 @@ as.list(x[-1])
 
 ### Cautions
 
-Substitute + eval is an extremely powerful tool, but it can also create code that is hard for others to understand. Before you use it, make sure that you have exhaustive all other possibilities. This section shows a couple of examples of inappropriate use of computing on the language that you should avoid recreeating.
+Substitute + eval is an extremely powerful tool, but it can also create code that is hard for others to understand. Before you use it, make sure that you have exhausted all other possibilities. This section shows a couple of examples of inappropriate use of computing on the language that you should avoid recreating.
 
 For example, given the name of a variable and it's desired value, you might write something like this:
 
@@ -348,7 +348,7 @@ A function has three components: its arguments, body (code to run) and the envir
     make_function <- make_function1
 
 
-There are two tricks here: first of all we use the `alist` function to create a **a**rugment list.
+There are two tricks here: first of all we use the `alist` function to create an **a**rugment list.
 
     add <- make_function(alist(a = 1, b = a), quote(a + b))
     add(1)
