@@ -56,10 +56,6 @@ The rest of this chapter explains in more detail how these (and other important 
     rinternals <- file.path(R.home(), "include", "Rinternals.h")
     file.show(rinternals)
 
-### Inline
-
-How to use the inline package.
-
 ## Basic data structures
 
 All the R objects are stored in a common datatype, the `SEXP`. (Technically, this is a pointer to a structure with typedef `SEXPREC`). A `SEXP` is a variant type, with subtypes for all of the common R data structures. The most important types are:
@@ -89,7 +85,7 @@ And for internal objects, objects that are usually only created by C functions, 
 
 Generally you should avoid returning these types of object to R.
 
-__Beware:__ At the C level, R's lists are `VECSXP`s, pairlists are `LISTSXP`s. 
+__Beware:__ At the C level, R's lists are `VECSXP`s, pairlists are `LISTSXP`s. This is because R started with LISP-like lists (now called “pairlists”) to S-like generic vectors. As a result, the appropriate test for an object of mode `list` is `isNewList`, and we use `allocVector(VECSXP,` n).
 
 ### Character vectors
 
@@ -226,201 +222,51 @@ the programmer may assume that they will raise an error if the memory cannot be 
 
 ### Garbage collection
 
-If you create an R object in your C code, you must tell R that you are
-using the object by using the `PROTECT` macro on a pointer to the
-object. This tells R that the object is in use so it is not destroyed
-during garbage collection.  This is also protects all objects pointed to in the corresponding `SEXPREC`, for example all elements of a
-protected list are automatically protected.
+If you create an R object in your C code, you must tell R that you're using the object by `PROTECT`ing on the `SEXP`. This tells R that the object is in use, and not to destroy it during garbage collection. Protection is not needed for objects that R already knows are in use, like function arguments. This is also protects all objects pointed to in the corresponding `SEXPREC`, for example all elements of a protected list are automatically protected.
 
-You are responsible for housekeeping the calls to `PROTECT`. There is a corresponding macro `UNPROTECT` that takes as
-argument an `int` giving the number of objects to unprotect when they
-are no longer needed. The protection mechanism is stack-based, so
-`UNPROTECT(`n`)` unprotects the last n objects which were protected. The
-calls to `PROTECT` and `UNPROTECT` must balance when the user's code
-returns. R will warn about `"stack imbalance in .Call"` (or `.External`)
-if they don't match.
+You are responsible for making sure that every `PROTECT` has a matching `UNPROTECT`. `UNPROTECT` takes a single integer argument, n, and unprotects the last n objects that were protected. If your calls don't match, R will warn about `"stack imbalance in .Call"`. 
 
-Here is a small example of creating an R numeric vector in C code. First
-we use the macros in Rinternals.h:
+Here is a small example of creating an R numeric vector in C code. 
 
-   #include <R.h>
-   #include <Rinternals.h>
-   
-    SEXP ab;
-      ....
-    PROTECT(ab = allocVector(REALSXP, 2));
-    REAL(ab)[0] = 123.45;
-    REAL(ab)[1] = 67.89;
-    UNPROTECT(1);
+    SEXP seq_len(SEXP n) {
+      SEXP out;
+      int n_ = asInteger(n);
 
-You might wonder how the R object could possibly get removed
-during those manipulations, as it is just our C code that is running. As
-it happens, we can do without the protection in this example, but in
-general we do not know (nor want to know) what is hiding behind the R
-macros and functions we use, and any of them might cause memory to be
-allocated, hence garbage collection and hence our object `ab` to be
-removed. It is usually wise to err on the side of caution and assume
-that any of the R macros and functions might remove the object.
+      PROTECT(out = allocVector(INTSXP, n));
+      for (i = 0; i++; i < n) {
+        INTEGER(out)[i] <- i;
+      }
+      UNPROTECT(out);
 
-Protection is not needed for objects which R already knows are in use.
-In particular, this applies to function arguments.
+      return(out);
+    }
 
-Other specialised forms of `PROTECT` and `UNPROTECT` are needed in some circumstances: `UNPROTECT_PTR(`s`)` that unprotects the
+In this case, you might wonder how `out` could be garbage collected. We could actually do without protection in this example, but in general, we don't know what what is hiding behind the macros and functions we use, and any of them might allocate memory, hence activating the garbage collection and deleting unprotected objects.
+
+Other specialised forms of `PROTECT` and `UNPROTECT` are needed in some circumstances: `UNPROTECT_PTR(`s`)` unprotects the
 object pointed to by the `SEXP` s, `PROTECT_WITH_INDEX` saves an index of the protection location that can be used to replace the protected value using `REPROTECT`.  Consult R externals for more details.
 
-### Getting and setting attributes
+### Symbols and attributes
 
-Many R objects have attributes: some of the most useful are classes and
-the `dim` and `dimnames` that mark objects as matrices or arrays. It can
-also be helpful to work with the `names` attribute of vectors.
+To create a symbol (the equivalent of `as.symbol` or `as.name` in R), use `install`.  Symbols are used in more places when working at the C-level.  For example, to get or set attributes, you need to use a symbol:
 
-To illustrate this, let us write code to take the outer product of two
-vectors (which `outer` and `%o%` already do). As usual the R code is
-simple
-
-   out <- function(x, y) {
-    storage.mode(x) <- storage.mode(y) <- "double"
-    .Call("out", x, y)
-   }
-
-where we expect `x` and `y` to be numeric vectors (possibly integer),
-possibly with names. This time we do the coercion in the calling R code.
-
-However, we would like to set the `dimnames` of the result. Although
-`allocMatrix` provides a short cut, we will show how to set the `dim`
-attribute directly.
-
-   #include <R.h>
-   #include <Rinternals.h>
-   
-   SEXP out(SEXP x, SEXP y)
-   {
-    R_len_t i, j, nx = length(x), ny = length(y);
-    double tmp, *rx = REAL(x), *ry = REAL(y), *rans;
-    SEXP ans, dim, dimnames;
-   
-    PROTECT(ans = allocVector(REALSXP, nx*ny));
-    rans = REAL(ans);
-    for(i = 0; i < nx; i++) {
-    tmp = rx[i];
-    for(j = 0; j < ny; j++)
-      rans[i + nx*j] = tmp * ry[j];
-    }
-   
-    PROTECT(dim = allocVector(INTSXP, 2));
-    INTEGER(dim)[0] = nx; INTEGER(dim)[1] = ny;
-    setAttrib(ans, R_DimSymbol, dim);
-   
-    PROTECT(dimnames = allocVector(VECSXP, 2));
-    SET_VECTOR_ELT(dimnames, 0, getAttrib(x, R_NamesSymbol));
-    SET_VECTOR_ELT(dimnames, 1, getAttrib(y, R_NamesSymbol));
-    setAttrib(ans, R_DimNamesSymbol, dimnames);
-   
-    UNPROTECT(3);
-    return(ans);
-   }
-
-This example introduces several new features. The `getAttrib` and
-`setAttrib` functions get and set individual attributes. Their second
-argument is a `SEXP` defining the name in the symbol table of the
-attribute we want; these and many such symbols are defined in the header
-file Rinternals.h.
-
-There are shortcuts here too: the functions `namesgets`, `dimgets` and
-`dimnamesgets` are the internal versions of the default methods of
-`names<-`, `dim<-` and `dimnames<-` (for vectors and arrays).
-
-### Symbols
-
-    R_ClassSymbol;      /* "class" */
-    R_DimNamesSymbol;   /* "dimnames" */
-    R_DimSymbol;      /* "dim" */
-    R_NamesSymbol;      /* "names" */
-    R_LevelsSymbol;     /* "levels" */
-
-    R_Bracket2Symbol;   /* "[[" */
-    R_BracketSymbol;    /* "[" */
-    R_BraceSymbol;      /* "{" */
-    R_DollarSymbol;     /* "$" */
-    R_DotsSymbol;     /* "..." */
-    R_DropSymbol;     /* "drop" */
-    R_ModeSymbol;     /* "mode" */
-    R_NameSymbol;     /* "name" */
-    R_NaRmSymbol;     /* "na.rm" */
-    R_PackageSymbol;    /* "package" */
-    R_QuoteSymbol;      /* "quote" */
-    R_RowNamesSymbol;   /* "row.names" */
-    R_SourceSymbol;     /* "source" */
-
-What happens if we want to add an attribute that is not pre-defined? We
-need to add a symbol for it *via* a call to `install`. Suppose for
-illustration we wanted to add an attribute `"version"` with value `3.0`.
-We could use
-
-    SEXP version;
-    PROTECT(version = allocVector(REALSXP, 1));
-    REAL(version)[0] = 3.0;
-    setAttrib(ans, install("version"), version);
-    UNPROTECT(1);
-
-Using `install` when it is not needed is harmless and provides a simple
-way to retrieve the symbol from the symbol table if it is already
-installed. 
-
-### S3 Classes
-
-In R the class is just the attribute named `"class"` so it can be
-handled as such, but there is a shortcut `classgets`. Suppose we want to
-give the return value in our example the class `"mat"`. We can use
-
-   #include <R.h>
-   #include <Rdefines.h>
-      ....
-    SEXP ans, dim, dimnames, class;
-      ....
-    PROTECT(class = mkString("mat"));
-    classgets(ans, class);
-    UNPROTECT(4);
-    return(ans);
-   }
-
-### Lists
-
-Some care is needed with lists, as R moved early on from using LISP-like
-lists (now called “pairlists”) to S-like generic vectors. As a result,
-the appropriate test for an object of mode `list` is `isNewList`, and we
-need `allocVector(VECSXP,` n).
-
-List elements can be retrieved or set by direct access to the elements
-of the generic vector. Suppose we have a list object
-
-   a <- list(f = 1, g = 2, h = 3)
-
-Then we can access `a$g` as `a[[2]]` by
-
-    double g;
-      ....
-    g = REAL(VECTOR_ELT(a, 1))[0];
-
-This can rapidly become tedious, and the function like the following is very useful:
-
-    SEXP getListElement(SEXP list, const char *str) {
-      SEXP elmt = R_NilValue;
-      SEXP names = getAttrib(list, R_NamesSymbol);
-
-      for (R_len_t i = 0; i < length(list); i++) {
-        if (strcmp(CHAR(STRING_ELT(names, i)), str) == 0) {
-          elmt = VECTOR_ELT(list, i);
-          break;
-        }
-      }
-      return elmt;
+    SEXP set_attr(obj, SEXP attr, SEXP value) {
+      duplicate(obj);
+      setAttrib(obj, install(attr), value);
+      return(obj)
     }
 
-and enables us to say
+(We'll talk about why the duplicated is need in the modifying inputs section)The converse to `setAttrib` is `getAttrib`.  
 
-     double g;
-     g = REAL(getListElement(a, "g"))[0];
+Some commonly used symbols are available without the use of `install`:
+
+* `R_ClassSymbol`: class
+* `R_DimNamesSymbol`: dimnames
+* `R_DimSymbol`: dim
+* `R_NamesSymbol`: names
+* `R_LevelsSymbol`: levels
+
+There are some (confusingly named) shortcuts for common setting operations: `classgets`, `namesgets`, `dimgets` and `dimnamesgets` are the internal versions of the default methods of `class<-`, `names<-`, `dim<-` and `dimnames<-`.
 
 ### Missing and non-finite values
 
@@ -433,21 +279,9 @@ correctly.  However, it is unwise to depend on such details, and is better to de
 * Logicals, compare to and set with `NA_LOGICAL`
 * String, compare to and set with `NA_STRING`
 
-## Working with pairlists and language objects
+## Modifying objects
 
-There are a series of small macros/functions to help construct pairlists
-and language objects (whose internal structures just differ by
-`SEXPTYPE`). Function `CONS(u, v)` is the basic building block: is
-constructs a pairlist from `u` followed by `v` (which is a pairlist or
-`R_NilValue`). `LCONS` is a variant that constructs a language object.
-
-Functions `list1` to `list5` construct a pairlist from one to five
-items, and `lang1` to `lang6` do the same for a language object (a
-function to call plus zero to five arguments). 
-
-Functions `elt` and `lastElt` find the ith element and the last element of a pairlist, and `nthcdr` returns a pointer to the nth position in the pairlist (whose `CAR` is the nth item).
-
-## Modifying inputs
+### Modifying inputs
 
 When assignments are done in R such as
 
@@ -480,47 +314,66 @@ field in a `SEXPREC` that can be accessed *via* the macros `NAMED` and
 Note the past tenses: R does not do full reference counting and there
 may currently be fewer bindings.
 
-It is safe to modify the value of any `SEXP` for which `NAMED(foo)` is
-zero, and if `NAMED(foo)` is two, the value should be duplicated (*via*
-a call to `duplicate`) before any modification. Note that it is the
-responsibility of the author of the code making the modification to do
-the duplication, even if it is `x` whose value is being modified after
-`y <- x`.
-
-The case `NAMED(foo) == 1` allows some optimization, but it can be
-ignored (and duplication done whenever `NAMED(foo) > 0`). (This
-optimization is not currently usable in user code.) It is intended for
-use within replacement functions. Suppose we used
-
-   x <- 1:10
-   foo(x) <- 3
-
-which is computed as
-
-   x <- 1:10
-   x <- "foo<-"(x, 3)
-
-Then inside `"foo<-"` the object pointing to the current value of `x`
-will have `NAMED(foo)` as one, and it would be safe to modify it as the
-only symbol bound to it is `x` and that will be rebound immediately.
-(Provided the remaining code in `"foo<-"` make no reference to `x`, and
-no one is going to attempt a direct call such as `y <- "foo<-"(x)`.)
-
 Currently all arguments to a `.Call` call will have `NAMED` set to 2,
-and so users must assume that they need to be duplicated before
+and so users must assume that they need to be `duplicate()`d before
 alteration.
 
+### Lists
 
-## Other functions
+List elements can be retrieved or set by direct access to the elements
+of the generic vector. Suppose we have a list object
 
-* LENGTH
+   a <- list(f = 1, g = 2, h = 3)
+
+Then we can access `a$g` as `a[[2]]` by
+
+    double g;
+      ....
+    g = REAL(VECTOR_ELT(a, 1))[0];
+
+This can rapidly become tedious, and the function like the following is very useful:
+
+    SEXP getListElement(SEXP list, const char *str) {
+      SEXP elmt = R_NilValue;
+      SEXP names = getAttrib(list, R_NamesSymbol);
+
+      for (R_len_t i = 0; i < length(list); i++) {
+        if (strcmp(CHAR(STRING_ELT(names, i)), str) == 0) {
+          elmt = VECTOR_ELT(list, i);
+          break;
+        }
+      }
+      return elmt;
+    }
+
+and enables us to say
+
+     double g;
+     g = REAL(getListElement(a, "g"))[0];
+
+
+### Pairlists and language objects
+
+There are a series of small macros/functions to help construct pairlists
+and language objects (whose internal structures just differ by
+`SEXPTYPE`). Function `CONS(u, v)` is the basic building block: is
+constructs a pairlist from `u` followed by `v` (which is a pairlist or
+`R_NilValue`). `LCONS` is a variant that constructs a language object.
+
+Functions `list1` to `list5` construct a pairlist from one to five
+items, and `lang1` to `lang6` do the same for a language object (a
+function to call plus zero to five arguments). 
+
+Functions `elt` and `lastElt` find the ith element and the last element of a pairlist, and `nthcdr` returns a pointer to the nth position in the pairlist (whose `CAR` is the nth item).
 
 ## `.External`
 
 An alternative to using `.Call` is to use `.External`.  It is used almost identically, except that the C function will recieve a single arugment containing a `LISTSXP`, a pairlist from which the
 arguments can be extracted.  For example, if we used `.External`, the add function would become.
 
-## Loading your code
+## Using C code
+
+### In a package
 
 The easiest way to get up and running with compiled C code is to use devtools.  You'll need to put your code in a package structure, which means:
 
@@ -530,4 +383,8 @@ The easiest way to get up and running with compiled C code is to use devtools.  
 * A `NAMESPACE` file containing `useDynLib(packagename)`
 
 Then running `load_all` will automatically compile and reload the code in your package.
+
+### With the inline package
+
+How to use the inline package.
 
