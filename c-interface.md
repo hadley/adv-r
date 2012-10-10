@@ -219,35 +219,35 @@ These all create R-level objects, so need to be `PROTECT`ed.
 
 String vectors are a little more complicated. As discussed earlier, a string vector is a vector made up of pointers to immutable `CHARSXP`, and it's the `CHARSXP` that contains the C string (which can be extracted using `CHAR`).  The following function shows a simple example of creating a vector of known values:
 
-  abc <- cfunction(NULL, '
-    SEXP out;
-    PROTECT(out = allocVector(STRSXP, 3));
+    abc <- cfunction(NULL, '
+      SEXP out;
+      PROTECT(out = allocVector(STRSXP, 3));
 
-    SET_STRING_ELT(out, 0, mkChar("a"));
-    SET_STRING_ELT(out, 1, mkChar("b"));
-    SET_STRING_ELT(out, 2, mkChar("c"));
+      SET_STRING_ELT(out, 0, mkChar("a"));
+      SET_STRING_ELT(out, 1, mkChar("b"));
+      SET_STRING_ELT(out, 2, mkChar("c"));
 
-    UNPROTECT(1);
+      UNPROTECT(1);
 
-    return(out);
-  ')
+      return(out);
+    ')
 
 Things are a little harder if you want to modify the strings in the vector because you need to know a lot about string manipulation in C (which is hard, and harder to do right). For any problem that involves any kind of string modification, you're better off using Rcpp.
 
-  first_letter <- cfunction(c(x = "character"), '
-    SEXP out;
-    int n = length(x);
-    const char* letter;
+    first_letter <- cfunction(c(x = "character"), '
+      SEXP out;
+      int n = length(x);
+      const char* letter;
 
-    PROTECT(out = allocVector(STRSXP, n));
-    for (int i = 0; i < n; i++) {
-      letter = CHAR(STRING_ELT(x, i));
-      SET_STRING_ELT(out, i, mkChar(letter));
-    }
-    UNPROTECT(1);
-    
-    return(out);
-  ')
+      PROTECT(out = allocVector(STRSXP, n));
+      for (int i = 0; i < n; i++) {
+        letter = CHAR(STRING_ELT(x, i));
+        SET_STRING_ELT(out, i, mkChar(letter));
+      }
+      UNPROTECT(1);
+      
+      return(out);
+    ')
 
 ### Allocation shortcuts
 
