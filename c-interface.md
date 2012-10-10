@@ -14,6 +14,8 @@ described here, so the R source code provides a rich source of examples
 and "how to do it": do make use of the source code for inspirational
 examples.
 
+All examples in this chapter use the `inline` package - this makes it extremely easy to get up and going with C code.  To see how to translate this code into a package, read the final section.
+
 ## Finding the C source code for a function
 
 `.Primitive`
@@ -43,11 +45,24 @@ And the C side might look like:
       SEXP result;
 
       PROTECT(result = allocVector(REALSXP, 1));
-      REAL[result] = asReal(a) + asReal(b);
-      UNPROTECT();
+      REAL(result)[0] = asReal(a) + asReal(b);
+      UNPROTECT(1);
 
-      return(REAL);
+      return(result);
     }
+
+In this chapter we'll combine these two pieces by using the `inline` package, which allows us to write:
+
+    add <- cfunction(signature(a = "integer", b = "integer"), "
+      SEXP result;
+
+      PROTECT(result = allocVector(REALSXP, 1));
+      REAL(result)[0] = asReal(a) + asReal(b);
+      UNPROTECT(1);
+
+      return(result);
+    ")
+    add(1, 5)
 
 This illustrates most of the important C functions and macros you need to know about: creating new R vectors, coercing input arguments to the appropriate type and dealing with garbage collecting.
 
@@ -118,52 +133,84 @@ the current locale: this can be done by accessing the data in the
 this has the advantage that a faithful translation is almost always
 possible.
 
-## Checking types
+## Coercion and object creation
 
-Unless you are very sure about the type of the arguments, the code
-should check the data types. You can either do this in R, or in C code.  In R, this is often most easily accomplished with `stopifnot` and `is.numeric`, `is.integer`, `is.character` etc, or by coercing the inputs to the correct type. In C, you have two options, either using `TYPEOF` or one of the built in helper functions.
+At the heart of every C function you write will be a set of conversions between R data structures and C data structures. Inputs will always be as R data structures (`SEXP`s) and you will need to convert them to C data structures in order to operate on then.
 
-`TYPEOF` returns the `SEXPTYPE` of the incoming SEXP:
+Generally, it's a good idea to write a R-level wrapper function that checks arguments are of the correct type, and coerces them as necessary.  It's usually better to do this at the R level, because `as.numeric` will use S3 dispatch, whereas the C-level equivalent described below will not.
 
-      SEXP is_numeric(SEXP x) {
-        TYPEOF(x) == REALSXP
+### Extracting C vectors
+
+The helper functions described below index into a `SEXP` and allow you to get or set the values of the vector.  There's one for each of the basic `SEXP`s: 
+
+* `LOGICAL(x)`
+* `INTEGER(x)`
+* `RAW(x)`
+* `COMPLEX(x)`
+* `REAL(x)`
+
+Here's an example:
+
+    add_one <- cfunction(c(x = "numeric"), "
+      SEXP out;
+      int n = length(x);
+
+      PROTECT(out = allocVector(REALSXP, n));
+      for (int i = 0; i < n; i++) {
+        REAL(out)[i] = REAL(x)[i] + 1;
       }
+      UNPROTECT(1);
 
-These all return 0 for FALSE and 1 for TRUE.
+      return(out);
+    ")
+    add_one(as.numeric(1:10))
 
-Atomic vectors:
+If you're working with long vectors, there's a small performance advantage to extracting a pointer to the C-level data structure once:
 
-* isInteger: an integer vector (that isn't a factor)
-* isReal
-* isComplex
-* isLogical
-* isString
-* isNumeric: integer, logical, real
-* isNumber: numeric + complex numbers
-* isVectorAtomic: atomic vectors (logical, interger, numeric, complex, string, raw)
+    add_two <- cfunction(c(x = "numeric"), "
+      SEXP out;
+      int n = length(x);
+      double *px, *pout;
 
-* isArray: vector with dimension attribute
-* isMatrix: vector with dimension attribute of length 2
+      PROTECT(out = allocVector(REALSXP, n));
 
-* isEnvironment
-* isExpression
-* isFactor: 
-* isFunction: function: a closure, a primitive, or an internal function
-* isList: __pair__list?
-* isNewList: list
-* isSymbol
-* isNull
-* isObject
-* isVector: atomic vectors + lists and expressions
+      px = REAL(x);
+      pout = REAL(out);
+      for (int i = 0; i < n; i++) {
+        pout[i] = px[i] + 2;
+      }
+      UNPROTECT(1);
 
-Note that some of these functions behave differently to the R-level functions with similar names. For example `isVector` is true for any atomic vector type, lists and expression, where `is.vector` is returns `TRUE` only if its input has no attributes apart from names.
+      return(out);
+    ")
+    add_two(as.numeric(1:10))
 
-## Coercing types
+    library(microbenchmark)
+    x <- as.numeric(1:1e6)
+    microbenchmark(
+      add_one(x),
+      add_two(x)
+    )
 
-Note that these coercion functions are *not* the same as calling
-`as.numeric` (and so on) in R code, as they do not dispatch on the class
-of the object. Thus it is normally preferable to do the coercion in the
-calling R code.
+On my computer, `add_two` is about twice as fast as `add_one` for a million element vector.  This is a common idiom in the R source code.
+
+Strings and lists are more complicated because the individual elements are `SEXP`s not C-level data structures. You can use `STRING_ELT(x, i)` and `VECTOR_ELT(x, i)` to extract individual components.  To get a single C string from a element in a R character vector, use `CHAR(STRING_ELT(x, i))`.
+
+### Coercion to C scalars
+
+There are also a few helper functions for when you just want to get a scalar C value:
+
+* `asLogical`, `INTSXP -> int`
+* `asInteger`, `INTSXP -> int`
+* `asReal`, `REALSXP -> double`
+* `asComplex`
+* `asChar`, `STRSXP -> const char*`
+* `asCharacterFactor`
+
+
+## Creating new objects
+
+## From a SEXP
 
 Coercing to R objects:
 
@@ -171,26 +218,7 @@ Coercing to R objects:
 
 You will always need to run `coerceVector` inside `PROTECT`, as described in the garbage collection section below.
 
-Coercing to C scalars:
-
-* asLogical
-* asInteger
-* asReal
-* asComplex
-* asChar
-* asCharacterFactor
-
-Coercing to C vectors:
-
-LOGICAL(x)
-INTEGER(x)
-RAW(x)    
-COMPLEX(x)
-REAL(x)
-
-There is no convenience function to extract a C character vector from a `STRSXP`.  You can extract a single `CHARSXP` from a `STRSXP` with `STRING_ELT(x,i)`. You can extract the C string from the `CHARSXP` with CHAR(x)`
-
-## Creating new objects
+### From scratch
 
 allocVector(SEXPTYPE type, R_xlen_t length)
 allocMatrix(SEXPTYPE mode, int nrow, int ncol)
@@ -198,15 +226,6 @@ alloc3DArray(SEXPTYPE mode, int nrow, int ncol, int nface)
 allocArray(SEXPTYPE mode, SEXP dims)
 allocList(int n)
 
-Convenience functions for creating a single element:
-
-* ScalarLogical(int x)
-* ScalarInteger(int x)
-* ScalarReal(double x)
-* ScalarComplex(Rcomplex x); Rcomplex cmp = {0.1, 0.2};
-* ScalarRaw(Rbyte x)
-* mkString("mystring")
-* ScalarString(mkChar("mystring"))
 
 * mkNamed: to create `list(xi=, yi=, zi=)`
 
@@ -220,6 +239,18 @@ allocation](http://cran.r-project.org/doc/manuals/R-exts.html#Memory-allocation)
 All of these memory allocation routines do their own error-checking, so
 the programmer may assume that they will raise an error if the memory cannot be allocated.
 
+### Creating R scalars
+
+Convenience functions for creating a single element:
+
+* ScalarLogical(int x)
+* ScalarInteger(int x)
+* ScalarReal(double x)
+* ScalarComplex(Rcomplex x); Rcomplex cmp = {0.1, 0.2};
+* ScalarRaw(Rbyte x)
+* mkString("mystring")
+* ScalarString(mkChar("mystring"))
+
 ### Garbage collection
 
 If you create an R object in your C code, you must tell R that you're using the object by `PROTECT`ing on the `SEXP`. This tells R that the object is in use, and not to destroy it during garbage collection. Protection is not needed for objects that R already knows are in use, like function arguments. This is also protects all objects pointed to in the corresponding `SEXPREC`, for example all elements of a protected list are automatically protected.
@@ -228,18 +259,18 @@ You are responsible for making sure that every `PROTECT` has a matching `UNPROTE
 
 Here is a small example of creating an R numeric vector in C code. 
 
-    SEXP seq_len(SEXP n) {
+    seq_len <- cfunction(signature(n = "integer"), "
       SEXP out;
       int n_ = asInteger(n);
 
-      PROTECT(out = allocVector(INTSXP, n));
-      for (i = 0; i++; i < n) {
-        INTEGER(out)[i] <- i;
+      PROTECT(out = allocVector(INTSXP, n_));
+      for (int i = 0; i < n_; i++) {
+        INTEGER(out)[i] = i + 1;
       }
-      UNPROTECT(out);
+      UNPROTECT(1);
 
       return(out);
-    }
+    ")
 
 In this case, you might wonder how `out` could be garbage collected. We could actually do without protection in this example, but in general, we don't know what what is hiding behind the macros and functions we use, and any of them might allocate memory, hence activating the garbage collection and deleting unprotected objects.
 
@@ -278,6 +309,47 @@ correctly.  However, it is unwise to depend on such details, and is better to de
 * Integers, compare to and set with `NA_INTEGER`
 * Logicals, compare to and set with `NA_LOGICAL`
 * String, compare to and set with `NA_STRING`
+
+## Checking types
+
+`TYPEOF` returns the `SEXPTYPE` of the incoming SEXP:
+
+      is_numeric <- cfunction(c("x" = "ANY"), "
+        return(ScalarLogical(TYPEOF(x) == REALSXP));
+      ")
+      is_numeric(7)
+      is_numeric("a")
+
+(Here we have to use `ScalarLogical` to convert the result of the C comparison, an integer, in an R data structure, a logical vector of length 1).
+
+These all return 0 for FALSE and 1 for TRUE.
+
+Atomic vectors:
+
+* isInteger: an integer vector (that isn't a factor)
+* isReal
+* isComplex
+* isLogical
+* isString
+* isNumeric: integer, logical, real
+* isNumber: numeric + complex numbers
+* isVectorAtomic: atomic vectors (logical, interger, numeric, complex, string, raw)
+
+* isArray: vector with dimension attribute
+* isMatrix: vector with dimension attribute of length 2
+
+* isEnvironment
+* isExpression
+* isFactor: 
+* isFunction: function: a closure, a primitive, or an internal function
+* isList: __pair__list?
+* isNewList: list
+* isSymbol
+* isNull
+* isObject
+* isVector: atomic vectors + lists and expressions
+
+Note that some of these functions behave differently to the R-level functions with similar names. For example `isVector` is true for any atomic vector type, lists and expression, where `is.vector` is returns `TRUE` only if its input has no attributes apart from names.
 
 ## Modifying objects
 
@@ -371,9 +443,7 @@ Functions `elt` and `lastElt` find the ith element and the last element of a pai
 An alternative to using `.Call` is to use `.External`.  It is used almost identically, except that the C function will recieve a single arugment containing a `LISTSXP`, a pairlist from which the
 arguments can be extracted.  For example, if we used `.External`, the add function would become.
 
-## Using C code
-
-### In a package
+## Using C code in a package
 
 The easiest way to get up and running with compiled C code is to use devtools.  You'll need to put your code in a package structure, which means:
 
@@ -383,8 +453,4 @@ The easiest way to get up and running with compiled C code is to use devtools.  
 * A `NAMESPACE` file containing `useDynLib(packagename)`
 
 Then running `load_all` will automatically compile and reload the code in your package.
-
-### With the inline package
-
-How to use the inline package.
 
