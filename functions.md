@@ -52,14 +52,15 @@ These are illustrated below:
     environment(function(x = 4) g(x) + h(x))
     # <environment: R_GlobalEnv>
 
+### Primitive functions
+
+Primitive functions are an exception to this rule.
 
 ## Pure functions
 
 Why pure functions are easy to reason about.
 
 Ways in which functions can have side effects
-
-## Primitive functions
 
 ## Lazy evaluation of function arguments
 
@@ -149,7 +150,4 @@ To create a variable `x`, that is the sum of the values `a` and `b`, but is not 
 `delayedAssign` also provides two parameters that control where the evaluation happens (`eval.env`) and which in environment the variable is assigned in (`assign.env`).
 
 Autoload is an example of this, it's a wrapper around `delayedAssign` for functions or data in a package - it makes R behave as if the package is loaded, but it doesn't actually load it (i.e. do any work) until you call one of the functions.  This is the way that data sets in most packages work - you can call (e.g.) `diamonds` after `library(ggplot2)` and it just works, but it isn't loaded into memory unless you actually use it.
-
-## Default arguments
-
 
