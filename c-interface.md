@@ -167,7 +167,6 @@ There are also a few helper functions if just want a scalar C value:
 * `asLogical(x)`, `INTSXP -> int`
 * `asInteger(x)`, `INTSXP -> int`
 * `asReal(x)`, `REALSXP -> double`
-* `asComplex(x)`, `CPLXSXP -> Rcomplex`
 * `CHAR(asChar(x))`, `STRSXP -> const char*`
 
 ### Object creation and garbage collection
@@ -206,160 +205,96 @@ If you run `dummy()` a few times, you'll notice the output is basically random. 
 
 ### Creating R scalars
 
-Convenience functions for creating a single element:
+There are also a few convenience functions for turning a C scalar into a length one R vector:
 
 * `ScalarLogical(int x)`
 * `ScalarInteger(int x)`
 * `ScalarReal(double x)`
-* `ScalarComplex(Rcomplex x); Rcomplex cmp = {0.1, 0.2};`
 * `ScalarRaw(Rbyte x)`
 * `mkString("mystring")`
 
+These all create R-level objects, so need to be `PROTECT`ed.
+
 ### Creating new strings
 
-* `mkString("mystring")`
-* `mkChar("mystring")`
+String vectors are a little more complicated. As discussed earlier, a string vector is a vector made up of pointers to immutable `CHARSXP`, and it's the `CHARSXP` that contains the C string (which can be extracted using `CHAR`).  The following function shows a simple example of creating a vector of known values:
 
-### Helper functions
+  abc <- cfunction(NULL, '
+    SEXP out;
+    PROTECT(out = allocVector(STRSXP, 3));
 
-allocVector(SEXPTYPE type, R_xlen_t length)
-allocMatrix(SEXPTYPE mode, int nrow, int ncol)
-alloc3DArray(SEXPTYPE mode, int nrow, int ncol, int nface)
-allocArray(SEXPTYPE mode, SEXP dims)
-allocList(int n)
-mkNamed: to create `list(xi=, yi=, zi=)`
+    SET_STRING_ELT(out, 0, mkChar("a"));
+    SET_STRING_ELT(out, 1, mkChar("b"));
+    SET_STRING_ELT(out, 2, mkChar("c"));
 
-        const char *nms[] = {"xi", "yi", "zi", ""};
-        mkNamed(VECSXP, nms);
+    UNPROTECT(1);
 
-### Coercing vectors 
+    return(out);
+  ')
 
-Coercing to R objects:
+Things are a little harder if you want to modify the strings in the vector because you need to know a lot about string manipulation in C (which is hard, and harder to do right). For any problem that involves any kind of string modification, you're better off using Rcpp.
 
-* coerceVector  .  This will return an error if the `SEXP` can not be converted to the desired type.
+  first_letter <- cfunction(c(x = "character"), '
+    SEXP out;
+    int n = length(x);
+    const char* letter;
 
-You will always need to run `coerceVector` inside `PROTECT`, as described in the garbage collection section below.
-
-
-If storage is required for C objects during the calculations this is
-best allocating by calling `R_alloc`; see [Memory
-allocation](http://cran.r-project.org/doc/manuals/R-exts.html#Memory-allocation).
-All of these memory allocation routines do their own error-checking, so
-the programmer may assume that they will raise an error if the memory cannot be allocated.
-
-
-## Symbols and attributes
-
-To create a symbol (the equivalent of `as.symbol` or `as.name` in R), use `install`.  Symbols are used in more places when working at the C-level.  For example, to get or set attributes, you need to use a symbol:
-
-    SEXP set_attr(obj, SEXP attr, SEXP value) {
-      duplicate(obj);
-      setAttrib(obj, install(attr), value);
-      return(obj)
+    PROTECT(out = allocVector(STRSXP, n));
+    for (int i = 0; i < n; i++) {
+      letter = CHAR(STRING_ELT(x, i));
+      SET_STRING_ELT(out, i, mkChar(letter));
     }
+    UNPROTECT(1);
+    
+    return(out);
+  ')
 
-(We'll talk about why the duplicated is need in the modifying inputs section)The converse to `setAttrib` is `getAttrib`.  
+### Allocation shortcuts
 
-Some commonly used symbols are available without the use of `install`:
+There are also shortcuts for allocating matrices and 3d arrays:
 
-* `R_ClassSymbol`: class
-* `R_DimNamesSymbol`: dimnames
-* `R_DimSymbol`: dim
-* `R_NamesSymbol`: names
-* `R_LevelsSymbol`: levels
+    allocMatrix(SEXPTYPE mode, int nrow, int ncol)
+    alloc3DArray(SEXPTYPE mode, int nrow, int ncol, int nface)
 
-There are some (confusingly named) shortcuts for common setting operations: `classgets`, `namesgets`, `dimgets` and `dimnamesgets` are the internal versions of the default methods of `class<-`, `names<-`, `dim<-` and `dimnames<-`.
+Beware `allocList` - it creates a pairlist, not a regular list.
 
-## Missing and non-finite values
+The `mkNamed` function simplifies the creation of named vectors.  The following code is equivalent to list(a = NULL, b = NULL, c = NULL)
 
-R's `NA` is a subtype of `NaN` so IEC60559 arithmetic will handle them
-correctly.  However, it is unwise to depend on such details, and is better to deal with missings explicitly.
+    const char *names[] = {"a", "b", "c", ""};
+    mkNamed(VECSXP, names);
 
-* In doubles, use the `ISNA` macro, `ISNAN`, or `R_FINITE` macros to check for missing, NaN or non-finite values.  Use the constants `NA_REAL`, `R_NaN`, `R_PosInf` and `R_NegInf` to set those values
+### Coercing R vectors
 
-* Integers, compare to and set with `NA_INTEGER`
-* Logicals, compare to and set with `NA_LOGICAL`
-* String, compare to and set with `NA_STRING`
-
-## Checking types
-
-`TYPEOF` returns the `SEXPTYPE` of the incoming SEXP:
-
-      is_numeric <- cfunction(c("x" = "ANY"), "
-        return(ScalarLogical(TYPEOF(x) == REALSXP));
-      ")
-      is_numeric(7)
-      is_numeric("a")
-
-(Here we have to use `ScalarLogical` to convert the result of the C comparison, an integer, in an R data structure, a logical vector of length 1).
-
-These all return 0 for FALSE and 1 for TRUE.
-
-Atomic vectors:
-
-* isInteger: an integer vector (that isn't a factor)
-* isReal
-* isComplex
-* isLogical
-* isString
-* isNumeric: integer, logical, real
-* isNumber: numeric + complex numbers
-* isVectorAtomic: atomic vectors (logical, interger, numeric, complex, string, raw)
-
-* isArray: vector with dimension attribute
-* isMatrix: vector with dimension attribute of length 2
-
-* isEnvironment
-* isExpression
-* isFactor: 
-* isFunction: function: a closure, a primitive, or an internal function
-* isList: __pair__list?
-* isNewList: list
-* isSymbol
-* isNull
-* isObject
-* isVector: atomic vectors + lists and expressions
-
-Note that some of these functions behave differently to the R-level functions with similar names. For example `isVector` is true for any atomic vector type, lists and expression, where `is.vector` is returns `TRUE` only if its input has no attributes apart from names.
+To coerce objects at the C level, use `PROTEXT(new = coerceVector(old, SEXPTYPE))`. This will return an error if the `SEXP` can not be converted to the desired type.  Note that these coercion functions do not use S3 dispatch.
 
 ## Modifying objects
 
-### Modifying inputs
+You must be very careful when modifying an object that the user has passed into the function.  The following naive function has some very unexpected behaviour:
 
-When assignments are done in R such as
+    add_three <- cfunction(c(x = "numeric"), '
+      REAL(x)[0] = REAL(x)[0] + 3;
+      return(x);
+    ')
+    x <- 1
+    y <- x
+    add_three(x)
+    x
+    y
 
-   x <- 1:10
-   y <- x
+Not only has it modified the value of `x`, but it has also modified `y`!  This happens because of the way that R implements copy-on-modify. It does so lazily, so a complete copy only has to be made if you make a change.  To avoid problems like this, only ever modify `duplicate()`s of the input arguments.
 
-the named object is not necessarily copied, so after those two
-assignments `y` and `x` are bound to the same `SEXPREC` (the structure a
-`SEXP` points to). This means that any code which alters one of them has
-to make a copy before modifying the copy if the usual R semantics are to
-apply. Note that whereas `.C` and `.Fortran` do copy their arguments
-(unless the dangerous `dup = FALSE` is used), `.Call` and `.External` do
-not. So `duplicate` is commonly called on arguments to `.Call` before
-modifying them.
-
-However, at least some of this copying is unneeded. In the first
-assignment shown, `x <- 1:10`, R first creates an object with value
-`1:10` and then assigns it to `x` but if `x` is modified no copy is
-necessary as the temporary object with value `1:10` cannot be referred
-to again. R distinguishes between named and unnamed objects *via* a
-field in a `SEXPREC` that can be accessed *via* the macros `NAMED` and
-`SET_NAMED`. This can take values
-
-* `0`:  The object is not bound to any symbol
-* `1`:  The object has been bound to exactly one symbol
-* `2`:  The object has potentially been bound to two or more symbols, and
- one should act as if another variable is currently bound to this
- value.
-
-Note the past tenses: R does not do full reference counting and there
-may currently be fewer bindings.
-
-Currently all arguments to a `.Call` call will have `NAMED` set to 2,
-and so users must assume that they need to be `duplicate()`d before
-alteration.
+    add_four <- cfunction(c(x = "numeric"), '
+      SEXP x_copy;
+      PROTECT(x_copy = duplicate(x));
+      REAL(x_copy)[0] = REAL(x_copy)[0] + 4;
+      UNPROTECT(1);
+      return(x_copy);
+    ')
+    x <- 1
+    y <- x
+    add_four(x)
+    x
+    y
 
 ### Lists
 
@@ -394,20 +329,54 @@ and enables us to say
      double g;
      g = REAL(getListElement(a, "g"))[0];
 
+## Symbols and attributes
 
-### Pairlists and language objects
+To create a symbol (the equivalent of `as.symbol` or `as.name` in R), use `install`.  Symbols are used in more places when working at the C-level.  For example, to get or set attributes, you need to use a symbol:
 
-There are a series of small macros/functions to help construct pairlists
-and language objects (whose internal structures just differ by
-`SEXPTYPE`). Function `CONS(u, v)` is the basic building block: is
-constructs a pairlist from `u` followed by `v` (which is a pairlist or
-`R_NilValue`). `LCONS` is a variant that constructs a language object.
+    set_attr <- cfunction(c(obj = "ANY", attr = "string", value = "ANY"), '
+      const char* attr_s = CHAR(asChar(attr));
 
-Functions `list1` to `list5` construct a pairlist from one to five
-items, and `lang1` to `lang6` do the same for a language object (a
-function to call plus zero to five arguments). 
+      duplicate(obj);
+      setAttrib(obj, install(attr_s), value);
+      return(obj);
+    ')
+    x <- 1:10
+    set_attr(x, "a", 1)
 
-Functions `elt` and `lastElt` find the ith element and the last element of a pairlist, and `nthcdr` returns a pointer to the nth position in the pairlist (whose `CAR` is the nth item).
+There are some (confusingly named) shortcuts for common setting operations: `classgets`, `namesgets`, `dimgets` and `dimnamesgets` are the internal versions of the default methods of `class<-`, `names<-`, `dim<-` and `dimnames<-`.
+
+## Missing and non-finite values
+
+R's `NA` is a subtype of `NaN` so IEC60559 arithmetic should handle them
+correctly.  However, it is unwise to depend on such details, and is better to deal with missings explicitly.
+
+* In doubles, use the `ISNA` macro, `ISNAN`, or `R_FINITE` macros to check for missing, NaN or non-finite values.  Use the constants `NA_REAL`, `R_NaN`, `R_PosInf` and `R_NegInf` to set those values
+
+* Integers, compare to and set with `NA_INTEGER`
+* Logicals, compare to and set with `NA_LOGICAL`
+* String, compare to and set with `NA_STRING`
+
+## Checking types in C
+
+`TYPEOF` returns the `SEXPTYPE` of the incoming SEXP:
+
+      is_numeric <- cfunction(c("x" = "ANY"), "
+        return(ScalarLogical(TYPEOF(x) == REALSXP));
+      ")
+      is_numeric(7)
+      is_numeric("a")
+
+There's also a whole passel of helper functions.  They all return 0 for FALSE and 1 for TRUE:
+
+* For atomic vectors: `isInteger`, `isReal`, `isComplex`, `isLogical`, `isString`.
+
+* For combinations of atomic vectors: `isNumeric` (integer, logical, real), `isNumber` (integer, logical, real, complex), isVectorAtomic (logical, interger, numeric, complex, string, raw)
+
+* Matrices (`isMatrix`) and arrays (`isArray`)
+
+* For other more esoteric object: `isEnvironment`, `isExpression`, `isList` (a pair list), `isNewList` (a list), `isSymbol`, `isNull`, `isObject` (S4 objects), `isVector` (atomic vectors, lists, expressions)
+
+Note that some of these functions behave differently to the R-level functions with similar names. For example `isVector` is true for any atomic vector type, lists and expression, where `is.vector` is returns `TRUE` only if its input has no attributes apart from names.
 
 ## `.External`
 
@@ -416,10 +385,9 @@ arguments can be extracted.  For example, if we used `.External`, the add functi
 
 ## Finding the C source code for a function
 
-`.Primitive`
+`.Primitive`, like `sum`
 
-`.Internal`
-
+`.Internal`, like `mean.default`
 
 ## Using C code in a package
 
