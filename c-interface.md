@@ -1,43 +1,30 @@
 # R-C interface
 
-This is a opinionated translation of section 5 ("System and foreign language interfaces") of [Writing R extensions](http://cran.r-project.org/doc/manuals/R-exts.html), focussing on best practices and use with `devtools`, not documenting things that used to be a good dea. This means it does not cover:
+This is a opinionated re-write of section 5 ("System and foreign language interfaces") of [Writing R extensions](http://cran.r-project.org/doc/manuals/R-exts.html), focussing on best practices and use with modern tools. This means it does not cover:
 
-* The `.C` interface
-* The old api defined in `Rdefines.h`
+* the `.C` interface
+* the old api defined in `Rdefines.h`
+* many esoteric language features that are rarely used
 
-It focusses mainly on section 5.9, "Handling R objects in C".
+It focusses mainly on section 5.9, "Handling R objects in C", considerably expanding it, and providing many more examples. The main point of the guide is to help you read and understand R's C source code. It will also help you write your own C functions, but for anything more than the simplest function, we recommend using C++ and Rcpp.
 
-The main point of this guide is to help you read and understand R's C source code. It will also help you write C code, but we generally recommend using Rcpp, because of the additional syntax sugar it provides.
+All examples in this chapter use the `inline` package - this makes it extremely easy to get up and running with C code. Make sure you have it installed and loaded with the following code:
 
-A substantial amount of R is implemented using the functions and macros
-described here, so the R source code provides a rich source of examples
-and "how to do it": do make use of the source code for inspirational
-examples.
+    install.packages("inline")
+    library(inline)
 
-All examples in this chapter use the `inline` package - this makes it extremely easy to get up and going with C code.  To see how to translate this code into a package, read the final section.
-
-## Finding the C source code for a function
-
-`.Primitive`
-
-`.Internal`
+You'll also (obviously) need a working C compiler.  The final section of this chapter shows you how to turn C functions you've created with inline into a package C code.
 
 ## Calling C functions from R
 
-Calling C functions from R involves two parts:
+Generally, calling C functions from R involves two parts: a c function, and an R function that uses `.Call`. The simple function below adds two numbers together and illustrates some of the important features of coding in C (creating new R vectors, coercing input arguments to the appropriate type and dealing with garbage collection).  
 
-* A C function
-* An R function that calls the C function using `.Call`
-
-The first argument to `.Call` is the name of the function, followed by its arguments (to a maximum of 65). Let's pretend we want to write a C function to add two numbers together.  The R side of the interface might look like:
-  
+    # In R ----------------------------------------
     add <- function(a, b) {
-      stopifnot(is.numeric(a), is.numeric(b))
       .Call("add", a, b)
     }
 
-And the C side might look like:
-
+    # In C ----------------------------------------
     #include <R.h>
     #include <Rinternals.h>
 
@@ -51,7 +38,7 @@ And the C side might look like:
       return(result);
     }
 
-In this chapter we'll combine these two pieces by using the `inline` package, which allows us to write:
+In this chapter we'll produce these two pieces in one step by using the `inline` package. This allows us to write:
 
     add <- cfunction(signature(a = "integer", b = "integer"), "
       SEXP result;
@@ -64,9 +51,7 @@ In this chapter we'll combine these two pieces by using the `inline` package, wh
     ")
     add(1, 5)
 
-This illustrates most of the important C functions and macros you need to know about: creating new R vectors, coercing input arguments to the appropriate type and dealing with garbage collecting.
-
-The rest of this chapter explains in more detail how these (and other important functions) work; providing a guide to the C function you use to manipulate R data structures. These are in defined header file `Rinternals.h`, which you can easily find and show from within R:
+The rest of this chapter explains in more detail how these (and other important functions) work.  The C functions and macros that R provides for us to modify R data structures are all defined in the header file `Rinternals.h`.  It's easiest to find and display this file from within R:
 
     rinternals <- file.path(R.home(), "include", "Rinternals.h")
     file.show(rinternals)
@@ -442,6 +427,13 @@ Functions `elt` and `lastElt` find the ith element and the last element of a pai
 
 An alternative to using `.Call` is to use `.External`.  It is used almost identically, except that the C function will recieve a single arugment containing a `LISTSXP`, a pairlist from which the
 arguments can be extracted.  For example, if we used `.External`, the add function would become.
+
+## Finding the C source code for a function
+
+`.Primitive`
+
+`.Internal`
+
 
 ## Using C code in a package
 
