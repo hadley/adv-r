@@ -2,7 +2,7 @@
 
 ## Introduction
 
-This is a opinionated re-write of section 5 ("System and foreign language interfaces") of [Writing R extensions](http://cran.r-project.org/doc/manuals/R-exts.html), focussing on best practices and modern tools. This means it does not cover:
+This is an opinionated re-write of section 5 ("System and foreign language interfaces") of [Writing R extensions](http://cran.r-project.org/doc/manuals/R-exts.html), focussing on best practices and modern tools. This means it does not cover:
 
 * the `.C` interface
 * the old api defined in `Rdefines.h`
