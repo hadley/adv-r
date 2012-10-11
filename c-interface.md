@@ -8,7 +8,7 @@ This is a opinionated re-write of section 5 ("System and foreign language interf
 * the old api defined in `Rdefines.h`
 * esoteric language features that are rarely used
 
-It focusses mainly on section 5.9, "Handling R objects in C", considerably expanding it, and providing many more examples. The main point of the guide is to help you read and understand R's C source code. It will also help you write your own C functions, but for anything more than the simplest function, we recommend using C++ and Rcpp.
+It focusses mainly on section 5.9, "Handling R objects in C", considerably expanding with many more examples. The main point of the guide is to help you read and understand R's C source code. It will also help you write your own C functions, but for anything more than the simplest function, we recommend using C++ and Rcpp.
 
 All examples in this chapter use the `inline` package - this makes it extremely easy to get up and running with C code. Make sure you have it installed and loaded with the following code:
 
@@ -145,7 +145,7 @@ You might wonder what all the `PROTECT` calls do. They tell R that we're current
 
 You also need to make sure that every protected object is unprotected. `UNPROTECT` takes a single integer argument, n, and unprotects the last n objects that were protected. If your calls don't match, R will warn about a "stack imbalance in .Call".
 
-Other specialised forms of `PROTECT` and `UNPROTECT` are needed in some circumstances: `UNPROTECT_PTR(`s`)` unprotects the
+Other specialised forms of `PROTECT` and `UNPROTECT` are needed in some circumstances: `UNPROTECT_PTR(s)` unprotects the
 object pointed to by the `SEXP` s, `PROTECT_WITH_INDEX` saves an index of the protection location that can be used to replace the protected value using `REPROTECT`. Consult [R externals](http://cran.r-project.org/doc/manuals/R-exts.html#Garbage-Collection) for more details.
 
 If you run `dummy()` a few times, you'll notice the output is basically random. This is because `allocVector` assigns memory to each output, but it doesn't clean it out first. For real functions, you'll want to loop through each element in the vector and zero it out. The most efficient way to do that is to use `memset`:
