@@ -354,7 +354,7 @@ A function has three components: its arguments, body (code to run) and the envir
     make_function <- make_function1
 
 
-There are two tricks here: first of all we use the `alist` function to create an **a**rugment list.
+There are two tricks here: first of all we use the `alist` function to create an **a**rgument list.
 
     add <- make_function(alist(a = 1, b = a), quote(a + b))
     add(1)
