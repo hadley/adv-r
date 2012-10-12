@@ -140,7 +140,7 @@ Note that `substitute` doesn't evaluate its first argument:
     substitute(x, list(a = 1, b = 2))
     # x
 
-We can create our own adaption of substitute (that uses substitute!) to work around this:
+We can create our own adaption of `substitute` (that uses `substitute`!) to work around this:
 
     substitute2 <- function(x, env) {
       call <- substitute(substitute(x, env), list(x = x))
