@@ -316,41 +316,6 @@ This makes the function much much easier to understand - it's just calling `writ
 A function has three components: its arguments, body (code to run) and the environment in which its defined. There are a few ways we can create a  function from these three components.  The third is probably the most straightforward (create an empty function and then modify it).  But you might want to read the others and figure out how they work - it's good practice for your computing on the language skills.
 
 
-    make_function1 <- function(args, body, env = parent.frame()) {
-      args <- as.pairlist(args)
-      eval(call("function", args, body), env)
-    }
-    make_function2 <- function(args, body, env = parent.frame()) {
-      f <- function() {}
-      formals(f) <- args
-      body(f) <- body
-      environment(f) <- env
-
-      f
-    }
-    make_function3 <- function(args, body, env = parent.frame()) {
-      as.function(c(args, body), env)
-    }
-    make_function4 <- function(args, body, env = parent.frame()) {
-      subs <- list(args = as.pairlist(args), body = body)
-      eval(substitute(`function`(args, body), subs), env)
-    }
-
-    args <- alist(a = 1, b = 2)
-    body <- quote(a + b)
-    make_function1(args, body)
-    make_function2(args, body)
-    make_function3(args, body)
-    make_function4(args, body)
-    
-    library(microbenchmark)
-    microbenchmark(
-      make_function1(args, body),
-      make_function2(args, body),
-      make_function3(args, body),
-      make_function4(args, body),
-      function(a = 1, b = 2) a + b
-    )
     make_function <- make_function1
 
 
