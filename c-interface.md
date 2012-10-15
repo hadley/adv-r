@@ -28,6 +28,7 @@ Important differences from R include:
 * indices start at 0, not 1
 * you must use a semi-colon at end of each line
 * you must have an explicit return statement
+* assignment is done with `=`, not `<-`
 
 ## Calling C functions from R
 
@@ -100,6 +101,43 @@ And `SEXP`s for internal objects, objects that are usually only created and used
 * `CHARSXP`: "scalar" strings (see below)
 * `PROMSXP`: promises, lazily evaluated function arguments
 * `EXPRSXP`: expressions
+
+There's no built-in R function to easily access these names, but we can write one: (This is adapted from code in R's `inspect.c`)
+    
+    sexp_type <- cfunction(c(x = "ANY"), '
+      switch (TYPEOF(x)) {
+        case NILSXP:      return mkString("NILSXP");
+        case SYMSXP:      return mkString("SYMSXP");
+        case LISTSXP:     return mkString("LISTSXP");
+        case CLOSXP:      return mkString("CLOSXP");
+        case ENVSXP:      return mkString("ENVSXP");
+        case PROMSXP:     return mkString("PROMSXP");
+        case LANGSXP:     return mkString("LANGSXP");
+        case SPECIALSXP:  return mkString("SPECIALSXP");
+        case BUILTINSXP:  return mkString("BUILTINSXP");
+        case CHARSXP:     return mkString("CHARSXP");
+        case LGLSXP:      return mkString("LGLSXP");
+        case INTSXP:      return mkString("INTSXP");
+        case REALSXP:     return mkString("REALSXP");
+        case CPLXSXP:     return mkString("CPLXSXP");
+        case STRSXP:      return mkString("STRSXP");
+        case DOTSXP:      return mkString("DOTSXP");
+        case ANYSXP:      return mkString("ANYSXP");
+        case VECSXP:      return mkString("VECSXP");
+        case EXPRSXP:     return mkString("EXPRSXP");
+        case BCODESXP:    return mkString("BCODESXP");
+        case EXTPTRSXP:   return mkString("EXTPTRSXP");
+        case WEAKREFSXP:  return mkString("WEAKREFSXP");
+        case S4SXP:       return mkString("S4SXP");
+        case RAWSXP:      return mkString("RAWSXP");
+        default:          return mkString("<unknown>");
+    }')
+    sexp_type(10)
+    sexp_type(10L)
+    sexp_type("a")
+    sexp_type(T)
+    sexp_type(list(a = 1))
+    sexp_type(pairlist(a = 1))
 
 ### Character vectors
 
@@ -316,13 +354,59 @@ To avoid problems like this, always `duplicate()` inputs before modifying them:
     x
     y
 
-## Symbols and attributes
+## Pairlists and symbols
 
-To create a symbol (the equivalent of `as.symbol` or `as.name` in R), use `install`. Symbols are used in more places when working at the C-level. To create a symbol, use `install`.
+R hides a few details of the underlying datastructures it uses. In some places in R code, it looks like you're working with a list (`VECSXP`), but behind the scenes R you're actually modifying a pairlist (`LISTSXP`). These include attributes, calls and `...`. 
 
-To get or set attributes, you need to use a symbol:
+Pairlists differ from lists in the following ways:
 
-    set_attr <- cfunction(c(obj = "ANY", attr = "string", value = "ANY"), '
+* Pairlists are [linked lists](http://en.wikipedia.org/wiki/Linked_list), a data structure which does not have any easy way to get to an arbitrary element of the list
+
+* Pairlists have `tags`, not `names`, and tags are symbols, not strings.
+
+Because you can't easily index into a specified location in a pairlist, R provides a set of helper functions to moved along the linked list. The basic helpers are `CAR` which extracts the first element of the first, and `CDR` which extracts the rest. These can be composed to get `CAAR`, `CDAR`, `CADDR`, `CADDR`, `CADDDR`. As well as the getters, R also provides `SETCAR`, `SETCDR` etc. (Or you can just use )
+
+    car <- cfunction(c(x = "ANY"), 'return(CAR(x));')
+    cdr <- cfunction(c(x = "ANY"), 'return(CDR(x));')
+    cadr <- cfunction(c(x = "ANY"), 'return(CADR(x));')
+
+    x <- quote(f(a = 1, b = 2))
+    car(x)
+    cdr(x)
+    car(cdr(x))
+    cadr(x)
+
+You can make new pairlists with `CONS` or `LCONS` (if you want a call object). A pairlist is always terminated with `R_NilValue`.
+
+    new_call <- cfunction(NULL, '
+      SEXP out;
+
+      out = LCONS(install("+"), LCONS(
+          ScalarReal(10), LCONS(
+            ScalarReal(5), R_NilValue)));
+      return(out);
+    ')
+    new_call();
+
+Similarly, you can loop through all elements of a pairlist as follows:
+
+    count <- cfunction(c(x = "ANY"), '
+      SEXP el, nxt;
+      int i = 0;
+
+      for(nxt = x; nxt != R_NilValue; el = CAR(nxt), nxt = CDR(nxt)) {
+        i++;
+      }
+      return(ScalarInteger(i));
+    ')
+    count(quote(f(a, b, c)))
+    count(quote(f()))
+
+`TAG` and `SET_TAG` allow you to get and set the tag (aka name) associated with an element of a pairlist. The tag should be a symbol. To create a symbol (the equivalent of `as.symbol` or `as.name` in R), use `install`. 
+
+Attributes are also pairlists behind the scenes, but come with the helper functions `setAttrib` and `getAttrib` to make access a little easier:
+
+    set_attr <- cfunction(c(obj = "ANY", attr = "character", value = "ANY"), '
       const char* attr_s = CHAR(asChar(attr));
 
       duplicate(obj);
@@ -333,6 +417,28 @@ To get or set attributes, you need to use a symbol:
     set_attr(x, "a", 1)
 
 There are some (confusingly named) shortcuts for common setting operations: `classgets`, `namesgets`, `dimgets` and `dimnamesgets` are the internal versions of the default methods of `class<-`, `names<-`, `dim<-` and `dimnames<-`. 
+
+    tags <- cfunction(c(x = "ANY"), '
+      SEXP el, nxt, out;
+      int i = 0;
+
+      for(nxt = CDR(x); nxt != R_NilValue; nxt = CDR(nxt)) {
+        i++;
+      }
+
+      PROTECT(out = allocVector(VECSXP, i));
+
+      for(nxt = CDR(x), i = 0; nxt != R_NilValue; i++, nxt = CDR(nxt)) {
+        SET_VECTOR_ELT(out, i, TAG(nxt));
+      }
+
+      UNPROTECT(1);
+
+      return(out);
+    ')
+    tags(quote(f(a = 1, b = 2, c = 3)))
+    tags(quote(f()))
+
 
 ## Missing and non-finite values
 
@@ -345,7 +451,7 @@ correctly.  However, it is unwise to depend on such details, and is better to de
 
 * In `LGLSXP`s, compare/set values to `NA_LOGICAL`
 
-* In `STRSXP`s, compare/set values to `NA_STRING`
+* In `STRSXP`s, compare/set `CHAR(STRING_ELT(x, i))` values to `NA_STRING`. 
 
 For example, a primitive implementation of `is.NA` might look like
 
@@ -381,6 +487,15 @@ For example, a primitive implementation of `is.NA` might look like
     is_na(c(NA, 1))
     is_na(c(NA, "a"))
     is_na(c(NA, TRUE))
+
+There are a few other special values:
+
+    nil <- cfunction(NULL, 'return(R_NilValue);')
+    unbound <- cfunction(NULL, 'return(R_UnboundValue);')
+    missing_arg <- cfunction(NULL, 'return(R_MissingArg);')
+
+    x <- missing_arg()
+    x
 
 ## Checking types in C
 
@@ -442,6 +557,16 @@ In many R functions you'll find code like `.Internal(mean(x))` or `.Primitive("s
 
 * Next, search the R source code for the name of that function.  To make it easier to find where it's defined (rather than everywhere it's used), you can add `(SEXP`.  e.g. to find the source code for `findInterval`, search for `do_findinterval(SEXP`.
 
+## Errors, warnings, messages and printing
+
+    R_ShowMessage
+    warning
+    error
+    Rprintf
+
+## Long running C code
+
+    R_CheckUserInterrupt
 
 ## `.External`
 
@@ -461,3 +586,7 @@ If you're putting your code in a package, it's generally a good idea to stop usi
 
 Running `load_all(path/to/package)` will automatically compile and reload the code in your package.
 
+Your C code will need these headers:
+
+    #include <R.h>
+    #include <Rinternals.h>
