@@ -37,31 +37,14 @@ Packages are the fundamental unit of reproducible R code. They include reusable 
   * [[Source code control|git]]: git + github
   * [[Ready for release|Release]]
 
-The canonical reference for package development will always be [writing R extensions][r-ext] - these pages attempt to expand on the more important points and discuss more of the why and what of best practices.
-
-Making R packages, a presentation to HACASA and the Houston R users group: http://www.slideshare.net/hadley/r-packages
-
 ## Appendices
 
 * Introduction to markdown
 * [[Vocabulary]]  (draft)
 
-<!-- ## Specialised data languages
-
-* You know the three specialised languages needed to extract data from the
-  types of data that analysts encounter most often: regular expressions for
-  strings, SQL for databases, and xpath for xml.
-
-These types of data come up so frequently it's useful to know a little about them and the specialised languages that you use to work with them:
-
-  * [[Strings and regular expressions|lang-regexp]]  (outline)
-  * [[Databases and SQL|lang-sql]]  (outline)
-  * [[XML and XPath|lang-xml]]   (outline) -->
-
 ## Miscellaneous
 
 * [[How to make a reproducible example|Reproducibility]]
-* Mastering the command line
 
   [lang-def]:http://cran.r-project.org/doc/manuals/R-lang.html
   [r-ext]:http://cran.r-project.org/doc/manuals/R-exts.html

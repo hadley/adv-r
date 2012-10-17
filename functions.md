@@ -28,6 +28,53 @@ When you print a function in R, it shows you the formals, the source code and th
     # UseMethod("print")
     # <environment: namespace:base>
 
+
+Functions in R are created by `function`. They consist of an argument list (which can include default values), and a body of code to execute when evaluated. In R arguments are passed-by-value, so the only way a function can affect the outside world is through its return value:
+
+    f <- function(x) {
+      x$a <- 2
+    }
+    x <- list(a = 1)
+    f()
+    x$a
+
+Functions can return only a single value, but this is not a limitation in practice because you can always return a list containing any number of objects.
+
+When calling a function you can specify arguments by position, or by name:
+
+    mean(1:10)
+    mean(x = 1:10)
+    mean(x = 1:10, trim = 0.05)
+
+Arguments are matched first by exact name, then by prefix matching and finally by position.
+
+## Special function types
+
+### Infix operators
+
+You can define new infix operators with a special syntax:
+
+    "%+%" <- function(a, b) paste(a, b)
+    "new" %+% "string"
+
+### Replacement functions
+
+And replacement functions to modify arguments "in-place":
+
+    "second<-" <- function(x, value) {
+      x[2] <- value
+      x
+    }
+    x <- 1:10
+    second(x) <- 5
+    x
+
+But this is really the same as 
+
+    x <- "second<-"(x, 5)
+
+and actual modification in place should be considered a performance optimisation, not a fundamental property of the language.
+
 ## Creating functions
 
 The tool we use for creating functions is `function`. It is very close to being an ordinary R function, but it has special syntax: the last argument to the function is outside the call and provides the body of the new function.  If we don't assign the results of `function` to a variable we get an anonymous function:
@@ -177,7 +224,9 @@ g()
 
 This seems a little magical (how does R know what the value of `y` is after the function has been called), but it's because every function stores the environment in which it's defined.  [[Environments]] gives some pointers on how you can dive in and figure out what some of the values are.
 
-## Lazy evaluation of function arguments
+## Function arguments ("formals")
+
+### Lazy evaluation
 
 By default, R function arguments are lazy - they're not evaluated when you call the function, but only when that argument is used:
 
@@ -240,4 +289,8 @@ And you can use it to write functions that are not possible otherwise
     and(!is.null(a), a > 0)
 
 This function would not work without lazy evaluation because both `x` and `y` would always be evaluated, testing if `a > 0` even if `a` was NULL.
+
+### `...`
+
+There is a special argument called `...`.  This argument will match any arguments not otherwise specifically matched, and can be used to call other functions.  This is useful if you want to collect arguments to call another function, but you don't want to prespecify their possible names.
 
