@@ -2,6 +2,8 @@
 
 This book has grown out of over 10 years of programming in R, and constantly struggling to understand the best way of doing things. 
 
+Overall, this is an opinionated book. There are many ways to do things in R; this book will focus on what we think is the best way.  We've spent the time to figure out what's the best approach so that you don't have to.
+
 R is still a relatively young language, and the resources to help you understand it are still maturing. In my personal journey to understand R, I've found it particularly helpful to refer to resources that describe how other programming languages work. R has aspects of both functional and object-oriented (OO) programming languages, and learning how these aspects are expressed in R, will help you translate your existing knowledge from other programming languages, and to help you identify areas where you can improve.
 
 Functional
