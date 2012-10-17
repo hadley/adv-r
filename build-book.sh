@@ -11,6 +11,7 @@ pandoc -o book.pdf \
   S4.md \
   R5.md \
   performance.md \
+  c-interface.md \
   Rcpp.md \
   Philosophy.md \
   package-basics.md \
