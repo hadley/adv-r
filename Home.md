@@ -11,18 +11,15 @@ In the following pages I try and explain how fundamental R components work, taki
   * [[Functions]]
   * [[Environments]]
   * [[First class functions|First-class-functions]]
-
 * Objected oriented programming
   * [[The S3 object system|S3]]
   * [[The S4 object system|S4]]
   * [[Reference based classes|R5]]
   * [[Software systems|SoftwareSystems]]
-
 * Advanced programming techniques
   * [[Controlling evaluation|Evaluation]]
   * [[Computing on the language|Computing-on-the-language]]
   * [[Exceptions and debugging|Exceptions-debugging]]
-
 * Performant code
   * [[Performance and profiling|performance]]
   * [[R's C interface|c-interface]]
