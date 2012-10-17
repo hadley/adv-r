@@ -22,12 +22,13 @@ I found the following two books particularly helpful:
 
 * [Concepts, Techniques and Models of Computer Programming](http://amzn.com/0262220695?tag=hadlwick-20) by Peter van Roy and Sef Haridi
 
+These are both extremely dense books, but very rewarding. They really helped me to understand the tradeoffs behind the way that R does things.
+
 It's also very useful to learn a little about lisp and scheme, because many of the ideas in R are adapted from lisp, and there are often good descriptions of the basic ideas, even if the implementation differs somewhat. Part of the purpose of this book is so that you don't have to consult these original source, but if you want to learn more, this is a great way to develop a deeper understanding of how R works.
 
 Other websites that helped me to understand smaller pieces of R are:
 
-* [Getting Started with Dylan](http://opendylan.org/documentation/intro-dylan/index.html)
-  for understanding S4
+* [Getting Started with Dylan](http://opendylan.org/documentation/intro-dylan/index.html) for understanding S4
 
 * [Frames, Environments, and Scope in R and S-PLUS](http://cran.r-project.org/doc/contrib/Fox-Companion/appendix-scope.pdf). Section 2 is recommended as a good introduction to the formal vocabulary used in much of the R documentation. 
 
@@ -72,3 +73,7 @@ To get the most out of this look you should already be familiar with the basics 
 I would particularly like to thank the tireless contributors to R-help. There are too many that have helped me over the years to list individually, but I'd particularly like to thank Luke Tierney, John Chambers, and Brian Ripley for correcting countless of my misunderstandings and helping me to deeply understand R.
 
 More recently, [stackoverflow](http://stackoverflow.com/questions/tagged/r) has become a fantastic resource.
+
+Feedback of the many people who read draft versions of the book (wiki), especially those who fixed many typos: 
+
+Twitter

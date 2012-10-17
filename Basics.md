@@ -1,3 +1,5 @@
+# Basic R knowledge
+
 ## Data structures
 
 The basic data structure in R is the vector, which comes in two basic flavours: atomic vectors and lists. Atomic vectors are logical, integer, numeric, character and raw. Common vector properties are mode, length and names:
