@@ -3,9 +3,7 @@
 
 [[Introduction]]
 
-## R fundamentals
-
-In the following pages I try and explain how fundamental R components work, taking the [R language definition][lang-def] and making it easier to understand with plenty of examples to illustrate each idea. These tools are important because they allow to identify and reduce duplication in a wider variety of settings.
+## R programming
 
 * Functional programming
   * [[Functions]]

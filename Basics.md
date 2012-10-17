@@ -38,6 +38,8 @@ All vectors can also have additional arbitrary attributes - these can be thought
 
 Another extremely important data structure is the data.frame. A data frame is a named list with a restriction that all elements must be vectors of the same length. Each element in the list represents a column, which means that each column must be one type, but a row may contain values of different types.
 
+## Argument matching
+
 ## Subsetting
 
 * Three subsetting operators.
