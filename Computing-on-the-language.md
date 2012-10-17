@@ -149,9 +149,9 @@ We can create our own adaption of `substitute` (that uses `substitute`!) to work
     x <- quote(a + b)
     substitute2(x, list(a = 1, b = 2))
 
-When writing functions like this, I find it helpful to do the evaluation last, only after I've made sure that I've constructed the correct substitute call with a few test inputs.
+When writing functions like this, I find it helpful to do the evaluation last, only after I've made sure that I've constructed the correct substitute call with a few test inputs.  (This is also much easier to test more formally)
 
-If you want to substitute in a variable or function call, you need to be careful to supply the right type object to substitute:
+If you want to substitute in a variable or function name, you need to be careful to supply the right type object to substitute:
     
     substitute(a + b, list(a = y))
     # Error: object 'y' not found
@@ -174,7 +174,7 @@ If you want to substitute in a variable or function call, you need to be careful
     substitute(a + b, list(a = quote(y())))
     # y() + b
 
-Another useful tool is `bquote`.  It quotes an expression apart from any terms wrapped in `.()` which it evaluates:
+Another useful tool is `bquote`.  It quotes an call apart from any terms wrapped in `.()` which it evaluates:
 
     x <- 5
     bquote(y + x)
@@ -315,11 +315,12 @@ This makes the function much much easier to understand - it's just calling `writ
 
 A function has three components: its arguments, body (code to run) and the environment in which its defined. There are a few ways we can create a  function from these three components.  The third is probably the most straightforward (create an empty function and then modify it).  But you might want to read the others and figure out how they work - it's good practice for your computing on the language skills.
 
+    make_function <- function(args, body, env = parent.frame()) {
+      args <- as.pairlist(args)
+      eval(call("function", args, body), env)
+    }
 
-    make_function <- make_function1
-
-
-There are two tricks here: first of all we use the `alist` function to create an **a**rgument list.
+To use this function we need to use the special `alist` function to create an **a**rgument list.
 
     add <- make_function(alist(a = 1, b = a), quote(a + b))
     add(1)

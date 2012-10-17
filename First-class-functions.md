@@ -9,100 +9,18 @@ R supports "first class functions", functions that can be:
 
 You've already learned about anonymous functions in [[functions]]. This chapter will explore the other three properties, and show how they can remove redundancy in your code. The chapter concludes with an exploration of numerical integration, showing how all of the properties of first-class functions can be used to solve a real problem.
 
+<!-- 
+## Pure functions
+
+Why pure functions are easy to reason about.
+
+Ways in which functions can have side effects
+ -->
+
 You should be familiar with the basic properties of [[scoping and environments|Scoping]] before reading this chapter.
 
 
-```R
-f <- function(x) {
-  y <- 1
-  function() {
-    c(x = x, y = y)
-  }
-}
-f()
-g <- f()
-g()
-f()()
-```
-
-## Closures 
-
-"An object is data with functions. A closure is a function with data." 
---- [John D Cook](http://twitter.com/JohnDCook/status/29670670701)
-
-A closure is a function written by another function. Closures are so called because they __enclose__ the environment of the parent function, and can access all variables and parameters in that function. This is useful because it allows us to have two levels of parameters. One level of parameters (the parent) controls how the function works. The other level (the child) does the work. The following example shows how can use this idea to generate a family of power functions. The parent function (`power`) creates child functions (`square` and `cube`) that actually do the hard work.
-
-    power <- function(exponent) {
-      function(x) x ^ exponent
-    }
-
-    square <- power(2)
-    square(2) # -> [1] 4
-    square(4) # -> [1] 16
-
-    cube <- power(3)
-    cube(2) # -> [1] 8
-    cube(4) # -> [1] 64
-
-The ability to manage variables at two levels makes it possible to maintain the state across function invocations by allowing a function to modify variables in the environment of its parent. Key to managing variables at different levels is the double arrow assignment operator (`<<-`). Unlike the usual single arrow assignment (`<-`) that always assigns in the current environment, the double arrow operator will keep looking up the chain of parent environments until it finds a matching name.
-
-This makes it possible to maintain a counter that records how many times a function has been called, as shown in the following example. Each time `new_counter` is run, it creates an environment, initialises the counter `i` in this environment, and then creates a new function.
-
-    new_counter <- function() {
-      i <- 0
-      function() {
-        # do something useful, then ...
-        i <<- i + 1
-        i
-      }
-    }
-
-The new function is a closure, and its environment is the enclosing environment. When the closures `counter_one` and `counter_two` are run, each one modifies the counter in its enclosing environment and then returns the current count.
-
-    counter_one <- new_counter()
-    counter_two <- new_counter()
-
-    counter_one() # -> [1] 1
-    counter_one() # -> [1] 2
-    counter_two() # -> [1] 1
-
-This is an important technique because it is one way to generate "mutable state" in R. [[R5]] expands on this idea in considerably more detail.
-
-An interesting property of functions in R is that basically every function in R is a closure, because all functions remember the environment in which they are created, typically either the global environment, if it's a function that you've written, or a package environment, if it's a function that someone else has written. When you print a function in R, it always shows you which environment it comes from. If the environment isn't displayed, it doesn't mean it doesn't have an environment, it means that it was created in the global environment. The environment inside an arbitrary function doesn't have a special name, so the environment of closures that you've created will have random names.
-
-    f <- function(x) x
-    f
-    # function(x) x
-    environment(f)
-    # <environment: R_GlobalEnv>
-    
-    print
-    # function (x, ...) 
-    # UseMethod("print")
-    # <environment: namespace:base>
-    
-    counter_one
-    # function() {
-    #         # do something useful, then ...
-    #         i <<- i + 1
-    #         i
-    #       }
-    # <environment: 0x1022be7f0>
-
-The only way to create a function that isn't a closure, is to manually set its environment to the empty environment:.
-
-    f <- function(x) x + 1
-    environment(f) <- emptyenv()
-    f
-    # function(x) x + 1
-    # <environment: R_EmptyEnv>
-
-But this isn't very useful because functions in R rely on lexical scoping:
-
-    f(1)
-    # Error in f(1) : could not find function "+"
-
-### Built-in functions
+## Closures
 
 There are two useful built-in functions that return closures:
 
@@ -136,6 +54,37 @@ There are two useful built-in functions that return closures:
   vectorised function always returns a list. This is usually a good idea.
 
   `Vectorize` does not work with primitive functions.
+
+* `ecdf`
+
+## Mutable state
+
+
+The ability to manage variables at two levels makes it possible to maintain the state across function invocations by allowing a function to modify variables in the environment of its parent. Key to managing variables at different levels is the double arrow assignment operator (`<<-`). Unlike the usual single arrow assignment (`<-`) that always assigns in the current environment, the double arrow operator will keep looking up the chain of parent environments until it finds a matching name.
+
+This makes it possible to maintain a counter that records how many times a function has been called, as shown in the following example. Each time `new_counter` is run, it creates an environment, initialises the counter `i` in this environment, and then creates a new function.
+
+    new_counter <- function() {
+      i <- 0
+      function() {
+        # do something useful, then ...
+        i <<- i + 1
+        i
+      }
+    }
+
+The new function is a closure, and its environment is the enclosing environment. When the closures `counter_one` and `counter_two` are run, each one modifies the counter in its enclosing environment and then returns the current count.
+
+    counter_one <- new_counter()
+    counter_two <- new_counter()
+
+    counter_one() # -> [1] 1
+    counter_one() # -> [1] 2
+    counter_two() # -> [1] 1
+
+This is an important technique because it is one way to generate "mutable state" in R. [[R5]] expands on this idea in considerably more detail.
+
+
 
 ## Higher-order functions
 

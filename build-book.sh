@@ -1,7 +1,7 @@
 pandoc -o book.pdf \
   Introduction.md \
-  Scoping.md \
   Functions.md \
+  Environments.md \
   First-class-functions.md \
   Evaluation.md \
   Computing-on-the-language.md \

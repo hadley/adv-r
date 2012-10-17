@@ -1,23 +1,24 @@
 # Advanced R development
 (Making reproducible code)
 
-[[Introduction]]  (outline)
+[[Introduction]]
 
 ## R fundamentals
 
 In the following pages I try and explain how fundamental R components work, taking the [R language definition][lang-def] and making it easier to understand with plenty of examples to illustrate each idea. These tools are important because they allow to identify and reduce duplication in a wider variety of settings.
 
-  * [[Scoping and environments|Scoping]]  (draft)
-  * [[Functions]]  (outline)
-  * [[First class functions|First-class-functions]]  (draft)
-  * [[Controlling evaluation|Evaluation]]  (complete)
-  * [[Computing on the language|Computing-on-the-language]]  (draft)
-  * [[Exceptions and debugging|Exceptions-debugging]]  (draft)
-  * [[The S3 object system|S3]]  (draft)
-  * [[The S4 object system|S4]]  (draft)
-  * [[Reference based classes|R5]]  (outline)
-  * [[Performance and profiling|performance]]  (outline)
-  * [[High performance functions with Rcpp|Rcpp]]  (outline)
+  * [[Functions]]
+  * [[Environments]]
+  * [[First class functions|First-class-functions]]
+  * [[Controlling evaluation|Evaluation]]
+  * [[Computing on the language|Computing-on-the-language]]
+  * [[Exceptions and debugging|Exceptions-debugging]]
+  * [[The S3 object system|S3]]
+  * [[The S4 object system|S4]]
+  * [[Reference based classes|R5]]
+  * [[Performance and profiling|performance]]
+  * [[R's C interface|c-interface]]
+  * [[High performance functions with Rcpp|Rcpp]]
 
 These sections are designed to be a primer for the more technical descriptions available in the [R language definition][lang-def] and [software for data analysis](http://amzn.com/0387759352).
 
@@ -26,15 +27,15 @@ These sections are designed to be a primer for the more technical descriptions a
 Packages are the fundamental unit of reproducible R code. They include reusable R functions, the documentation that describes how to use them, and sample data. In this section you'll learn how to turn your code into packages that others can easily download and use. Writing a package can seem overwhelming at first, but start with the basics and then improve it over time. It doesn't matter if your first version isn't perfect as long as the next version is better.
 
   * [[Philosophy]]
-  * [[Package basics]]  (complete)
-  * [[Development]]  (draft)
+  * [[Package basics]]
+  * [[Development]]
   * Documentation at both the [[function|docs-function]] and
-    [[package|docs-package]] levels  (outline)
-  * [[Testing]]  (draft)
-  * Good code [[style]]  (complete)
-  * [[Namespaces]], to minimise conflict with other packages  (draft)
-  * [[Source code control|git]]: git + github  (outline)
-  * [[Ready for release|Release]]  (complete)
+    [[package|docs-package]] levels
+  * [[Testing]]
+  * Good code [[style]]
+  * [[Namespaces]], to minimise conflict with other packages
+  * [[Source code control|git]]: git + github
+  * [[Ready for release|Release]]
 
 The canonical reference for package development will always be [writing R extensions][r-ext] - these pages attempt to expand on the more important points and discuss more of the why and what of best practices.
 

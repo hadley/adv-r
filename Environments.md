@@ -1,80 +1,6 @@
-# Scoping and environments
+# Environments
 
-Scoping is the set of rules that govern how R looks up the value of a symbol, or name. That is, scoping is the set rules that R applies to go from the symbol `x`, to its value `10` in the following example.
-
-    x <- 10
-    x
-    # [1] 10
-
-R has two types of scoping: __lexical scoping__, implemented automatically at the language level, and __dynamic scoping__, used in select functions to save typing during interactive analysis. This document describes lexical scoping, as well as environments (the underlying data structure). Dynamic scoping is described in the context of [[controlling evaluation|Evaluation]].
-
-Understanding scoping allows you to:
-
-* build tools by composing functions, as described in [[first-class-functions]]
-* overrule the usual evaluation rules and [[computing-on-the-language]]
-
-## Lexical scoping
-
-Lexical scoping looks up symbol values using how functions are nested when they were written, not when they were called. With lexical scoping, you can figure out where the value of each variable will be looked up only by looking at the definition of the function, you don't need to know anything about how the function is called.
-
-The "lexical" in lexical scoping doesn't correspond to the usual English definition ("of or relating to words or the vocabulary of a language as distinguished from its grammar and construction") but comes from the computer science term "lexing", which is part of the process that converts code represented as text to meaningful pieces that the programming language understands.  It's lexical in this sense, because you only need the definition of the functions, not how they are called.
-
-The following example illustrates the basic principle:
-
-    x <- 5
-    f <- function() { 
-      y <- 10
-      c(x = x, y = y)
-    }
-    f()
-    #  x  y 
-    #  5 10
-
-Lexical scoping is the rule that determines where values are looked for, not when. Unlike some languages, R looks up at the values at run-time, not when the function is created.  This means results from a function can be different depending on objects outside its environment:
-
-    x <- 15
-    f()
-    #  x  y 
-    # 15 10
-    x <- 20
-    f()
-    #  x  y 
-    # 20 10
-
-If a name is defined inside a function, it will mask the top-level definition:
-
-    g <- function() { 
-      x <- 21
-      y <- 11
-      c(x = x, y = y)
-    }
-    f()
-    #  x  y 
-    # 20 10
-    g()
-    #  x  y 
-    # 21 11
-
-The same principle applies regardless of the degree of nesting. See if you can predict what the following function will return before trying it out yourself.
-
-    w <- 0
-    f <- function() {
-      x <- 1
-      g <- function() {
-        y <- 2
-        h <- function() {
-          z <- 3
-          c(w = w, x = x, y = y, z = z)
-        }
-        h()
-      }
-      g()
-    }
-    f()
-
-To better understand how scoping works, it's useful to know a little about environments, the data structure that powers scoping.
-
-## Environments
+## Introduction
 
 An __environment__ is very similar to a list, with two important differences. Firstly, an environment has reference semantics: R's usual copy on modify rules do not apply. Secondly, an environment has a parent: if an object is not found in an environment, then R will look in its parent. Technically, an environment is made up of a __frame__, a collection of named objects (like a list), and link to a parent environment.
 
@@ -246,8 +172,36 @@ If it doesn't find an existing variable of that name, it will create one in the 
 
 We'll come back to this idea in depth in [[first-class-functions]].
 
-## Manipulating environments and scoping
+### delayedAssign
 
+Delayed assign is particularly useful for doing expensive operations that
+you're not sure you'll need. This is the essence of lazyness - put off doing
+any work until the last possible minute.
+
+To create a variable `x`, that is the sum of the values `a` and `b`, but is not evaluated until we need, we use `delayedAssign`:
+
+    a <- 1
+    b <- 2
+    delayedAssign("x", a + b)
+    a <- 10
+    x
+    # [1] 12
+
+`delayedAssign` also provides two parameters that control where the evaluation happens (`eval.env`) and which in environment the variable is assigned in (`assign.env`).
+
+Autoload is an example of this, it's a wrapper around `delayedAssign` for functions or data in a package - it makes R behave as if the package is loaded, but it doesn't actually load it (i.e. do any work) until you call one of the functions.  This is the way that data sets in most packages work - you can call (e.g.) `diamonds` after `library(ggplot2)` and it just works, but it isn't loaded into memory unless you actually use it.
+
+### Active bindings
+
+`makeActiveBinding` allows you to create names that look like variables, but act like functions. Every time you access the object a function is run. This lets you do crazy things like:
+
+    makeActiveBinding("x", function(...) rnorm(1), globalenv())
+    x
+    # [1] 0.4754442
+    x
+    # [1] -1.659971
+    x
+    # [1] -1.040291
 
 ### Explicit scoping with `local`
 
@@ -288,31 +242,4 @@ eval.parent <- function (expr, n = 1) {
   eval(expr, p)
 }
 ```
-
-### Default arguments and lazy evaluation
-
-Default arguments work a little differently - they are evaluated in the environment where they are defined. This means that if the expression depends on the current environment the results will be different depending on whether you use the default value or explicitly provide it.
-
-    f <- function(x = ls()) {
-      a <- 1
-      g(x)
-    }
-    g <- function(x) {
-      b <- 2
-      x
-    }
-    f()
-    f(ls())
-
-### Active bindings
-
-`makeActiveBinding` allows you to create names that look like variables, but act like functions. Every time you access the object a function is run. This lets you do crazy things like:
-
-      makeActiveBinding("x", function(...) rnorm(1), globalenv())
-      x
-      # [1] 0.4754442
-      x
-      # [1] -1.659971
-      x
-      # [1] -1.040291
 
