@@ -358,7 +358,6 @@ With the basics in place, we'll next develop some useful tools based the ideas w
         }
       }
 
-
 The `finally` argument to `tryCatch` is very useful for clean up, because it is always called, regardless of whether the code executed successfully or not. This is useful when you have:
 
 * modified `options`, `par` or locale
@@ -387,9 +386,9 @@ Another more casual way of cleaning up is the `on.exit` function, which is calle
 
 ## Getting help
 
-Currently, there are two main venues to get help when you are stuck and can't figure out what's causing the problem: [stackoverflow](http://stackoverflow.com) and the R-help mailing list..
+Currently, there are two main venues to get help when you are stuck and can't figure out what's causing the problem: [stackoverflow](http://stackoverflow.com) and the R-help mailing list. You can get fantastic help in both venues, but they do have their own culture and expectations.  It's usually a good idea to spend a little time lurking, and learning about community expectations before your first post. 
 
-While you can get some excellent advice on R-help, fools are not tolerated gladly, so follow the tips below for getting the best help:
+Some good general advice:
 
 * Make sure you have the latest version of R, and the package (or packages)
   you are having problems with. It may be that your problem is the result of a
@@ -398,10 +397,45 @@ While you can get some excellent advice on R-help, fools are not tolerated gladl
 * If it's not clear where the problem is, include the results of
   `sessionInfo()` so others can see your R setup.
 
-* Spend some time creating a reproducible example. Make sure you have run your
-  script in a vanilla R sessions (`R --vanilla`). This is often a useful
-  example by itself, because in the course of making the problem reproducible
-  you figure out what's causing the problem.
+* Spend some time creating a reproducible example, as described below.  This 
+  is often a useful process in its own right, because in the course of making 
+  the problem reproducible you figure out what's causing the problem.
+
+### How to write a reproducible example.
+
+You are most likely to get good help with your R problem if you provide a reproducible example. A reproducible example allows someone else to recreate your problem by just copying and pasting R code. 
+
+There are four things you need to include to make your example reproducible: required packages, data, code, and a description of your R environment.
+
+* **Packages** should be loaded at the top of the script, so it's easy to
+ see which ones the example needs.
+
+* The easiest way to include **data** in an email is to use dput() to generate
+  the R code to recreate it. For example, to recreate the mtcars dataset in R,
+  I'd perform the following steps:
+
+   1. Run `dput(mtcars)` in R
+   2. Copy the output
+   3. In my reproducible script, type `mtcars <- ` then paste.
+
+* Spend a little bit of time ensuring that your **code** is easy for others to
+  read:
+
+  * make sure you've used spaces and your variable names are concise, but
+    informative
+
+  * use comments to indicate where your problem lies
+
+  * do your best to remove everything that is not related to the problem.  
+   The shorter your code is, the easier it is to understand.
+
+* Include the output of sessionInfo() as a comment. This summarises your **R
+  environment** and makes it easy to check if you're using an out-of-date
+  package, or a non-standard locale.
+
+You can check you have actually made a reproducible example by starting up a fresh R session and pasting your script in.  
+
+Before putting all of your code in an email, consider putting it in a [gist](http://gist.github.com/).  It will give your code nice syntax highlighting, and you don't have to worry about anything getting mangled by the email system.
 
 ## Exercises
 
