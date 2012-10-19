@@ -48,33 +48,6 @@ When calling a function you can specify arguments by position, or by name:
 
 Arguments are matched first by exact name, then by prefix matching and finally by position.
 
-## Special function types
-
-### Infix operators
-
-You can define new infix operators with a special syntax:
-
-    "%+%" <- function(a, b) paste(a, b)
-    "new" %+% "string"
-
-### Replacement functions
-
-And replacement functions to modify arguments "in-place":
-
-    "second<-" <- function(x, value) {
-      x[2] <- value
-      x
-    }
-    x <- 1:10
-    second(x) <- 5
-    x
-
-But this is really the same as 
-
-    x <- "second<-"(x, 5)
-
-and actual modification in place should be considered a performance optimisation, not a fundamental property of the language.
-
 ## Creating functions
 
 The tool we use for creating functions is `function`. It is very close to being an ordinary R function, but it has special syntax: the last argument to the function is outside the call and provides the body of the new function.  If we don't assign the results of `function` to a variable we get an anonymous function:
@@ -144,6 +117,51 @@ But this isn't very useful because functions in R rely on lexical scoping:
 
     f(1)
     # Error in f(1) : could not find function "+"
+
+## Special function types
+
+There are two types of special functions R: infix operators, and replacement functions.
+
+### Infix operators
+
+Most functions are "prefix" operators: the name of the function comes before the arguments.  In R you can also create infix functions where the function name comes in between it's arguments.  All infix functions names must start and end with `%`.
+
+For example, we could create a new operator for combining strings:
+
+    "%+%" <- function(a, b) paste(a, b)
+    "new" %+% "string"
+
+Note that you have to put the name of the function in quotes because it's a special name.
+
+### Replacement functions
+
+Replacement functions acts like they modify their arguments in place, and have the special name `xxx<-`. They typically have two arguments (`x` and `value`), although they can have more, and they must return the modified object. 
+
+For example, the following function allows you to modify the second element of a vector:
+
+    "second<-" <- function(x, value) {
+      x[2] <- value
+      x
+    }
+    x <- 1:10
+    .Internal(inspect(x))
+    second(x) <- 5L
+    x
+    .Internal(inspect(x))
+
+It's often useful to combine replacement and subsetting:
+
+    x <- setNames(1:3, letters[1:3])
+    names(x)[2] <- "two"
+    names(x)
+
+This works because `names(x)[2] <- "two"` is evaluated as `x <- "names<-"(x, "[<-"(names(x), 2, "two"))`, i.e. it's equivalent to:
+
+    y <- names(x)
+    y[2] <- "two"
+    names(x) <- y
+
+Typically, modifying in place will not create a copy of the data, but if your depending on that for high performance, it's best to verify for the situation at hand.
 
 ## Lexical scoping
 
@@ -292,5 +310,8 @@ This function would not work without lazy evaluation because both `x` and `y` wo
 
 ### `...`
 
-There is a special argument called `...`.  This argument will match any arguments not otherwise specifically matched, and can be used to call other functions.  This is useful if you want to collect arguments to call another function, but you don't want to prespecify their possible names.
+There is a special argument called `...`.  This argument will match any arguments not otherwise matched, and can be used to call other functions.  This is useful if you want to collect arguments to call another function, but you don't want to prespecify their possible names.
 
+To capture `...` in a form that is easier to work with, you can use `list(...)`.
+
+Using `...` comes with a cost - any misspelled arguments will be silently ignored.  It's often better to be explicit instead of explicit, so you might instead ask users to supply a list of additional arguments.  And this is certainly easier if you're trying to use `...` with multiple additional functions.
