@@ -17,7 +17,7 @@
 * Advanced programming techniques
   * [[Controlling evaluation|Evaluation]]
   * [[Computing on the language|Computing-on-the-language]]
-  * [[Exceptions and debugging|Exceptions-debugging]]
+  * [[Exceptions, debugging and getting help|Exceptions-debugging]]
 * Performant code
   * [[Performance and profiling|performance]]
   * [[R's C interface|c-interface]]

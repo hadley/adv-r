@@ -1,4 +1,4 @@
-# Dealing with errors and exceptions
+# Exceptions, debugging and getting help.
 
 This chapter describes techniques to use when things go wrong:
 
@@ -34,9 +34,75 @@ There is a tension between interactive analysis and programming. When you a doin
   * Don't use `sapply`: use `vapply`, or `lapply` plus the appropriate
     transformation
 
+### An example
+
+The following function is naively written and might cause problems:
+
+    col_means <- function(df) {
+      numeric <- sapply(df, is.numeric)
+      numeric_cols <- df[, numeric]
+      
+      data.frame(lapply(numeric_cols, mean))
+    }
+
+The ability to come up with a set of potential pathological inputs is a good skill to master. Common cases that I try and check are:
+
+* dimensions of length 0
+* dimensions of length 1 (in case dropping occurs)
+* incorrect input types
+
+The following code exercises some of those cases for `col_means`
+
+    col_means(mtcars)
+    col_means(mtcars[, 0])
+    col_means(mtcars[0, ])
+    col_means(mtcars[, "mpg", drop = F])
+    col_means(1:10)
+    col_means(as.matrix(mtcars))
+    col_means(as.list(mtcars))
+
+    mtcars2 <- mtcars
+    mtcars2[-1] <- lapply(mtcars2[-1], as.character)
+    col_means(mtcars2)
+
+A better version of `col_means` might be:
+
+    col_means <- function(df) {
+      numeric <- vapply(df, is.numeric, logical(1))
+      numeric_cols <- df[, numeric, drop = FALSE]
+      
+      data.frame(lapply(numeric_cols, mean))
+    }
+
+We use `vapply` instead of `sapply`, remember to use `drop = FALSE`.  It still doesn't check that the input is correct, or coerce it to the correct format.
+
 ## Debugging
 
-The key function for performing a post-mortem on an error is `traceback`, which shows all the calls leading up to the error. This can help you figure out where the error occurred, but often you'll need the interactive environment created by `browser`:
+To illustrate debugging techniques, we need some functions with bugs in them.
+
+### Traceback
+
+The key function for performing a post-mortem on an error is `traceback`, which shows all the calls leading up to the error.  Here's an example:
+
+    f <- function() g()
+    g <- function() h()
+    h <- function() i()
+    i <- function() "a" + 1
+    f()
+    traceback()
+
+This is very helpful to determine exactly where in a stack of calls an error occured.  However, it's not so helpful if you have a recursive function, or other situations where the same function is called in multiple places:
+
+    j <- function(i = 10) {
+      if (i == 1) "a" + 1
+      j(i - 1)
+    }
+    j()
+    traceback()
+
+### Browser
+
+Trackback can help you figure out where the error occurred, but to understand why the error occured and to fix it, it's often easier to explore interactively.  The `browser` function allows you to do this by pausing execution and returning you to an interactive state. Here you can run any regular R command, as well as some extra single letter commands:
 
 * `c`: leave interactive debugging and continue execution
 
@@ -54,7 +120,7 @@ The key function for performing a post-mortem on an error is `traceback`, which 
 * `where`: prints stack trace of active calls (the interactive equivalent of
   `traceback`)
 
-You can add Don't forget that you can combine `if` statements with `browser()` to only debug when a certain situation occurs.
+Don't forget that you can combine `if` statements with `browser()` to only debug when a certain situation occurs.
 
 ### Browsing arbitrary R code
 
@@ -85,9 +151,18 @@ It's also possible to  start `browser` automatically when an error occurs, by se
   occurred. This allows you to later use `debugger` to re-create the error as
   if you had called `recover` from where the error occurred
 
-* `NULL`: the default. Prints an error message and stops function execution.
+      options(error = quote({dump.frames(to.file = TRUE); q()}))
 
-We can use `withCallingHandlers` to set up something similar for warnings. The following function will call the specified action when a warning is generated. The code is slightly tricky because we need to find the right environment to evaluate the action - it should be the function that calls warning.
+      # Saves debugging info to file last.dump.rda
+
+      # Then in an interactive R session:
+      print(load("last.dump.rda"))
+      debugger("last.dump")
+
+* `NULL`: the default. Prints an error message and stops function execution.
+  Use this to reset back to the regular behaviour.
+
+Warnings are harder to track down because they don't provide any information about where they occured.  One way to make them easier to detect is to convert them to errors with `options(warn = 2)`.  Another way is to use function to trigger special behaviour. We can use `withCallingHandlers` (explained below) to set up something similar for warnings. The following function will call the specified action when a warning is generated. The code is slightly tricky because we need to find the right environment to evaluate the action - it should be the function that calls `warning`.
 
     on_warning <- function(action, code) {
       q_action <- substitute(action)
@@ -116,7 +191,7 @@ We can use `withCallingHandlers` to set up something similar for warnings. The f
 
 ### Creative uses of trace
 
-Trace is a useful debugging function that along with some of our computing on the language tools can be used to set up warnings on a large number of functions at a time. This is useful if you for automatically detecting some of the errors described above. The first step is to find all functions that have a `na.rm` argument. We'll do this by first building a list of all functions in base and stats, then inspecting their formals.
+Trace is a useful debugging function that along with some of our computing on the language tools can be used to set up warnings on a large number of functions at a time. This is useful if you for automatically detecting some of the potential problems described above. The first step is to find all functions that have a `na.rm` argument. We'll do this by first building a list of all functions in base and stats, then inspecting their formals.
 
     objs <- c(ls("package:base", "package:stats"))
     has_missing_arg <- function(name) {
@@ -128,7 +203,7 @@ Trace is a useful debugging function that along with some of our computing on th
     }
     f_miss <- Filter(has_missing_arg, objs)
 
-Next, we write a version of trace vectorised over the function name, and then use that function to add a warning to every function that we found above.
+Next, we write a version of trace that is vectorised over the function name, and then use that function to add a warning to every function that we found above.
 
     trace_all <- function(fs, tracer, ...) {
       lapply(fs, trace, tracer = tracer, print = FALSE, ...)
@@ -136,20 +211,19 @@ Next, we write a version of trace vectorised over the function name, and then us
     }
   
     trace_all(f_miss, quote(if(missing(na.rm)) stop("na.rm not set")))
-    # But misses primitives
   
     pmin(1:10, 1:10)
     # Error in eval(expr, envir, enclos) : na.rm not set
     pmin(1:10, 1:10, na.rm = T)
     # [1]  1  2  3  4  5  6  7  8  9 10
 
-One problem of this approach is that we don't automatically pick up any `primitive` functions, because for these functions formals returns `NULL`.
+One problem of this approach is that we don't automatically pick up any `primitive` functions, because these functions don't have formal arguments.
 
 ## Exceptions
 
 Defensive programming is the art of making code fail in a well-defined manner even when something unexpected occurs. There are two components of this art related to exceptions: raising exceptions as soon as you notice something has gone wrong, and responding to errors as cleanly as possible.
 
-A general principle for errors is to "fail fast" - as soon as you figure out something as wrong, and your inputs are not as expected, you should raise an error.  
+A general principle for errors is to "fail fast" - as soon as you figure out something as wrong, and your inputs are not as expected, you should raise an error. This is more work for you as the function author, but will make it easier for the user to debug because they get errors early on, not after unexpected input has passed through several functions and caused a problem.
 
 ### Creating
 
@@ -163,12 +237,12 @@ There are a number of options for letting the user know when something has gone 
   computation or impact. Two examples are `reshape2::melt` package which
   informs the user what melt and id variables where used if not specific, and
   `plyr::join` which informs which variables where used to join the two
-  tables.
+  tables.  You can supress messages with `suppressMessages`.
 
 * use `warning()` for unexpected problems that aren't show stoppers.
   `options(warn = 2)` will turn warnings into errors. Warnings are often
   more appropriate for vectorised functions when a single value in the vector
-  is incorrect, e.g. `log(-1:2)` and `sqrt(-1:2)`.
+  is incorrect, e.g. `log(-1:2)` and `sqrt(-1:2)`.  You can suppress warnings with `suppressWarnings`
 
 * use `stop()` when the problem is so big you can't continue
 
@@ -347,18 +421,9 @@ We can write a simple version of `try` using `tryCatch`. The real version of `tr
 
 ### Using `tryCatch`
 
-With the basics in place, we'll next develop some useful tools based the ideas we just learned about.
+With the basics in place, we'll next develop some useful tools based the ideas we just learned about.  
 
-<!-- * capturing all messages or warnings produced by a function
-* returning a value even when a user interrupts: `Ctrl + C` -->
-
-      browse_on_error <- function(f) {
-        function(...) {
-          tryCatch(f(...), error = function(c) browser())
-        }
-      }
-
-The `finally` argument to `tryCatch` is very useful for clean up, because it is always called, regardless of whether the code executed successfully or not. This is useful when you have:
+The `finally` argument to `tryCatch` is particularly useful for clean up, because it is always called, regardless of whether the code executed successfully or not. This is useful when you have:
 
 * modified `options`, `par` or locale
 * opened connections, or created temporary files and directories
@@ -383,6 +448,15 @@ The following function changes the working directory, executes some code, and al
     getwd()
 
 Another more casual way of cleaning up is the `on.exit` function, which is called when the function terminates.  It's not as fine grained as `tryCatch`, but it's a bit less typing.
+
+    in_dir <- function(path, code) {
+      cur_dir <- getwd()
+      on.exit(setwd(cur_dir))
+
+      force(code)
+    }
+
+If you're using multiple `on.exit` calls, make sure to set `add = TRUE`, otherwise they will replace the previous call.
 
 ## Getting help
 
