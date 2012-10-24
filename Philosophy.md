@@ -51,12 +51,12 @@ The goal of the devtools package is to make package development as painless as p
 
 Most of the devtools function we will use take a path to the package as their first argument. If the path is omitted, devtools will look in the current working directory - so for that reason, it's good practice to have your working directory set to the package directory.
 
-The functions that you'll use most often are those that facilitate the [package development cycle](development.html):
+The functions that you'll use most often are those that facilitate the [[package development cycle |development]]:
 
 * `load_all()`: simulates package installation and loading by `source()`ing
   all files in the `R/` directory, compiling and linking C, C++ and Fortran
   files in the `src/` and `load()`ing data files in the `data/` directory.
-  More on that in [package development](development.html)
+  More on that in [[package development |development]]
 
 * `document()`: extracts documentation from source code comments and creates
   `Rd` files in the `man/` directory. You can use `dev_help()` and
