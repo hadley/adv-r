@@ -161,7 +161,7 @@ This works because `names(x)[2] <- "two"` is evaluated as `x <- "names<-"(x, "[<
     y[2] <- "two"
     names(x) <- y
 
-Typically, modifying in place will not create a copy of the data, but if your depending on that for high performance, it's best to verify for the situation at hand.
+Typically, modifying in place will not create a copy of the data, but if you're depending on that for high performance, it's best to double check.
 
 ## Lexical scoping
 
@@ -242,7 +242,15 @@ g()
 
 This seems a little magical (how does R know what the value of `y` is after the function has been called), but it's because every function stores the environment in which it's defined.  [[Environments]] gives some pointers on how you can dive in and figure out what some of the values are.
 
+## Return values
+
+Invisable value.
+
 ## Function arguments ("formals")
+
+R's function call semantics
+
+Default values.
 
 ### Lazy evaluation
 
@@ -315,3 +323,7 @@ There is a special argument called `...`.  This argument will match any argument
 To capture `...` in a form that is easier to work with, you can use `list(...)`.
 
 Using `...` comes with a cost - any misspelled arguments will be silently ignored.  It's often better to be explicit instead of explicit, so you might instead ask users to supply a list of additional arguments.  And this is certainly easier if you're trying to use `...` with multiple additional functions.
+
+## Exercises
+
+* (From the R inferno 8.2.36): If `weirdFun()()()` is a valid command, what does `weirdFun()` return? Write an example.

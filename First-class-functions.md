@@ -12,7 +12,8 @@ You've already learned about anonymous functions in [[functions]]. This chapter 
 <!-- 
 ## Pure functions
 
-Why pure functions are easy to reason about.
+Why pure functions are easy to reason about:
+Always easier to reason about things locally.
 
 Ways in which functions can have side effects
  -->

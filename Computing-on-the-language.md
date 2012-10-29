@@ -1,6 +1,6 @@
 # Computing on the language
 
-Writing R code that modifies R code.
+Writing R code that modifies R code. Why?
 
 ## Basics of R code
 
@@ -29,7 +29,7 @@ Calls are recursive because the arguments to a call can be other calls, e.g. `f(
 Everything in R parses into this tree structure - even things that don't look like calls such as `{`, `function`, control flow, infix operators and assignment. The figure below shows the parse tree for some of these special constructs. All calls are labelled with "()" even if we don't normally think of them as function calls.
 
     draw_tree(expression(
-      { a + b; 2},
+      {a + b; 2},
       function(x, y = 2) 3,
       (a - b) * 3,
       if (x < 3) y <- 3 else z <- 4,
@@ -77,14 +77,14 @@ Everything in R parses into this tree structure - even things that don't look li
     # \- -()
     #    \- x
 
-Code chunks can be built up into larger structures in two ways: with expressions or braced expressions:
+Calls can be built up into larger structures in two ways: with expressions or braced expressions:
 
 * Expressions are lists of code chunks, and are created when you parse a file.
   Expressions have one special behaviour compared to lists: when you `eval()`
   a expression, it evaluates each piece in turn and returns the result of last
   piece of parsed code.
 
-* Braced expressions represent complex multiline functions as a call to the
+* Braced calls represent complex multiline functions as a call to the
   special function `{`, with one argument for each code chunk in the function.
   Despite the name, braced expressions are not actually expressions, although
   the accomplish much the same task.
@@ -121,7 +121,7 @@ You can either capture it from a missing argument of the formals of a function, 
 
 ## Modifying calls
 
-It's a bad idea to create code by operating on its string representation: there is no guarantee that you'll create valid code.   
+It's generally a bad idea to create code by operating on its string representation: there is no guarantee that you'll create valid code.  Don't get me wrong: pasting strings together will often allow you to solve your problem in the least amount of time, but it may create subtle bugs that will take your users hours to track down. Learning more about the structure of the R language and the tools that allow you to modify it is an investment that will pay off by allowing you to make more robust code.
 
 [Some examples]
 
@@ -149,7 +149,7 @@ We can create our own adaption of `substitute` (that uses `substitute`!) to work
     x <- quote(a + b)
     substitute2(x, list(a = 1, b = 2))
 
-When writing functions like this, I find it helpful to do the evaluation last, only after I've made sure that I've constructed the correct substitute call with a few test inputs.  (This is also much easier to test more formally)
+When writing functions like this, I find it helpful to do the evaluation last, only after I've made sure that I've constructed the correct substitute call with a few test inputs. If you split the two pieces (call construction and evaluation) in to two functions, it's also much easier to test more formally.
 
 If you want to substitute in a variable or function name, you need to be careful to supply the right type object to substitute:
     
@@ -174,7 +174,7 @@ If you want to substitute in a variable or function name, you need to be careful
     substitute(a + b, list(a = quote(y())))
     # y() + b
 
-Another useful tool is `bquote`.  It quotes an call apart from any terms wrapped in `.()` which it evaluates:
+A special case of `substitute()` is `bquote()`.  It quotes an call, except for any terms wrapped in `.()` which it evaluates:
 
     x <- 5
     bquote(y + x)
@@ -183,13 +183,11 @@ Another useful tool is `bquote`.  It quotes an call apart from any terms wrapped
     bquote(y + .(x))
     # y + 5
 
-### Limitations of substitute
+Substitute does have some limitations: you can't change the number of arguments or their names. To do that, you'll need to modify the call directly, the topic of the next section.
 
-Can't change argument names or number.  To do that, you'll need to modify the call directly.
+## Modifying calls directly
 
-### Modifying calls directly
-
-You can also modify calls because of their list-like behaviour: just like a list, a call has `length`, `'[[` and `[` methods. The length of a call minus 1 gives the number of arguments:
+You can also modify calls by taking advantage of their list-like behaviour.  List a list, a call has `length`, `'[[` and `[` methods. The length of a call minus 1 gives the number of arguments:
 
     x <- quote(read.csv(x, "important.csv", row.names = FALSE))
     length(x) - 1
@@ -260,9 +258,9 @@ as.list(x[-1])
 
 ### Cautions
 
-Substitute + eval is an extremely powerful tool, but it can also create code that is hard for others to understand. Before you use it, make sure that you have exhausted all other possibilities. This section shows a couple of examples of inappropriate use of computing on the language that you should avoid recreating.
+Computing on the language is an extremely powerful tool, but it can also create code that is hard for others to understand. Before you use it, make sure that you have exhausted all other possibilities. This section shows a couple of examples of inappropriate use of computing on the language that you should avoid reproducing.
 
-For example, given the name of a variable and it's desired value, you might write something like this:
+Typically, computing on the language is most useful for functions called directly by the user, not by other functions. For example, you might try using `subset()` from within a function that is given the name of a variable and it's desired value:
 
       colname <- "cyl"
       val <- 6
@@ -274,7 +272,7 @@ For example, given the name of a variable and it's desired value, you might writ
       substitute(subset(mtcars, col == val), list(col = col, val = val))
       bquote(subset(mtcars, .(col) == .(val)))
 
-But in this case, there's a much better solution: use subsetting, not the subset function.
+Typically, it's better to avoid the function that does non-standard evaluation, and use the underlying verbose code.  In this case, use subsetting, not the subset function:
 
 ```R
 mtcars[mtcars[[colname]] == val, ]
@@ -313,12 +311,18 @@ This makes the function much much easier to understand - it's just calling `writ
 
 ## Creating a function
 
-A function has three components: its arguments, body (code to run) and the environment in which its defined. There are a few ways we can create a  function from these three components.  The third is probably the most straightforward (create an empty function and then modify it).  But you might want to read the others and figure out how they work - it's good practice for your computing on the language skills.
+
+Building up a function by hand is also useful when you can't use a closure because you don't know in advance what the arguments will be.
+
+
+A function has three components: its arguments, body (code to run) and the environment in which its defined. There are a few ways we can create a  function from these three components. R doesn't have a function that takes exactly these arguments, but we can make one:
 
     make_function <- function(args, body, env = parent.frame()) {
       args <- as.pairlist(args)
       eval(call("function", args, body), env)
     }
+
+There is the one place in R where we need to care about the difference between a pairlist and a list: argument lists must be provided as pairlists.
 
 To use this function we need to use the special `alist` function to create an **a**rgument list.
 
@@ -330,7 +334,9 @@ To use this function we need to use the special `alist` function to create an **
     d <- 3
     add2(1)
 
-We don't use any special evaluation tricks here because we want `make_function` to be a building block for other functions.  For example, we could create an `unenclose` function that takes a closure and modifies it so when you look at the source you can see what's going on:  (Note we need to use `substitute2` here, because `substitute` doesn't evaluate its arguments).
+We don't use any special evaluation tricks here because we want `make_function` to be a building block for other functions. 
+
+For example, we could create an `unenclose` function that takes a closure and modifies it so when you look at the source you can see what's going on: 
 
     unenclose <- function(f) {
       stopifnot(is.function(f))
@@ -347,9 +353,9 @@ We don't use any special evaluation tricks here because we want `make_function` 
     f(1)
     unenclose(f(1))
 
-(Exercise: modify this function so it only substitutes in atomic vectors, not more complicated objects.)
+(Note we need to use `substitute2` here, because `substitute` doesn't evaluate its arguments).
 
-Building up a function by hand is also useful when you can't use a closure because you don't know in advance what the arguments will be.
+(Exercise: modify this function so it only substitutes in atomic vectors, not more complicated objects.)
 
 ## Walking the code tree
 

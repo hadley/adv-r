@@ -7,9 +7,29 @@ Your code should be correct, maintainable and fast. Notice that speed comes last
 
 What can you do if your code is slow?  Before you can figure out how to improve it, you first need to figure out why it's slow.  That's what this chapter will teach you.
 
+* Figure out what is slow and then optimise that
+
 * Build up your vocab, and use built-in vectorised operations where possible.
 
-* Figure out what is slow and then optimise that
+The main point of this chapter is to illustrate some common performance bottlenecks in R and give you the skills to conduct your own experiments.  We'll focus on a work flow that uses three tools:
+
+* `profr` to identify bottlenecks in your code
+* `microbenchmark` to explore alternative approaches
+* `system.time` to track the impact of your change on real examples
+
+Having a good test suite is important when tuning the performance of your code. 
+
+## Common performance problems
+
+Most C functions are faster not because the loop is written in C instead of R, but because C always modifies in place. This is less safe, but much more efficient.  
+
+Specialised functions can usually be more efficient.
+
+* Copy on modify
+  * modifying in a loop
+  * growing objects
+* Accidental coercion
+* Method dispatch
 
 ## Benchmarking
 
@@ -42,6 +62,15 @@ The following example compares two different ways of computing means of random u
     )
     print(res2, unit = "s")
 
+### Workflow
+
+* 
+* [Vbench](http://wesmckinney.com/blog/?p=373)
+
+## Caching
+
+`readRDS`, `saveRDS`, `load`, `save`
+
 ## Performance profiling
 
 R provides a built in tool for profiling: `Rprof`. When active, this records the current call stack to disk very `interval` seconds. This provides a fine grained report showing how long each function takes. 
@@ -64,11 +93,9 @@ There are three ways to explore memory usage:
   * `Rprof` + `memory`
   * `Rprofmem`
 
- Another useful function is:
+Another useful function is:
 
-    .Internal(inspect(z1)) 
-
-
+  .Internal(inspect(z1)) 
 
 
 [microbenchmark]: http://cran.r-project.org/web/packages/microbenchmark/index.html

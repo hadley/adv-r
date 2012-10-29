@@ -24,8 +24,7 @@ There is a tension between interactive analysis and programming. When you a doin
 
   * Use `TRUE` and `FALSE` instead of `T` and `F`
 
-  * Try to avoid relying on position matching or partial name matching when
-    calling functions
+  * Avoid functions that have non-standard evaluation rules (no subset, with, transform) 
 
 * Avoid functions that can return different types of objects:
 
@@ -398,6 +397,13 @@ A common use for `try` and `tryCatch` is to set a default value if a condition f
       # Do something that might fail
       success <- TRUE
     })
+
+An alternative idiom is
+
+    success <- tryCatch({
+      # Do something that might fail
+      success <- TRUE      
+    }, error = function(e) FALSE)
 
 We can write a simple version of `try` using `tryCatch`. The real version of `try` is considerably more complicated to preserve the usual error behaviour.
 
