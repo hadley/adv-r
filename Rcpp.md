@@ -138,6 +138,10 @@ Useful algorithms
 
 http://community.topcoder.com/tc?module=Static&d1=tutorials&d2=alg_index
 
+### Profiling
+
+http://stackoverflow.com/questions/13224322/profiling-rcpp-code-on-os-x
+
 ## More Rcpp
 
 This chapter has only touched on a small part of Rcpp, giving you the basic tools to rewrite poorly performing R code in C++.  Rcpp has many other capabilities that make it easy to interface R to existing C++ code, including:
