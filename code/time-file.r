@@ -18,7 +18,6 @@ comment_ref <- function(x) {
 }
 
 time_file <- function(path) {
-  path <- "summarise-by.r"
   lines <- readLines(path)
 
   # Remove any line starting with #:

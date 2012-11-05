@@ -19,7 +19,8 @@
   * [[Computing on the language|Computing-on-the-language]]
   * [[Exceptions, debugging and getting help|Exceptions-debugging]]
 * Performant code
-  * [[Performance and profiling|performance]]
+  * [[Profiling and benchmarking|profiling]]
+  * [[General performance tips and tricks|performance]]
   * [[R's C interface|c-interface]]
   * [[High performance functions with Rcpp|Rcpp]]
 
