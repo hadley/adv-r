@@ -113,6 +113,9 @@ From the standard template library (STL).  Can be very useful when implementing 
 
 Useful resources:
 
+* http://www.cplusplus.com/reference/algorithm/
+* http://www.cplusplus.com/reference/stl/
+
 * http://www.davethehat.com/articles/eff_stl.htm
 * http://www.sgi.com/tech/stl/
 * http://www.uml.org.cn/c++/pdf/EffectiveSTL.pdf
