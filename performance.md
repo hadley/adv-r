@@ -17,7 +17,9 @@ Using the compiler is an easy way to get speed ups - it's easy to use, and if it
 
 ## Important vectorised functions
 
-    cumsum
+    cumsum, diff
     rowSums, colSums, rowMeans, colMeans
     rle
-    
+    match
+    duplicated
+
