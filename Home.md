@@ -47,4 +47,3 @@ Packages are the fundamental unit of reproducible R code. They include reusable 
 
   [lang-def]:http://cran.r-project.org/doc/manuals/R-lang.html
   [r-ext]:http://cran.r-project.org/doc/manuals/R-exts.html
-tic
