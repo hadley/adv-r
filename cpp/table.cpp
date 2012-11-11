@@ -2,6 +2,7 @@
 #include <boost/unordered_map.hpp>
 using namespace Rcpp;
 
+// [[Rcpp::export]]
 IntegerVector table1(const CharacterVector x) {
   std::map<std::string, int> counts;
   std::vector<std::string> vec = as<std::vector<std::string> >(x);
@@ -25,6 +26,7 @@ IntegerVector table1(const CharacterVector x) {
   return(out);
 }
 
+// [[Rcpp::export]]
 IntegerVector table4(CharacterVector x) {
   boost::unordered_map<std::string, int> counts;
 
@@ -46,6 +48,7 @@ IntegerVector table4(CharacterVector x) {
   return(out);
 }
 
+// [[Rcpp::export]]
 std::map<std::string, int> table5(CharacterVector x) {
   std::map<std::string, int> counts;
   int n = x.size();
