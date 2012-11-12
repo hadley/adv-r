@@ -25,10 +25,15 @@ microbenchmark(
 # About 25% faster without check for NA
 # About the same speed with NA check
 
-
 # match ------------------------------------------------------------------------
 
 sourceCpp("match.cpp")
+# Ask JJ about custom hashing function for R strings - since they're
+# already in a string table, we can use that pointer as a hash.
+#
+# Building up a hash table is probably a common enough operation that'd
+# it be useful to have a template that dispatched on the type of the
+# input.
 
 # Long x, short table
 x <- sample(letters, 1e4, rep = T)
@@ -44,9 +49,6 @@ microbenchmark(
   match1(x[1:10], x),
   match2(x[1:10], x)
 )
-
-# Ask JJ about custom hashing function for R strings - since they're
-# already in a string table, we can use that pointer as a hash.
 
 microbenchmark(
   match(x[9990:10000], x),

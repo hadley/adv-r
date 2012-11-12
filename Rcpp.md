@@ -238,8 +238,6 @@ http://stackoverflow.com/questions/13224322/profiling-rcpp-code-on-os-x
     ifelse (R) ?
     match
     %in%
-    merge
-    range.default (makes copies, two passes)
     anyNA (vs any(is.NA(x)) - short circuiting)
 
  
