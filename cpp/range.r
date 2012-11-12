@@ -9,5 +9,6 @@ microbenchmark(
   min(x, na.rm = TRUE),
   max(x, na.rm = TRUE),
   range2(x, TRUE),
-  range3(x, TRUE)
+  range3(x, TRUE),
+  range4(x, TRUE)
 )
