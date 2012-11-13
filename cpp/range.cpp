@@ -8,8 +8,8 @@ NumericVector range2(NumericVector x, const bool na_rm) {
   out[1] = R_NegInf;
 
   int n = x.length();
-  for(int i = 0; i < n; i++) {
-    if (!na_rm && x[i] == NA_REAL) {
+  for(int i = 0; i < n; ++i) {
+    if (!na_rm && R_IsNA(x[i])) {
       out[0] = NA_REAL;
       out[1] = NA_REAL;
       return(out);
@@ -23,7 +23,7 @@ NumericVector range2(NumericVector x, const bool na_rm) {
 
 }
 
-// Iterators - the right way
+// Iterators - the right way (but no faster than raw access)
 // [[Rcpp::export]]
 NumericVector range3(NumericVector x, const bool na_rm) {
   NumericVector out(2);
@@ -34,7 +34,7 @@ NumericVector range3(NumericVector x, const bool na_rm) {
   NumericVector::iterator end = x.end();
   for(it = x.begin(); it != end; ++it) {
     double val = *it;
-    if (!na_rm && val == NA_REAL) {
+    if (!na_rm && R_IsNA(val)) {
       out[0] = NA_REAL;
       out[1] = NA_REAL;
       return(out);
@@ -48,19 +48,17 @@ NumericVector range3(NumericVector x, const bool na_rm) {
 
 }
 
-
-// Avoid initial comparisons
+// Iterators - the _really_ right way but much slower
 // [[Rcpp::export]]
-NumericVector range4(NumericVector x, const bool na_rm) {
+NumericVector range3a(const NumericVector& x, const bool na_rm) {
   NumericVector out(2);
-  out[0] = x[0];
-  out[1] = x[1];
+  out[0] = R_PosInf;
+  out[1] = R_NegInf;
 
-  NumericVector::iterator it = x.begin();
-  NumericVector::iterator end = x.end();
-  for(it++; it != end; ++it) {
+  NumericVector::iterator it;
+  for(it = x.begin(); it != x.end(); ++it) {
     double val = *it;
-    if (!na_rm && val == NA_REAL) {
+    if (!na_rm && R_IsNA(val)) {
       out[0] = NA_REAL;
       out[1] = NA_REAL;
       return(out);
@@ -71,9 +69,4 @@ NumericVector range4(NumericVector x, const bool na_rm) {
   }
 
   return(out);
-
 }
-
-// Other optimisations: you can reduce the number of comparisons
-// because if a value is a new min it's probably not the new max - could
-// also elim
