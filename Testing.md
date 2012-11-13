@@ -158,7 +158,7 @@ If you don't like the readable, but verbose, `expect_that` style, you can use on
   <tr><td><code>expect_that(x, equals(y))</code></td><td><code>expect_equal(x, y)</code></td></tr>
   <tr><td><code>expect_that(x, is_equivalent_to(y))</code></td><td><code>expect_equivalent(x, y)</code></td></tr>
   <tr><td><code>expect_that(x, is_identical_to(y))</code></td><td><code>expect_identical(x, y)</code></td></tr>
-  <tr><td><code>expect_that(x, matches(y))</code></td><td><code>expect_matches(x, y)</code></td></tr>
+  <tr><td><code>expect_that(x, matches(y))</code></td><td><code>expect_match(x, y)</code></td></tr>
   <tr><td><code>expect_that(x, prints_text(y))</code></td><td><code>expect_output(x, y)</code></td></tr>
   <tr><td><code>expect_that(x, shows_message(y))</code></td><td><code>expect_message(x, y)</code></td></tr>
   <tr><td><code>expect_that(x, gives_warning(y))</code></td><td><code>expect_warning(x, y)</code></td></tr>
@@ -291,7 +291,7 @@ Each expectation is displayed as either a green dot (indicating success) or a re
 
 If you want a more minimal report, suitable for display on a dashboard, you can use a different reporter. `testthat` comes with three reporters: stop, minimal and summary. The stop reporter is the default and `stop()`s whenever a failure is encountered, and the summary report is the default for `test_file` and `test_dir`. The minimal reporter is shown below: it prints `.` for success, `E` for an error and `F` a failure. The following output shows the results of running the `stringr` test suite with the minimal reporter.
 
-    > test_dir("inst/tests/", "minimal")
+    > test_dir("inst/tests/", reporter="minimal")
     ...............................................
 
 ### Autotest
