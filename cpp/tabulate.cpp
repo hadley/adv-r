@@ -16,6 +16,8 @@ IntegerVector tabulate1(IntegerVector x, const int max) {
   return(counts);
 }
 
+// Don't really need explicit R_IsNA(pos) check because in C++ all comparisons
+// involving a NaN always return false
 // [[Rcpp::export]]
 IntegerVector tabulate2(const IntegerVector x, const int max) {
   IntegerVector counts(max);

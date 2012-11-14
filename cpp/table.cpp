@@ -59,3 +59,42 @@ std::map<std::string, int> table5(CharacterVector x) {
   }  
   return counts;
 }
+
+// [[Rcpp::export]]
+std::map<std::string, int> table6(CharacterVector x) {
+    
+  // perform the count
+  std::map<const char*, int> counts;
+  for (int i = 0; i < x.size(); i++) {
+    const char* name = x[i];
+    counts[name]++;
+  }
+  
+  // creating a new map keyed by std::string
+  std::map<std::string,int> result;
+  for (std::map<const char*, int>::const_iterator 
+         it = counts.begin(); it != counts.end(); ++it) {
+    result[it->first] = result[it->first] + it->second;
+  }
+  return result;
+}
+
+// [[Rcpp::export]]
+std::map<std::string, int> table6a(CharacterVector x) {
+    
+  // perform the count
+  std::map<const char*, int> counts;
+  int n = x.size();
+  for (int i = 0; i < n; i++) {
+    const char* name = x[i];
+    counts[name]++;
+  }
+  
+  // creating a new map keyed by std::string
+  std::map<std::string,int> result;
+  for (std::map<const char*, int>::const_iterator 
+         it = counts.begin(); it != counts.end(); ++it) {
+    result[it->first] = result[it->first] + it->second;
+  }
+  return result;
+}

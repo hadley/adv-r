@@ -1,10 +1,8 @@
 # High performance functions with Rcpp
 
-Sometimes R code just isn't fast enough - you've already used all of the tips and tricks you know and you've used profiling to find the bottleneck, and there's simply no way to make the code any faster. This chapter is the answer to that problem: use Rcpp to easily write key functions in C++ to get all the performance of C, while sacrificing the minimum of convenience. [Rcpp](http://dirk.eddelbuettel.com/code/rcpp.html) is a fantastic tool written by Dirk Eddelbuettel and Romain Francois that makes it dead simple to write high-performance code in C++ that easily interfaces with the R-level data structures.
+Sometimes R code just isn't fast enough - you've used profiling to find the bottleneck, but there's simply no way to make the code any faster. This chapter is the answer to that problem: use Rcpp to easily write key functions in C++ to get high-performance functions that only take slightly longer to write than their R requivalents. [Rcpp](http://dirk.eddelbuettel.com/code/rcpp.html) is a fantastic tool written by Dirk Eddelbuettel, Romain Francois, Doug Bates, John Chambers and JJ Allaire that makes it dead simple to write high-performance R code in C++.
 
-You can also write high performance code in straight C or Fortran. These may (or may not) be more performant than C++, but you have to sacrifice a lot of convenience and master the complex C internals of R, as well as doing memory management yourself. In my opinion, using Rcpp is currently the best balance between speed and convenience.
-
-Writing performant code may also require you to rethink your basic approach: a solid understand of basic data structures and algorithms is very helpful here.  That's beyond the scope of this book, but I'd suggest the "algorithm design handbook" as a good place to start.  Or http://ocw.mit.edu/courses/electrical-engineering-and-computer-science/6-046j-introduction-to-algorithms-sma-5503-fall-2005/
+It is possible to write high performance code in C or Fortran. This may (or may not) be produce faster code, but it will almost certainly take you much much longer to write.  Without Rcpp, you must sacrifice a lot of very helpful wrappers and master the complex C internals of R yourself. In my opinion, using Rcpp is currently the best balance between speed and convenience.
 
 The basic strategy is to keep as much code as possible in R, because:
 
@@ -12,31 +10,23 @@ The basic strategy is to keep as much code as possible in R, because:
 
 * people reading/maintaining your code in the future will probably be more familiar with R than C++
 
-Implementing bottlenecks in C++ can give considerable speed ups (2-3 orders of magnitude) and allows you to easily access best-of-breed data structures.  Keeping the majority of your code in straight R, means that you don't have to sacrifice the benefits of R.  
+Implementing bottlenecks in C++ can give considerable speed ups (2-3 orders of magnitude) and allows you to easily access best-of-breed data structures.  Keeping the majority of your code in straight R, means that you don't have to sacrifice R's rapid development and huge library of statistical functions.  
 
 Typical bottlenecks involve:
 
  * loops that can't easily be vectorised because each iteration depends on the previous: this is because C++ modifies in place by default, so there is little overhead for modifying a data structure many many times.
  
- * functions that are most elegantly expressed recursively: the overhead of calling a function in C++ is much much lower than the overhead of all a function in R.
+ * functions that are most elegantly expressed recursively: the overhead of calling a function in C++ is much much lower than the overhead of all a function in R.  (It's often possible to rewrite recursive functions in a iterative way, but that may muddy their intent).
  
- * functions that advanced data structures and algorithms that R doesn't provide
+ * problems that advanced data structures and algorithms that R doesn't provide.
 
-The aim of this chapter is to give you the absolute basics to get up and running with Rcpp for the purpose of speeding up slow parts of your code. You'll lean the essence of C++ by seeing how simple R functions are converted to there C++ equivalents.  Other resources that I found helpful when writing this chapter and you might too are:
+The aim of this chapter is to give you the absolute basics to get up and running with Rcpp for the purpose of speeding up slow parts of your code. You'll lean the essence of C++ by seeing how simple R functions are converted to their C++ equivalents. 
 
-* Slides from the [Rcpp master class ](http://dirk.eddelbuettel.com/blog/2011/04/29/#rcpp_class_2011-04_slides) taught by Dirk Eddelbuettel and Romain Francois in April 2011.
+## Getting started with Rcpp
 
-## Getting started
+All examples in this chapter need at least version 0.10 of the `Rcpp` package. This version includes `cppFunction`, which makes it easier than ever to connect C++ to R. You'll also (obviously) need a working C++ compiler.  
 
-All examples in this chapter use the development version of the `Rcpp` package (>= 0.9.15.6). This version includes `cppFunction`, which makes it easier than ever to connect C++ to R.  You can install it with:
-
-    install.packages("Rcpp", repos="http://R-Forge.R-project.org", 
-      type = "source")
-    library(Rcpp)
-
-You'll also (obviously) need a working C++ compiler. 
-
-`cppFunction` works slightly differently to `install::cfunction` - you specify the function completely in the string, and it parses that function to figure out what the arguments to the R function should be.  
+If you're familiar with `inline::cfunction`, `cppFunction` is similarly, except that you specifcy the function completely in the string, and it parses the C++ function arguments to figure out what the R function arguments should be:
 
     cppFunction('
       int fib(const int x) {
@@ -45,52 +35,48 @@ You'll also (obviously) need a working C++ compiler.
         return fib(x - 1) + fib(x - 2);
       }'
     )
-    fib(2)
-    fib(-1) # segfault from C stack overflow
-    fib(y = 1) # no error
-    fib(1, 2) # no error
-    fib(135) # no way to escape
-    fib("a") # errors
+    formals(fib)
 
-The final section of this chapter shows you how to turn C++ functions you've created with `cppFunction` into C++ code for a package. While using `cppFunction` is easiest when exploring new code (and in tutorials like this), when you're actually developing code it's easier to set up a src directory and use `devtools::load_all` to automatically reload and recompile your code.
+As well compiling C++ code inline, you can also create whole files of C++ code and load them with `sourceCpp`, and you can easily include C++ in a package.  Both of these uses are described at the end of the package.  While using `cppFunction` is easiest when exploring new code (and in tutorials like this), when you're actually developing code it's easier to set up a src directory and use `devtools::load_all` to automatically reload and recompile your code.
 
-## Essentials of C++
+## Getting starting with C++
 
-C++ is a large language, and there's no way to cover it exhaustively here.  Our aim is to give you the the absolute basics so that you can start writing fast code. We we'll spend minimal time on object oriented C++ and on templating, because our focus is not on writing big programs in C++, just single, self-contained functions that allow you to speed up slow parts of your R code.  We'll focus on C++ 11 (the C++ standard written in 2011, formerly known as C++0x (as it was supposed be finished by 2009))
+C++ is a large language, and there's no way to cover it exhaustively here.  Our aim is to give you the basics so that you can start writing fast code. We we'll spend minimal time on object oriented C++ and on templating, because our focus is not on writing big programs in C++, just single, self-contained functions that allow you to speed up slow parts of your R code.  
 
-C++ strengths are as an infrastructure program language. Designed for environments where speed and safety are critical. This comes at a cost of verbosity compared to R - there is a quite a lot more typing to do (although modern C++ 11 techniques can offset that a lot).  
+<!-- We'll focus on C++ 11 (the C++ standard written in 2011, formerly known as C++0x (as it was supposed be finished by 2009))
+ -->
 
-The biggest differences from R are:
-
-* C++ is compiled: 
-* semi-colon at end of each line
-* static typing
-* vectors are 0-based
-* compiled, not interpreted 
-* variables are scalars by default
-* `pow` instead of `^`
-
-In the following section we'll compare and contrast basic R functions with their C++ equivalents.
-
-Let's start with a very simple function.  It has no arguments and always returns the the integer1 :
+In the following section we'll compare and contrast basic R functions with their C++ equivalents. Let's start with a very simple function. It has no arguments and always returns the the integer 1:
 
     one <- function() 1L
 
-This example shows some of the key differences between R and C++:
+The equivalent C++ function is: 
+
+    int one() {
+      return(1);
+    }
+
+We can compile and use this from R with `cppFunction`
 
     cppFunction('
       int one() {
         return(1);
-      }'
-    )
+      }
+    ')
 
-In C++ the syntax to create a function looks like the syntax to call a function: `one() {...}`.  Another key difference is that we have to declare the type of output the function returns: an integer.
+This small function illustrates a number of important differences between R and C++:
 
-* Vector: `IntegerVector`, scalar: `int`
-* Vector: `NumericVector`, scalar: `double`
-* Vector: `CharacterVector`, scalar: `std::string`
+* In C++ the syntax to create a function looks like the syntax to call a function: `one() {...}`.  We don't use assignment to create functions.
 
-The final difference is that we must use an explicit `return` statement in C++, and that every statement is terminated by a `;`.
+* We must declare the type of output the function returns. This function returns an `int` (a scalar integer). The classes for the most common types of R vectors are: `NumericVector`, `IntegerVector`, `CharacterVector` and `LogicalVector`.
+
+* C++ distinguishes between scalars and vectors. The scalar equivalents of numeric, integer, character and logical vectors are: `double`, `int`, `std::string` and `bool`.
+
+* We must use an explicit `return` statement 
+
+* Every statement is terminated by a `;`.
+
+The next example function makes things a little more complicated
 
     sign1 <- function(x) {
       if (x > 0) {
@@ -103,7 +89,7 @@ The final difference is that we must use an explicit `return` statement in C++, 
     }
 
     cppFunction('
-      int sign2(const int x) {
+      int sign2(int x) {
         if (x > 0) {
           return(1);
         } else if (x == 0) {
@@ -119,46 +105,55 @@ In the C++ version:
 * we need to declare what type of input the function takes
 * the if syntax is identical
 
-Let's continue the example by vectorising it
+One big difference between R and C++ is that the cost of loops is much lower.  For example, we could implement the `sum` function in R using a loop: but if you've been programming in R a while this will look pretty strange. 
 
-    sign1 <- function(x) {
-      
-      if (x > 0) {
-        1
-      } else if (x == 0) {
-        0
-      } else {
-        -1
+    sum1 <- function(x) {
+      total <- 0;
+      for (i in seq_along(x)) {
+        total <- total + x[i]
       }
+      total
     }
 
     cppFunction('
-      int sign2(const int x) {
-        if (x > 0) {
-          return(1);
-        } else if (x == 0) {
-          return(0);
-        } else {
-          return(-1);
+      double sum2(NumericVector x) {
+        int n = x.size();
+        double total = 0;
+        for(int i = 0; i < n; i++) {
+          total =+ x[i];
         }
-      }'
+        return(total);
+      }
+    ')
+
+The C++ version is similar, but:
+
+* The `for` statement has a different syntax: `for(intialise; condition; increase)`.
+
+* Vectors in C++ start at 0. I'll say this again because it's so important: VECTORS IN C++ START AT 0! Forgetting that is probably the most common source of bugs when converting R functions to C++.
+
+* We can take advantage of the in-place modification operator `total =+ x[i]` which is equivalent to `total = total + x[i]`.  Similar in-place operators are `=-`, `=*` and `=/`.  
+
+This is a good example of where C++ is much more efficient than the R equivalent: our `sum2` function is competitive with the built-in (and highly optimised) `sum` function, while `sum1` is several orders of magnitude slower.
+
+    library(microbenchmark)
+    x <- runif(1e3)
+    microbenchmark(
+      sum(x),
+      sum1(x),
+      sum2(x)
     )
 
-    diff1 <- function(x, lag) {
-      n <- length(x)
-      y <- numeric(n)
+<!-- 
+* for loops
+* 0-based indices
 
-      for (i in seq(lag + 1, n)) {
-        y[i - lag + 1] <- x[i] - x[i - lag + 1]
-      }
-      y
-    }
+* initialising scalars
+* initialising vectors
 
+* `pow` instead of `^`
+ -->
 
-* basic syntax
-* creating variables and assigning
-* control flow (new for statement)
-* functions
 
 ## Variable types
 
@@ -176,7 +171,7 @@ Also provides matrix equivalents of the above classes.
 * Environment
 * DataFrame
 
-As well as classes for many more specialised language objects: `ComplexVector`, `RawVector`, `DottedPair`, `Language`,  `Promise`, `Symbol`, `WeakReference` and so on.  These are beyond the scope of this document and won't be discussed further.
+As well as classes for many more specialised language objects: `ComplexVector`, `RawVector`, `DottedPair`, `Language`,  `Promise`, `Symbol`, `WeakReference` and so on. These are beyond the scope of this document and won't be discussed further.
 
 You can also use standard C++ variable types for scalars: `int`, `long`, `float`, `double`, `bool`, `char`, `std::string`.  
 
@@ -274,4 +269,9 @@ Namespace:
 Makefiles
 
 R function
+
+## Learning more
+
+Writing performant code may also require you to rethink your basic approach: a solid understand of basic data structures and algorithms is very helpful here.  That's beyond the scope of this book, but I'd suggest the "algorithm design handbook" as a good place to start.  Or http://ocw.mit.edu/courses/electrical-engineering-and-computer-science/6-046j-introduction-to-algorithms-sma-5503-fall-2005/
+
 
