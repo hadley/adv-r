@@ -1,4 +1,4 @@
-pandoc -o book.pdf \
+pandoc --chapters --listings --latex-engine xelatex -o book.pdf \
   Introduction.md \
   Functions.md \
   Environments.md \
