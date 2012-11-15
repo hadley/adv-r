@@ -16,8 +16,7 @@ cppFunction('
   double sum2(NumericVector x) {
     double total = 0;
 
-    NumericVector::iterator end = x.end();
-    for(NumericVector::iterator it = x.begin(); it != end; it++) {
+    for(NumericVector::iterator it = x.begin(); it != x.end(); it++) {
       total += *it;
     }
     return(total);
@@ -28,25 +27,26 @@ cppFunction('
   double sum2a(NumericVector x) {
     double total = 0;
 
-    for(NumericVector::iterator it = x.begin(); it != x.end(); it++) {
+    NumericVector::iterator end = x.end();
+    for(NumericVector::iterator it = x.begin(); it != end; it++) {
       total += *it;
     }
     return(total);
   }
 ')
 
+
 cppFunction('
   #include <numeric>
-  double sum4(NumericVector x) {
+  double sum3(NumericVector x) {
 
-    double total = std::accumulate(x.begin(), x.end(), 0);
+    double total = std::accumulate(x.begin(), x.end(), 0.0);
     return(total);
   }
 ')
 cppFunction('
   #include <numeric>
-  double sum5(NumericVector x) {
-
+  double sum4(NumericVector x) {
     return(sum(x));
   }
 ')
@@ -55,9 +55,10 @@ cppFunction('
 library(microbenchmark)
 x <- runif(1e4)
 print(microbenchmark(
+   sum(x),
+   sum1(x),
    sum2(x),
    sum2a(x),
    sum3(x),
-   sum4(x),
-   sum5(x)
+   sum4(x)
 ))

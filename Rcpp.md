@@ -10,7 +10,7 @@ The basic strategy is to keep as much code as possible in R, because:
 
 * people reading/maintaining your code in the future will probably be more familiar with R than C++
 
-Implementing bottlenecks in C++ can give considerable speed ups (2-3 orders of magnitude) and allows you to easily access best-of-breed data structures.  Keeping the majority of your code in straight R, means that you don't have to sacrifice R's rapid development and huge library of statistical functions.  
+Implementing bottlenecks in C++ can give considerable speed ups (2-3 orders of magnitude) and allows you to easily access best-of-breed data structures.  Keeping the majority of your code in straight R, means that you don't have to sacrifice R's rapid development and huge library of statistical functions.  Note, however, that many functions that would be bottlenecks if implemented in pure R have already been turned into hand-rolled C. To write functions in C++ that are faster than these often takes some tuning and performance tricks.  That's not the aim of this chapter - often the naive approach will get you within 20% of the running time of the base R function.  If you need more performance, you'll need to consult other sources (some of which are described in the final section of this chapter).
 
 Typical bottlenecks involve:
 
@@ -24,24 +24,23 @@ The aim of this chapter is to give you the absolute basics to get up and running
 
 ## Getting started with Rcpp
 
-All examples in this chapter need at least version 0.10 of the `Rcpp` package. This version includes `cppFunction`, which makes it easier than ever to connect C++ to R. You'll also (obviously) need a working C++ compiler.  
+All examples in this chapter need at least version 0.10 of the `Rcpp` package. This version includes `cppFunction`, which makes it very easy to connect C++ to R. You'll also (obviously) need a working C++ compiler.  
 
 If you're familiar with `inline::cfunction`, `cppFunction` is similarly, except that you specifcy the function completely in the string, and it parses the C++ function arguments to figure out what the R function arguments should be:
 
     cppFunction('
-      int fib(const int x) {
-        if (x == 0) return(0); 
-        if (x == 1) return(1);
-        return fib(x - 1) + fib(x - 2);
+      int add(int x, int y, int z) {
+        int sum = x + y + z;
+        return(sum);
       }'
     )
-    formals(fib)
+    formals(add)
 
-As well compiling C++ code inline, you can also create whole files of C++ code and load them with `sourceCpp`, and you can easily include C++ in a package.  Both of these uses are described at the end of the package.  While using `cppFunction` is easiest when exploring new code (and in tutorials like this), when you're actually developing code it's easier to set up a src directory and use `devtools::load_all` to automatically reload and recompile your code.
+As well compiling C++ code inline, you can also create whole files of C++ code and load them with `sourceCpp`, and you can easily include C++ code in a package.  Both of these uses are described at the end of the chapter.  While using `cppFunction` is easiest when exploring new code (and in tutorials like this), when you're actually developing code it's easier to set up a src directory and use `devtools::load_all` (or similar tools) to automatically reload and recompile your code.
 
 ## Getting starting with C++
 
-C++ is a large language, and there's no way to cover it exhaustively here.  Our aim is to give you the basics so that you can start writing fast code. We we'll spend minimal time on object oriented C++ and on templating, because our focus is not on writing big programs in C++, just single, self-contained functions that allow you to speed up slow parts of your R code.  
+C++ is a large language, and there's no way to cover it exhaustively here.  Our aim is to give you the basics so that you can start writing useful functions in C++. We we'll spend minimal time on object oriented C++ and on templating, because our focus is not on writing big programs in C++, just small, mostly self-contained functions that allow you to speed up slow parts of your R code.  
 
 <!-- We'll focus on C++ 11 (the C++ standard written in 2011, formerly known as C++0x (as it was supposed be finished by 2009))
  -->
@@ -102,10 +101,11 @@ The next example function makes things a little more complicated
 
 In the C++ version:
 
-* we need to declare what type of input the function takes
-* the if syntax is identical
+* we need to declare the type of each of the function's inputs, in the same way we need to declare the type of output it produces
 
-One big difference between R and C++ is that the cost of loops is much lower.  For example, we could implement the `sum` function in R using a loop: but if you've been programming in R a while this will look pretty strange. 
+* the if syntax is identical - while there are some big differences between R and C++, there are also lots of similarities!
+
+One big difference between R and C++ is that the cost of loops is much lower.  For example, we could implement the `sum` function in R using a loop. If you've been programming in R a while, you'll probably have a visceral reaction to this function: why aren't I using an internal vectorise function?!
 
     sum1 <- function(x) {
       total <- 0;
@@ -114,6 +114,8 @@ One big difference between R and C++ is that the cost of loops is much lower.  F
       }
       total
     }
+
+In C++, for loops have very little overhead, and it's fine to use them (although as we'll see later, like in R, there are better alternatives that more clearly express your intent).
 
     cppFunction('
       double sum2(NumericVector x) {
@@ -211,13 +213,13 @@ The main changes are in the for loop:
 
 Also notice the type of the iterator: `NumericVector::iterator`.  Each vector type has it's own iterator type: `LogicalVector::iterator`, `CharacterVector::iterator` etc.
 
-Iterators also allow us to use the C++ equivalents of the apply family of functions. For example, we could again rewrite to use the `accumulate` function, which takes an starting and ending iterator and adds all the values in between.
+Iterators also allow us to use the C++ equivalents of the apply family of functions. For example, we could again rewrite to use the `accumulate` function, which takes an starting and ending iterator and adds all the values in between. The third argument to accumulate gives the initial value: it's particularly important because this also determines the data type that accumulate uses (here we use `0.0` and not `0` so that accumulate uses a `double`, not an `int`.)
 
     cppFunction('
       #include <numeric>
       double sum4(NumericVector x) {
 
-        double total = std::accumulate(x.begin(), x.end(), 0);
+        double total = std::accumulate(x.begin(), x.end(), 0.0);
         return(total);
       }
     ')
@@ -231,21 +233,27 @@ The `<algorithm>` provides a large number of algorithms that work with iterators
       IntegerVector findInterval2(NumericVector x, NumericVector breaks) {
         IntegerVector out(x.size());
 
-        NumericVector::iterator it;
+        NumericVector::iterator it, pos;
         IntegerVector::iterator out_it;
 
         for(it = x.begin(), out_it = out.begin(); it != x.end(); it++, out_it++) {
-          NumericVector::iterator pos = std::upper_bound(breaks.begin(), breaks.end(), *it);
-          *out_it = pos - breaks.begin();
+          pos = std::upper_bound(breaks.begin(), breaks.end(), *it);
+          *out_it = std::distance(pos, breaks.begin());
         }
 
         return(out);
       }
     ')
 
-* We step through two iterators (input and output) simultaneously.  We can also assign into an deferenced iterator to change the values in the vector.
+* We step through two iterators (input and output) simultaneously.  
 
-* `upper_bound` returns an iterator - if we wanted the value of the `upper_bound` we could dereference it.  To figure out the position of the `upper_bound` we subtract it from the position of the first iterator. (Note that this will not work for all types of iterators)
+* We can also assign into an deferenced iterator (`out_it`) to change the values in `out`.
+
+* `upper_bound` returns an iterator.  If we wanted the value of the `upper_bound` we could dereference it; to figure out its location, we use the `distance` function.
+
+* Small note: if we want this function to be as fast as `findInterval` in R (which uses hand-written C code), we need to cache access to `.begin()` and `.end`.  This is simple but it adds cognitive overhead that distracts from this example.
+
+It's generally better to use algorithms from the STL than hand rolled loops.  In "Effective STL", Scott Meyer gives three reasons: efficiency, correctness and maintainability.  Also makes clear the intent.  Extremely well tested and performant.
 
 ### Sugar
 
@@ -271,7 +279,7 @@ Some resources that you might find helpful are:
 * http://www.davethehat.com/articles/eff_stl.htm
 * http://www.sgi.com/tech/stl/
 
-* vector: like an R vector, but efficiently grows (but see the reserve method if you know something about how many space you'll need)
+* vector: like an R vector, but grows efficiently (but use the `reserve` method if you know how much space you need in advance)
 * set: no duplicates, sorted
 * map
 
@@ -347,4 +355,4 @@ Writing performant code may also require you to rethink your basic approach: a s
 * [Effective C++](http://amzn.com/0321334876)
 * [Effective STL](http://amzn.com/0201749629)
 
-
+* http://www.cs.helsinki.fi/u/tpkarkka/alglib/k06/

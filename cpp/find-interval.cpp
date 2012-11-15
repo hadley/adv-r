@@ -11,7 +11,7 @@ IntegerVector findInterval2(NumericVector x, NumericVector breaks) {
 
   for(it = x.begin(), out_it = out.begin(); it != x.end(); it++, out_it++) {
     ubound = std::upper_bound(breaks.begin(), breaks.end(), *it);
-    *out_it = ubound - breaks.begin();
+    *out_it = std::distance(ubound, breaks.begin());
   }
 
   return(out);
@@ -28,7 +28,7 @@ IntegerVector findInterval3(NumericVector x, NumericVector breaks) {
   
   for(; x_it != x_end; x_it++, out_it++) {
     ubound = std::upper_bound(breaks_it, breaks_end, *x_it);
-    *out_it = ubound - breaks_it;
+    *out_it = std::distance(ubound, breaks_it);
   }
 
   return(out);
