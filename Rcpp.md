@@ -42,8 +42,7 @@ As well compiling C++ code inline, you can also create whole files of C++ code a
 
 C++ is a large language, and there's no way to cover it exhaustively here.  Our aim is to give you the basics so that you can start writing useful functions in C++. We we'll spend minimal time on object oriented C++ and on templating, because our focus is not on writing big programs in C++, just small, mostly self-contained functions that allow you to speed up slow parts of your R code.  
 
-<!-- We'll focus on C++ 11 (the C++ standard written in 2011, formerly known as C++0x (as it was supposed be finished by 2009))
- -->
+### No inputs, scalar output
 
 In the following section we'll compare and contrast basic R functions with their C++ equivalents. Let's start with a very simple function. It has no arguments and always returns the the integer 1:
 
@@ -75,6 +74,8 @@ This small function illustrates a number of important differences between R and 
 
 * Every statement is terminated by a `;`.
 
+### Scalar input, scalar output
+
 The next example function makes things a little more complicated
 
     sign1 <- function(x) {
@@ -103,7 +104,9 @@ In the C++ version:
 
 * we need to declare the type of each of the function's inputs, in the same way we need to declare the type of output it produces
 
-* the if syntax is identical - while there are some big differences between R and C++, there are also lots of similarities!
+* the `if` syntax is identical - while there are some big differences between R and C++, there are also lots of similarities!  C++ also has a `while` statement that works the same way as R's.  You can also use `break`, but instead of R's `next`, C++ has `continue`.
+
+### Vector input, scalar output
 
 One big difference between R and C++ is that the cost of loops is much lower.  For example, we could implement the `sum` function in R using a loop. If you've been programming in R a while, you'll probably have a visceral reaction to this function: why aren't I using an internal vectorise function?!
 
@@ -115,13 +118,13 @@ One big difference between R and C++ is that the cost of loops is much lower.  F
       total
     }
 
-In C++, for loops have very little overhead, and it's fine to use them (although as we'll see later, like in R, there are better alternatives that more clearly express your intent).
+In C++, for loops have very little overhead, so it's fine to use them (although as we'll see later, like in R, there are better alternatives that more clearly express your intent).
 
     cppFunction('
       double sum2(NumericVector x) {
-        int n = x.size();
+        int n = x.length();
         double total = 0;
-        for(int i = 0; i < n; i++) {
+        for(int i = 0; i < n; ++i) {
           total += x[i];
         }
         return(total);
@@ -130,9 +133,13 @@ In C++, for loops have very little overhead, and it's fine to use them (although
 
 The C++ version is similar, but:
 
-* The `for` statement has a different syntax: `for(intialise; condition; increase)`.
+* To find the length of the vector, we use the `length()` method, which returns an integer. Again, whenever we create a new variable we have to tell C++ what type of object it will hold. An int is a scalar integer, but we could have used double for a scalar numeric, bool for a scalar logical, or a std::string for a scalar character vector.
+
+* The `for` statement has a different syntax: `for(intialise; condition; increase)`. The initialise component creates a new variable called `i` and sets it equal to 0. The condition is checked in each iteration of the loop: the loop is completed when it becomes false. The increase statement is run after each loop iteration (but before the condition is checked). Here we use the special prefix operator `++` which increases the value of `i` by 1.
 
 * Vectors in C++ start at 0. I'll say this again because it's so important: VECTORS IN C++ START AT 0! Forgetting that is probably the most common source of bugs when converting R functions to C++.
+
+* We can't use `<-` (or `->`) for assignment, but instead use `=`.
 
 * We can take advantage of the in-place modification operator `total += x[i]` which is equivalent to `total = total + x[i]`.  Similar in-place operators are `-=`, `*=` and `/=`.  
 
@@ -146,18 +153,56 @@ This is a good example of where C++ is much more efficient than the R equivalent
       sum2(x)
     )
 
-<!-- 
-* for loops
-* 0-based indices
+It's possible to make our version of sum even faster if we use some tricks, but those are beyond the scope of this book.
 
-* initialising scalars
-* initialising vectors
+### Vector input, vector output
 
-* `pow` instead of `^`
-* only `=`, not `<-`, `->`
+For our next example, we'll create a function that computes the distance between one value and a vector of other values:
 
-* missing values
- -->
+    pdist1 <- function(x, ys) {
+      (x - ys) ^ 2
+    }
+
+    cppFunction('
+      NumericVector pdist2(double x, NumericVector ys) {
+        int n = ys.size();
+        NumericVector out(n);
+
+        for(int i = 0; i < n; ++i) {
+          out[i] = pow(ys[i] - x, 2);
+        }
+        return(out);
+      }
+    ')
+
+This function introduces only a few new concepts:
+
+* We create a new `NumericVector` and say how long it should be using a constructor function: `out(n)`.
+
+* Finally, C++ doesn't have the `^` operator for exponentiation, it instead has the `pow` function
+
+Note that this function is not only much more verbose than R equivalent, it's unlikely to be much faster - the R version will be very fast because it uses vectorised primitives. These very quickly turn into C loops.  However, our C++ function does have one advantage - it will use less memory, because `pdist1` needs two vectors the same length as y (`z <- x - ys`, and `z ^ 2`)
+
+    ys <- runif(1e5)
+    all.equal(pdist1(0.5, ys), pdist2(0.5, ys))
+
+    library(microbenchmark)
+    microbenchmark(
+      pdist1(0.5, ys),
+      pdist2(0.5, ys)
+    )
+
+### Exercises
+
+With the basics of C++ in hand, now is a great time to practice by writing some simple C++ functions.  
+
+Convert the following functions into C++
+
+* `diff`. Start by assuming lag 1, and then generalise for lag n.
+
+* `range`.  Start by assuming that the input has no missing values, then generalise to include a `na.rm` parameter. If `TRUE` your function should ignore missing values (does it need to do anything special?), if `FALSE` it should return two missing values the first time it sees a missing value.
+
+* `var` or `sd`
 
 ## Rcpp
 
@@ -189,6 +234,25 @@ As well as classes for many more specialised language objects: `ComplexVector`, 
 
 ### Variable arguments
 
+Not easily supported - instead put the arguments in a list.
+
+### Missing values
+
+In C++, NaN values always evaluate to false in a boolean context:
+
+    evalCpp("NAN == 1")
+    evalCpp("NAN < 1")
+    evalCpp("NAN > 1")
+    evalCpp("NAN == NAN")
+
+But they propagate similarly to NA in numeric contexts:
+
+    evalCpp("NAN + 1")
+    evalCpp("NAN - 1")
+    evalCpp("NAN / 1")
+    evalCpp("NAN * 1")
+
+
 ### Using iterators
 
 Iterators are the next step up from basic loops.  They abstract away from the details of the underlying datastructure.  They are important to understand because many C++ functions either accept or return iterators. Iterators have three main operators: they can be advanced with `++`, dereferenced (to get the value they refer to) with `*` and compared using `==`.  For example we could re-write our sum function above using iterators:
@@ -198,7 +262,7 @@ Iterators are the next step up from basic loops.  They abstract away from the de
         double total = 0;
 
         NumericVector::iterator end = x.end();
-        for(NumericVector::iterator it = x.begin(); it != end; it++) {
+        for(NumericVector::iterator it = x.begin(); it != end; ++it) {
           total += *it;
         }
         return(total);
@@ -236,7 +300,7 @@ The `<algorithm>` provides a large number of algorithms that work with iterators
         NumericVector::iterator it, pos;
         IntegerVector::iterator out_it;
 
-        for(it = x.begin(), out_it = out.begin(); it != x.end(); it++, out_it++) {
+        for(it = x.begin(), out_it = out.begin(); it != x.end(); ++it, ++out_it) {
           pos = std::upper_bound(breaks.begin(), breaks.end(), *it);
           *out_it = std::distance(pos, breaks.begin());
         }
@@ -254,6 +318,16 @@ The `<algorithm>` provides a large number of algorithms that work with iterators
 * Small note: if we want this function to be as fast as `findInterval` in R (which uses hand-written C code), we need to cache access to `.begin()` and `.end`.  This is simple but it adds cognitive overhead that distracts from this example.
 
 It's generally better to use algorithms from the STL than hand rolled loops.  In "Effective STL", Scott Meyer gives three reasons: efficiency, correctness and maintainability.  Also makes clear the intent.  Extremely well tested and performant.
+
+#### Exercises
+
+Implement:
+
+* `median.default` using `partial_sort`
+* `%in%` using `unordered_set` and the `find` method
+* `min` using `min`
+* `which.min` using `min_element`
+* `setdiff`, `union` and `intersect` using sorted ranges and `set_union`, `set_intersection` and `set_difference`
 
 ### Sugar
 
