@@ -120,7 +120,7 @@ One big difference between R and C++ is that the cost of loops is much lower.  F
         int n = x.size();
         double total = 0;
         for(int i = 0; i < n; i++) {
-          total =+ x[i];
+          total += x[i];
         }
         return(total);
       }
@@ -132,7 +132,7 @@ The C++ version is similar, but:
 
 * Vectors in C++ start at 0. I'll say this again because it's so important: VECTORS IN C++ START AT 0! Forgetting that is probably the most common source of bugs when converting R functions to C++.
 
-* We can take advantage of the in-place modification operator `total =+ x[i]` which is equivalent to `total = total + x[i]`.  Similar in-place operators are `=-`, `=*` and `=/`.  
+* We can take advantage of the in-place modification operator `total += x[i]` which is equivalent to `total = total + x[i]`.  Similar in-place operators are `-=`, `*=` and `/=`.  
 
 This is a good example of where C++ is much more efficient than the R equivalent: our `sum2` function is competitive with the built-in (and highly optimised) `sum` function, while `sum1` is several orders of magnitude slower.
 
@@ -152,55 +152,124 @@ This is a good example of where C++ is much more efficient than the R equivalent
 * initialising vectors
 
 * `pow` instead of `^`
+* only `=`, not `<-`, `->`
+
+* missing values
  -->
 
+## Rcpp
 
-## Variable types
-
-Table that shows R, standard C++, and Rcpp classes.
+### Important classes
 
 * NumericVector
 * CharacterVector
 * IntegerVector
 * LogicalVector
+
+You can also use standard C++ variable types for scalars: `int`, `double`, `bool`, `std::string`.  
+
+* Important methods: `length`, `fill`, `begin`, `end`, etc.
+* Naming vectors `names()`
+* Attributes `attr()`
+
+* Matrices
+
 * List
-
-Also provides matrix equivalents of the above classes. 
-
-* Function
-* Environment
 * DataFrame
+* Environment
 
 As well as classes for many more specialised language objects: `ComplexVector`, `RawVector`, `DottedPair`, `Language`,  `Promise`, `Symbol`, `WeakReference` and so on. These are beyond the scope of this document and won't be discussed further.
-
-You can also use standard C++ variable types for scalars: `int`, `long`, `float`, `double`, `bool`, `char`, `std::string`.  
 
 * lists and data frames, named vectors
 * functions
 
-* Important methods: `length`, `fill`, `begin`, `end`, etc.
+### Calling R functions
 
-### RCpp syntax sugar
+### Variable arguments
+
+### Using iterators
+
+Iterators are the next step up from basic loops.  They abstract away from the details of the underlying datastructure.  They are important to understand because many C++ functions either accept or return iterators. Iterators have three main operators: they can be advanced with `++`, dereferenced (to get the value they refer to) with `*` and compared using `==`.  For example we could re-write our sum function above using iterators:
+
+    cppFunction('
+      double sum3(NumericVector x) {
+        double total = 0;
+
+        NumericVector::iterator end = x.end();
+        for(NumericVector::iterator it = x.begin(); it != end; it++) {
+          total += *it;
+        }
+        return(total);
+      }
+    ')
+
+The main changes are in the for loop:
+
+* we start at `x.begin()` and loop until we get to `x.end()`. A small optimisiation is to store the value of the end iterator so we don't need to look it up each time. This only saves about 2 ns per iteration, so it's only important when the calculations in the loop are very simple.
+
+* instead of indexing into x, we use the dereference operator to get its current value: `*it`.
+
+Also notice the type of the iterator: `NumericVector::iterator`.  Each vector type has it's own iterator type: `LogicalVector::iterator`, `CharacterVector::iterator` etc.
+
+Iterators also allow us to use the C++ equivalents of the apply family of functions. For example, we could again rewrite to use the `accumulate` function, which takes an starting and ending iterator and adds all the values in between.
+
+    cppFunction('
+      #include <numeric>
+      double sum4(NumericVector x) {
+
+        double total = std::accumulate(x.begin(), x.end(), 0);
+        return(total);
+      }
+    ')
+
+However, `accumulate` (along with the other functions in `<numeric>`, `adjacent_difference`, `inner_product` and `partial_sum`) is not really that important in Rcpp because Rcpp sugar provides equivalents: `sum`, `diff, `*` and `cumsum`.
+
+The `<algorithm>` provides a large number of algorithms that work with iterators. For example, we could write a basic Rcpp version of `findInterval` that takes two arguments a vector of values and a vector of breaks - the aim is to find the bin that each x falls into.  This shows off a number of more advanced iterator features.  Read the code below and see if you can figure out how it works.
+
+    cppFunction('
+      #include <algorithm>
+      IntegerVector findInterval2(NumericVector x, NumericVector breaks) {
+        IntegerVector out(x.size());
+
+        NumericVector::iterator it;
+        IntegerVector::iterator out_it;
+
+        for(it = x.begin(), out_it = out.begin(); it != x.end(); it++, out_it++) {
+          NumericVector::iterator pos = std::upper_bound(breaks.begin(), breaks.end(), *it);
+          *out_it = pos - breaks.begin();
+        }
+
+        return(out);
+      }
+    ')
+
+* We step through two iterators (input and output) simultaneously.  We can also assign into an deferenced iterator to change the values in the vector.
+
+* `upper_bound` returns an iterator - if we wanted the value of the `upper_bound` we could dereference it.  To figure out the position of the `upper_bound` we subtract it from the position of the first iterator. (Note that this will not work for all types of iterators)
+
+### Sugar
 
 * vectorised operations: ifelse, sapply
-* lazy functions: any, all
+* lazy functions: any, all (is_true, is_false, is_na)
+* math functions: abs, exp, floor, ceil, pow, 
+* binary arithmetic and logical operators
 
 More details are available in the [Rcpp syntactic sugar](http://dirk.eddelbuettel.com/code/rcpp/Rcpp-sugar.pdf) vignette.
 
+### Dispatching based on type
+
+Table?
+
 ## Useful data structures and algorithms
 
-From the standard template library (STL).  Can be very useful when implementing algorithms that rely on data structures with particular performance characteristics.
+The real strength of C++ shows itself when you need to implement more complex algorithms. The standard template library (STL) provides the standard CS data structures, and the Boost library implements a very wide range of data structures.
 
-Useful resources:
+Some resources that you might find helpful are:
 
 * http://www.cplusplus.com/reference/algorithm/
 * http://www.cplusplus.com/reference/stl/
-
 * http://www.davethehat.com/articles/eff_stl.htm
 * http://www.sgi.com/tech/stl/
-* http://www.uml.org.cn/c++/pdf/EffectiveSTL.pdf
-
-Compared to R these objects are typically mutable, and most operations operator destructively in place - this can be much faster.
 
 * vector: like an R vector, but efficiently grows (but see the reserve method if you know something about how many space you'll need)
 * set: no duplicates, sorted
@@ -235,18 +304,6 @@ http://stackoverflow.com/questions/13224322/profiling-rcpp-code-on-os-x
     %in%
     anyNA (vs any(is.NA(x)) - short circuiting)
 
- 
-
-## More Rcpp
-
-This chapter has only touched on a small part of Rcpp, giving you the basic tools to rewrite poorly performing R code in C++.  Rcpp has many other capabilities that make it easy to interface R to existing C++ code, including:
-
-* automatically creating the wrappers between R data structures and C++ data
-  structures (modules).  A good introduction to this topic is the vignette of [Rcpp modules](http://dirk.eddelbuettel.com/code/rcpp/Rcpp-modules.pdf)
-
-* mapping of C++ classes to reference classes.
-
-I strongly recommend keeping an eye on the [Rcpp homepage](http://dirk.eddelbuettel.com/code/rcpp.html) and signing up for the [Rcpp mailing list](http://lists.r-forge.r-project.org/cgi-bin/mailman/listinfo/rcpp-devel). Rcpp is still under active development, and is getting better with every release.
 
 ## Using Rcpp in a package
 
@@ -272,6 +329,22 @@ R function
 
 ## Learning more
 
+### More Rcpp
+
+This chapter has only touched on a small part of Rcpp, giving you the basic tools to rewrite poorly performing R code in C++.  Rcpp has many other capabilities that make it easy to interface R to existing C++ code, including:
+
+* automatically creating the wrappers between C++ data structures and R
+  data structures. A good introduction to this topic is the vignette of [Rcpp modules](http://dirk.eddelbuettel.com/code/rcpp/Rcpp-modules.pdf)
+
+* mapping C++ classes to reference classes.
+
+I strongly recommend keeping an eye on the [Rcpp homepage](http://dirk.eddelbuettel.com/code/rcpp.html) and signing up for the [Rcpp mailing list](http://lists.r-forge.r-project.org/cgi-bin/mailman/listinfo/rcpp-devel). Rcpp is still under active development, and is getting better with every release.
+
+### More C++
+
 Writing performant code may also require you to rethink your basic approach: a solid understand of basic data structures and algorithms is very helpful here.  That's beyond the scope of this book, but I'd suggest the "algorithm design handbook" as a good place to start.  Or http://ocw.mit.edu/courses/electrical-engineering-and-computer-science/6-046j-introduction-to-algorithms-sma-5503-fall-2005/
+
+* [Effective C++](http://amzn.com/0321334876)
+* [Effective STL](http://amzn.com/0201749629)
 
 
