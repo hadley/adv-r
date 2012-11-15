@@ -236,22 +236,112 @@ As well as classes for many more specialised language objects: `ComplexVector`, 
 
 Not easily supported - instead put the arguments in a list.
 
-### Missing values
+## Missing values
 
-In C++, NaN values always evaluate to false in a boolean context:
+If you're working with missing values, you need to know two things:
+
+* what happens when you put missing values in scalars (e.g. `double`)
+* how to get and set missing values in vectors (e.g. `NumericVector`)
+
+### Scalars
+
+The following code explores what happens when you coerce the first element of a vector into the corresponding scalar:
+
+    cppFunction('int first_int(IntegerVector x) {
+      return(x[0]);
+    }')
+    cppFunction('double first_num(NumericVector x) {
+      return(x[0]);
+    }')
+    cppFunction('std::string first_char(CharacterVector x) {
+      return((std::string) x[0]);
+    }')
+    cppFunction('bool first_log(LogicalVector x) {
+      return(x[0]);
+    }')
+
+    first_log(NA)
+    first_int(NA_integer_)
+    first_num(NA_real_)
+    first_char(NA_character_)
+
+So
+
+* `NumericVector` -> `double`: NAN
+
+* `IntegerVector` -> `int`: NAN (not sure how this works given that integer types don't usually have a missing value)
+
+* `CharacterVector` -> `std::string`: the string "NA"
+
+* `LogicalVector` -> `bool`: TRUE
+
+If you're working with doubles, depending on your problem, you may be able to get away with ignoring missing values and working with NaNs. R's missing values are a special type of the IEEE 754 floating point number NaN (not a number). That means if you coerce them to `double` or `int` in your C++ code, they will behave like regular NaN's. 
+
+In a logical context they always evaluate to FALSE:
 
     evalCpp("NAN == 1")
     evalCpp("NAN < 1")
     evalCpp("NAN > 1")
     evalCpp("NAN == NAN")
+    
+But be careful when combining then with boolean values:
 
-But they propagate similarly to NA in numeric contexts:
+    evalCpp("NAN && TRUE")
+    evalCpp("NAN || FALSE")
+
+In numeric contexts, they propagate similarly to NA in R:
 
     evalCpp("NAN + 1")
     evalCpp("NAN - 1")
     evalCpp("NAN / 1")
     evalCpp("NAN * 1")
 
+### Vectors
+
+To set a missing value in a vector, you need to use a missing value specific to the type of vector. Unfortunately these are not named terribly consistently:
+
+    cppFunction('
+      List missing_sampler() {
+
+        NumericVector num(1);
+        num[0] = NA_REAL;
+
+        IntegerVector intv(1);
+        intv[0] = NA_INTEGER;
+
+        LogicalVector lgl(1);
+        lgl[0] = NA_LOGICAL;
+
+        CharacterVector chr(1);
+        chr[0] = NA_STRING;
+
+        List out(4);
+        out[0] = num;
+        out[1] = intv;
+        out[2] = lgl;
+        out[3] = chr;
+        return(out);
+      }
+    ')
+    str(missing_sampler())
+
+To check if a value in a vector is missing, use `ISNA`:
+
+    cppFunction('
+      LogicalVector is_na2(NumericVector x) {
+        LogicalVector out(x.size());
+        
+        NumericVector::iterator x_it;
+        LogicalVector::iterator out_it;
+        for (x_it = x.begin(), out_it = out.begin(); x_it != x.end(); x_it++, out_it++) {
+          *out_it = ISNA(*x_it);
+        }
+        return(out);
+      }
+    ')
+    is_na2(c(NA, 5.4, 3.2, NA))
+
+Rcpp provides a helper function called `is_na` that works similarly to `is_na2` above, producing a logical vector that's true where the value in the vector was missing.
 
 ### Using iterators
 
