@@ -31,7 +31,7 @@ If you're familiar with `inline::cfunction`, `cppFunction` is similarly, except 
     cppFunction('
       int add(int x, int y, int z) {
         int sum = x + y + z;
-        return(sum);
+        return sum;
       }'
     )
     formals(add)
@@ -51,14 +51,14 @@ In the following section we'll compare and contrast basic R functions with their
 The equivalent C++ function is: 
 
     int one() {
-      return(1);
+      return 1;
     }
 
 We can compile and use this from R with `cppFunction`
 
     cppFunction('
       int one() {
-        return(1);
+        return 1;
       }
     ')
 
@@ -91,11 +91,11 @@ The next example function makes things a little more complicated
     cppFunction('
       int sign2(int x) {
         if (x > 0) {
-          return(1);
+          return 1;
         } else if (x == 0) {
-          return(0);
+          return 0;
         } else {
-          return(-1);
+          return -1;
         }
       }'
     )
@@ -127,7 +127,7 @@ In C++, for loops have very little overhead, so it's fine to use them (although 
         for(int i = 0; i < n; ++i) {
           total += x[i];
         }
-        return(total);
+        return total;
       }
     ')
 
@@ -171,7 +171,7 @@ For our next example, we'll create a function that computes the distance between
         for(int i = 0; i < n; ++i) {
           out[i] = pow(ys[i] - x, 2);
         }
-        return(out);
+        return out;
       }
     ')
 
@@ -192,6 +192,30 @@ Note that this function is not only much more verbose than R equivalent, it's un
       pdist2(0.5, ys)
     )
 
+### Matrix input, vector output
+
+Each vector type also has a matrix equivalent: `NumericMatrix`, `IntegerMatrix`, `CharacterMatrix` and `LogicalMatrix`. Using them is straightforward. For example, we could easily create a function that reproduces `rowSums`:
+
+    cppFunction('
+      NumericVector row_sums(NumericMatrix x) {
+        int nrow = x.nrow(), ncol = x.ncol();
+        NumericVector out(nrow);
+
+        for (int i = 0; i < nrow; i++) {
+          double total = 0;
+          for (int j = 0; j < ncol; j++) {
+            total += x(i, j);
+          }
+          out[i] = total;
+        }
+        return out;
+      }
+    ')
+    x <- matrix(sample(100), 10)
+    rowSums(x)
+
+The main thing to notice is that when subsetting a matrix we use `()` and not `[]`. 
+
 ### Exercises
 
 With the basics of C++ in hand, now is a great time to practice by writing some simple C++ functions.  
@@ -204,9 +228,7 @@ Convert the following functions into C++
 
 * `var` or `sd`
 
-## Rcpp
-
-### Important classes
+## Important Rcpp classes
 
 * NumericVector
 * CharacterVector
@@ -232,9 +254,12 @@ As well as classes for many more specialised language objects: `ComplexVector`, 
 
 ### Calling R functions
 
-### Variable arguments
+Calling an R function from C++ is straightforward, apart from storing the result: 
 
-Not easily supported - instead put the arguments in a list.
+  Function assign("assign");
+  assign("y", 1);
+  assign(_["x"] = "y", _["value"] = 1);
+
 
 ## Missing values
 
@@ -248,16 +273,16 @@ If you're working with missing values, you need to know two things:
 The following code explores what happens when you coerce the first element of a vector into the corresponding scalar:
 
     cppFunction('int first_int(IntegerVector x) {
-      return(x[0]);
+      return x[0];
     }')
     cppFunction('double first_num(NumericVector x) {
-      return(x[0]);
+      return x[0];
     }')
     cppFunction('std::string first_char(CharacterVector x) {
-      return((std::string) x[0]);
+      return std::string(x[0]);
     }')
     cppFunction('bool first_log(LogicalVector x) {
-      return(x[0]);
+      return x[0];
     }')
 
     first_log(NA)
@@ -302,25 +327,14 @@ To set a missing value in a vector, you need to use a missing value specific to 
 
     cppFunction('
       List missing_sampler() {
-
-        NumericVector num(1);
-        num[0] = NA_REAL;
-
-        IntegerVector intv(1);
-        intv[0] = NA_INTEGER;
-
-        LogicalVector lgl(1);
-        lgl[0] = NA_LOGICAL;
-
         CharacterVector chr(1);
         chr[0] = NA_STRING;
 
-        List out(4);
-        out[0] = num;
-        out[1] = intv;
-        out[2] = lgl;
-        out[3] = chr;
-        return(out);
+        return(List::create(
+          NumericVector::create(NA_REAL), 
+          IntegerVector::create(NA_INTEGER),
+          LogicalVector::create(NA_LOGICAL), 
+          chr));
       }
     ')
     str(missing_sampler())
@@ -336,14 +350,15 @@ To check if a value in a vector is missing, use `ISNA`:
         for (x_it = x.begin(), out_it = out.begin(); x_it != x.end(); x_it++, out_it++) {
           *out_it = ISNA(*x_it);
         }
-        return(out);
+        return out;
       }
     ')
     is_na2(c(NA, 5.4, 3.2, NA))
 
 Rcpp provides a helper function called `is_na` that works similarly to `is_na2` above, producing a logical vector that's true where the value in the vector was missing.
 
-### Using iterators
+
+## Using iterators
 
 Iterators are the next step up from basic loops.  They abstract away from the details of the underlying datastructure.  They are important to understand because many C++ functions either accept or return iterators. Iterators have three main operators: they can be advanced with `++`, dereferenced (to get the value they refer to) with `*` and compared using `==`.  For example we could re-write our sum function above using iterators:
 
@@ -355,7 +370,7 @@ Iterators are the next step up from basic loops.  They abstract away from the de
         for(NumericVector::iterator it = x.begin(); it != end; ++it) {
           total += *it;
         }
-        return(total);
+        return total;
       }
     ')
 
@@ -374,7 +389,7 @@ Iterators also allow us to use the C++ equivalents of the apply family of functi
       double sum4(NumericVector x) {
 
         double total = std::accumulate(x.begin(), x.end(), 0.0);
-        return(total);
+        return total;
       }
     ')
 
@@ -395,42 +410,19 @@ The `<algorithm>` provides a large number of algorithms that work with iterators
           *out_it = std::distance(pos, breaks.begin());
         }
 
-        return(out);
+        return out;
       }
     ')
 
 * We step through two iterators (input and output) simultaneously.  
 
-* We can also assign into an deferenced iterator (`out_it`) to change the values in `out`.
+* We can assign into an dereferenced iterator (`out_it`) to change the values in `out`.
 
-* `upper_bound` returns an iterator.  If we wanted the value of the `upper_bound` we could dereference it; to figure out its location, we use the `distance` function.
+* `upper_bound` returns an iterator. If we wanted the value of the `upper_bound` we could dereference it; to figure out its location, we use the `distance` function.
 
 * Small note: if we want this function to be as fast as `findInterval` in R (which uses hand-written C code), we need to cache access to `.begin()` and `.end`.  This is simple but it adds cognitive overhead that distracts from this example.
 
 It's generally better to use algorithms from the STL than hand rolled loops.  In "Effective STL", Scott Meyer gives three reasons: efficiency, correctness and maintainability.  Also makes clear the intent.  Extremely well tested and performant.
-
-#### Exercises
-
-Implement:
-
-* `median.default` using `partial_sort`
-* `%in%` using `unordered_set` and the `find` method
-* `min` using `min`
-* `which.min` using `min_element`
-* `setdiff`, `union` and `intersect` using sorted ranges and `set_union`, `set_intersection` and `set_difference`
-
-### Sugar
-
-* vectorised operations: ifelse, sapply
-* lazy functions: any, all (is_true, is_false, is_na)
-* math functions: abs, exp, floor, ceil, pow, 
-* binary arithmetic and logical operators
-
-More details are available in the [Rcpp syntactic sugar](http://dirk.eddelbuettel.com/code/rcpp/Rcpp-sugar.pdf) vignette.
-
-### Dispatching based on type
-
-Table?
 
 ## Useful data structures and algorithms
 
@@ -449,12 +441,93 @@ Some resources that you might find helpful are:
 
 Useful algorithms
 
-* partial sort
 * binary search
-* accumulate (example: total length of strings)
-* sort with custom comparison operation?
 
 http://community.topcoder.com/tc?module=Static&d1=tutorials&d2=alg_index
+
+
+    // [[Rcpp::export]]
+    NumericVector tapply3(NumericVector x, IntegerVector i, Function fun) {
+      std::map<int, std::vector<double> > groups;
+      
+      NumericVector::iterator x_it;
+      IntegerVector::iterator i_it;
+      
+      for(x_it = x.begin(), i_it = i.begin(); x_it != x.end(); ++x_it, ++i_it) {
+        groups[*i_it].push_back(*x_it);
+      }
+     
+      NumericVector out(groups.size());   
+      std::map<int, std::vector<double> >::const_iterator g_it = groups.begin();
+      NumericVector::iterator o_it = out.begin();
+      for(; g_it != groups.end(); ++g_it, ++o_it) {
+        NumericVector res = fun(g_it->second);
+        *o_it = res[0];
+      }
+      return out;
+    }
+
+Sets are a useful data structure for many jobs that involve duplicates or unique values. The following function is a simple implementation of R's `duplicated` funciton. Note the use of `seen.insert(x[i]).second` - `insert` returns a pair, the first value giving an iterator to the position of the element and the second element is a boolean that's true if the value was a new addition to the set.  
+
+    LogicalVector duplicated(IntegerVector x) {
+      std::set<int> seen;
+      int n = x.size();
+      LogicalVector out(n);
+
+      for (int i = 0; i < n; ++i) {
+        out[i] = seen.insert(x[i]).second;
+      }
+
+      return(out);
+    }
+
+Another advantage of working with the STL is that Rcpp already knows how to convert from STL data structures to R data structures. For example, the following is a very simple implementation of a sorted unique function: it loads everything into a set and then returns the set.  Rcpp takes care of converting it into an integer vector.
+
+    std::set<int> s_unique(IntegerVector x) {
+      std::set<int> seen;
+
+      for(IntegerVector::iterator it = x.begin(); it != x.end(); ++it) {
+        seen.insert(*it);
+      } 
+      return(seen);
+    }
+
+### Exercises
+
+Implement:
+
+* `median.default` using `partial_sort`
+* `%in%` using `unordered_set` and the `find` method
+* `min` using `min`
+* `which.min` using `min_element`
+* `setdiff`, `union` and `intersect` using sorted ranges and `set_union`, `set_intersection` and `set_difference`
+
+* re-write our implementation of `row_sums` to use iterators. Rewrite it to use `accumulate`.
+
+<!-- 
+duplicated.data.frame (pastes rows together)
+rank?
+rle (R, 3 copies) ?
+ifelse (R) ?
+match
+%in%
+anyNA (vs any(is.NA(x)) - short circuiting)
+ -->
+
+## Rcpp Sugar
+
+* vectorised operations: ifelse, sapply
+* lazy functions: any, all (is_true, is_false, is_na)
+* math functions: abs, exp, floor, ceil, pow, 
+* binary arithmetic and logical operators
+
+More details are available in the [Rcpp syntactic sugar](http://dirk.eddelbuettel.com/code/rcpp/Rcpp-sugar.pdf) vignette.
+
+## Special programming topics
+
+### Dispatching based on type
+
+Table?
 
 ### Profiling
 
@@ -462,20 +535,47 @@ http://stackoverflow.com/questions/13224322/profiling-rcpp-code-on-os-x
 
 ## Case studies
 
-    rowsum.default (C)
-    tapply (R: split + lapply) 
-    median.default (R: sort): nth_element
-    findInterval (C): binary_search, lower_bound
-    cut.default?
-    duplicated.data.frame (pastes rows together)
-    interaction/table/plyr::id
-    rank?
-    rle (R, 3 copies) ?
-    ifelse (R) ?
-    match
-    %in%
-    anyNA (vs any(is.NA(x)) - short circuiting)
+### Gibbs sampler
 
+The following case study updates an example [blogged about](From http://dirk.eddelbuettel.com/blog/2011/07/14/) by Dirk Eddelbuettel, illustrating the conversion of a gibbs sampler in R to C++.  The R and C++ code shown below is very similar (it only took a few minutes to convert the R version to the C++ version), but runs about 20 times faster on my computer.  Dirk's blog post also shows another way to make it even faster: using the faster (but presumably less numerically accurate) random number generator functions in GSL (easily accessible from R through RcppGSL) can eke out another 2-3x speed improvement.
+
+    gibbs_r <- function(N, thin) {
+      mat <- matrix(nrow = N, ncol = 2)
+      x <- y <- 0
+      
+      for (i in 1:N) {
+        for (j in 1:thin) {
+          x <- rgamma(1, 3, y * y + 4)
+          y <- rnorm(1, 1 / (x + 1), 1 / sqrt(2 * (x + 1)))
+        }
+        mat[i, ] <- c(x, y)
+      }
+      mat
+    }
+
+    cppFunction('
+      NumericMatrix gibbs_cpp(int N, int thin) {
+        NumericMatrix mat(N, 2);
+        double x = 0, y = 0;
+
+        for(int i = 0; i < N; i++) {
+          for(int j = 0; j < thin; j++) {
+            x = rgamma(1, 3.0, y * y + 4)[0];
+            y = rnorm(1, 1 / (x + 1), 1 / sqrt(2 * (x + 1)))[0];
+          }
+          mat(i, 0) = x;
+          mat(i, 1) = y;
+        }
+
+        return(mat);
+      }
+    ')
+
+    library(microbenchmark)
+    microbenchmark(
+      gibbs_r(100, 10),
+      gibbs_cpp(100, 10)
+    )
 
 ## Using Rcpp in a package
 
@@ -519,4 +619,5 @@ Writing performant code may also require you to rethink your basic approach: a s
 * [Effective C++](http://amzn.com/0321334876)
 * [Effective STL](http://amzn.com/0201749629)
 
+* http://www.icce.rug.nl/documents/cplusplus/cplusplus.html
 * http://www.cs.helsinki.fi/u/tpkarkka/alglib/k06/
