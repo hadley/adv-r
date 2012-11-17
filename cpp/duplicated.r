@@ -8,11 +8,12 @@ print(microbenchmark(
   duplicated(x),
   duplicated2(x),
   duplicated3(x),
+  duplicated3a(x),
   duplicated4(x)
 ))
 
-
 print(microbenchmark(
   sort(unique(x)),
-  s_unique(x)
+  s_unique(x),
+  sort(unique1(x))
 ))

@@ -230,14 +230,11 @@ Convert the following functions into C++
 
 ## Important Rcpp classes
 
-* NumericVector
-* CharacterVector
-* IntegerVector
-* LogicalVector
+You've already seen `NumericVector`, `CharacterVector`, `IntegerVector` and `LogicalVector`. They 
 
 You can also use standard C++ variable types for scalars: `int`, `double`, `bool`, `std::string`.  
 
-* Important methods: `length`, `fill`, `begin`, `end`, etc.
+* Important methods: `length`, `fill`.
 * Naming vectors `names()`
 * Attributes `attr()`
 
@@ -254,11 +251,92 @@ As well as classes for many more specialised language objects: `ComplexVector`, 
 
 ### Calling R functions
 
-Calling an R function from C++ is straightforward, apart from storing the result: 
+Calling an R function from C++ is straightforward:
 
-  Function assign("assign");
-  assign("y", 1);
-  assign(_["x"] = "y", _["value"] = 1);
+    Function assign("assign");
+    assign("y", 1);
+    assign(_["x"] = "y", _["value"] = 1);
+
+The challenge is storing the output. If you don't know a priori what the output will be, store it in an `RObject`. 
+
+## Rcpp sugar
+
+Rcpp provides a lot of "sugar", C++ functions included in the Rcpp namespace that work very similarly to their R equivalents. They work with `Vector` objects, and recycle in the same way as their R counterparts. Rcpp sugar makes it possible to write extremely efficient C++ code that looks almost identical to the R equivalent.
+
+If a sugar version of the function you're interested exists, you should use it: it's likely to be fast and correct. Many of the sugar functions don't make copies of the object, or use expression capturing tricks to ensure that the minimal necessary computation is done.
+
+More details are available in the [Rcpp syntactic sugar](http://dirk.eddelbuettel.com/code/rcpp/Rcpp-sugar.pdf) vignette.
+
+### Vectorised arithmetic and logical operators: 
+
+`+` `*`, `-`, `/`, `pow`, `<`, `<=`, `>`, `>=`, `==`, `!=`, `!`.  For example, we could use sugar to considerably simply the implementation of our `pdist2` function:
+
+    pdist1 <- function(x, ys) {
+      (x - ys) ^ 2
+    }
+
+    cppFunction('
+      NumericVector pdist3(double x, NumericVector ys) {
+        return pow((x - ys), 2);
+      }
+    ')
+
+### Logical summary functions
+
+`any` and  `all`. These functions are fully lazy (so that e.g `any(x == 0)` might only need to evaluate one element of the value), and return a special type that can be converted into a `bool` using `is_true`, `is_false`, or `is_na`.  
+
+For example, we could use this to write an efficient funtion to determine whether or not a numeric vector contains any missing values.  In R we could do `any(is.na(x))` but that will always do the same amount of work regardless of if there's a missing value in the first position or the last.  
+
+    any_na1 <- function(x) any(is.na(x))
+
+    cppFunction('
+      bool any_na2(NumericVector x) {
+        return(is_true(any(is_na(x))));
+      }
+    ')
+
+    cppFunction('
+      bool any_na3(NumericVector x) {
+        NumericVector::iterator it = x.begin(), end = x.end();
+        for(; it != end; ++it) {
+          if (ISNA(*it)) return(true);
+        }
+
+        return(false);
+      }
+    ')
+
+    library(microbenchmark)
+    x <- runif(1e5)
+    x1 <- c(NA, x)
+    x2 <- c(x, NA)
+
+    microbenchmark(
+      any_na1(x), any_na2(x), any_na3(x),
+      any_na1(x1), any_na2(x1), any_na3(x1),
+      any_na1(x2), any_na2(x2), any_na3(x2))
+
+Our `any_na2` function is always faster than `any_na1` (probably because it avoids allocation an logical vector of the same length of `x`), but it's much faster when the first value is missing. Our hand-written equivalent `any_na3` is exactly the same speed, but 
+
+### Vector views
+
+`head`, `tail`, `rep_each`, `rep_len`, `rev`, `seq_along`, `seq_len`.  
+
+In R these would all produce copies of the vector, but in Rcpp sugar they simply point to the existing vector and override the subsetting operator (`[`) to implement special behaviour. This makes them very efficient.
+
+### Other useful functions
+
+`mean, `min`, `max`, `sum`, `sd` and `var`.
+
+`which_max`, `which_min`
+
+`abs`, `exp`, `sign`, `floor`, `ceil`, `pow`, `cumsum`, `diff`, `pmin`, and `pmax`.  All the trigonometric functions like `sin`, `cos` etc. `log`
+
+`diff`
+
+`d/q/p/r` for all standard distributions in R.
+
+Rcpp provides the special function `no_na(x)`: this asserts that the vector `x` does not contain any missing values, and allows optimisation of some mathematical operations.
 
 
 ## Missing values
@@ -271,6 +349,15 @@ If you're working with missing values, you need to know two things:
 ### Scalars
 
 The following code explores what happens when you coerce the first element of a vector into the corresponding scalar:
+
+    cppFunction('
+      List missing_sampler() {
+        int intv = NA_INTEGER;
+        std::string chr = CharacterVector::create(NA_STRING)[0];
+
+        return(List::create(intv, chr);
+      }
+    ')
 
     cppFunction('int first_int(IntegerVector x) {
       return x[0];
@@ -357,10 +444,15 @@ To check if a value in a vector is missing, use `ISNA`:
 
 Rcpp provides a helper function called `is_na` that works similarly to `is_na2` above, producing a logical vector that's true where the value in the vector was missing.
 
+## The STL
 
-## Using iterators
+The real strength of C++ shows itself when you need to implement more complex algorithms. The standard template library (STL) provides set of extremely useful data structures and algorithms. This section will explain the most important algorithms and data structures and point you in the right direction to learn more.
 
-Iterators are the next step up from basic loops.  They abstract away from the details of the underlying datastructure.  They are important to understand because many C++ functions either accept or return iterators. Iterators have three main operators: they can be advanced with `++`, dereferenced (to get the value they refer to) with `*` and compared using `==`.  For example we could re-write our sum function above using iterators:
+If you need an algorithm or data strucutre that isn't implemented in STL, the first place to look is [boost](http://www.boost.org/doc/).
+
+### Using iterators
+
+Iterators are used extensively in the STL: many functions either accept or return iterators. They are the next step up from basic loops, abstracting away the details of the underlying data structure. Iterators have three main operators: they can be advanced with `++`, dereferenced (to get the value they refer to) with `*` and compared using `==`. For example we could re-write our sum function using iterators:
 
     cppFunction('
       double sum3(NumericVector x) {
@@ -380,9 +472,9 @@ The main changes are in the for loop:
 
 * instead of indexing into x, we use the dereference operator to get its current value: `*it`.
 
-Also notice the type of the iterator: `NumericVector::iterator`.  Each vector type has it's own iterator type: `LogicalVector::iterator`, `CharacterVector::iterator` etc.
+* notice the type of the iterator: `NumericVector::iterator`.  Each vector type has it's own iterator type: `LogicalVector::iterator`, `CharacterVector::iterator` etc.
 
-Iterators also allow us to use the C++ equivalents of the apply family of functions. For example, we could again rewrite to use the `accumulate` function, which takes an starting and ending iterator and adds all the values in between. The third argument to accumulate gives the initial value: it's particularly important because this also determines the data type that accumulate uses (here we use `0.0` and not `0` so that accumulate uses a `double`, not an `int`.)
+Iterators also allow us to use the C++ equivalents of the apply family of functions. For example, we could again rewrite `sum` to use the `accumulate` function, which takes an starting and ending iterator and adds all the values in between. The third argument to accumulate gives the initial value: it's particularly important because this also determines the data type that accumulate uses (here we use `0.0` and not `0` so that accumulate uses a `double`, not an `int`.)
 
     cppFunction('
       #include <numeric>
@@ -393,9 +485,14 @@ Iterators also allow us to use the C++ equivalents of the apply family of functi
       }
     ')
 
-However, `accumulate` (along with the other functions in `<numeric>`, `adjacent_difference`, `inner_product` and `partial_sum`) is not really that important in Rcpp because Rcpp sugar provides equivalents: `sum`, `diff, `*` and `cumsum`.
+`accumulate` (along with the other functions in `<numeric>`, `adjacent_difference`, `inner_product` and `partial_sum`) are not that important in Rcpp because Rcpp sugar provides equivalents: `sum`, `diff, `*` and `cumsum`.
 
-The `<algorithm>` provides a large number of algorithms that work with iterators. For example, we could write a basic Rcpp version of `findInterval` that takes two arguments a vector of values and a vector of breaks - the aim is to find the bin that each x falls into.  This shows off a number of more advanced iterator features.  Read the code below and see if you can figure out how it works.
+
+### Algorithms
+
+http://www.cplusplus.com/reference/algorithm/
+
+The `<algorithm>` header provides a large number of algorithms that work with iterators. For example, we could write a basic Rcpp version of `findInterval` that takes two arguments a vector of values and a vector of breaks - the aim is to find the bin that each x falls into. This shows off a few more advanced iterator features.  Read the code below and see if you can figure out how it works.
 
     cppFunction('
       #include <algorithm>
@@ -420,31 +517,26 @@ The `<algorithm>` provides a large number of algorithms that work with iterators
 
 * `upper_bound` returns an iterator. If we wanted the value of the `upper_bound` we could dereference it; to figure out its location, we use the `distance` function.
 
-* Small note: if we want this function to be as fast as `findInterval` in R (which uses hand-written C code), we need to cache access to `.begin()` and `.end`.  This is simple but it adds cognitive overhead that distracts from this example.
+* Small note: if we want this function to be as fast as `findInterval` in R (which uses hand-written C code), we need to cache the calls to `.begin()` and `.end()`.  This is easy, but it distracts from this example so it has been omitted.
 
-It's generally better to use algorithms from the STL than hand rolled loops.  In "Effective STL", Scott Meyer gives three reasons: efficiency, correctness and maintainability.  Also makes clear the intent.  Extremely well tested and performant.
+It's generally better to use algorithms from the STL than hand rolled loops.  In "Effective STL", Scott Meyer gives three reasons: efficiency, correctness and maintainability. Algorithms from the STL are written by C++ experts to be extremely efficient, and they have been around for a long time so they are well tested. Using standard algorithms also makes the intent of your code more clear, helping to make it more readable and more maintainable.
 
-## Useful data structures and algorithms
+### Data structures
 
-The real strength of C++ shows itself when you need to implement more complex algorithms. The standard template library (STL) provides the standard CS data structures, and the Boost library implements a very wide range of data structures.
+The STL provides a large set of data structures: `array`, `bitset`, `list`, `forward_list`, `map`, `multimap`, `multiset`, `priority_queue`, `queue`, `dequeue`, `set`, `stack`, `unordered_map`, `unordered_set`, `unordered_multimap`, `unordered_multiset`, and `vector`.  The most important of these datastructures are the `vector`, the `unordered_set`, and the `unordered_map`.  We'll focus on these three in this section, but using the others is very similar: they just have different performance tradeoffs. For example, the `deque` (pronounced "deck") has a very similar interface to vectors but a different implementation with different performance trade-offs. You may want to try them for your problem.
 
-Some resources that you might find helpful are:
+http://www.cplusplus.com/reference/stl/
 
-* http://www.cplusplus.com/reference/algorithm/
-* http://www.cplusplus.com/reference/stl/
-* http://www.davethehat.com/articles/eff_stl.htm
-* http://www.sgi.com/tech/stl/
+One nice feature of the STL containers is that Rcpp knows how to convert from most STL data structures to their R equivalents. For example, the following is a very simple implementation of a unique function: it loads everything into a set and then returns the set. Rcpp takes care of converting it into an integer vector.
 
-* vector: like an R vector, but grows efficiently (but use the `reserve` method if you know how much space you need in advance)
-* set: no duplicates, sorted
-* map
+    std::tr1::unordered_set<int> unique(IntegerVector x) {
+      std::tr1::unordered_set<int> seen;
 
-Useful algorithms
-
-* binary search
-
-http://community.topcoder.com/tc?module=Static&d1=tutorials&d2=alg_index
-
+      for(IntegerVector::iterator it = x.begin(); it != x.end(); ++it) {
+        seen.insert(*it);
+      } 
+      return(seen);
+    }
 
     // [[Rcpp::export]]
     NumericVector tapply3(NumericVector x, IntegerVector i, Function fun) {
@@ -481,23 +573,13 @@ Sets are a useful data structure for many jobs that involve duplicates or unique
       return(out);
     }
 
-Another advantage of working with the STL is that Rcpp already knows how to convert from STL data structures to R data structures. For example, the following is a very simple implementation of a sorted unique function: it loads everything into a set and then returns the set.  Rcpp takes care of converting it into an integer vector.
-
-    std::set<int> s_unique(IntegerVector x) {
-      std::set<int> seen;
-
-      for(IntegerVector::iterator it = x.begin(); it != x.end(); ++it) {
-        seen.insert(*it);
-      } 
-      return(seen);
-    }
-
 ### Exercises
 
 Implement:
 
 * `median.default` using `partial_sort`
 * `%in%` using `unordered_set` and the `find` method
+* `unique` using an `unordered_set`
 * `min` using `min`
 * `which.min` using `min_element`
 * `setdiff`, `union` and `intersect` using sorted ranges and `set_union`, `set_intersection` and `set_difference`
@@ -508,20 +590,8 @@ Implement:
 duplicated.data.frame (pastes rows together)
 rank?
 rle (R, 3 copies) ?
-ifelse (R) ?
-match
-%in%
 anyNA (vs any(is.NA(x)) - short circuiting)
  -->
-
-## Rcpp Sugar
-
-* vectorised operations: ifelse, sapply
-* lazy functions: any, all (is_true, is_false, is_na)
-* math functions: abs, exp, floor, ceil, pow, 
-* binary arithmetic and logical operators
-
-More details are available in the [Rcpp syntactic sugar](http://dirk.eddelbuettel.com/code/rcpp/Rcpp-sugar.pdf) vignette.
 
 ## Special programming topics
 
@@ -542,7 +612,7 @@ The following case study updates an example [blogged about](From http://dirk.edd
     gibbs_r <- function(N, thin) {
       mat <- matrix(nrow = N, ncol = 2)
       x <- y <- 0
-      
+
       for (i in 1:N) {
         for (j in 1:thin) {
           x <- rgamma(1, 3, y * y + 4)
@@ -621,3 +691,5 @@ Writing performant code may also require you to rethink your basic approach: a s
 
 * http://www.icce.rug.nl/documents/cplusplus/cplusplus.html
 * http://www.cs.helsinki.fi/u/tpkarkka/alglib/k06/
+* http://www.davethehat.com/articles/eff_stl.htm
+* http://www.sgi.com/tech/stl/
