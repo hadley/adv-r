@@ -299,7 +299,7 @@ For example, we could use this to write an efficient funtion to determine whethe
       bool any_na3(NumericVector x) {
         NumericVector::iterator it = x.begin(), end = x.end();
         for(; it != end; ++it) {
-          if (ISNA(*it)) return(true);
+          if (is_na(ISNA(*it)) return(true);
         }
 
         return(false);
@@ -338,7 +338,6 @@ In R these would all produce copies of the vector, but in Rcpp sugar they simply
 
 Rcpp provides the special function `no_na(x)`: this asserts that the vector `x` does not contain any missing values, and allows optimisation of some mathematical operations.
 
-
 ## Missing values
 
 If you're working with missing values, you need to know two things:
@@ -348,40 +347,28 @@ If you're working with missing values, you need to know two things:
 
 ### Scalars
 
-The following code explores what happens when you coerce the first element of a vector into the corresponding scalar:
+The following code explores what happens when you take one of R's missing values, coerce it into a scalar, and then coerce back to an R vector
 
     cppFunction('
-      List missing_sampler() {
-        int intv = NA_INTEGER;
-        std::string chr = CharacterVector::create(NA_STRING)[0];
+      List scalar_missings() {
+        CharacterVector chr(1);
+        chr[0] = NA_STRING;
 
-        return(List::create(intv, chr);
+        int int_s = NA_INTEGER;
+        std::string chr_s = std::string(chr[0]);
+        bool lgl_s = NA_LOGICAL;
+        double num_s = NA_REAL;
+
+        return(List::create(int_s, chr_s, lgl_s, num_s));
       }
     ')
-
-    cppFunction('int first_int(IntegerVector x) {
-      return x[0];
-    }')
-    cppFunction('double first_num(NumericVector x) {
-      return x[0];
-    }')
-    cppFunction('std::string first_char(CharacterVector x) {
-      return std::string(x[0]);
-    }')
-    cppFunction('bool first_log(LogicalVector x) {
-      return x[0];
-    }')
-
-    first_log(NA)
-    first_int(NA_integer_)
-    first_num(NA_real_)
-    first_char(NA_character_)
+    str(scalar_missings())
 
 So
 
-* `NumericVector` -> `double`: NAN
+* `NumericVector` -> `double`: stored as an NaN, and preserved. Most numerical operations will behave as you expect, but logical comparisons will not.  See below for more details.
 
-* `IntegerVector` -> `int`: NAN (not sure how this works given that integer types don't usually have a missing value)
+* `IntegerVector` -> `int`: stored as the smallest integer. If you leave as is, it will be preserved, but no C++ operations are aware of the missingness: `evalCpp('NA_INTEGER + 1')` gives -2147483647.
 
 * `CharacterVector` -> `std::string`: the string "NA"
 
