@@ -750,7 +750,7 @@ using namespace Rcpp;
 
 And for each function that you want availble within R, you need to prefix it with:
 
-```C++
+```c++
 // [[Rcpp::export]]
 ```
 
@@ -758,7 +758,7 @@ Then using `sourceCpp("path/to/file.cpp")` will compile the C++ code, create the
 
 Standalone C++ files can also contain embedded R code in special C++ comment blocks. This is really convenient if you want to run some R test code. For example, running `sourceCpp` on the following file first compiles the C++ code and then compares it to native equivalent:
 
-```C++
+```cpp
 #include <Rcpp.h>
 using namespace Rcpp;
 
@@ -775,12 +775,13 @@ double mean1(NumericVector x) {
 /*** R 
   library(microbenchmark)
   x <- runif(1e5)
-  print(microbenchmark(
+  microbenchmark(
     mean(x),
-    mean1(x)))
+    mean1(x))
 */
 ```  
 
+The R code is run with `source(print.eval = TRUE)` so you don't need to explicitly print output.
 
 ### In package
 

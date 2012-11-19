@@ -14,7 +14,7 @@ double mean1(NumericVector x) {
 /*** R 
   library(microbenchmark)
   x <- runif(1e5)
-  print(microbenchmark(
+  microbenchmark(
     mean(x),
-    mean1(x)))
+    mean1(x))
 */
