@@ -743,38 +743,44 @@ The following sections describe how to use either individual C++ files and how t
 
 Your standalone C++ file should have extension `.cpp`, and needs to start with:
 
-    #include <Rcpp.h>
-    using namespace Rcpp;
+```C++
+#include <Rcpp.h>
+using namespace Rcpp;
+```
 
 And for each function that you want availble within R, you need to prefix it with:
 
-    // [[Rcpp::export]]
+```C++
+// [[Rcpp::export]]
+```
 
 Then using `sourceCpp("path/to/file.cpp")` will compile the C++ code, create the matching R functions and add them to your current session.
 
 Standalone C++ files can also contain embedded R code in special C++ comment blocks. This is really convenient if you want to run some R test code. For example, running `sourceCpp` on the following file first compiles the C++ code and then compares it to native equivalent:
 
-    #include <Rcpp.h>
-    using namespace Rcpp;
+```C++
+#include <Rcpp.h>
+using namespace Rcpp;
 
-    // [[Rcpp::export]]
-    double mean1(NumericVector x) {
-      int n = x.size();
-      double total = 0;
+// [[Rcpp::export]]
+double mean1(NumericVector x) {
+  int n = x.size();
+  double total = 0;
 
-      for(int i = 0; i < n; ++i) {
-        total =+ x[i] / n;
-      }
-      return total;
-    }
-    /*** R 
-      library(microbenchmark)
-      x <- runif(1e5)
-      print(microbenchmark(
-        mean(x),
-        mean1(x)))
-    */
-    
+  for(int i = 0; i < n; ++i) {
+    total =+ x[i] / n;
+  }
+  return total;
+}
+/*** R 
+  library(microbenchmark)
+  x <- runif(1e5)
+  print(microbenchmark(
+    mean(x),
+    mean1(x)))
+*/
+```  
+
 
 ### In package
 
