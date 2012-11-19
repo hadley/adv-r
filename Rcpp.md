@@ -597,6 +597,8 @@ http://stackoverflow.com/questions/13224322/profiling-rcpp-code-on-os-x
 
 The following case study updates an example [blogged about](From http://dirk.eddelbuettel.com/blog/2011/07/14/) by Dirk Eddelbuettel, illustrating the conversion of a gibbs sampler in R to C++.  The R and C++ code shown below is very similar (it only took a few minutes to convert the R version to the C++ version), but runs about 20 times faster on my computer.  Dirk's blog post also shows another way to make it even faster: using the faster (but presumably less numerically accurate) random number generator functions in GSL (easily accessible from R through RcppGSL) can eke out another 2-3x speed improvement.
 
+The R code is as follows:
+
     gibbs_r <- function(N, thin) {
       mat <- matrix(nrow = N, ncol = 2)
       x <- y <- 0
@@ -610,6 +612,14 @@ The following case study updates an example [blogged about](From http://dirk.edd
       }
       mat
     }
+
+This is straightforward to convert to C++.  We:
+
+* add type declarations to all variables
+* use `(` instead of `[` to index into the matrix
+* subscript the results of `rgamma` and `rnorm` to convert from a vector into a scalar
+
+This yields:
 
     cppFunction('
       NumericMatrix gibbs_cpp(int N, int thin) {
@@ -742,26 +752,50 @@ And for each function that you want availble within R, you need to prefix it wit
 
 Then using `sourceCpp("path/to/file.cpp")` will compile the C++ code, create the matching R functions and add them to your current session.
 
+Standalone C++ files can also contain embedded R code in special C++ comment blocks. This is really convenient if you want to run some R test code. For example, running `sourceCpp` on the following file first compiles the C++ code and then compares it to native equivalent:
+
+    #include <Rcpp.h>
+    using namespace Rcpp;
+
+    // [[Rcpp::export]]
+    double mean1(NumericVector x) {
+      int n = x.size();
+      double total = 0;
+
+      for(int i = 0; i < n; ++i) {
+        total =+ x[i] / n;
+      }
+      return total;
+    }
+    /*** R 
+      library(microbenchmark)
+      x <- runif(1e5)
+      print(microbenchmark(
+        mean(x),
+        mean1(x)))
+    */
+    
+
 ### In package
 
 To use `Rcpp` in a package, your put your C++ files in the `src/` directory and modify/create the following configuration files:
 
 * In `DESCRIPTION` add    
 
-      Depends: Rcpp (>= 0.10) 
-      LinkingTo: Rcpp 
+        Depends: Rcpp (>= 0.10) 
+        LinkingTo: Rcpp 
 
 * Make sure your `NAMESPACE` includes:
 
-      useDynLib(mypackage)
+        useDynLib(mypackage)
 
 * You need `src/Makevars` which contains:
 
-      PKG_LIBS = `$(R_HOME)/bin/Rscript -e "Rcpp:::LdFlags()"`
+        PKG_LIBS = `$(R_HOME)/bin/Rscript -e "Rcpp:::LdFlags()"`
 
   And `src/Makevars.win` that contains:
 
-      PKG_LIBS = $(shell "${R_HOME}/bin${R_ARCH_BIN}/Rscript.exe" -e "Rcpp:::LdFlags()")
+        PKG_LIBS = $(shell "${R_HOME}/bin${R_ARCH_BIN}/Rscript.exe" -e "Rcpp:::LdFlags()")
 
 If you're creating a new package, you can use `Rcpp.package.skeleton( "mypackage")` to speed up the process. For more details see the [Writing a package that uses Rcpp vignette](http://dirk.eddelbuettel.com/code/rcpp/Rcpp-package.pdf). 
 
@@ -771,7 +805,7 @@ Once you're set up, during development, after you create the C++ functions, you 
 
 * In RStudio, any package building command, such as "Build and reload" or "Load all", will update the correct files
 
-* If building a package by hand, use `Rcpp::compileAttributes("pkgpath")`
+* If building a package by hand, use `Rcpp::compileAttributes(".")`
 
 ## Learning more
 
