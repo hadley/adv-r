@@ -133,7 +133,7 @@ In C++, for loops have very little overhead, so it's fine to use them (although 
 
 The C++ version is similar, but:
 
-* To find the length of the vector, we use the `length()` method, which returns an integer. Again, whenever we create a new variable we have to tell C++ what type of object it will hold. An int is a scalar integer, but we could have used double for a scalar numeric, bool for a scalar logical, or a std::string for a scalar character vector.
+* To find the length of the vector, we use the `length()` method, which returns an integer. Again, whenever we create a new variable we have to tell C++ what type of object it will hold. An `int` is a scalar integer, but we could have used `double` for a scalar numeric, `bool` for a scalar logical, or a `std::string` for a scalar character vector.
 
 * The `for` statement has a different syntax: `for(intialise; condition; increase)`. The initialise component creates a new variable called `i` and sets it equal to 0. The condition is checked in each iteration of the loop: the loop is completed when it becomes false. The increase statement is run after each loop iteration (but before the condition is checked). Here we use the special prefix operator `++` which increases the value of `i` by 1.
 
@@ -181,7 +181,7 @@ This function introduces only a few new concepts:
 
 * Finally, C++ doesn't have the `^` operator for exponentiation, it instead has the `pow` function
 
-Note that this function is not only much more verbose than R equivalent, it's unlikely to be much faster - the R version will be very fast because it uses vectorised primitives. These very quickly turn into C loops.  However, our C++ function does have one advantage - it will use less memory, because `pdist1` needs two vectors the same length as y (`z <- x - ys`, and `z ^ 2`)
+Note that this function is not only much more verbose than R equivalent, it won't be much faster - the R version is already very fast because it uses vectorised primitives which very quickly turn into C loops. However, our C++ function does have one advantage - it will use less memory, because `pdist1` needs two vectors the same length as y (`z <- x - ys`, and `z ^ 2`)
 
     ys <- runif(1e5)
     all.equal(pdist1(0.5, ys), pdist2(0.5, ys))
@@ -191,6 +191,8 @@ Note that this function is not only much more verbose than R equivalent, it's un
       pdist1(0.5, ys),
       pdist2(0.5, ys)
     )
+
+In the sugar section, you'll see how to rewrite this function to take advantage of Rcpp's vectorised operations so that the C++ code is barely longer than the R code.
 
 ### Matrix input, vector output
 
@@ -218,15 +220,15 @@ The main thing to notice is that when subsetting a matrix we use `()` and not `[
 
 ### Exercises
 
-With the basics of C++ in hand, now is a great time to practice by writing some simple C++ functions.  
+With the basics of C++ in hand, now is a great time to practice by reading and writing some simple C++ functions.  
 
 Convert the following functions into C++
 
 * `diff`. Start by assuming lag 1, and then generalise for lag n.
 
-* `range`.  Start by assuming that the input has no missing values, then generalise to include a `na.rm` parameter. If `TRUE` your function should ignore missing values (does it need to do anything special?), if `FALSE` it should return two missing values the first time it sees a missing value.
+* `range`. Start by assuming that the input has no missing values, then generalise to include a `na.rm` parameter. If `TRUE` your function should ignore missing values (does it need to do anything special?), if `FALSE` it should return two missing values the first time it sees a missing value.
 
-* `var` or `sd`
+* `var` or `sd`.
 
 ## Important Rcpp classes
 
@@ -299,7 +301,7 @@ For example, we could use this to write an efficient funtion to determine whethe
       bool any_na3(NumericVector x) {
         NumericVector::iterator it = x.begin(), end = x.end();
         for(; it != end; ++it) {
-          if (is_na(ISNA(*it)) return(true);
+          if (ISNA(*it)) return(true);
         }
 
         return(false);
@@ -316,7 +318,7 @@ For example, we could use this to write an efficient funtion to determine whethe
       any_na1(x1), any_na2(x1), any_na3(x1),
       any_na1(x2), any_na2(x2), any_na3(x2))
 
-Our `any_na2` function is always faster than `any_na1` (probably because it avoids allocation an logical vector of the same length of `x`), but it's much faster when the first value is missing. Our hand-written equivalent `any_na3` is exactly the same speed, but 
+Our `any_na2` function is always (slightly) faster than `any_na1` (probably because it avoids allocation an logical vector of the same length of `x`), but it's much faster when the first value is missing. Our hand-written equivalent `any_na3` is exactly the same speed.
 
 ### Vector views
 
@@ -326,17 +328,17 @@ In R these would all produce copies of the vector, but in Rcpp sugar they simply
 
 ### Other useful functions
 
-`mean, `min`, `max`, `sum`, `sd` and `var`.
+* `mean, `min`, `max`, `sum`, `sd` and `var`.
 
-`which_max`, `which_min`
+* `which_max`, `which_min`
 
-`abs`, `exp`, `sign`, `floor`, `ceil`, `pow`, `cumsum`, `diff`, `pmin`, and `pmax`.  All the trigonometric functions like `sin`, `cos` etc. `log`
+* `abs`, `exp`, `sign`, `floor`, `ceil`, `pow`, `log`, `sin`, `cos`, etc.
 
-`diff`
+* `cumsum`, `diff`, `pmin`, and `pmax`
 
-`d/q/p/r` for all standard distributions in R.
+* `d/q/p/r` for all standard distributions in R.
 
-Rcpp provides the special function `no_na(x)`: this asserts that the vector `x` does not contain any missing values, and allows optimisation of some mathematical operations.
+* `no_na(x)`: this asserts that the vector `x` does not contain any missing values, and allows optimisation of some mathematical operations.
 
 ## Missing values
 
@@ -570,14 +572,13 @@ Implement:
 * `min` using `min`
 * `which.min` using `min_element`
 * `setdiff`, `union` and `intersect` using sorted ranges and `set_union`, `set_intersection` and `set_difference`
+* `rle` using `vector` and `push_back`
 
 * re-write our implementation of `row_sums` to use iterators. Rewrite it to use `accumulate`.
 
 <!-- 
 duplicated.data.frame (pastes rows together)
 rank?
-rle (R, 3 copies) ?
-anyNA (vs any(is.NA(x)) - short circuiting)
  -->
 
 ## Special programming topics
@@ -633,6 +634,84 @@ The following case study updates an example [blogged about](From http://dirk.edd
       gibbs_r(100, 10),
       gibbs_cpp(100, 10)
     )
+
+### R vectorisation vs. C++ vectorisation
+
+This example is adapted from [Rcpp is smoking fast for agent-based models in data frames](http://www.babelgraph.org/wp/?p=358). The challenge is to predict a model response from three inputs. The basic R version looks like:
+
+    vacc1a <- function(age, female, ily) {
+      p <- 0.25 + 0.3 * 1 / (1 - exp(0.04 * age)) + 0.1 * ily
+      p <- p * if (female) 1.25 else 0.75
+      p <- max(0, p)
+      p <- min(1, p)
+      p
+    }
+
+We want to be able to apply this function to many inputs, so we might write a vectorised version using a for loop.
+
+    vacc1 <- function(age, female, ily) {
+      n <- length(age)
+      out <- numeric(n)
+      for (i in seq_len(n)) {
+        out[i] <- vacc1a(age[i], female[i], ily[i])
+      }
+      out
+    }
+
+If you're familiar with R, you'll have a gut feeling that this will be slow, and indeed it is. There are two ways we could attack this problem. If you have a good R vocabulary, you might immediately see how to vectorise the function (using `ifelse`, `pmin` and `pmax`).  Alternatively, we could rewrite `vacc1a` and `vacc1` in C++, using our knowledge that loops and function calls have much lower overhead in C++.
+
+Either approach is fairly straighforward. In R:
+
+    vacc2 <- function(age, female, ily) {
+      p <- 0.25 + 0.3 * 1 / (1 - exp(0.04 * age)) + 0.1 * ily
+      p <- p * ifelse(female, 1.25, 0.75)
+      p <- pmax(0, p)
+      p <- pmin(1, p)
+      p
+    }
+
+Or in C++:
+
+    double vacc3a(double age, bool female, bool ily){
+      double p = 0.25 + 0.3 * 1 / (1 - exp(0.04 * age)) + 0.1 * ily;
+      p = p * (female ? 1.25 : 0.75);
+      p = std::max(p, 0.0); 
+      p = std::min(p, 1.0);
+      return p;
+    }
+
+    // [[Rcpp::export]]
+    NumericVector vacc3(NumericVector age, LogicalVector female, LogicalVector ily) {
+      int n = age.size();
+      NumericVector out(n);
+
+      for(int i = 0; i < n; ++i) {
+        out[i] = vacc3a(age[i], female[i], ily[i]);
+      }
+
+      return out;
+    }
+
+We next generate some sample data, and check that all three versions return the same values:
+
+    n <- 1000
+    age <- rnorm(n, mean = 50, sd = 10)
+    female <- sample(c(T, F), n, rep = TRUE)
+    ily <- sample(c(T, F), n, prob = c(0.8, 0.2), rep = TRUE)
+
+    stopifnot(
+      all.equal(vacc1(age, female, ily), vacc2(age, female, ily)),
+      all.equal(vacc1(age, female, ily), vacc3(age, female, ily))
+    )
+
+The original blog post forgot to do this, and hence introduced a bug in the C++ version: `0.004` instead of `0.04`.  Finally, we can benchmark our three approaches:
+
+    microbenchmark(
+      vacc1(age, female, ily),
+      vacc2(age, female, ily),
+      vacc3(age, female, ily)
+
+Not surprisingly, our original approach with loops is very slow.  Vectorising in R gives a huge speedup, and we can eke out even more performance (~10x) with the C++ loop.  I was a little surprised that the C++ was so much faster, but I think that this is because the R version has to create 11 vectors to store intermediate results, where the C++ code only needs to create 1.
 
 ## Using Rcpp in a package
 
