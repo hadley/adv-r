@@ -711,29 +711,67 @@ The original blog post forgot to do this, and hence introduced a bug in the C++ 
       vacc2(age, female, ily),
       vacc3(age, female, ily)
 
-Not surprisingly, our original approach with loops is very slow.  Vectorising in R gives a huge speedup, and we can eke out even more performance (~10x) with the C++ loop.  I was a little surprised that the C++ was so much faster, but I think that this is because the R version has to create 11 vectors to store intermediate results, where the C++ code only needs to create 1.
+Not surprisingly, our original approach with loops is very slow.  Vectorising in R gives a huge speedup, and we can eke out even more performance (~10x) with the C++ loop. I was a little surprised that the C++ was so much faster, but it is because the R version has to create 11 vectors to store intermediate results, where the C++ code only needs to create 1.
 
-## Using Rcpp in a package
+## Standalone C++
+
+The examples in this chapter have focused on inline C++ because it's easy to copy, paste and experiment, with a minimum of infrastructure to set up. For real problems, it's usually easier to use standalone C++ files so that you get:
+
+* one compilation step for all functions
+
+* can easily define C++ helper functions
+
+* easier transition to packaged code
+
+* better editor support: C++ editors (like RStudio) can provide syntax highlighting, code completion, help, "go to definition", refactoring, and static code analysis
+
+* better line numbers in error messages
+
+The following sections describe how to use either individual C++ files and how to include Rcpp code in a package.
+
+### A single file
+
+Your standalone C++ file should have extension `.cpp`, and needs to start with:
+
+    #include <Rcpp.h>
+    using namespace Rcpp;
+
+And for each function that you want availble within R, you need to prefix it with:
+
+    // [[Rcpp::export]]
+
+Then using `sourceCpp("path/to/file.cpp")` will compile the C++ code, create the matching R functions and add them to your current session.
 
 ### In package
 
-For more details see the vignette, [Writing a package that uses Rcpp](http://dirk.eddelbuettel.com/code/rcpp/Rcpp-package.pdf).
+To use `Rcpp` in a package, your put your C++ files in the `src/` directory and modify/create the following configuration files:
 
-    Rcpp.package.skeleton( "mypackage" )
+* In `DESCRIPTION` add    
 
-Description:
+      Depends: Rcpp (>= 0.10) 
+      LinkingTo: Rcpp 
 
-    Depends: Rcpp (>= 0.9.4.1) 
-    LinkingTo: Rcpp 
+* Make sure your `NAMESPACE` includes:
 
-Namespace:
+      useDynLib(mypackage)
 
-    useDynLib(mypackage)
+* You need `src/Makevars` which contains:
 
+      PKG_LIBS = `$(R_HOME)/bin/Rscript -e "Rcpp:::LdFlags()"`
 
-Makefiles
+  And `src/Makevars.win` that contains:
 
-R function
+      PKG_LIBS = $(shell "${R_HOME}/bin${R_ARCH_BIN}/Rscript.exe" -e "Rcpp:::LdFlags()")
+
+If you're creating a new package, you can use `Rcpp.package.skeleton( "mypackage")` to speed up the process. For more details see the [Writing a package that uses Rcpp vignette](http://dirk.eddelbuettel.com/code/rcpp/Rcpp-package.pdf). 
+
+Once you're set up, during development, after you create the C++ functions, you need to generate the files that create the R functions that call your C++ functions. There are currently three ways to do this, depending on your pacakge development environment:
+
+* `devtools::load_all` handles Rcpp files automatically.
+
+* In RStudio, any package building command, such as "Build and reload" or "Load all", will update the correct files
+
+* If building a package by hand, use `Rcpp::compileAttributes("pkgpath")`
 
 ## Learning more
 
