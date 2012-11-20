@@ -13,28 +13,28 @@ To get the most out of this book, you should be familiar with "the basics".  For
     # Operators
     %in%, match
     =, <-, <<-, assign
-    $, [, [[, replace, head, tail, subset
+    $, [, [[, head, tail, subset
     with
     within
 
     # Comparison 
     all.equal, identical
     !=, ==, >, >=, <, <=
-    is.na, is.nan, is.finite
-    complete.cases
+    is.na, complete.cases
+    is.finite
 
     # Basic math
     *, +, -, /, ^, %%, %/%
     abs, sign
-    acos, acosh, asin, asinh, atan, atan2, atanh
-    sin, sinh, cos, cosh, tan, tanh
+    acos, asin, atan, atan2
+    sin, cos, tan
     ceiling, floor, round, trunc, signif
-    exp, log, log10, log1p, log2, logb, sqrt
+    exp, log, log10, log2, sqrt
 
-    cummax, cummin, cumprod, cumsum, diff
     max, min, prod, sum
+    cummax, cummin, cumprod, cumsum, diff
     range
-    mean, median, cor, cov, sd, var
+    mean, median, cor, sd, var
     pmax, pmin
     rle
 
@@ -158,8 +158,8 @@ To get the most out of this book, you should be familiar with "the basics".  For
     library(foreign)
     write.table
     readLines, writeLines
-    load, save
     readRDS, saveRDS
+    load, save
 
     # Files and directories 
     dir
