@@ -82,3 +82,22 @@ std::tr1::unordered_set<int> unique1(IntegerVector x) {
   } 
   return(seen);
 }
+
+// [[Rcpp::export]]
+std::tr1::unordered_set<int> unique2(IntegerVector x) {
+  std::tr1::unordered_set<int> seen;
+  seen.insert(x.begin(), x.end());
+
+  return(seen);
+}
+
+// [[Rcpp::export]]
+std::tr1::unordered_set<int> unique3(IntegerVector x) {
+  std::tr1::unordered_set<int> seen(x.begin(), x.end());
+  return seen;
+}
+
+// [[Rcpp::export]]
+std::tr1::unordered_set<int> unique4(IntegerVector x) {
+  return std::tr1::unordered_set<int>(x.begin(), x.end());
+}

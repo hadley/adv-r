@@ -222,13 +222,70 @@ The main thing to notice is that when subsetting a matrix we use `()` and not `[
 
 With the basics of C++ in hand, now is a great time to practice by reading and writing some simple C++ functions.  
 
+For each of the following C++ functions, read the code and figure out what base R function it corresponds to.  You might not understand every part of the code yet, but you should be able to figure out the essence of what the function does.
+
+    double f1(NumericVector x) {
+      int n = x.size();
+      double y = 0;
+
+      for(int i = 0; i < n; ++i) {
+        y =+ x[i] / n;
+      }
+      return y;
+    }
+
+    NumericVector f2(NumericVector x) {
+      int n = x.size();
+      NumericVector out(n);
+
+      out[0] = x[0];
+      for(int i = 1; i < n; ++i) {
+        out =+ out[i - 1] + x[i];
+      }
+      return out;
+    }
+
+    bool f3(LogicalVector x) {
+      int n = x.size();
+
+      for(int i = 0; i < n; ++i) {
+        if (x[i]) return true;
+      }
+      return false;
+    }
+
+    int f4(Function pred, List x) {
+
+      int n = x.size();
+
+      for(int i = 0; i < n; ++i) {
+        LogicalVector res = pred(x[i]);
+        if (res[0]) return i + 1;
+      }
+      return 0;
+    }
+
+    NumericVector f5(NumericVector x, NumericVector y) {
+      int n = std::max(x.size(), y.size());
+      NumericVector x1 = rep_len(x, n);
+      NumericVector y1 = rep_len(y, n);
+
+      NumericVector out(n);
+
+      for (int i = 0; i < n; ++i) {
+        out[i] = std::min(x[i], y[i]);
+      }
+
+      return(out);
+    }
+
 Convert the following functions into C++
 
 * `diff`. Start by assuming lag 1, and then generalise for lag n.
 
 * `range`. Start by assuming that the input has no missing values, then generalise to include a `na.rm` parameter. If `TRUE` your function should ignore missing values (does it need to do anything special?), if `FALSE` it should return two missing values the first time it sees a missing value.
 
-* `var` or `sd`.
+* `var`.  Read about the approaches you can take at [wikipedia](http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance).  Whenever implementing a numerical algorithm it's always good to check what is already known about the problem.
 
 ## Important Rcpp classes
 
@@ -587,9 +644,11 @@ rank?
 
 Table?
 
+<!-- 
 ### Profiling
 
 http://stackoverflow.com/questions/13224322/profiling-rcpp-code-on-os-x
+ -->
 
 ## Case studies
 
@@ -818,7 +877,7 @@ Once you're set up, during development, after you create the C++ functions, you 
 
 ### More Rcpp
 
-This chapter has only touched on a small part of Rcpp, giving you the basic tools to rewrite poorly performing R code in C++.  Rcpp has many other capabilities that make it easy to interface R to existing C++ code, including:
+This chapter has only touched on a small part of Rcpp, giving you the basic tools to rewrite poorly performing R code in C++. Rcpp has many other capabilities that make it easy to interface R to existing C++ code, including:
 
 * automatically creating the wrappers between C++ data structures and R
   data structures. A good introduction to this topic is the vignette of [Rcpp modules](http://dirk.eddelbuettel.com/code/rcpp/Rcpp-modules.pdf)
