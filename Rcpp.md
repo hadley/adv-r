@@ -1,6 +1,6 @@
 # High performance functions with Rcpp
 
-Sometimes R code just isn't fast enough - you've used profiling to find the bottleneck, but there's simply no way to make the code any faster. This chapter is the answer to that problem: use Rcpp to easily write key functions in C++ to get high-performance functions that only take slightly longer to write than their R requivalents. [Rcpp](http://dirk.eddelbuettel.com/code/rcpp.html) is a fantastic tool written by Dirk Eddelbuettel, Romain Francois, Doug Bates, John Chambers and JJ Allaire that makes it dead simple to write high-performance R code in C++.
+Sometimes R code just isn't fast enough - you've used profiling to find the bottleneck, but there's simply no way to make the code any faster. This chapter is the answer to that problem: use Rcpp to easily write key functions in C++ to get high-performance functions that only take slightly longer to write than their R requivalents. [Rcpp](http://dirk.eddelbuettel.com/code/rcpp.html) is a fantastic tool written by Dirk Eddelbuettel and Romain Francois (with key contribution by Doug Bates, John Chambers and JJ Allaire) that makes it dead simple to write high-performance C++ code for use from R.
 
 It is possible to write high performance code in C or Fortran. This may (or may not) be produce faster code, but it will almost certainly take you much much longer to write.  Without Rcpp, you must sacrifice a lot of very helpful wrappers and master the complex C internals of R yourself. In my opinion, using Rcpp is currently the best balance between speed and convenience.
 
@@ -24,9 +24,9 @@ The aim of this chapter is to give you the absolute basics to get up and running
 
 ## Getting started with Rcpp
 
-All examples in this chapter need at least version 0.10 of the `Rcpp` package. This version includes `cppFunction`, which makes it very easy to connect C++ to R. You'll also (obviously) need a working C++ compiler.  
+All examples in this chapter need at least version 0.10.0 of the `Rcpp` package. This version includes `cppFunction`, which makes it very easy to connect C++ to R. You'll also (obviously) need a working C++ compiler.  
 
-If you're familiar with `inline::cfunction`, `cppFunction` is similarly, except that you specifcy the function completely in the string, and it parses the C++ function arguments to figure out what the R function arguments should be:
+If you're familiar with `inline::cxxfunction`, `cppFunction` is similarly, except that you specifcy the function completely in the string, and it parses the C++ function arguments to figure out what the R function arguments should be:
 
     cppFunction('
       int add(int x, int y, int z) {
