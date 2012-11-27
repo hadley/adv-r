@@ -196,7 +196,7 @@ If you run `dummy()` a few times, you'll notice the output is basically random. 
       memset(INTEGER(out), 0, n * sizeof(int));
       UNPROTECT(1);
 
-      return(out);
+      return out;
     ')
     zeroes(10);
 
@@ -230,7 +230,7 @@ The following example shows how to use the helper function `REAL` to inspect and
       }
       UNPROTECT(1);
 
-      return(out);
+      return out;
     ")
     add_one(as.numeric(1:10))
 
@@ -252,7 +252,7 @@ If you're working with long vectors, there's a performance advantage to using th
       }
       UNPROTECT(1);
 
-      return(out);
+      return out;
     ")
     add_two(as.numeric(1:10))
 
@@ -281,7 +281,7 @@ String vectors are a little more complicated. As discussed earlier, a string vec
 
       UNPROTECT(1);
 
-      return(out);
+      return out;
     ')
     abc()
 
@@ -301,7 +301,7 @@ The following function just makes a copy of a string, so you can at least see ho
       }
       UNPROTECT(1);
       
-      return(out);
+      return out;
     ')
     copy(letters)
 
@@ -384,7 +384,7 @@ You can make new pairlists with `CONS` or `LCONS` (if you want a call object). A
       out = LCONS(install("+"), LCONS(
           ScalarReal(10), LCONS(
             ScalarReal(5), R_NilValue)));
-      return(out);
+      return out;
     ')
     new_call();
 
@@ -434,7 +434,7 @@ There are some (confusingly named) shortcuts for common setting operations: `cla
 
       UNPROTECT(1);
 
-      return(out);
+      return out;
     ')
     tags(quote(f(a = 1, b = 2, c = 3)))
     tags(quote(f()))
@@ -481,7 +481,7 @@ For example, a primitive implementation of `is.NA` might look like
       }
       UNPROTECT(1);
 
-      return(out);
+      return out;
     ')
     is_na(c(NA, 1L))
     is_na(c(NA, 1))

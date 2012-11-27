@@ -280,7 +280,7 @@ For each of the following C++ functions, read the code and figure out what base 
         out[i] = std::min(x[i], y[i]);
       }
 
-      return(out);
+      return out;
     }
 
 To practice your function writing skills, convert the following functions into C++.  For now, assume the inputs have no missing values.
@@ -672,7 +672,7 @@ The following function is a simple implementation of R's `duplicated` funciton. 
         out[i] = seen.insert(x[i]).second;
       }
 
-      return(out);
+      return out;
     }
 
 ### Unordered map
