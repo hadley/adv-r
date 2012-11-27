@@ -15,7 +15,7 @@ LogicalVector duplicated2(IntegerVector x) {
     *out_it = seen.insert(*it).second;
   }
 
-  return(out);
+  return out;
 }
 
 // [[Rcpp::export]]
@@ -31,7 +31,7 @@ LogicalVector duplicated3(IntegerVector x) {
     *out_it = seen.insert(*it).second;
   }
 
-  return(out);
+  return out;
 }
 
 // [[Rcpp::export]]
@@ -47,7 +47,7 @@ LogicalVector duplicated3a(IntegerVector x) {
     *out_it = seen.insert(*it).second;
   }
 
-  return(out);
+  return out;
 }
 
 // [[Rcpp::export]]
@@ -60,7 +60,7 @@ LogicalVector duplicated4(IntegerVector x) {
     out[i] = seen.insert(x[i]).second;
   }
 
-  return(out);
+  return out;
 }
 
 // [[Rcpp::export]]
@@ -70,7 +70,7 @@ std::set<int> s_unique(IntegerVector x) {
   for(IntegerVector::iterator it = x.begin(); it != x.end(); ++it) {
     seen.insert(*it);
   } 
-  return(seen);
+  return seen;
 }
 
 // [[Rcpp::export]]
@@ -80,7 +80,7 @@ std::tr1::unordered_set<int> unique1(IntegerVector x) {
   for(IntegerVector::iterator it = x.begin(); it != x.end(); ++it) {
     seen.insert(*it);
   } 
-  return(seen);
+  return seen;
 }
 
 // [[Rcpp::export]]
@@ -88,7 +88,7 @@ std::tr1::unordered_set<int> unique2(IntegerVector x) {
   std::tr1::unordered_set<int> seen;
   seen.insert(x.begin(), x.end());
 
-  return(seen);
+  return seen;
 }
 
 // [[Rcpp::export]]
@@ -101,3 +101,35 @@ std::tr1::unordered_set<int> unique3(IntegerVector x) {
 std::tr1::unordered_set<int> unique4(IntegerVector x) {
   return std::tr1::unordered_set<int>(x.begin(), x.end());
 }
+
+/*** R
+
+library(microbenchmark)
+
+x <- sample(1e3, 1e5, rep = T)
+microbenchmark(
+  duplicated(x),
+  duplicated2(x),
+  duplicated3(x),
+  duplicated3a(x),
+  duplicated4(x)
+)
+
+microbenchmark(
+  sort(unique(x)),
+  s_unique(x),
+  sort(unique1(x)),
+  sort(unique2(x)),
+  sort(unique3(x))
+)
+
+x <- sample(1e3, 1e6, rep = T)
+microbenchmark(
+  unique(x),
+  unique1(x),
+  unique2(x),
+  unique3(x),
+  unique4(x)
+)
+
+*/

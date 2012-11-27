@@ -63,5 +63,5 @@ NumericVector f5(NumericVector x, NumericVector y) {
     out[i] = std::min(x[i], y[i]);
   }
 
-  return(out);
+  return out;
 }

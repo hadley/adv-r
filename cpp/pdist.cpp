@@ -52,20 +52,20 @@ NumericVector pdist4(double x, NumericVector ys) {
 
 
 /*** R 
-  pdist1 <- function(x, ys) {
-    (x[1] - ys) ^ 2
-  }
+pdist1 <- function(x, ys) {
+  (x[1] - ys) ^ 2
+}
 
-  ys <- runif(1e5)
-  all.equal(pdist1(0.5, ys), pdist2(0.5, ys))
-  all.equal(pdist1(0.5, ys), pdist3(0.5, ys))
+ys <- runif(1e5)
+all.equal(pdist1(0.5, ys), pdist2(0.5, ys))
+all.equal(pdist1(0.5, ys), pdist3(0.5, ys))
 
-  library(microbenchmark)
-  microbenchmark(
-    pdist1(0.5, ys),
-    pdist2(0.5, ys),
-    pdist3(0.5, ys),
-    pdist4(0.5, ys)
-  )
+library(microbenchmark)
+microbenchmark(
+  pdist1(0.5, ys),
+  pdist2(0.5, ys),
+  pdist3(0.5, ys),
+  pdist4(0.5, ys)
+)
 
 */

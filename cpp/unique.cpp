@@ -18,7 +18,7 @@ std::tr1::unordered_set<std::string> unique1(CharacterVector x) {
   for(CharacterVector::iterator it = x.begin(); it != x.end(); ++it) {
     seen.insert(std::string(*it));
   } 
-  return(seen);
+  return seen;
 }
 
 // [[Rcpp::export]]

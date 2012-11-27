@@ -18,7 +18,7 @@ IntegerVector match1(const CharacterVector x, const CharacterVector table) {
     const char* name = x[j];
     out[j] = lookup[name];
   }
-  return(out);
+  return out;
 }
 
 // With iterators: is actually slower?
@@ -40,5 +40,32 @@ IntegerVector match2(const CharacterVector x, const CharacterVector table) {
     const char* name = it[j];
     out[j] = lookup[name];
   }
-  return(out);
+  return out;
 }
+
+/*** R
+
+library(microbenchmark)
+
+# Long x, short table
+x <- sample(letters, 1e4, rep = T)
+microbenchmark(
+  match(x, letters),
+  match1(x, letters),
+  match2(x, letters)
+)
+
+x <- replicate(1e4, paste(sample(letters, 10), collapse = ""))
+microbenchmark(
+  match(x[1:10], x),
+  match1(x[1:10], x),
+  match2(x[1:10], x)
+)
+
+microbenchmark(
+  match(x[9990:10000], x),
+  match1(x[9990:10000], x),
+  match2(x[9990:10000], x)
+)
+
+*/

@@ -23,7 +23,7 @@ IntegerVector table1(const CharacterVector x) {
     out[i] = it->second;
   }
   out.attr("names") = names;
-  return(out);
+  return out;
 }
 
 // [[Rcpp::export]]
@@ -45,7 +45,7 @@ IntegerVector table4(CharacterVector x) {
     out[i] = it->second;
   }
   out.attr("names") = names;
-  return(out);
+  return out;
 }
 
 // [[Rcpp::export]]
@@ -98,3 +98,19 @@ std::map<std::string, int> table6a(CharacterVector x) {
   }
   return result;
 }
+
+/*** R
+library(microbenchmark)
+
+x <- sample(letters, 1e4, rep = T)
+microbenchmark(
+  table(x),
+  table1(x),
+  table4(x),
+  table5(x),
+  table6(x),
+  table6a(x)
+)
+# About 2x slower
+
+*/

@@ -9,7 +9,7 @@ cppFunction('
     for (int i = 0; i < n; ++i) {
       out[i] = a[i] + b[i];
     }
-    return(out);
+    return out;
   }
 ')
 
@@ -20,7 +20,7 @@ cppFunction('
     for (int i = 0; i < n; ++i) {
       out[i] = a[i] + b[i] + c[i];
     }
-    return(out);
+    return out;
   }
 ')
 
@@ -31,7 +31,7 @@ cppFunction('
     for (int i = 0; i < n; ++i) {
       out[i] = a[i] + b[i] + c[i] + d[i];
     }
-    return(out);
+    return out;
   }
 ')
 

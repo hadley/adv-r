@@ -14,7 +14,7 @@ IntegerVector findInterval2(NumericVector x, NumericVector breaks) {
     *out_it = std::distance(ubound, breaks.begin());
   }
 
-  return(out);
+  return out;
 }
 
 // [[Rcpp::export]]
@@ -31,5 +31,17 @@ IntegerVector findInterval3(NumericVector x, NumericVector breaks) {
     *out_it = std::distance(ubound, breaks_it);
   }
 
-  return(out);
+  return out;
 }
+
+/*** R
+
+library(microbenchmark)
+x <- sample(10, 1000, rep = T)
+print(microbenchmark(
+  findInterval(x, c(2, 4, 8)),
+  findInterval2(x, c(2, 4, 8)),
+  findInterval3(x, c(2, 4, 8))
+))
+
+*/

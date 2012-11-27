@@ -95,25 +95,22 @@ std::vector<int> order4(NumericVector x) {
 }
 
 /*** R 
-  options(digits = 3)
-  library(microbenchmark)
-  x <- runif(1e4)
-  ord <- x[order(x)]
+options(digits = 3)
+library(microbenchmark)
+x <- runif(1e4)
+ord <- x[order(x)]
 
-  stopifnot(all.equal(ord, x[order1(x)]))
-  stopifnot(all.equal(ord, x[order2(x)]))
-  stopifnot(all.equal(ord, x[order3(x)]))
-  stopifnot(all.equal(ord, x[order4(x)]))
-  stopifnot(all.equal(ord, x[order5(x)]))
-  
-  microbenchmark(
-    order(x),
-    order1(x),
-    order2(x),
-    order3(x),
-    order4(x),
-    order5(x),
-    sort(x)
-  )
+stopifnot(all.equal(ord, x[order1(x)]))
+stopifnot(all.equal(ord, x[order2(x)]))
+stopifnot(all.equal(ord, x[order3(x)]))
+stopifnot(all.equal(ord, x[order4(x)]))
 
+microbenchmark(
+  order(x),
+  order1(x),
+  order2(x),
+  order3(x),
+  order4(x),
+  sort(x)
+)
 */

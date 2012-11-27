@@ -12,14 +12,14 @@ NumericVector range2(NumericVector x, const bool na_rm) {
     if (!na_rm && R_IsNA(x[i])) {
       out[0] = NA_REAL;
       out[1] = NA_REAL;
-      return(out);
+      return out;
     }
 
     if (x[i] < out[0]) out[0] = x[i];
     if (x[i] > out[1]) out[1] = x[i];
   }
 
-  return(out);
+  return out;
 
 }
 
@@ -37,14 +37,14 @@ NumericVector range3(NumericVector x, const bool na_rm) {
     if (!na_rm && R_IsNA(val)) {
       out[0] = NA_REAL;
       out[1] = NA_REAL;
-      return(out);
+      return out;
     }
 
     if (val < out[0]) out[0] = val;
     if (val > out[1]) out[1] = val;
   }
 
-  return(out);
+  return out;
 
 }
 
@@ -61,12 +61,36 @@ NumericVector range3a(const NumericVector& x, const bool na_rm) {
     if (!na_rm && R_IsNA(val)) {
       out[0] = NA_REAL;
       out[1] = NA_REAL;
-      return(out);
+      return out;
     }
 
     if (val < out[0]) out[0] = val;
     if (val > out[1]) out[1] = val;
   }
 
-  return(out);
+  return out;
 }
+
+/*** R
+
+library(microbenchmark)
+
+x <- c(NA, runif(1e5))
+microbenchmark(
+  range(x, na.rm = TRUE),
+  min(x, na.rm = TRUE),
+  max(x, na.rm = TRUE),
+  range2(x, TRUE),
+  range3(x, TRUE),
+  range3a(x, TRUE)
+)
+microbenchmark(
+  range(x, na.rm = FALSE),
+  min(x, na.rm = FALSE),
+  max(x, na.rm = FALSE),
+  range2(x, FALSE),
+  range3(x, FALSE),
+  range3a(x, FALSE)
+)
+
+*/

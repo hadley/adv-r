@@ -33,7 +33,7 @@ List rle2(NumericVector x) {
 /*** R
 
 x <- rev(rep(1:20, 1:20))
-y <- sample(10, 1e3, rep = T)
+y <- sample(10, 1e4, rep = T)
 
 library(microbenchmark)
 microbenchmark(

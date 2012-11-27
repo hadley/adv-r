@@ -13,7 +13,7 @@ NumericVector pmin1(NumericVector x, NumericVector y) {
     out[i] = std::min(x[i], y[i]);
   }
 
-  return(out);
+  return out;
 }
 
 // [[Rcpp::export]]
@@ -28,7 +28,7 @@ NumericVector pmin2(NumericVector x, NumericVector y) {
     out[i] = x[i] < y[i] ? x[i] : y[i];
   }
 
-  return(out);
+  return out;
 }
 
 // [[Rcpp::export]]
@@ -46,24 +46,23 @@ NumericVector pmin3(NumericVector x, NumericVector y) {
     *out_i = std::min(*x_i, *y_i);
   }
 
-  return(out);
+  return out;
 }
 
-
-
 /*** R 
-  options(digits = 3)
-  library(microbenchmark)
-  x <- runif(1e5)
-  y <- runif(1e5)
 
-  stopifnot(all.equal(pmin(x, y), pmin1(x, y)))
-  
-  microbenchmark(
-    pmin(x, y),
-    pmin1(x, y),
-    pmin2(x, y),
-    pmin3(x, y)
-  )
+options(digits = 3)
+library(microbenchmark)
+x <- runif(1e5)
+y <- runif(1e5)
+
+stopifnot(all.equal(pmin(x, y), pmin1(x, y)))
+
+microbenchmark(
+  pmin(x, y),
+  pmin1(x, y),
+  pmin2(x, y),
+  pmin3(x, y)
+)
 
 */
