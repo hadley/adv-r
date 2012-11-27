@@ -1,5 +1,4 @@
 #include <Rcpp.h>
-#include <boost/array.hpp>
 using namespace Rcpp;
 
 // Create a pair, sort it, extra first value

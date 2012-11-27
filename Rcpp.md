@@ -538,7 +538,7 @@ This works the same way as the Rcpp sugar function `is_na`.
 
 The real strength of C++ shows itself when you need to implement more complex algorithms. The standard template library (STL) provides set of extremely useful data structures and algorithms. This section will explain the most important algorithms and data structures and point you in the right direction to learn more.
 
-If you need an algorithm or data strucutre that isn't implemented in STL, the first place to look is [boost](http://www.boost.org/doc/).
+If you need an algorithm or data strucutre that isn't implemented in STL, a good place to look is [boost](http://www.boost.org/doc/). Installing boost on to your computer is beyond the scope of this chapter, but once you have it installed, you can use `boost` data structures and algorithms by including the appropriate header file with (e.g.) `#include <boost/array.h>`.
 
 ### Using iterators
 
@@ -548,8 +548,7 @@ Iterators are used extensively in the STL: many functions either accept or retur
       double sum3(NumericVector x) {
         double total = 0;
 
-        NumericVector::iterator end = x.end();
-        for(NumericVector::iterator it = x.begin(); it != end; ++it) {
+        for(NumericVector::iterator it = x.begin(); it != x.end(); ++it) {
           total += *it;
         }
         return total;
@@ -562,25 +561,20 @@ The main changes are in the for loop:
 
 * instead of indexing into x, we use the dereference operator to get its current value: `*it`.
 
-* notice the type of the iterator: `NumericVector::iterator`.  Each vector type has it's own iterator type: `LogicalVector::iterator`, `CharacterVector::iterator` etc.
+* notice the type of the iterator: `NumericVector::iterator`.  Each vector type has its own iterator type: `LogicalVector::iterator`, `CharacterVector::iterator` etc.
 
-Iterators also allow us to use the C++ equivalents of the apply family of functions. For example, we could again rewrite `sum` to use the `accumulate` function, which takes an starting and ending iterator and adds all the values in between. The third argument to accumulate gives the initial value: it's particularly important because this also determines the data type that accumulate uses (here we use `0.0` and not `0` so that accumulate uses a `double`, not an `int`.)
+Iterators also allow us to use the C++ equivalents of the apply family of functions. For example, we could again rewrite `sum` to use the `accumulate` function, which takes an starting and ending iterator and adds all the values in between. The third argument to accumulate gives the initial value: it's particularly important because this also determines the data type that accumulate uses (here we use `0.0` and not `0` so that accumulate uses a `double`, not an `int`.).  To use `accumulate` we need to include the `<numeric>` header.
 
     cppFunction('
       #include <numeric>
       double sum4(NumericVector x) {
-
-        double total = std::accumulate(x.begin(), x.end(), 0.0);
-        return total;
+        return std::accumulate(x.begin(), x.end(), 0.0);
       }
     ')
 
-`accumulate` (along with the other functions in `<numeric>`, `adjacent_difference`, `inner_product` and `partial_sum`) are not that important in Rcpp because Rcpp sugar provides equivalents: `sum`, `diff, `*` and `cumsum`.
-
+`accumulate` (along with the other functions in `<numeric>`, `adjacent_difference`, `inner_product` and `partial_sum`) are not that important in Rcpp because Rcpp sugar provides equivalents.
 
 ### Algorithms
-
-http://www.cplusplus.com/reference/algorithm/
 
 The `<algorithm>` header provides a large number of algorithms that work with iterators. For example, we could write a basic Rcpp version of `findInterval` that takes two arguments a vector of values and a vector of breaks - the aim is to find the bin that each x falls into. This shows off a few more advanced iterator features.  Read the code below and see if you can figure out how it works.
 
@@ -601,6 +595,8 @@ The `<algorithm>` header provides a large number of algorithms that work with it
       }
     ')
 
+The key points are:
+
 * We step through two iterators (input and output) simultaneously.  
 
 * We can assign into an dereferenced iterator (`out_it`) to change the values in `out`.
@@ -611,45 +607,61 @@ The `<algorithm>` header provides a large number of algorithms that work with it
 
 It's generally better to use algorithms from the STL than hand rolled loops.  In "Effective STL", Scott Meyer gives three reasons: efficiency, correctness and maintainability. Algorithms from the STL are written by C++ experts to be extremely efficient, and they have been around for a long time so they are well tested. Using standard algorithms also makes the intent of your code more clear, helping to make it more readable and more maintainable.
 
+A good reference guide for algorithms is http://www.cplusplus.com/reference/algorithm/
+
 ### Data structures
 
-The STL provides a large set of data structures: `array`, `bitset`, `list`, `forward_list`, `map`, `multimap`, `multiset`, `priority_queue`, `queue`, `dequeue`, `set`, `stack`, `unordered_map`, `unordered_set`, `unordered_multimap`, `unordered_multiset`, and `vector`.  The most important of these datastructures are the `vector`, the `unordered_set`, and the `unordered_map`.  We'll focus on these three in this section, but using the others is very similar: they just have different performance tradeoffs. For example, the `deque` (pronounced "deck") has a very similar interface to vectors but a different implementation with different performance trade-offs. You may want to try them for your problem.
-
-http://www.cplusplus.com/reference/stl/
+The STL provides a large set of data structures: `array`, `bitset`, `list`, `forward_list`, `map`, `multimap`, `multiset`, `priority_queue`, `queue`, `dequeue`, `set`, `stack`, `unordered_map`, `unordered_set`, `unordered_multimap`, `unordered_multiset`, and `vector`.  The most important of these datastructures are the `vector`, the `unordered_set`, and the `unordered_map`.  We'll focus on these three in this section, but using the others is very similar: they just have different performance tradeoffs. For example, the `deque` (pronounced "deck") has a very similar interface to vectors but a different implementation with different performance trade-offs. You may want to try them for your problem.  
 
 One nice feature of the STL containers is that Rcpp knows how to convert from most STL data structures to their R equivalents. For example, the following is a very simple implementation of a unique function: it loads everything into a set and then returns the set. Rcpp takes care of converting it into an integer vector.
 
-    std::tr1::unordered_set<int> unique(IntegerVector x) {
-      std::tr1::unordered_set<int> seen;
+A good reference for stl data structures is http://www.cplusplus.com/reference/stl/
 
-      for(IntegerVector::iterator it = x.begin(); it != x.end(); ++it) {
-        seen.insert(*it);
-      } 
-      return(seen);
-    }
+### Vector
+
+A stl vector is very similar to an R vector, except that it expands efficiently.  This makes vectors appropriate to use when you don't know in advance how big the output will be.  Vectors are templated, which means that you need to specify the type of object the vector will contain when you create it: `vector<int>`, `vector<bool>`, `vector<double>`, `vector<std::string>`.  You can access individual elements of a vector using the standard `[]` notation, and you can add a new element to the end of the vector using `.push_back()`.  If you have some idea in advance how big the vector will be, you can use `.reserve()` to allocate sufficient storage.
+
+The following code implements run length encoding (`rle`). It produces two vectors of output: a vector of values, and a vector `lengths` giving how many times each element is repeated. It works by looping through the input vector `x` comparing each value to the previous: if it's the same, then it increments the last value in `lengths`; if it's different, it adds the value to the end of `values`, and sets the corresponding length to 1.
 
     // [[Rcpp::export]]
-    NumericVector tapply3(NumericVector x, IntegerVector i, Function fun) {
-      std::map<int, std::vector<double> > groups;
-      
-      NumericVector::iterator x_it;
-      IntegerVector::iterator i_it;
-      
-      for(x_it = x.begin(), i_it = i.begin(); x_it != x.end(); ++x_it, ++i_it) {
-        groups[*i_it].push_back(*x_it);
+    List rle2(NumericVector x) {
+      std::vector<int> lengths;
+      std::vector<double> values;
+
+      // Initialise first value
+      int i = 0;
+      double prev = x[0];
+      values.push_back(prev);
+      lengths.push_back(1);
+
+      for(NumericVector::iterator it = x.begin() + 1; it != x.end(); ++it) {
+        if (prev == *it) {
+          lengths[i]++;
+        } else {
+          values.push_back(*it);
+          lengths.push_back(1);
+
+          i++;
+          prev = *it;
+        }
       }
-     
-      NumericVector out(groups.size());   
-      std::map<int, std::vector<double> >::const_iterator g_it = groups.begin();
-      NumericVector::iterator o_it = out.begin();
-      for(; g_it != groups.end(); ++g_it, ++o_it) {
-        NumericVector res = fun(g_it->second);
-        *o_it = res[0];
-      }
-      return out;
+
+      return List::create(_["lengths"] = lengths, _["values"] = values);
     }
 
-Sets are a useful data structure for many jobs that involve duplicates or unique values. The following function is a simple implementation of R's `duplicated` funciton. Note the use of `seen.insert(x[i]).second` - `insert` returns a pair, the first value giving an iterator to the position of the element and the second element is a boolean that's true if the value was a new addition to the set.  
+(An alternative implementation would be to replace `i` with the iterator `lengths.rbegin()` which always points to the last element of the vector.)
+
+Other methods of a vector are described at http://www.cplusplus.com/reference/vector/vector/.
+
+### Unordered set
+
+Sets are a useful data structure for many jobs that involve duplicates or unique values (like `unique`, `duplicated`, or `in`).  They can very efficiently tell if you've seen a value or not.
+
+
+The `unordered_set` isn't part of the last C++ specification, but it will be in the next one. For that reason, you need to jump through a small hoop to use it: it's in the `std::tr1` namespace rather than the usual `std` namespace. 
+    
+
+The following function is a simple implementation of R's `duplicated` funciton. Note the use of `seen.insert(x[i]).second` - `insert` returns a pair, the first value giving an iterator to the position of the element and the second element is a boolean that's true if the value was a new addition to the set.  
 
     LogicalVector duplicated(IntegerVector x) {
       std::set<int> seen;
@@ -663,36 +675,23 @@ Sets are a useful data structure for many jobs that involve duplicates or unique
       return(out);
     }
 
+### Unordered map
+
+An unordered map is very similar to an unordered set, but instead of storing presence or absence, it can store additional data. It's useful for functions that map some value to a like `table` or `match`. 
+
 ### Exercises
 
 Implement:
 
 * `median.default` using `partial_sort`
-* `%in%` using `unordered_set` and the `find` method
-* `unique` using an `unordered_set`
-* `min` using `min`
-* `which.min` using `min_element`
+* `%in%` using `unordered_set` and the `find` or `count` methods
+* `unique` using an `unordered_set` (challenge: do it in one line!)
+* `min` using `std::min`
+* `which.min` using `min_element`, or `which.max` using `max_element`
 * `setdiff`, `union` and `intersect` using sorted ranges and `set_union`, `set_intersection` and `set_difference`
-* `rle` using `vector` and `push_back`
 
 * re-write our implementation of `row_sums` to use iterators. Rewrite it to use `accumulate`.
 
-<!-- 
-duplicated.data.frame (pastes rows together)
-rank?
- -->
-
-## Special programming topics
-
-### Dispatching based on type
-
-Table?
-
-<!-- 
-### Profiling
-
-http://stackoverflow.com/questions/13224322/profiling-rcpp-code-on-os-x
- -->
 
 ## Case studies
 
