@@ -1,33 +1,34 @@
 # High performance functions with Rcpp
 
-Sometimes R code just isn't fast enough - you've used profiling to find the bottleneck, but there's simply no way to make the code any faster. This chapter is the answer to that problem: use Rcpp to easily write key functions in C++ to get high-performance functions that only take slightly longer to write than their R requivalents. [Rcpp](http://dirk.eddelbuettel.com/code/rcpp.html) is a fantastic tool written by Dirk Eddelbuettel and Romain Francois (with key contribution by Doug Bates, John Chambers and JJ Allaire) that makes it dead simple to write high-performance C++ code for use from R.
+Sometimes R code just isn't fast enough - you've used profiling to find the bottleneck, but there's simply no way to make the code any faster. This chapter is the answer to that problem. You'll learn how to rewrite key functions in C++ to get much better performance, while not taking too much longer to write. The key to this magic is [Rcpp](http://dirk.eddelbuettel.com/code/rcpp.html), a fantastic tool written by Dirk Eddelbuettel and Romain Francois (with key contribution by Doug Bates, John Chambers and JJ Allaire), that makes it dead simple to connect C++ to R. It is possible to write high performance code in C or Fortran. This might produce faster code than C++ (but probably not), but it will take you much much longer to write. Without Rcpp, you must sacrifice many helpful wrappers and master the complex C internals of R yourself. Rcpp is currently the best balance between speed and convenience, and any other approach will be much more painful.
 
-It is possible to write high performance code in C or Fortran. This may (or may not) be produce faster code, but it will almost certainly take you much much longer to write.  Without Rcpp, you must sacrifice a lot of very helpful wrappers and master the complex C internals of R yourself. In my opinion, using Rcpp is currently the best balance between speed and convenience.
+Typical bottlenecks that C++ can help with are:
 
-The basic strategy is to keep as much code as possible in R, because:
+* Loops that can't easily be vectorised because each iteration depends on the previous. C++ modifies objects in place, so there is little overhead when modifying a data structure many times.
 
-* you are probably more familiar with R than C++
+* Recursive functions, or problems which involve calling functions millions of times. The overhead of calling a function in C++ is much lower than the overhead of calling a function in R: ~5ns compared to ~200ns.
 
-* people reading/maintaining your code in the future will probably be more familiar with R than C++
+* Problems that require advanced data structures and algorithms that R doesn't provide. Through the standard template library (STL), C++ has efficient implementations of many important data structures, from ordered maps to double ended queues.
 
-Implementing bottlenecks in C++ can give considerable speed ups (2-3 orders of magnitude) and allows you to easily access best-of-breed data structures.  Keeping the majority of your code in straight R, means that you don't have to sacrifice R's rapid development and huge library of statistical functions.  Note, however, that many functions that would be bottlenecks if implemented in pure R have already been turned into hand-rolled C. To write functions in C++ that are faster than these often takes some tuning and performance tricks.  That's not the aim of this chapter - often the naive approach will get you within 20% of the running time of the base R function.  If you need more performance, you'll need to consult other sources (some of which are described in the final section of this chapter).
+Rewriting a function in C++ can lead to a 2-3 order of magnitude speed up, but most improvements will be more modest. While pure R code is relatively slow compared to C or C++, many bottlenecks in base R have already implemented as hand-written C functions. This means that if your function already uses vectorised operations, you are unlikely to see a large improvement in performance, perhaps around 20-50%. It's possible to get greater improvements by using C++ performance tricks, but those are beyond the scope of this chapter, and you'll need to consult other sources. Compared to base R implementations, the big advantage of C++ code is that it's much more concise: often around 10% of length of the equivalent C code in the R sources.
 
-Typical bottlenecks involve:
+The aim of this chapter is to give you the absolute necessities of C++ and Rcpp. You'll learn:
 
- * loops that can't easily be vectorised because each iteration depends on the previous: this is because C++ modifies in place by default, so there is little overhead for modifying a data structure many many times.
- 
- * functions that are most elegantly expressed recursively: the overhead of calling a function in C++ is much much lower than the overhead of all a function in R.  (It's often possible to rewrite recursive functions in a iterative way, but that may muddy their intent).
- 
- * problems that advanced data structures and algorithms that R doesn't provide.
+* How to write C++ code by seeing R functions and their C++ equivalents.
+* The Rcpp class hierarchy
+* How to use Rcpp "sugar" to avoid C++ loops and convert directly from vectorised R code
+* How to work with missing values
+* Some of the most important techniques, data structures and algorithms from standard template library (STL)
 
-The aim of this chapter is to give you the absolute basics to get up and running with Rcpp for the purpose of speeding up slow parts of your code. You'll lean the essence of C++ by seeing how simple R functions are converted to their C++ equivalents. 
+The chapter concludes with a selection of real case studies showing how others have used C++ and Rcpp to speed up their slow R code.
 
-## Getting started with Rcpp
+## Getting started
 
-All examples in this chapter need at least version 0.10.0 of the `Rcpp` package. This version includes `cppFunction`, which makes it very easy to connect C++ to R. You'll also (obviously) need a working C++ compiler.  
+All examples in this chapter need at least version 0.10.1 of the `Rcpp` package. This version includes `cppFunction` and `sourceCpp`, which makes it very easy to connect C++ to R. You'll also (obviously!) need a working C++ compiler.  
 
-If you're familiar with `inline::cxxfunction`, `cppFunction` is similarly, except that you specifcy the function completely in the string, and it parses the C++ function arguments to figure out what the R function arguments should be:
+`cppFunction` allows you to write C++ functions in R like this:
 
+    library(Rcpp)
     cppFunction('
       int add(int x, int y, int z) {
         int sum = x + y + z;
@@ -35,16 +36,26 @@ If you're familiar with `inline::cxxfunction`, `cppFunction` is similarly, excep
       }'
     )
     formals(add)
+    add(1, 2, 3)
 
-As well compiling C++ code inline, you can also create whole files of C++ code and load them with `sourceCpp`, and you can easily include C++ code in a package.  Both of these uses are described at the end of the chapter.  While using `cppFunction` is easiest when exploring new code (and in tutorials like this), when you're actually developing code it's easier to set up a src directory and use `devtools::load_all` (or similar tools) to automatically reload and recompile your code.
+When you run this code, R will compile the C++ code and construct an R function that connects to the compiled C++ function. If you're familiar with `inline::cfunction`, `cppFunction` is similar, except that you specifcy the function completely in the string, and it parses the C++ function arguments to figure out what the R function arguments should be:
+
+As well compiling C++ code inline, you can also create standalone C++ files and load them with `sourceCpp`, or include them in a package. Both of these uses are described at the end of the chapter. While using `cppFunction` is easiest when exploring new code (and in tutorials like this), when you're actually developing code it's easier to set up a src directory and use `devtools::load_all` (or similar tools) to automatically reload and recompile your code.
 
 ## Getting starting with C++
 
-C++ is a large language, and there's no way to cover it exhaustively here.  Our aim is to give you the basics so that you can start writing useful functions in C++. We we'll spend minimal time on object oriented C++ and on templating, because our focus is not on writing big programs in C++, just small, mostly self-contained functions that allow you to speed up slow parts of your R code.  
+C++ is a large language, and there's no way to cover it exhaustively here.  Our aim is to give you the basics so that you can start writing useful functions. We'll spend minimal time on advanced features like object oriented programming and templates, because our focus is not on writing big programs in C++, just small, mostly self-contained functions that allow you to speed up slow parts of your R code.  
+
+The following section shows the basics of C++ by translating simple R functions to their R equivalents. We'll start simple with a function that has no inputs and a scalar output, and then get progressively more complicated:
+
+* Scalar input and scalar output
+* Vector input and scalar output
+* Vector input and vector output
+* Matrix input and vector output
 
 ### No inputs, scalar output
 
-In the following section we'll compare and contrast basic R functions with their C++ equivalents. Let's start with a very simple function. It has no arguments and always returns the the integer 1:
+Let's start with a very simple function. It has no arguments and always returns the the integer 1:
 
     one <- function() 1L
 
@@ -64,19 +75,19 @@ We can compile and use this from R with `cppFunction`
 
 This small function illustrates a number of important differences between R and C++:
 
-* In C++ the syntax to create a function looks like the syntax to call a function: `one() {...}`.  We don't use assignment to create functions.
+* The syntax to create a function looks like the syntax to call a function; you don't use assignment to create functions like in R.
 
-* We must declare the type of output the function returns. This function returns an `int` (a scalar integer). The classes for the most common types of R vectors are: `NumericVector`, `IntegerVector`, `CharacterVector` and `LogicalVector`.
+* You must declare the type of output the function returns. This function returns an `int` (a scalar integer). The classes for the most common types of R vectors are: `NumericVector`, `IntegerVector`, `CharacterVector` and `LogicalVector`.
 
-* C++ distinguishes between scalars and vectors. The scalar equivalents of numeric, integer, character and logical vectors are: `double`, `int`, `std::string` and `bool`.
+* C++ distinguishes between scalars and vectors. The scalar equivalents of numeric, integer, character and logical vectors are: `double`, `int`, `std::string` and `bool`. (Unfortunately the names of C++ scalars and R vectors are inconsistent for historical reasons)
 
-* We must use an explicit `return` statement 
+* You must use an explicit `return` statement to return a value from the function.
 
 * Every statement is terminated by a `;`.
 
 ### Scalar input, scalar output
 
-The next example function makes things a little more complicated
+The next example function makes things a little more complicated by implementating a scalar version of the `sign` function which returns 1 if the input is positive, and -1 if it's negative:
 
     sign1 <- function(x) {
       if (x > 0) {
@@ -102,27 +113,27 @@ The next example function makes things a little more complicated
 
 In the C++ version:
 
-* we need to declare the type of each of the function's inputs, in the same way we need to declare the type of output it produces
+* we declare the type of each input in the same way we declare the type of the output. While this makes the code a little more verbose, it also makes it very obvious what type of input the function needs.
 
-* the `if` syntax is identical - while there are some big differences between R and C++, there are also lots of similarities!  C++ also has a `while` statement that works the same way as R's.  You can also use `break`, but instead of R's `next`, C++ has `continue`.
+* the `if` syntax is identical - while there are some big differences between R and C++, there are also lots of similarities!  C++ also has a `while` statement that works the same way as R's.  You can also use `break`, but use `contine`  instead of `next`.
 
 ### Vector input, scalar output
 
-One big difference between R and C++ is that the cost of loops is much lower.  For example, we could implement the `sum` function in R using a loop. If you've been programming in R a while, you'll probably have a visceral reaction to this function: why aren't I using an internal vectorise function?!
+One big difference between R and C++ is that the cost of loops is much lower.  For example, we could implement the `sum` function in R using a loop. If you've been programming in R a while, you'll probably have a visceral reaction to this function!
 
     sum1 <- function(x) {
-      total <- 0;
+      total <- 0
       for (i in seq_along(x)) {
         total <- total + x[i]
       }
       total
     }
 
-In C++, for loops have very little overhead, so it's fine to use them (although as we'll see later, like in R, there are better alternatives that more clearly express your intent).
+In C++, loops have very little overhead, so it's fine to use them. However, we'll see some alternatives to for loops that more clearly express your intent; they're not faster, but they make your code easier to understand.
 
     cppFunction('
       double sum2(NumericVector x) {
-        int n = x.length();
+        int n = x.size();
         double total = 0;
         for(int i = 0; i < n; ++i) {
           total += x[i];
@@ -133,17 +144,17 @@ In C++, for loops have very little overhead, so it's fine to use them (although 
 
 The C++ version is similar, but:
 
-* To find the length of the vector, we use the `length()` method, which returns an integer. Again, whenever we create a new variable we have to tell C++ what type of object it will hold. An `int` is a scalar integer, but we could have used `double` for a scalar numeric, `bool` for a scalar logical, or a `std::string` for a scalar character vector.
+* To find the length of the vector, we use the `size()` method, which returns an integer. Again, whenever we create a new variable we have to tell C++ what type of object it will hold. An `int` is a scalar integer, but we could have used `double` for a scalar numeric, `bool` for a scalar logical, or a `std::string` for a scalar character vector.
 
-* The `for` statement has a different syntax: `for(intialise; condition; increase)`. The initialise component creates a new variable called `i` and sets it equal to 0. The condition is checked in each iteration of the loop: the loop is completed when it becomes false. The increase statement is run after each loop iteration (but before the condition is checked). Here we use the special prefix operator `++` which increases the value of `i` by 1.
+* The `for` statement has a different syntax: `for(intialisation; condition; increase)`. The initialise component creates a new variable called `i` and sets it equal to 0. The condition is checked in each iteration of the loop: the loop is continues while it's `true`. The increase statement is run after each loop iteration, but before the condition is checked. Here we use the special prefix operator `++` which increases the value of `i` by 1.
 
 * Vectors in C++ start at 0. I'll say this again because it's so important: VECTORS IN C++ START AT 0! Forgetting that is probably the most common source of bugs when converting R functions to C++.
 
 * We can't use `<-` (or `->`) for assignment, but instead use `=`.
 
-* We can take advantage of the in-place modification operator `total += x[i]` which is equivalent to `total = total + x[i]`.  Similar in-place operators are `-=`, `*=` and `/=`.  
+* We can take advantage of the in-place modification operators: `total += x[i]` is equivalent to `total = total + x[i]`.  Similar in-place operators are `-=`, `*=` and `/=`.  
 
-This is a good example of where C++ is much more efficient than the R equivalent: our `sum2` function is competitive with the built-in (and highly optimised) `sum` function, while `sum1` is several orders of magnitude slower.
+This is a good example of where C++ is much more efficient than the R equivalent. As shown by the following microbenchmark, our `sum2` function is competitive with the built-in (and highly optimised) `sum` function, while `sum1` is several orders of magnitude slower.
 
     library(microbenchmark)
     x <- runif(1e3)
@@ -163,6 +174,8 @@ For our next example, we'll create a function that computes the distance between
       (x - ys) ^ 2
     }
 
+From the function definition, it's not obvious that we want `x` to be a scalar - that's something we'd need to mention in the documentation. That's not a problem in the C++ version:
+
     cppFunction('
       NumericVector pdist2(double x, NumericVector ys) {
         int n = ys.size();
@@ -177,26 +190,17 @@ For our next example, we'll create a function that computes the distance between
 
 This function introduces only a few new concepts:
 
-* We create a new `NumericVector` and say how long it should be using a constructor function: `out(n)`.
+* We create a new numeric vector of length `n` with a constructor: `NumericVector out(n)`.  Another useful constructor takes an existing vector and makes a copy: `NumericVector zs(ys)` would create a new numeric vector called `zs` that contained a copy of `ys`.
 
-* Finally, C++ doesn't have the `^` operator for exponentiation, it instead has the `pow` function
+* C++ doesn't use `^` for exponentiation, it instead uses the `pow` function.
 
-Note that this function is not only much more verbose than R equivalent, it won't be much faster - the R version is already very fast because it uses vectorised primitives which very quickly turn into C loops. However, our C++ function does have one advantage - it will use less memory, because `pdist1` needs two vectors the same length as y (`z <- x - ys`, and `z ^ 2`)
-
-    ys <- runif(1e5)
-    all.equal(pdist1(0.5, ys), pdist2(0.5, ys))
-
-    library(microbenchmark)
-    microbenchmark(
-      pdist1(0.5, ys),
-      pdist2(0.5, ys)
-    )
+Note that because the R function is fully vectorised, it is already going to be extremely fast. On my computer, it takes around 8 ms with a 1 million element `y` vector. The C++ function is twice as fast, ~4 ms, but assuming it took you 10 minutes to write the C++ function, you'd need to run it ~150,000 times to make it a net saver of time. The reason why the C++ function is faster is subtle, and relates to memory management. The R version needs to create an intermediate vector the same length as y (`x - ys`), and allocating memory is an expensive operation. The C++ function avoids this overhead because it uses an intermediate scalar.
 
 In the sugar section, you'll see how to rewrite this function to take advantage of Rcpp's vectorised operations so that the C++ code is barely longer than the R code.
 
 ### Matrix input, vector output
 
-Each vector type also has a matrix equivalent: `NumericMatrix`, `IntegerMatrix`, `CharacterMatrix` and `LogicalMatrix`. Using them is straightforward. For example, we could easily create a function that reproduces `rowSums`:
+Each vector type also has a matrix equivalent: `NumericMatrix`, `IntegerMatrix`, `CharacterMatrix` and `LogicalMatrix`. Using them is straightforward. For example, we could create a function that reproduces `rowSums`:
 
     cppFunction('
       NumericVector row_sums(NumericMatrix x) {
@@ -216,13 +220,13 @@ Each vector type also has a matrix equivalent: `NumericMatrix`, `IntegerMatrix`,
     x <- matrix(sample(100), 10)
     rowSums(x)
 
-The main thing to notice is that when subsetting a matrix we use `()` and not `[]`. 
+The main thing to notice is that when subsetting a matrix we use `()` and not `[]`, and that matrix objects have `nrow()` and `ncol()` methods. 
 
 ### Exercises
 
 With the basics of C++ in hand, now is a great time to practice by reading and writing some simple C++ functions.  
 
-For each of the following C++ functions, read the code and figure out what base R function it corresponds to.  You might not understand every part of the code yet, but you should be able to figure out the essence of what the function does.
+For each of the following C++ functions, read the code and figure out what base R function it corresponds to.  You might not understand every part of the code yet, but you should be able to figure out the basics of what the function does.
 
     double f1(NumericVector x) {
       int n = x.size();
@@ -279,56 +283,105 @@ For each of the following C++ functions, read the code and figure out what base 
       return(out);
     }
 
-Convert the following functions into C++
+To practice your function writing skills, convert the following functions into C++.  For now, assume the inputs have no missing values.
+
+* `all`
+
+* `cumprod`, `cummin`, `cummax`.
 
 * `diff`. Start by assuming lag 1, and then generalise for lag n.
 
-* `range`. Start by assuming that the input has no missing values, then generalise to include a `na.rm` parameter. If `TRUE` your function should ignore missing values (does it need to do anything special?), if `FALSE` it should return two missing values the first time it sees a missing value.
+* `range`. 
 
 * `var`.  Read about the approaches you can take at [wikipedia](http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance).  Whenever implementing a numerical algorithm it's always good to check what is already known about the problem.
 
-## Important Rcpp classes
+## Rcpp classes and methods
 
-You've already seen `NumericVector`, `CharacterVector`, `IntegerVector` and `LogicalVector`. They 
+You've already seen the basic vector classes (`IntegerVector`, `NumericVector`, LogicalVector`, `CharacterVector`) and their scalar (`int`, `double`, `bool`, `std::string`) and matrix (`IntegerMatrix`, `NumericMatrix`, LogicalMatrix`, `CharacterMatrix`) equivalents. 
 
-You can also use standard C++ variable types for scalars: `int`, `double`, `bool`, `std::string`.  
+All R objects have attributes, which can be queried and modified with the `attr` method.  Rcpp also provides a `names()` method for the commonly used attribute: `attr("names")`. The following code snippet illustrates these methods.  Note the use of the `create()` class method to easily create an R vector from C++ scalar values.
 
-* Important methods: `length`, `fill`.
-* Naming vectors `names()`
-* Attributes `attr()`
+    cppFunction('NumericVector attribs() {
+      NumericVector out = NumericVector::create(1, 2, 3);
 
-* Matrices
+      out.names() = CharacterVector::create("a", "b", "c");
+      out.attr("my-attr") = "my-value";
+      out.attr("class") = "my-class";
 
-* List
-* DataFrame
-* Environment
+      return out;
+    }')
 
-As well as classes for many more specialised language objects: `ComplexVector`, `RawVector`, `DottedPair`, `Language`,  `Promise`, `Symbol`, `WeakReference` and so on. These are beyond the scope of this document and won't be discussed further.
+You can use the `slot()` method in a similar way to get and set slots of S4 objects.
 
-* lists and data frames, named vectors
-* functions
+Rcpp also provides classes `List` and `DataFrame`. These are more useful for output than input, because lists and data frames can contain arbitrary classes, and this does not fit well with C++'s desire to have the types of all inputs known in advance. If, however, the list is an S3 object with components of known types, you can extract the components and manually convert to their C++ equivalents with `as`. 
 
-### Calling R functions
+For example, the linear model objects that `lm` produces are lists and the components are always of the same type. The following code illustrates how you might component the mean percentage error (`mpe`) of a linear model.  This isn't a very good example for when you might use C++ (because it's so easily implemented in R), but it illustrates how to pull out the components of a list. Note the use of the `inherits()` method and the `stop()` function to check that the object really is a linear model.
 
-Calling an R function from C++ is straightforward:
+    cppFunction('
+      double mpe(List mod) {
+        if (!mod.inherits("lm")) stop("Input must be a linear model");
+
+        NumericVector resid = as<NumericVector>(mod["residuals"]);
+        NumericVector fitted = as<NumericVector>(mod["fitted.values"]);
+
+        int n = resid.size();
+        double err = 0;
+        for(int i = 0; i < n; ++i) {
+          err += resid[i] / (fitted[i] + resid[i]);
+        }
+        return err / n;
+      }
+    ')
+    mod <- lm(mpg ~ wt, data = mtcars)
+    mpe(mod)
+
+It is possible to write code that works differently depending on the type of the R input, but it is beyond the scope of this book.
+
+You can put R functions in an object of type `Function`. Calling an R function from C++ is straightforward. The string constructor of the function object will look for a function of that name in the global environment.
 
     Function assign("assign");
+
+You can call functions with arguments specified by position:
+
     assign("y", 1);
+
+Or by name, with a special syntax:
+
     assign(_["x"] = "y", _["value"] = 1);
 
-The challenge is storing the output. If you don't know a priori what the output will be, store it in an `RObject`. 
+The challenge is storing the output. If you don't know in advance what the output will be, store it in an `RObject` or in components of a `List`. For example, the following code is a basic implementation of `lapply` in C++:
+
+    cppFunction('
+      List lapply1(List input, Function f) {
+        int n = input.size();
+        List out(n);
+
+        for(int i = 0; i < n; i++) {
+          out[i] = f(input[i]);
+        }
+
+        return out;
+      }
+    ')
+    lapply1(1:10, sqrt)
+    lapply1(list("a", 1, F), class)
+
+There are also classes for many more specialised language objects: `Environment`, ComplexVector`, `RawVector`, `DottedPair`, `Language`,  `Promise`, `Symbol`, `WeakReference` and so on. These are beyond the scope of this chapter and won't be discussed further.
 
 ## Rcpp sugar
 
-Rcpp provides a lot of "sugar", C++ functions included in the Rcpp namespace that work very similarly to their R equivalents. They work with `Vector` objects, and recycle in the same way as their R counterparts. Rcpp sugar makes it possible to write extremely efficient C++ code that looks almost identical to the R equivalent.
+Rcpp provides a lot of "sugar", C++ functions that work very similarly to their R equivalents. (The main difference is that they don't recycle their inputs - you need to do that yourself). Rcpp sugar makes it possible to write efficient C++ code that looks almost identical to the R equivalent. If a sugar version of the function you're interested exists, you should use it: it's expressive and well tested. Sugar functions aren't always faster than your hand-written equivalent, but they will get faster as more time is spend on optimising Rcpp.
 
-If a sugar version of the function you're interested exists, you should use it: it's likely to be fast and correct. Many of the sugar functions don't make copies of the object, or use expression capturing tricks to ensure that the minimal necessary computation is done.
+Sugar functions can be roughly broken down into
 
-More details are available in the [Rcpp syntactic sugar](http://dirk.eddelbuettel.com/code/rcpp/Rcpp-sugar.pdf) vignette.
+* arithmetic and logical operators
+* logical summary functions
+* vector views
+* other useful functions
 
-### Vectorised arithmetic and logical operators: 
+### Arithmetic and logical operators 
 
-`+` `*`, `-`, `/`, `pow`, `<`, `<=`, `>`, `>=`, `==`, `!=`, `!`.  For example, we could use sugar to considerably simply the implementation of our `pdist2` function:
+All the basic arithmetic and logical operators are vectorised: `+` `*`, `-`, `/`, `pow`, `<`, `<=`, `>`, `>=`, `==`, `!=`, `!`.  For example, we could use sugar to considerably simply the implementation of our `pdist2` function:
 
     pdist1 <- function(x, ys) {
       (x - ys) ^ 2
@@ -342,60 +395,51 @@ More details are available in the [Rcpp syntactic sugar](http://dirk.eddelbuette
 
 ### Logical summary functions
 
-`any` and  `all`. These functions are fully lazy (so that e.g `any(x == 0)` might only need to evaluate one element of the value), and return a special type that can be converted into a `bool` using `is_true`, `is_false`, or `is_na`.  
+The sugar function `any` and `all` are fully lazy, so that e.g `any(x == 0)` might only need to evaluate one element of the value, and return a special type that can be converted into a `bool` using `is_true`, `is_false`, or `is_na`.  
 
-For example, we could use this to write an efficient funtion to determine whether or not a numeric vector contains any missing values.  In R we could do `any(is.na(x))` but that will always do the same amount of work regardless of if there's a missing value in the first position or the last.  
+For example, we could use this to write an efficient funtion to determine whether or not a numeric vector contains any missing values. In R we could do `any(is.na(x))` but that will do almost the same amount of work whether there's a missing value in the first position or the last.  
 
     any_na1 <- function(x) any(is.na(x))
 
     cppFunction('
       bool any_na2(NumericVector x) {
-        return(is_true(any(is_na(x))));
-      }
-    ')
-
-    cppFunction('
-      bool any_na3(NumericVector x) {
-        NumericVector::iterator it = x.begin(), end = x.end();
-        for(; it != end; ++it) {
-          if (ISNA(*it)) return(true);
-        }
-
-        return(false);
+        return is_true(any(is_na(x)));
       }
     ')
 
     library(microbenchmark)
-    x <- runif(1e5)
-    x1 <- c(NA, x)
-    x2 <- c(x, NA)
+    x0 <- runif(1e5)
+    x1 <- c(x0, NA)
+    x2 <- c(NA, x0)
 
     microbenchmark(
-      any_na1(x), any_na2(x), any_na3(x),
-      any_na1(x1), any_na2(x1), any_na3(x1),
-      any_na1(x2), any_na2(x2), any_na3(x2))
+      any_na1(x0), any_na2(x0),
+      any_na1(x1), any_na2(x1),
+      any_na1(x2), any_na2(x2))
 
-Our `any_na2` function is always (slightly) faster than `any_na1` (probably because it avoids allocation an logical vector of the same length of `x`), but it's much faster when the first value is missing. Our hand-written equivalent `any_na3` is exactly the same speed.
+Our `any_na2` function is slightly slower `any_na1` when there are no missing values, or the missing value is at the end, but it's much faster when the first value is missing. 
 
 ### Vector views
 
-`head`, `tail`, `rep_each`, `rep_len`, `rev`, `seq_along`, `seq_len`.  
-
-In R these would all produce copies of the vector, but in Rcpp sugar they simply point to the existing vector and override the subsetting operator (`[`) to implement special behaviour. This makes them very efficient.
+A number of helpful functions provide a "view" of a vector: `head`, `tail`, `rep_each`, `rep_len`, `rev`, `seq_along`, `seq_len`. In R these would all produce copies of the vector, but in Rcpp they simply point to the existing vector and override the subsetting operator (`[`) to implement special behaviour. This makes them very efficient: `rep_len(x, 1e6)` does not have to make a million copies of x. 
 
 ### Other useful functions
 
-* `mean, `min`, `max`, `sum`, `sd` and `var`.
+Finally, there are a grab bag of sugar functions that mimic frequently used R functions:
 
-* `which_max`, `which_min`
+* Math functions: `abs`, `acos`, `asin`, `atan`, `beta`, `ceil`, `ceiling`, `choose`, `cos`, `cosh`, `digamma`, `exp`, `expm1`, `factorial`, `floor`, `gamma`, `lbeta`, `lchoose`, `lfactorial`, `lgamma`, `log`, `log10`, `log1p`, `pentagamma`, `psigamma`, `round`, `signif`, `sin`, `sinh`, `sqrt`, `tan`, `tanh`, `tetragamma`, `trigamma`, `trunc`, 
 
-* `abs`, `exp`, `sign`, `floor`, `ceil`, `pow`, `log`, `sin`, `cos`, etc.
+* Scalar summaries: `mean`, `min`, `max`, `range`, `sum`, `sd` and `var`.
 
-* `cumsum`, `diff`, `pmin`, and `pmax`
+* Vector summaries: `cumsum`, `diff`, `pmin`, and `pmax`
+
+* Finding values: `match`, `self_match`, `which_max`, `which_min`
+
+* `duplicated`, `unique`
 
 * `d/q/p/r` for all standard distributions in R.
 
-* `no_na(x)`: this asserts that the vector `x` does not contain any missing values, and allows optimisation of some mathematical operations.
+* `noNA(x)`: this asserts that the vector `x` does not contain any missing values, and allows optimisation of some mathematical operations.
 
 ## Missing values
 
@@ -406,7 +450,7 @@ If you're working with missing values, you need to know two things:
 
 ### Scalars
 
-The following code explores what happens when you take one of R's missing values, coerce it into a scalar, and then coerce back to an R vector
+The following code explores what happens when you take one of R's missing values, coerce it into a scalar, and then coerce back to an R vector. This is a generally useful technique: if you don't know what an operation will do, design an experiment to figure it out.
 
     cppFunction('
       List scalar_missings() {
@@ -425,17 +469,15 @@ The following code explores what happens when you take one of R's missing values
 
 So
 
-* `NumericVector` -> `double`: stored as an NaN, and preserved. Most numerical operations will behave as you expect, but logical comparisons will not.  See below for more details.
-
 * `IntegerVector` -> `int`: stored as the smallest integer. If you leave as is, it will be preserved, but no C++ operations are aware of the missingness: `evalCpp('NA_INTEGER + 1')` gives -2147483647.
 
 * `CharacterVector` -> `std::string`: the string "NA"
 
 * `LogicalVector` -> `bool`: TRUE
 
-If you're working with doubles, depending on your problem, you may be able to get away with ignoring missing values and working with NaNs. R's missing values are a special type of the IEEE 754 floating point number NaN (not a number). That means if you coerce them to `double` or `int` in your C++ code, they will behave like regular NaN's. 
+* `NumericVector` -> `double`: stored as an NaN, and preserved. Most numerical operations will behave as you expect, but logical comparisons will not.  See below for more details.
 
-In a logical context they always evaluate to FALSE:
+If you're working with doubles, you may be able to get away with ignoring missing values and working with NaN (not a number). R's missing values are a special type of the IEEE 754 floating point number NaN. That means if you coerce them to `double` in your C++ code, they will behave like regular NaN's. That means, in a logical context they always evaluate to FALSE:
 
     evalCpp("NAN == 1")
     evalCpp("NAN < 1")
@@ -460,14 +502,11 @@ To set a missing value in a vector, you need to use a missing value specific to 
 
     cppFunction('
       List missing_sampler() {
-        CharacterVector chr(1);
-        chr[0] = NA_STRING;
-
         return(List::create(
           NumericVector::create(NA_REAL), 
           IntegerVector::create(NA_INTEGER),
           LogicalVector::create(NA_LOGICAL), 
-          chr));
+          CharacterVector::create(NA_STRING)));
       }
     ')
     str(missing_sampler())
@@ -476,19 +515,24 @@ To check if a value in a vector is missing, use `ISNA`:
 
     cppFunction('
       LogicalVector is_na2(NumericVector x) {
-        LogicalVector out(x.size());
+        int n = x.size();
+        LogicalVector out(n);
         
-        NumericVector::iterator x_it;
-        LogicalVector::iterator out_it;
-        for (x_it = x.begin(), out_it = out.begin(); x_it != x.end(); x_it++, out_it++) {
-          *out_it = ISNA(*x_it);
+        for (int i = 0; i < n; ++i) {
+          out[i] = ISNA(x[i]);
         }
         return out;
       }
     ')
     is_na2(c(NA, 5.4, 3.2, NA))
 
-Rcpp provides a helper function called `is_na` that works similarly to `is_na2` above, producing a logical vector that's true where the value in the vector was missing.
+This works the same way as the Rcpp sugar function `is_na`.
+
+### Exercises
+
+* Rewrite any of the functions from the first exercises to correctly deal with missing values. If `na.rm` is true, ignore the missing values. If `na.rm` is false, return missing values the first time a missing value is encountered. Some functions you can practice with are: `min`, `max`, `range`, `mean`, `var`
+
+* `cumsum` and `diff` diff need slightly more complicated behaviour for missing values.
 
 ## The STL
 

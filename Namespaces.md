@@ -30,7 +30,7 @@ The easiest way to use namespaces is with roxygen2, because it keeps the namespa
 
 For every function in your package, you need to decide whether it is external and available to all users of the package, or internal and only available to other functions within the package. It's not always easy to tell whether or not a function is internal or external. A few rules of thumb:
 
-* Is the purpose of the function different to the purpose of the package? If
+* Is the purpose of the function the same as the purpose of the package? If
   not, make it internal. (A package should provide a set of closely related
   functions for a well-defined problem domain - someone should be able to look
   at all the functions in your package and say this is a package about X - if

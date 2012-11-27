@@ -25,5 +25,5 @@ List rle2(NumericVector x) {
     }
   }
 
-  return(List::create(_["lengths"] = lengths, _["values"] = values));
+  return List::create(_["lengths"] = lengths, _["values"] = values);
 }
