@@ -38,7 +38,7 @@ All examples in this chapter need at least version 0.10.1 of the `Rcpp` package.
     formals(add)
     add(1, 2, 3)
 
-When you run this code, R will compile the C++ code and construct an R function that connects to the compiled C++ function. If you're familiar with `inline::cfunction`, `cppFunction` is similar, except that you specifcy the function completely in the string, and it parses the C++ function arguments to figure out what the R function arguments should be:
+When you run this code, R will compile the C++ code and construct an R function that connects to the compiled C++ function. If you're familiar with `inline::cxxfunction`, `cppFunction` is similar, except that you specifcy the function completely in the string, and it parses the C++ function arguments to figure out what the R function arguments should be:
 
 As well compiling C++ code inline, you can also create standalone C++ files and load them with `sourceCpp`, or include them in a package. Both of these uses are described at the end of the chapter. While using `cppFunction` is easiest when exploring new code (and in tutorials like this), when you're actually developing code it's easier to set up a src directory and use `devtools::load_all` (or similar tools) to automatically reload and recompile your code.
 
