@@ -7,23 +7,42 @@ double var1(NumericVector x) {
   int n = x.size();
 
   for(int i = 0; i < n; ++i) {
-    delta = x[i] - mu;
+    double delta = x[i] - mu;
     mu = mu + delta / (i + 1);
-    m2 = m2 + delta * (x - mu);
+    m2 = m2 + delta * (x[i] - mu);
   }
 
   return m2 / (n - 1);
 }
-def online_variance(data):
-    n = 0
-    mean = 0
-    M2 = 0
- 
-    for x in data:
-        n = n + 1
-        delta = x - mean
-        mean = mean + delta/n
-        M2 = M2 + delta*(x - mean)
- 
-    variance = M2/(n - 1)
-    return variance
+
+// [[Rcpp::export]]
+double var2(NumericVector x) {
+  double mu = 0, m2 = 0;
+  int n = x.size();
+  Fast<NumericVector> fx(x);
+
+  for(int i = 0; i < n; ++i) {
+    double delta = fx[i] - mu;
+    mu = mu + delta / (i + 1);
+    m2 = m2 + delta * (fx[i] - mu);
+  }
+
+  return m2 / (n - 1);
+}
+
+/*** R
+x <- runif(1e3)
+y <- runif(1e5)
+
+library(microbenchmark)
+
+microbenchmark(
+  var(x),
+  var1(x),
+  var2(x),
+  var(y),
+  var1(y),
+  var2(y)
+)
+
+*/
