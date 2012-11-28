@@ -32,4 +32,32 @@ There are four things you need to include to make your example reproducible: req
 
 You can check you have actually made a reproducible example by starting up a fresh R session and pasting your script in.  
 
+Here is an example of how to create a reproducible example. First, have R print out your data in a format that can be copy-pasted:
+
+```R
+# For this example, use the built-in BOD data set. Replace this with your data.
+dput(BOD)
+# structure(list(Time = c(1, 2, 3, 4, 5, 7), demand = c(8.3, 10.3, 
+# 19, 16, 15.6, 19.8)), .Names = c("Time", "demand"), row.names = c(NA, 
+# -6L), class = "data.frame", reference = "A1.4, p. 270")
+```
+
+
+Then you can use that output to create a reproducible example:
+
+```R
+library(ggplot2)
+
+# Save the data structure in variable BOD
+BOD <- structure(list(Time = c(1, 2, 3, 4, 5, 7), demand = c(8.3, 10.3, 
+19, 16, 15.6, 19.8)), .Names = c("Time", "demand"), row.names = c(NA, 
+-6L), class = "data.frame", reference = "A1.4, p. 270")
+
+# Some example code that uses the data
+ggplot(BOD, aes(x=Time, y=demand)) + geom_line()
+```
+
+Check that others can run this code by simply copying and pasting it.
+
+
 Before putting all of your code in an email, consider putting it on http://gist.github.com/.  It will give your code nice syntax highlighting, and you don't have to worry about anything getting mangled by the email system.
