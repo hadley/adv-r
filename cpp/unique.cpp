@@ -35,15 +35,16 @@ std::tr1::unordered_set<int> unique4(IntegerVector x) {
 
 library(microbenchmark)
 
+x <- sample(1e3, 1e5, rep = T)
 microbenchmark(
-  sort(unique(x)),
-  s_unique(x),
-  sort(unique1(x)),
-  sort(unique2(x)),
-  sort(unique3(x))
+  unique(x),
+  unique1(x),
+  unique2(x),
+  unique3(x),
+  unique4(x)
 )
 
-x <- sample(1e3, 1e6, rep = T)
+x <- sample(1e5, 1e5, rep = T)
 microbenchmark(
   unique(x),
   unique1(x),
