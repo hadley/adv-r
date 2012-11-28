@@ -908,15 +908,9 @@ To use `Rcpp` in a package, your put your C++ files in the `src/` directory and 
 
         PKG_LIBS = $(shell "${R_HOME}/bin${R_ARCH_BIN}/Rscript.exe" -e "Rcpp:::LdFlags()")
 
-If you're creating a new package, you can use `Rcpp.package.skeleton( "mypackage")` to speed up the process. For more details see the [Writing a package that uses Rcpp vignette](http://dirk.eddelbuettel.com/code/rcpp/Rcpp-package.pdf). 
+If you're creating a new package, you can use `Rcpp.package.skeleton("mypackage")` to speed up the process. For more details see the [Writing a package that uses Rcpp vignette](http://dirk.eddelbuettel.com/code/rcpp/Rcpp-package.pdf). 
 
-Once you're set up, during development, after you create the C++ functions, you need to generate the files that create the R functions that call your C++ functions. There are currently three ways to do this, depending on your pacakge development environment:
-
-* `devtools::load_all` handles Rcpp files automatically.
-
-* In RStudio, any package building command, such as "Build and reload" or "Load all", will update the correct files
-
-* If building a package by hand, use `Rcpp::compileAttributes(".")`
+Once you're set up, the development process is the same as for a pure R package: modify the C++ files then run `load_all` to update your current R sessions. If you're building a package by hand, you can use `Rcpp::compileAttributes(".")` to compile the C++ code and create the R function stubs.
 
 ## Learning more
 
@@ -924,7 +918,7 @@ Once you're set up, during development, after you create the C++ functions, you 
 
 This chapter has only touched on a small part of Rcpp, giving you the basic tools to rewrite poorly performing R code in C++. Rcpp has many other capabilities that make it easy to interface R to existing C++ code, including:
 
-* automatically creating the wrappers between C++ data structures and R
+* automatically creating wrappers between C++ data structures and R
   data structures. A good introduction to this topic is the vignette of [Rcpp modules](http://dirk.eddelbuettel.com/code/rcpp/Rcpp-modules.pdf)
 
 * mapping C++ classes to reference classes.
@@ -933,12 +927,12 @@ I strongly recommend keeping an eye on the [Rcpp homepage](http://dirk.eddelbuet
 
 ### More C++
 
-Writing performant code may also require you to rethink your basic approach: a solid understand of basic data structures and algorithms is very helpful here.  That's beyond the scope of this book, but I'd suggest the "algorithm design handbook" as a good place to start.  Or http://ocw.mit.edu/courses/electrical-engineering-and-computer-science/6-046j-introduction-to-algorithms-sma-5503-fall-2005/
+Writing performant code may also require you to rethink your basic approach: a solid understand of basic data structures and algorithms is very helpful here.  That's beyond the scope of this book, but I'd suggest the ["algorithm design manual"](http://amzn.com/0387948600) or MIT's [Introduction to Algorithms](http://ocw.mit.edu/courses/electrical-engineering-and-computer-science/6-046j-introduction-to-algorithms-sma-5503-fall-2005/).
 
-* [Effective C++](http://amzn.com/0321334876)
-* [Effective STL](http://amzn.com/0201749629)
+Other resources I've found helpful in learning C++ are:
 
-* http://www.icce.rug.nl/documents/cplusplus/cplusplus.html
-* http://www.cs.helsinki.fi/u/tpkarkka/alglib/k06/
-* http://www.davethehat.com/articles/eff_stl.htm
-* http://www.sgi.com/tech/stl/
+* [Effective C++](http://amzn.com/0321334876) and [Effective STL](http://amzn.com/0201749629) by Scott Meyers.
+
+* [C++ Annotations](http://www.icce.rug.nl/documents/cplusplus/cplusplus.html), aimed at" knowledgeable users of C (or any other language using a C-like grammar, like Perl or Java) who would like to know more about, or make the transition to, C++"
+
+* [Algorithm Libraries](http://www.cs.helsinki.fi/u/tpkarkka/alglib/k06/), which provides a more technical, but still precise, description of important STL concepts. (Follow the links under notes)
