@@ -125,7 +125,7 @@ In the C++ version:
 
 * we declare the type of each input in the same way we declare the type of the output. While this makes the code a little more verbose, it also makes it very obvious what type of input the function needs.
 
-* the `if` syntax is identical - while there are some big differences between R and C++, there are also lots of similarities!  C++ also has a `while` statement that works the same way as R's.  You can also use `break`, but use `contine`  instead of `next`.
+* the `if` syntax is identical - while there are some big differences between R and C++, there are also lots of similarities!  C++ also has a `while` statement that works the same way as R's.  You can also use `break`, but use `continue`  instead of `next`.
 
 ### Vector input, scalar output
 
@@ -737,7 +737,7 @@ A good reference guide for algorithms is http://www.cplusplus.com/reference/algo
 
 The STL provides a large set of data structures: `array`, `bitset`, `list`, `forward_list`, `map`, `multimap`, `multiset`, `priority_queue`, `queue`, `dequeue`, `set`, `stack`, `unordered_map`, `unordered_set`, `unordered_multimap`, `unordered_multiset`, and `vector`.  The most important of these datastructures are the `vector`, the `unordered_set`, and the `unordered_map`.  We'll focus on these three in this section, but using the others is similar: they just have different performance tradeoffs. For example, the `deque` (pronounced "deck") has a very similar interface to vectors but a different underlying implementation that has different performance trade-offs. You may want to try them for your problem.  A good reference for STL data structures is http://www.cplusplus.com/reference/stl/ - I recommend you keep it open while working with the STL.
 
-Rcpp knows how to convert from many STL data structures to their R equivalents, so you can return them from your functions without explicitly converting to R datastructures. 
+Rcpp knows how to convert from many STL data structures to their R equivalents, so you can return them from your functions without explicitly converting to R data structures. 
 
 ### Vectors
 
@@ -1014,7 +1014,7 @@ To add `Rcpp` to an existing package, your put your C++ files in the `src/` dire
 
 For more details see the [Writing a package that uses Rcpp vignette](http://cran.rstudio.com/web/packages/Rcpp/vignettes/Rcpp-package.pdf). 
 
-If your packages uses the `Rcpp::export` attribute then one additional step in the package build process is requried. The `compileAttributes` function scans the source files within a package for export attributes and generates the code to export the functions as required.
+If your packages uses the `Rcpp::export` attribute then one additional step in the package build process is requried. The `compileAttributes` function scans the source files within a package for `Rcpp::export` attributes and generates the code required to export the functions to R.
 
 You should re-run `compileAttributes` whenever functions are added, removed, or have their signatures changed. Note that if you build your package using RStudio or `devtools` then this step occurs automatically.
 
@@ -1024,10 +1024,9 @@ You should re-run `compileAttributes` whenever functions are added, removed, or 
 
 This chapter has only touched on a small part of Rcpp, giving you the basic tools to rewrite poorly performing R code in C++. Rcpp has many other capabilities that make it easy to interface R to existing C++ code, including:
 
-* Additional capabilities of attributes including specifying default arguments, linking in external C++ dependencies, and exporting C++ interfaces from packages. These features and more are covered in the [Rcpp attributes](http://cran.rstudio.com/web/packages/Rcpp/vignettes/Rcpp-attributes.pdf) vignette.
+* Additional features of attributes including specifying default arguments, linking in external C++ dependencies, and exporting C++ interfaces from packages. These features and more are covered in the [Rcpp attributes](http://cran.rstudio.com/web/packages/Rcpp/vignettes/Rcpp-attributes.pdf) vignette.
 
-* Automatically creating wrappers between C++ data structures and R
-  data structures, including mapping C++ classes to reference classes. A good introduction to this topic is the vignette of [Rcpp modules](http://cran.rstudio.com/web/packages/Rcpp/vignettes/Rcpp-modules.pdf)
+* Automatically creating wrappers between C++ data structures and R data structures, including mapping C++ classes to reference classes. A good introduction to this topic is the vignette of [Rcpp modules](http://cran.rstudio.com/web/packages/Rcpp/vignettes/Rcpp-modules.pdf)
 
 * The [Rcpp quick reference guide](http://cran.rstudio.com/web/packages/Rcpp/vignettes/Rcpp-quickref.pdf) contains a useful summary of Rcpp classes and common programming idioms.
 
