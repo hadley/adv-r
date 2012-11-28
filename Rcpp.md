@@ -621,31 +621,33 @@ A stl vector is very similar to an R vector, except that it expands efficiently.
 
 The following code implements run length encoding (`rle`). It produces two vectors of output: a vector of values, and a vector `lengths` giving how many times each element is repeated. It works by looping through the input vector `x` comparing each value to the previous: if it's the same, then it increments the last value in `lengths`; if it's different, it adds the value to the end of `values`, and sets the corresponding length to 1.
 
-    // [[Rcpp::export]]
-    List rle2(NumericVector x) {
-      std::vector<int> lengths;
-      std::vector<double> values;
+```cpp
+// [[Rcpp::export]]
+List rle2(NumericVector x) {
+  std::vector<int> lengths;
+  std::vector<double> values;
 
-      // Initialise first value
-      int i = 0;
-      double prev = x[0];
-      values.push_back(prev);
+  // Initialise first value
+  int i = 0;
+  double prev = x[0];
+  values.push_back(prev);
+  lengths.push_back(1);
+
+  for(NumericVector::iterator it = x.begin() + 1; it != x.end(); ++it) {
+    if (prev == *it) {
+      lengths[i]++;
+    } else {
+      values.push_back(*it);
       lengths.push_back(1);
 
-      for(NumericVector::iterator it = x.begin() + 1; it != x.end(); ++it) {
-        if (prev == *it) {
-          lengths[i]++;
-        } else {
-          values.push_back(*it);
-          lengths.push_back(1);
-
-          i++;
-          prev = *it;
-        }
-      }
-
-      return List::create(_["lengths"] = lengths, _["values"] = values);
+      i++;
+      prev = *it;
     }
+  }
+
+  return List::create(_["lengths"] = lengths, _["values"] = values);
+}
+```
 
 (An alternative implementation would be to replace `i` with the iterator `lengths.rbegin()` which always points to the last element of the vector - you might want to try implementing that yourself.)
 
@@ -659,18 +661,20 @@ http://www.cplusplus.com/reference/set/set/ and http://www.cplusplus.com/referen
     
 The following function uses an unordered set to implement an equivalent to `duplicated` for integer vectors. Note the use of `seen.insert(x[i]).second` - `insert` returns a pair, the `first` value is an iterator that points to element and the `second` value is a boolean that's true if the value was a new addition to the set.  
 
-    // [[Rcpp::export]]
-    LogicalVector duplicated(IntegerVector x) {
-      std::tr1::unordered_set<int> seen;
-      int n = x.size();
-      LogicalVector out(n);
+```cpp
+// [[Rcpp::export]]
+LogicalVector duplicated(IntegerVector x) {
+  std::tr1::unordered_set<int> seen;
+  int n = x.size();
+  LogicalVector out(n);
 
-      for (int i = 0; i < n; ++i) {
-        out[i] = seen.insert(x[i]).second;
-      }
+  for (int i = 0; i < n; ++i) {
+    out[i] = seen.insert(x[i]).second;
+  }
 
-      return out;
-    }
+  return out;
+}
+```
 
 ### Map
 
@@ -786,25 +790,27 @@ Either approach is fairly straighforward. In R:
 
 Or in C++:
 
-    double vacc3a(double age, bool female, bool ily){
-      double p = 0.25 + 0.3 * 1 / (1 - exp(0.04 * age)) + 0.1 * ily;
-      p = p * (female ? 1.25 : 0.75);
-      p = std::max(p, 0.0); 
-      p = std::min(p, 1.0);
-      return p;
-    }
+```cpp
+double vacc3a(double age, bool female, bool ily){
+  double p = 0.25 + 0.3 * 1 / (1 - exp(0.04 * age)) + 0.1 * ily;
+  p = p * (female ? 1.25 : 0.75);
+  p = std::max(p, 0.0); 
+  p = std::min(p, 1.0);
+  return p;
+}
 
-    // [[Rcpp::export]]
-    NumericVector vacc3(NumericVector age, LogicalVector female, LogicalVector ily) {
-      int n = age.size();
-      NumericVector out(n);
+// [[Rcpp::export]]
+NumericVector vacc3(NumericVector age, LogicalVector female, LogicalVector ily) {
+  int n = age.size();
+  NumericVector out(n);
 
-      for(int i = 0; i < n; ++i) {
-        out[i] = vacc3a(age[i], female[i], ily[i]);
-      }
+  for(int i = 0; i < n; ++i) {
+    out[i] = vacc3a(age[i], female[i], ily[i]);
+  }
 
-      return out;
-    }
+  return out;
+}
+```
 
 We next generate some sample data, and check that all three versions return the same values:
 
@@ -847,14 +853,14 @@ The following sections describe how to use either individual C++ files and how t
 
 Your standalone C++ file should have extension `.cpp`, and needs to start with:
 
-```C++
+```cpp
 #include <Rcpp.h>
 using namespace Rcpp;
 ```
 
 And for each function that you want availble within R, you need to prefix it with:
 
-```c++
+```cpp
 // [[Rcpp::export]]
 ```
 
