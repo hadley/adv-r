@@ -12,7 +12,10 @@ Typical bottlenecks that C++ can help with are:
 
 Rewriting a function in C++ can lead to a 2-3 order of magnitude speed up, but most improvements will be more modest. While pure R code is relatively slow compared to C or C++, many bottlenecks in base R have already implemented as hand-written C functions. This means that if your function already uses vectorised operations, you are unlikely to see a large improvement in performance, perhaps around 20-50%. It's possible to get greater improvements by using C++ performance tricks, but those are beyond the scope of this chapter, and you'll need to consult other sources. Compared to base R implementations, the big advantage of C++ code is that it's much more concise: often around 10% of length of the equivalent C code in the R sources.
 
-The aim of this chapter is to give you the absolute necessities of C++ and Rcpp. You'll learn:
+The aim of this chapter is to give you the absolute necessities of C++ and Rcpp.
+Dirk Eddelbuettel is currently working on an entire book on Rcpp, "Seamless R and C++ integration with Rcpp", which will provide much more detail than we can here. If you're serious about Rcpp, make sure to get that book when it comes out!
+
+In this chapter you'll learn:
 
 * How to write C++ code by seeing R functions and their C++ equivalents.
 * Important Rcpp classes and methods
@@ -22,7 +25,6 @@ The aim of this chapter is to give you the absolute necessities of C++ and Rcpp.
 
 The chapter concludes with a selection of real case studies showing how others have used C++ and Rcpp to speed up their slow R code.
 
-(Link to Dirk's book "Seamless R and C++ integration with Rcpp" when available)
 
 ## Getting started
 
