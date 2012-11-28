@@ -2,6 +2,7 @@
 #include <algorithm>
 using namespace Rcpp;
 
+
 std::tr1::unordered_set<double> unique1(NumericVector x) {
   return std::tr1::unordered_set<double>(x.begin(), x.end());
 }
@@ -20,13 +21,8 @@ std::tr1::unordered_set<std::string> unique1(CharacterVector x) {
   return seen;
 }
 
-void unique1 (RObject x) {
-  Rf_error("Unsupported type");
-}
-
-
 // [[Rcpp::export]]
-RObject unique2(RObject x, ) {
+RObject unique2(RObject x) {
   switch(x.sexp_type()) {
     case REALSXP: 
       return wrap(unique1(as<NumericVector>(x)));
@@ -41,16 +37,29 @@ RObject unique2(RObject x, ) {
   }
 }
 
-RObject dispatch(RObject x, Function f) {
+// [[Rcpp::export]]
+RObject unique3(RObject x) {
+  NumericVector y1;
+  IntegerVector y2;
+  LogicalVector y3;
+
+  std::tr1::unordered_set<double> set1;
+  std::tr1::unordered_set<int> set2;
+  std::tr1::unordered_set<bool> set3;
+
   switch(x.sexp_type()) {
     case REALSXP: 
-      return wrap(unique1(as<NumericVector>(x)));
+      y1 = as<NumericVector>(x);
+      set1.insert(y1.begin(), y1.end());
+      return wrap(set1);
     case INTSXP: 
-      return wrap(unique1(as<IntegerVector>(x)));
-    case STRSXP: 
-      return wrap(unique1(as<CharacterVector>(x)));
+      y2 = as<IntegerVector>(x);
+      set2.insert(y2.begin(), y2.end());
+      return wrap(set2);
     case LGLSXP: 
-      return wrap(unique1(as<LogicalVector>(x)));
+      y3 = as<LogicalVector>(x);
+      set3.insert(y3.begin(), y3.end());
+      return wrap(set3);
     default:
       Rf_error("Unsupported type");
   }
@@ -68,10 +77,13 @@ RObject dispatch(RObject x, Function f) {
   microbenchmark(
     unique(x),
     unique2(x),
+    unique3(x),
     unique(y),
     unique2(y),
+    unique3(y),
     unique(z),
     unique2(z),
+    unique3(z),
     unique(a),
     unique2(a)
   )
