@@ -10,7 +10,7 @@ double sum1(NumericVector x) {
   for(int i = 0; i < n; i++) {
     total += x[i];
   }
-  return(total);
+  return total;
 }
 
 // [[Rcpp::export]]
@@ -20,7 +20,7 @@ double sum2(NumericVector x) {
   for(NumericVector::iterator it = x.begin(); it != x.end(); it++) {
     total += *it;
   }
-  return(total);
+  return total;
 }
 
 // [[Rcpp::export]]
@@ -31,19 +31,17 @@ double sum2a(NumericVector x) {
   for(NumericVector::iterator it = x.begin(); it != end; it++) {
     total += *it;
   }
-  return(total);
+  return total;
 }
 
 // [[Rcpp::export]]
 double sum3(NumericVector x) {
-
-  double total = std::accumulate(x.begin(), x.end(), 0.0);
-  return(total);
+  return std::accumulate(x.begin(), x.end(), 0.0);
 }
 
 // [[Rcpp::export]]
 double sum4(NumericVector x) {
-  return(sum(x));
+  return sum(x);
 }
 
 /*** R
