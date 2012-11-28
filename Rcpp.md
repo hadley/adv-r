@@ -1012,7 +1012,7 @@ To add `Rcpp` to an existing package, your put your C++ files in the `src/` dire
 
         PKG_LIBS = $(shell "${R_HOME}/bin${R_ARCH_BIN}/Rscript.exe" -e "Rcpp:::LdFlags()")
 
-For more details see the [Writing a package that uses Rcpp vignette](http://dirk.eddelbuettel.com/code/rcpp/Rcpp-package.pdf). 
+For more details see the [Writing a package that uses Rcpp vignette](http://cran.rstudio.com/web/packages/Rcpp/vignettes/Rcpp-package.pdf). 
 
 If your packages uses the `Rcpp::export` attribute then one additional step in the package build process is requried. The `compileAttributes` function scans the source files within a package for export attributes and generates the code to export the functions as required.
 
@@ -1024,10 +1024,12 @@ You should re-run `compileAttributes` whenever functions are added, removed, or 
 
 This chapter has only touched on a small part of Rcpp, giving you the basic tools to rewrite poorly performing R code in C++. Rcpp has many other capabilities that make it easy to interface R to existing C++ code, including:
 
-* automatically creating wrappers between C++ data structures and R
-  data structures. A good introduction to this topic is the vignette of [Rcpp modules](http://dirk.eddelbuettel.com/code/rcpp/Rcpp-modules.pdf)
+* Additional capabilities of attributes including specifying default arguments, linking in external C++ dependencies, and exporting C++ interfaces from packages. These features and more are covered in the [Rcpp attributes](http://cran.rstudio.com/web/packages/Rcpp/vignettes/Rcpp-attributes.pdf) vignette.
 
-* mapping C++ classes to reference classes.
+* Automatically creating wrappers between C++ data structures and R
+  data structures, including mapping C++ classes to reference classes. A good introduction to this topic is the vignette of [Rcpp modules](http://cran.rstudio.com/web/packages/Rcpp/vignettes/Rcpp-modules.pdf)
+
+* The [Rcpp quick reference guide](http://cran.rstudio.com/web/packages/Rcpp/vignettes/Rcpp-quickref.pdf) contains a useful summary of Rcpp classes and common programming idioms.
 
 I strongly recommend keeping an eye on the [Rcpp homepage](http://dirk.eddelbuettel.com/code/rcpp.html) and signing up for the [Rcpp mailing list](http://lists.r-forge.r-project.org/cgi-bin/mailman/listinfo/rcpp-devel). Rcpp is still under active development, and is getting better with every release.
 
