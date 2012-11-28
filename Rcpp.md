@@ -473,7 +473,7 @@ So
 
 * `CharacterVector` -> `std::string`: the string "NA"
 
-* `LogicalVector` -> `bool`: TRUE
+* `LogicalVector` -> `bool`: TRUE.  To work with missing values in logical vectors, use an `int` instead of a `bool`.
 
 * `NumericVector` -> `double`: stored as an NaN, and preserved. Most numerical operations will behave as you expect, but logical comparisons will not.  See below for more details.
 
@@ -511,7 +511,7 @@ To set a missing value in a vector, you need to use a missing value specific to 
     ')
     str(missing_sampler())
 
-To check if a value in a vector is missing, use `ISNA`:
+To check if a value in a vector is missing, use the class method `is_na`:
 
     cppFunction('
       LogicalVector is_na2(NumericVector x) {
@@ -519,14 +519,14 @@ To check if a value in a vector is missing, use `ISNA`:
         LogicalVector out(n);
         
         for (int i = 0; i < n; ++i) {
-          out[i] = ISNA(x[i]);
+          out[i] = NumericVector::is_na(x[i]);
         }
         return out;
       }
     ')
     is_na2(c(NA, 5.4, 3.2, NA))
 
-This works the same way as the Rcpp sugar function `is_na`.
+Another alternative is the similarly named sugar function `is_na`: it takes a vector and returns a logical vector.
 
 ### Exercises
 
@@ -536,7 +536,7 @@ This works the same way as the Rcpp sugar function `is_na`.
 
 ## The STL
 
-The real strength of C++ shows itself when you need to implement more complex algorithms. The standard template library (STL) provides set of extremely useful data structures and algorithms. This section will explain the most important algorithms and data structures and point you in the right direction to learn more.
+The real strength of C++ shows itself when you need to implement more complex algorithms. The standard template library (STL) provides set of extremely useful data structures and algorithms. This section will explain the most important algorithms and data structures and point you in the right direction to learn more.  We can't teach you everything you need to know about the STL, but hopefully the examples will at least show you the power of the STL, and persuade that it's useful to learn more. 
 
 If you need an algorithm or data strucutre that isn't implemented in STL, a good place to look is [boost](http://www.boost.org/doc/). Installing boost on to your computer is beyond the scope of this chapter, but once you have it installed, you can use `boost` data structures and algorithms by including the appropriate header file with (e.g.) `#include <boost/array.h>`.
 
@@ -603,7 +603,7 @@ The key points are:
 
 * `upper_bound` returns an iterator. If we wanted the value of the `upper_bound` we could dereference it; to figure out its location, we use the `distance` function.
 
-* Small note: if we want this function to be as fast as `findInterval` in R (which uses hand-written C code), we need to cache the calls to `.begin()` and `.end()`.  This is easy, but it distracts from this example so it has been omitted.
+* Small note: if we want this function to be as fast as `findInterval` in R (which uses hand-written C code), we need to cache the calls to `.begin()` and `.end()`.  This is easy, but it distracts from this example so it has been omitted.  Making this change yields a function that's slightly faster than R's `findInterval` function, but is about 1/10 of the code.
 
 It's generally better to use algorithms from the STL than hand rolled loops.  In "Effective STL", Scott Meyer gives three reasons: efficiency, correctness and maintainability. Algorithms from the STL are written by C++ experts to be extremely efficient, and they have been around for a long time so they are well tested. Using standard algorithms also makes the intent of your code more clear, helping to make it more readable and more maintainable.
 
@@ -611,13 +611,11 @@ A good reference guide for algorithms is http://www.cplusplus.com/reference/algo
 
 ### Data structures
 
-The STL provides a large set of data structures: `array`, `bitset`, `list`, `forward_list`, `map`, `multimap`, `multiset`, `priority_queue`, `queue`, `dequeue`, `set`, `stack`, `unordered_map`, `unordered_set`, `unordered_multimap`, `unordered_multiset`, and `vector`.  The most important of these datastructures are the `vector`, the `unordered_set`, and the `unordered_map`.  We'll focus on these three in this section, but using the others is very similar: they just have different performance tradeoffs. For example, the `deque` (pronounced "deck") has a very similar interface to vectors but a different implementation with different performance trade-offs. You may want to try them for your problem.  
+The STL provides a large set of data structures: `array`, `bitset`, `list`, `forward_list`, `map`, `multimap`, `multiset`, `priority_queue`, `queue`, `dequeue`, `set`, `stack`, `unordered_map`, `unordered_set`, `unordered_multimap`, `unordered_multiset`, and `vector`.  The most important of these datastructures are the `vector`, the `unordered_set`, and the `unordered_map`.  We'll focus on these three in this section, but using the others is similar: they just have different performance tradeoffs. For example, the `deque` (pronounced "deck") has a very similar interface to vectors but a different underlying implementation that has different performance trade-offs. You may want to try them for your problem.  A good reference for STL data structures is http://www.cplusplus.com/reference/stl/ - I recommend you keep it open while working with the STL.
 
-One nice feature of the STL containers is that Rcpp knows how to convert from most STL data structures to their R equivalents. For example, the following is a very simple implementation of a unique function: it loads everything into a set and then returns the set. Rcpp takes care of converting it into an integer vector.
+Rcpp knows how to convert from many STL data structures to their R equivalents, so you can return them from your functions without explicitly converting to R datastructures. 
 
-A good reference for stl data structures is http://www.cplusplus.com/reference/stl/
-
-### Vector
+### Vectors
 
 A stl vector is very similar to an R vector, except that it expands efficiently.  This makes vectors appropriate to use when you don't know in advance how big the output will be.  Vectors are templated, which means that you need to specify the type of object the vector will contain when you create it: `vector<int>`, `vector<bool>`, `vector<double>`, `vector<std::string>`.  You can access individual elements of a vector using the standard `[]` notation, and you can add a new element to the end of the vector using `.push_back()`.  If you have some idea in advance how big the vector will be, you can use `.reserve()` to allocate sufficient storage.
 
@@ -649,22 +647,21 @@ The following code implements run length encoding (`rle`). It produces two vecto
       return List::create(_["lengths"] = lengths, _["values"] = values);
     }
 
-(An alternative implementation would be to replace `i` with the iterator `lengths.rbegin()` which always points to the last element of the vector.)
+(An alternative implementation would be to replace `i` with the iterator `lengths.rbegin()` which always points to the last element of the vector - you might want to try implementing that yourself.)
 
 Other methods of a vector are described at http://www.cplusplus.com/reference/vector/vector/.
 
-### Unordered set
+### Sets
 
-Sets are a useful data structure for many jobs that involve duplicates or unique values (like `unique`, `duplicated`, or `in`).  They can very efficiently tell if you've seen a value or not.
+Sets maintain a unique set of values, and can efficiently tell if you've seen a value before. They are useful for problems that involve duplicates or unique values (like `unique`, `duplicated`, or `in`). C++ provides both ordered (`std::set`) and unordered sets (`std::tr1::unorded_set`), depending on whether or not order matters for you. Unordered sets tend to be much faster (because they use a hash table internally rather than a tree), so even if you need an ordered set, you should consider using an unordered set and then sorting the output. Like vectors, sets are templated, so you need to request the appropriate type of set for your purpose: `unordered_set<int>`, `unordered_set<bool>`, etc.
 
-
-The `unordered_set` isn't part of the last C++ specification, but it will be in the next one. For that reason, you need to jump through a small hoop to use it: it's in the `std::tr1` namespace rather than the usual `std` namespace. 
+http://www.cplusplus.com/reference/set/set/ and http://www.cplusplus.com/reference/unordered_set/unordered_set/ provide complete documentation for sets structures.
     
+The following function uses an unordered set to implement an equivalent to `duplicated` for integer vectors. Note the use of `seen.insert(x[i]).second` - `insert` returns a pair, the `first` value is an iterator that points to element and the `second` value is a boolean that's true if the value was a new addition to the set.  
 
-The following function is a simple implementation of R's `duplicated` funciton. Note the use of `seen.insert(x[i]).second` - `insert` returns a pair, the first value giving an iterator to the position of the element and the second element is a boolean that's true if the value was a new addition to the set.  
-
+    // [[Rcpp::export]]
     LogicalVector duplicated(IntegerVector x) {
-      std::set<int> seen;
+      std::tr1::unordered_set<int> seen;
       int n = x.size();
       LogicalVector out(n);
 
@@ -675,29 +672,32 @@ The following function is a simple implementation of R's `duplicated` funciton. 
       return out;
     }
 
-### Unordered map
+### Map
 
-An unordered map is very similar to an unordered set, but instead of storing presence or absence, it can store additional data. It's useful for functions that map some value to a like `table` or `match`. 
+A map is similar to a set, but instead of storing presence or absence, it can store additional data. It's useful for functions like `table` or `match` that need to look up a value. As with sets, there are ordered (`std::map`) and unordered (`std::tr1::unorded_map`) versions, but if output order matters it's usually faster to use an unordered map and sort the results. 
+
+Since maps have a value and a key, you need to specify both when initialising a map: `map<double, int>`, `unordered_map<int, double>`, and so on.
+
+XXX: Insert example implementation of match when `String` complete
 
 ### Exercises
 
-Implement:
+To practive using the STL algorithms and data structures, implement the following using R functions in C++, using the hints provided:
 
 * `median.default` using `partial_sort`
 * `%in%` using `unordered_set` and the `find` or `count` methods
 * `unique` using an `unordered_set` (challenge: do it in one line!)
-* `min` using `std::min`
+* `min` using `std::min`, or `max` using `std::max`
 * `which.min` using `min_element`, or `which.max` using `max_element`
 * `setdiff`, `union` and `intersect` using sorted ranges and `set_union`, `set_intersection` and `set_difference`
 
-* re-write our implementation of `row_sums` to use iterators. Rewrite it to use `accumulate`.
-
-
 ## Case studies
+
+The following case studies illustrate some real life uses of C++ to replace slow R code. 
 
 ### Gibbs sampler
 
-The following case study updates an example [blogged about](From http://dirk.eddelbuettel.com/blog/2011/07/14/) by Dirk Eddelbuettel, illustrating the conversion of a gibbs sampler in R to C++.  The R and C++ code shown below is very similar (it only took a few minutes to convert the R version to the C++ version), but runs about 20 times faster on my computer.  Dirk's blog post also shows another way to make it even faster: using the faster (but presumably less numerically accurate) random number generator functions in GSL (easily accessible from R through RcppGSL) can eke out another 2-3x speed improvement.
+The following case study updates an example [blogged about](http://dirk.eddelbuettel.com/blog/2011/07/14/) by Dirk Eddelbuettel, illustrating the conversion of a gibbs sampler in R to C++. The R and C++ code shown below is very similar (it only took a few minutes to convert the R version to the C++ version), but runs about 20 times faster on my computer. Dirk's blog post also shows another way to make it even faster: using the faster (but presumably less numerically accurate) random number generator functions in GSL (easily accessible from R through RcppGSL) can eke out another 2-3x speed improvement.
 
 The R code is as follows:
 
@@ -770,7 +770,7 @@ We want to be able to apply this function to many inputs, so we might write a ve
       out
     }
 
-If you're familiar with R, you'll have a gut feeling that this will be slow, and indeed it is. There are two ways we could attack this problem. If you have a good R vocabulary, you might immediately see how to vectorise the function (using `ifelse`, `pmin` and `pmax`).  Alternatively, we could rewrite `vacc1a` and `vacc1` in C++, using our knowledge that loops and function calls have much lower overhead in C++.
+If you're familiar with R, you'll have a gut feeling that this will be slow, and indeed it is. There are two ways we could attack this problem. If you have a good R vocabulary, you might immediately see how to vectorise the function (using `ifelse`, `pmin` and `pmax`). Alternatively, we could rewrite `vacc1a` and `vacc1` in C++, using our knowledge that loops and function calls have much lower overhead in C++.
 
 Either approach is fairly straighforward. In R:
 
@@ -781,6 +781,8 @@ Either approach is fairly straighforward. In R:
       p <- pmin(1, p)
       p
     }
+
+(If you've worked R a lot you might recongise some potential bottlenecks in this code: `ifelse`, `pmin`, and `pmax` are known to be slow, and could be replaced with `p + 0.75 + 0.5 * female`, `p[p < 0] <- 0`, `p[p > 1] <- 1`.  You might want to try timing that function yourself, but since it relies on rather esoteric knowledge I haven't included it in this case study.)
 
 Or in C++:
 
@@ -816,28 +818,28 @@ We next generate some sample data, and check that all three versions return the 
       all.equal(vacc1(age, female, ily), vacc3(age, female, ily))
     )
 
-The original blog post forgot to do this, and hence introduced a bug in the C++ version: `0.004` instead of `0.04`.  Finally, we can benchmark our three approaches:
+The original blog post forgot to do this, and hence introduced a bug in the C++ version: it used `0.004` instead of `0.04`.  Finally, we can benchmark our three approaches:
 
     microbenchmark(
       vacc1(age, female, ily),
       vacc2(age, female, ily),
       vacc3(age, female, ily)
 
-Not surprisingly, our original approach with loops is very slow.  Vectorising in R gives a huge speedup, and we can eke out even more performance (~10x) with the C++ loop. I was a little surprised that the C++ was so much faster, but it is because the R version has to create 11 vectors to store intermediate results, where the C++ code only needs to create 1.
+Not surprisingly, our original approach with loops is very slow.  Vectorising in R gives a huge speedup, and we can eke out even more performance (~10x) with the C++ loop. I was a little surprised that the C++ was so much faster, but it is because the R version has to create 11 vectors to store intermediate results, where the C++ code only needs to create 1. 
 
 ## Standalone C++
 
 The examples in this chapter have focused on inline C++ because it's easy to copy, paste and experiment, with a minimum of infrastructure to set up. For real problems, it's usually easier to use standalone C++ files so that you get:
 
-* one compilation step for all functions
-
-* can easily define C++ helper functions
-
-* easier transition to packaged code
-
 * better editor support: C++ editors (like RStudio) can provide syntax highlighting, code completion, help, "go to definition", refactoring, and static code analysis
 
 * better line numbers in error messages
+
+* one compilation step for multiple functions
+
+* define C++ helper functions that are not available in R
+
+* an easier transition to an R package
 
 The following sections describe how to use either individual C++ files and how to include Rcpp code in a package.
 
@@ -881,7 +883,7 @@ double mean1(NumericVector x) {
     mean(x),
     mean1(x))
 */
-```  
+```
 
 The R code is run with `source(print.eval = TRUE)` so you don't need to explicitly print output.
 
