@@ -26,6 +26,14 @@ vacc2 <- function(age, female, ily) {
   p
 }
 
+vacc2a <- function(age, female, ily) {
+  p <- 0.25 + 0.3 * 1 / (1 - exp(0.04 * age)) + 0.1 * ily
+  p <- p + 0.75 + 0.5 * female
+  p[p < 0] <- 0
+  p[p > 1] <- 1
+  p
+}
+
 sourceCpp("vaccinate.cpp")
 
 n <- 1000
@@ -42,6 +50,7 @@ stopifnot(
 print(microbenchmark(
   vacc1(age, female, ily),
   vacc2(age, female, ily),
+  vacc2a(age, female, ily),
   vacc3(age, female, ily),
   vacc4(age, female, ily),
   vacc5(age, female, ily)
