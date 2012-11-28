@@ -1016,10 +1016,6 @@ For more details see the [Writing a package that uses Rcpp vignette](http://dirk
 
 If your packages uses the `Rcpp::export` attribute then one additional step in the package build process is requried. The `compileAttributes` function scans the source files within a package for export attributes and generates the code to export the functions as required.
 
-You should re-run `compileAttributes` whenever functions are added, removed, or have their signatures changed. Note that if you build your package using RStudio or `devtools` then this step occurs automatically.For more details see the [Writing a package that uses Rcpp vignette](http://dirk.eddelbuettel.com/code/rcpp/Rcpp-package.pdf). 
-
-If your packages uses the `Rcpp::export` attribute then one additional step in the package build process is requried. The `compileAttributes` function scans the source files within a package for export attributes and generates the code to export the functions as required.
-
 You should re-run `compileAttributes` whenever functions are added, removed, or have their signatures changed. Note that if you build your package using RStudio or `devtools` then this step occurs automatically.
 
 ## Learning more
