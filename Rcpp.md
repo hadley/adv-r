@@ -1,6 +1,6 @@
 # High performance functions with Rcpp
 
-Sometimes R code just isn't fast enough - you've used profiling to find the bottleneck, but there's simply no way to make the code any faster. This chapter is the answer to that problem. You'll learn how to rewrite key functions in C++ to get much better performance, while not taking too much longer to write. The key to this magic is [Rcpp](http://dirk.eddelbuettel.com/code/rcpp.html), a fantastic tool written by Dirk Eddelbuettel and Romain Francois (with key contribution by Doug Bates, John Chambers and JJ Allaire), that makes it dead simple to connect C++ to R. It is possible to write high performance code in C or Fortran. This might produce faster code than C++ (but probably not), but it will take you much much longer to write. Without Rcpp, you must sacrifice many helpful wrappers and master the complex C internals of R yourself. Rcpp is currently the best balance between speed and convenience, and any other approach will be much more painful.
+Sometimes R code just isn't fast enough - you've used profiling to find the bottleneck, but there's simply no way to make the code any faster. This chapter is the answer to that problem. You'll learn how to rewrite key functions in C++ to get much better performance, while not taking too much longer to write. The key to this magic is [Rcpp](http://dirk.eddelbuettel.com/code/rcpp.html), a fantastic tool written by Dirk Eddelbuettel and Romain Francois (with key contribution by Doug Bates, John Chambers and JJ Allaire), that makes it dead simple to connect C++ to R. It is _possible_ to write high performance code in C or Fortran. This might produce faster code than C++ (but probably not), but it will take you much much longer to write. Without Rcpp, you must sacrifice many helpful wrappers and master the complex C internals of R yourself. Rcpp is currently the best balance between speed and convenience, and any other approach will be much more painful.
 
 Typical bottlenecks that C++ can help with are:
 
@@ -15,12 +15,14 @@ Rewriting a function in C++ can lead to a 2-3 order of magnitude speed up, but m
 The aim of this chapter is to give you the absolute necessities of C++ and Rcpp. You'll learn:
 
 * How to write C++ code by seeing R functions and their C++ equivalents.
-* The Rcpp class hierarchy
+* Important Rcpp classes and methods
 * How to use Rcpp "sugar" to avoid C++ loops and convert directly from vectorised R code
 * How to work with missing values
 * Some of the most important techniques, data structures and algorithms from standard template library (STL)
 
 The chapter concludes with a selection of real case studies showing how others have used C++ and Rcpp to speed up their slow R code.
+
+(Link to Dirk's book "Seamless R and C++ integration with Rcpp" when available)
 
 ## Getting started
 
@@ -283,7 +285,6 @@ bool f3(LogicalVector x) {
 }
 
 int f4(Function pred, List x) {
-
   int n = x.size();
 
   for(int i = 0; i < n; ++i) {
@@ -1014,3 +1015,7 @@ Other resources I've found helpful in learning C++ are:
 * [C++ Annotations](http://www.icce.rug.nl/documents/cplusplus/cplusplus.html), aimed at" knowledgeable users of C (or any other language using a C-like grammar, like Perl or Java) who would like to know more about, or make the transition to, C++"
 
 * [Algorithm Libraries](http://www.cs.helsinki.fi/u/tpkarkka/alglib/k06/), which provides a more technical, but still precise, description of important STL concepts. (Follow the links under notes)
+
+## Acknowledgements
+
+I'd like to thank the Rcpp-mailing list for many helpful conversations, particularly Romain Francois and Dirk Eddelbuettel who have not only provided detailed answers to many of my questions, but have been incredibly responsive at improving Rcpp. This chapter would not have been possible without JJ Allaire; he encouraged me to learn C++ and then answered many of my dumb questions along the way.
