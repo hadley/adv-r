@@ -152,7 +152,7 @@ Strings have this more complicated design because individual `CHARSXP`'s (elemen
       object.size(y) / 1e6
       # 4.000056 bytes
 
-(This is also the reason why factors are no more memory efficient than strings. `factor(y)` is actually slightly bigger than `factor(x)`)
+(This is also the reason why factors are no more memory efficient than strings. `factor(y)` is actually slightly bigger than `y`)
 
 ## Coercion and object creation
 
@@ -269,7 +269,7 @@ Strings and lists are more complicated because the individual elements are `SEXP
 
 ### Modifying strings
 
-String vectors are a little more complicated. As discussed earlier, a string vector is a vector made up of pointers to immutable `CHARSXP`, and it's the `CHARSXP` that contains the C string (which can be extracted using `CHAR`).  The following function shows a simple example of creating a vector of known values:
+String vectors are a little more complicated. As discussed earlier, a string vector is a vector made up of pointers to immutable `CHARSXP`s, and it's the `CHARSXP` that contains the C string (which can be extracted using `CHAR`). The following function shows how to create a vector of fixed values:
 
     abc <- cfunction(NULL, '
       SEXP out;
@@ -314,12 +314,12 @@ There also a few helper functions if you want to turn the first element of an R 
 * `asReal(x): REALSXP -> double`
 * `CHAR(asChar(x)): STRSXP -> const char*`
 
-And vice versa, it's easy to turn a C scalar into a length-one R vector:
+And similarly it's easy to turn a C scalar into a length-one R vector:
 
 * `ScalarLogical(x): int -> LGLSXP`
 * `ScalarInteger(x): int -> INTSXP`
 * `ScalarReal(x): double -> REALSXP`
-* `mkString(x) const char* -> STRSXP`
+* `mkString(x): const char* -> STRSXP`
 
 These all create R-level objects, so need to be `PROTECT`ed.
 
