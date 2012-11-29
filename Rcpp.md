@@ -278,7 +278,7 @@ double mean1(NumericVector x) {
   double total = 0;
 
   for(int i = 0; i < n; ++i) {
-    total =+ x[i] / n;
+    total += x[i] / n;
   }
   return total;
 }
@@ -309,7 +309,7 @@ double f1(NumericVector x) {
   double y = 0;
 
   for(int i = 0; i < n; ++i) {
-    y =+ x[i] / n;
+    y += x[i] / n;
   }
   return y;
 }
@@ -320,7 +320,7 @@ NumericVector f2(NumericVector x) {
 
   out[0] = x[0];
   for(int i = 1; i < n; ++i) {
-    out =+ out[i - 1] + x[i];
+    out[i] = out[i - 1] + x[i];
   }
   return out;
 }
