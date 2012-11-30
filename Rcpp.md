@@ -6,14 +6,14 @@ Typical bottlenecks that C++ can help with are:
 
 * Loops that can't easily be vectorised because each iteration depends on the previous. C++ modifies objects in place, so there is little overhead when modifying a data structure many times.
 
-* Recursive functions, or problems which involve calling functions millions of times. The overhead of calling a function in C++ is much lower than the overhead of calling a function in R: ~5ns compared to ~200ns.
+* Recursive functions, or problems which involve calling functions millions of times. The overhead of calling a function in C++ is much lower than the overhead of calling a function in R.  To give you some idea of the magnitude, on my computer when writing this book the overhead in C++ was ~5ns compared to ~200ns for R.
 
 * Problems that require advanced data structures and algorithms that R doesn't provide. Through the standard template library (STL), C++ has efficient implementations of many important data structures, from ordered maps to double ended queues.
 
-Rewriting a function in C++ can lead to a 2-3 order of magnitude speed up, but most improvements will be more modest. While pure R code is relatively slow compared to C or C++, many bottlenecks in base R have already been replaced with hand-written C functions. This means that if your function already uses vectorised operations, you are unlikely to see a large improvement in performance, perhaps around 20-30%. It's possible to get greater improvements by using C++ performance tricks, but those are beyond the scope of this chapter, and you'll need to consult other sources. Compared to base R implementations, the big advantage of C++ code is that it's much more concise: often around 10% of length of the equivalent C code in the R sources.
+Rewriting a function in C++ can lead to a 2-3 order of magnitude speed up, but most improvements will be more modest. While pure R code is relatively slow compared to C or C++, many bottlenecks in base R have already been replaced with hand-written C functions. This means that if your function already uses vectorised operations, you are unlikely to see a large improvement in performance. Note, however, that if you do rewrite a base C function with Rcpp, it's likely to be much shorter, because you can use the more sophisticated tools provided by C++.
 
 The aim of this chapter is to give you the absolute necessities of C++ and Rcpp.
-Dirk Eddelbuettel is currently working on an entire book on Rcpp, "Seamless R and C++ integration with Rcpp", which will provide much more detail than we can here. If you're serious about Rcpp, make sure to get that book when it comes out!
+A working knowledge of C++ is helpful, but not essential. Many good tutorials and references are freely available, including [http://www.learncpp.com/] and [http://www.cplusplus.com/]. For more advanced topics, the "Effective C++" series by Scott Meyers is popular choice. Dirk Eddelbuettel is currently working on an entire book on Rcpp, "Seamless R and C++ integration with Rcpp", which will provide much more detail than we can here. If you're serious about Rcpp, make sure to get that book when it comes out!
 
 In this chapter you'll learn:
 
@@ -40,15 +40,14 @@ cppFunction('
     return sum;
   }'
 )
-formals(add)
+add # like a regular R function, printing displays info about the function
 add(1, 2, 3)
 ```
-
-When you run this code, Rcpp will compile the C++ code and construct an R function that connects to the compiled C++ function. If you're familiar with `inline::cxxfunction`, `cppFunction` is similar, except that you specify the function completely in the string, and it parses the C++ function arguments to figure out what the R function arguments should be:
+When you run this code, Rcpp will compile the C++ code and construct an R function that connects to the compiled C++ function. If you're familiar with `inline::cxxfunction`, `cppFunction` is similar, except that you specify the function completely in the string, and it parses the C++ function arguments to figure out what the R function arguments should be.
 
 ## Getting starting with C++
 
-C++ is a large language, and there's no way to cover it exhaustively here.  Our aim is to give you the basics so that you can start writing useful functions. We'll spend minimal time on advanced features like object oriented programming and templates, because our focus is not on writing big programs in C++, just small, mostly self-contained functions that allow you to speed up slow parts of your R code.  
+C++ is a large language, and there's no way to cover it exhaustively here.  Our aim here is to give you the basics so you can start writing useful functions that allow you to speed up slow parts of your R code.  We'll spend minimal time on advanced features like object oriented programming and templates, because our focus is not on writing big programs in C++, just small, self-contained function.
 
 The following section shows the basics of C++ by translating simple R functions to their R equivalents. We'll start simple with a function that has no inputs and a scalar output, and then get progressively more complicated:
 
@@ -89,7 +88,7 @@ This small function illustrates a number of important differences between R and 
 
 * You must declare the type of output the function returns. This function returns an `int` (a scalar integer). The classes for the most common types of R vectors are: `NumericVector`, `IntegerVector`, `CharacterVector` and `LogicalVector`.
 
-* C++ distinguishes between scalars and vectors. The scalar equivalents of numeric, integer, character and logical vectors are: `double`, `int`, `std::string` and `bool`. (Unfortunately the names of C++ scalars and R vectors are inconsistent for historical reasons)
+* Scalars and vectors are different. The scalar equivalents of numeric, integer, character and logical vectors are: `double`, `int`, `std::string` and `bool`. 
 
 * You must use an explicit `return` statement to return a value from the function.
 
@@ -100,7 +99,7 @@ This small function illustrates a number of important differences between R and 
 The next example function makes things a little more complicated by implementating a scalar version of the `sign` function which returns 1 if the input is positive, and -1 if it's negative:
 
 ```
-sign1 <- function(x) {
+signR <- function(x) {
   if (x > 0) {
     1
   } else if (x == 0) {
@@ -111,7 +110,7 @@ sign1 <- function(x) {
 }
 
 cppFunction('
-  int sign2(int x) {
+  int signC(int x) {
     if (x > 0) {
       return 1;
     } else if (x == 0) {
@@ -125,7 +124,7 @@ cppFunction('
 
 In the C++ version:
 
-* we declare the type of each input in the same way we declare the type of the output. While this makes the code a little more verbose, it also makes it very obvious what type of input the function needs.
+* we declare the type of each input in the same way we declare the type of the output. While this makes the code a little more verbose, it also makes it very obvious what type of input the function needs. Similarly to S3 and S4 in R, C++ allows you to write different functions with the same name that have different inputs (number or type). 
 
 * the `if` syntax is identical - while there are some big differences between R and C++, there are also lots of similarities!  C++ also has a `while` statement that works the same way as R's.  You can also use `break`, but use `continue`  instead of `next`.
 
@@ -134,7 +133,7 @@ In the C++ version:
 One big difference between R and C++ is that the cost of loops is much lower.  For example, we could implement the `sum` function in R using a loop. If you've been programming in R a while, you'll probably have a visceral reaction to this function!
 
 ```
-sum1 <- function(x) {
+sumR <- function(x) {
   total <- 0
   for (i in seq_along(x)) {
     total <- total + x[i]
@@ -143,11 +142,11 @@ sum1 <- function(x) {
 }
 ```
 
-In C++, loops have very little overhead, so it's fine to use them. However, we'll see some alternatives to for loops that more clearly express your intent; they're not faster, but they make your code easier to understand.
+In C++, loops have very little overhead, so it's fine to use them (later, we'll see alternatives to `for` loops that more clearly express your intent; they're not faster, but they can make your code easier to understand).
 
 ```
 cppFunction('
-  double sum2(NumericVector x) {
+  double sumC(NumericVector x) {
     int n = x.size();
     double total = 0;
     for(int i = 0; i < n; ++i) {
@@ -160,17 +159,17 @@ cppFunction('
 
 The C++ version is similar, but:
 
-* To find the length of the vector, we use the `size()` method, which returns an integer. Again, whenever we create a new variable we have to tell C++ what type of object it will hold. An `int` is a scalar integer, but we could have used `double` for a scalar numeric, `bool` for a scalar logical, or a `std::string` for a scalar character vector.
+* To find the length of the vector, we use the `size()` method, which returns an integer. Again, whenever we create a new variable we have to tell C++ what type of object it will hold. An `int` is a scalar integer, but we could have used `double` for a scalar numeric, `bool` for a scalar logical, or a `std::string` for a scalar string.
 
 * The `for` statement has a different syntax: `for(intialisation; condition; increase)`. The initialise component creates a new variable called `i` and sets it equal to 0. The condition is checked in each iteration of the loop: the loop is continues while it's `true`. The increase statement is run after each loop iteration, but before the condition is checked. Here we use the special prefix operator `++` which increases the value of `i` by 1.
 
-* Vectors in C++ start at 0. I'll say this again because it's so important: VECTORS IN C++ START AT 0! Forgetting that is probably the most common source of bugs when converting R functions to C++.
+* Vectors in C++ start at 0. I'll say this again because it's so important: VECTORS IN C++ START AT 0! This is a very common source of bugs when converting R functions to C++.
 
 * We can't use `<-` (or `->`) for assignment, but instead use `=`.
 
-* We can take advantage of the in-place modification operators: `total += x[i]` is equivalent to `total = total + x[i]`.  Similar in-place operators are `-=`, `*=` and `/=`.  
+* We can take advantage of the in-place modification operators: `total += x[i]` is equivalent to `total = total + x[i]`.  Similar in-place operators are `-=`, `*=` and `/=`.  This is known as a side-effect, where the function `++` or `+=` modifies its argument `i` or `x` without us asking. Functions in R rarely have side-effects, and we need to be careful that our Rcpp functions don't modify their inputs. More on that later.
 
-This is a good example of where C++ is much more efficient than the R equivalent. As shown by the following microbenchmark, our `sum2` function is competitive with the built-in (and highly optimised) `sum` function, while `sum1` is several orders of magnitude slower.
+This is a good example of where C++ is much more efficient than the R equivalent. As shown by the following microbenchmark, our `sumC` function is competitive with the built-in (and highly optimised) `sum` function, while `sumR` is several orders of magnitude slower.
 
 
 ```
@@ -178,19 +177,17 @@ library(microbenchmark)
 x <- runif(1e3)
 microbenchmark(
   sum(x),
-  sum1(x),
-  sum2(x)
+  sumR(x),
+  sumC(x)
 )
 ```
-
-It's possible to make our version of sum even faster if we use some tricks, but those are beyond the scope of this book.
 
 ### Vector input, vector output
 
 For our next example, we'll create a function that computes the distance between one value and a vector of other values:
 
 ```
-pdist1 <- function(x, ys) {
+pdistR <- function(x, ys) {
   (x - ys) ^ 2
 }
 ```
@@ -199,12 +196,12 @@ From the function definition, it's not obvious that we want `x` to be a scalar -
 
 ```
 cppFunction('
-  NumericVector pdist2(double x, NumericVector ys) {
+  NumericVector pdistC(double x, NumericVector ys) {
     int n = ys.size();
     NumericVector out(n);
 
     for(int i = 0; i < n; ++i) {
-      out[i] = pow(ys[i] - x, 2);
+      out[i] = pow(ys[i] - x, 2.0);
     }
     return out;
   }
@@ -213,11 +210,11 @@ cppFunction('
 
 This function introduces only a few new concepts:
 
-* We create a new numeric vector of length `n` with a constructor: `NumericVector out(n)`.  Another useful constructor takes an existing vector and makes a copy: `NumericVector zs(ys)` would create a new numeric vector called `zs` that contained a copy of `ys`.
+* We create a new numeric vector of length `n` with a constructor: `NumericVector out(n)`.  Another useful way of making a vector is to copy an existing vector: `NumericVector zs = clone(ys)`.
 
 * C++ doesn't use `^` for exponentiation, it instead uses the `pow` function.
 
-Note that because the R function is fully vectorised, it is already going to be extremely fast. On my computer, it takes around 8 ms with a 1 million element `y` vector. The C++ function is twice as fast, ~4 ms, but assuming it took you 10 minutes to write the C++ function, you'd need to run it ~150,000 times to make it a net saver of time. The reason why the C++ function is faster is subtle, and relates to memory management. The R version needs to create an intermediate vector the same length as y (`x - ys`), and allocating memory is an expensive operation. The C++ function avoids this overhead because it uses an intermediate scalar.
+Note that because the R function is fully vectorised, it is already going to be fast. On my computer, it takes around 8 ms with a 1 million element `y` vector. The C++ function is twice as fast, ~4 ms, but assuming it took you 10 minutes to write the C++ function, you'd need to run it ~150,000 times to make it a net saver of time. The reason why the C++ function is faster is subtle, and relates to memory management. The R version needs to create an intermediate vector the same length as y (`x - ys`), and allocating memory is an expensive operation. The C++ function avoids this overhead because it uses an intermediate scalar.
 
 In the sugar section, you'll see how to rewrite this function to take advantage of Rcpp's vectorised operations so that the C++ code is barely longer than the R code.
 
@@ -227,7 +224,7 @@ Each vector type also has a matrix equivalent: `NumericMatrix`, `IntegerMatrix`,
 
 ```
 cppFunction('
-  NumericVector row_sums(NumericMatrix x) {
+  NumericVector rowSumsC(NumericMatrix x) {
     int nrow = x.nrow(), ncol = x.ncol();
     NumericVector out(nrow);
 
@@ -243,6 +240,7 @@ cppFunction('
 ')
 x <- matrix(sample(100), 10)
 rowSums(x)
+rowSumsC(x)
 ```
 
 The main thing to notice is that when subsetting a matrix we use `()` and not `[]`, and that matrix objects have `nrow()` and `ncol()` methods. 
@@ -264,7 +262,7 @@ And for each function that you want availble within R, you need to prefix it wit
 // [[Rcpp::export]]
 ```
 
-Then using `sourceCpp("path/to/file.cpp")` will compile the C++ code, create the matching R functions and add them to your current session.
+Then using `sourceCpp("path/to/file.cpp")` will compile the C++ code, create the matching R functions and add them to your current session.  (Note that these functions will not persist across `save()` and `load()`, such as when you restore your workspace.)
 
 For example, running `sourceCpp` on the following file first compiles the C++ code and then compares it to native equivalent:
 
@@ -273,7 +271,7 @@ For example, running `sourceCpp` on the following file first compiles the C++ co
 using namespace Rcpp;
 
 // [[Rcpp::export]]
-double mean1(NumericVector x) {
+double meanC(NumericVector x) {
   int n = x.size();
   double total = 0;
 
@@ -288,7 +286,7 @@ double mean1(NumericVector x) {
   x <- runif(1e5)
   microbenchmark(
     mean(x),
-    mean1(x))
+    meanC(x))
 */
 ```
 
@@ -1045,6 +1043,8 @@ Other resources I've found helpful in learning C++ are:
 * [C++ Annotations](http://www.icce.rug.nl/documents/cplusplus/cplusplus.html), aimed at" knowledgeable users of C (or any other language using a C-like grammar, like Perl or Java) who would like to know more about, or make the transition to, C++"
 
 * [Algorithm Libraries](http://www.cs.helsinki.fi/u/tpkarkka/alglib/k06/), which provides a more technical, but still precise, description of important STL concepts. (Follow the links under notes)
+
+* "Algorithms" by Robert Sedgewick and Kevin Wayne has a free [online textbook](http://algs4.cs.princeton.edu/home/) and a matching [coursera course](https://www.coursera.org/course/algs4partI).
 
 ## Acknowledgements
 
