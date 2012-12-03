@@ -88,7 +88,7 @@ This small function illustrates a number of important differences between R and 
 
 * You must declare the type of output the function returns. This function returns an `int` (a scalar integer). The classes for the most common types of R vectors are: `NumericVector`, `IntegerVector`, `CharacterVector` and `LogicalVector`.
 
-* Scalars and vectors are different. The scalar equivalents of numeric, integer, character and logical vectors are: `double`, `int`, `std::string` and `bool`. 
+* Scalars and vectors are different. The scalar equivalents of numeric, integer, character and logical vectors are: `double`, `int`, `String` and `bool`. 
 
 * You must use an explicit `return` statement to return a value from the function.
 
@@ -159,7 +159,7 @@ cppFunction('
 
 The C++ version is similar, but:
 
-* To find the length of the vector, we use the `size()` method, which returns an integer. Again, whenever we create a new variable we have to tell C++ what type of object it will hold. An `int` is a scalar integer, but we could have used `double` for a scalar numeric, `bool` for a scalar logical, or a `std::string` for a scalar string.
+* To find the length of the vector, we use the `size()` method, which returns an integer. Again, whenever we create a new variable we have to tell C++ what type of object it will hold. An `int` is a scalar integer, but we could have used `double` for a scalar numeric, `bool` for a scalar logical, or a `String` for a scalar string.
 
 * The `for` statement has a different syntax: `for(intialisation; condition; increase)`. The initialise component creates a new variable called `i` and sets it equal to 0. The condition is checked in each iteration of the loop: the loop is continues while it's `true`. The increase statement is run after each loop iteration, but before the condition is checked. Here we use the special prefix operator `++` which increases the value of `i` by 1.
 
@@ -371,7 +371,7 @@ To practice your function writing skills, convert the following functions into C
 
 ## Rcpp classes and methods
 
-You've already seen the basic vector classes (`IntegerVector`, `NumericVector`, LogicalVector`, `CharacterVector`) and their scalar (`int`, `double`, `bool`, `std::string`) and matrix (`IntegerMatrix`, `NumericMatrix`, LogicalMatrix`, `CharacterMatrix`) equivalents. 
+You've already seen the basic vector classes (`IntegerVector`, `NumericVector`, LogicalVector`, `CharacterVector`) and their scalar (`int`, `double`, `bool`, `String`) and matrix (`IntegerMatrix`, `NumericMatrix`, LogicalMatrix`, `CharacterMatrix`) equivalents. 
 
 All R objects have attributes, which can be queried and modified with the `attr` method.  Rcpp also provides a `names()` method for the commonly used attribute: `attr("names")`. The following code snippet illustrates these methods.  Note the use of the `create()` class method to easily create an R vector from C++ scalar values.
 
@@ -556,15 +556,12 @@ The following code explores what happens when you take one of R's missing values
 ```cpp
 // [[Rcpp::export]]
 List scalar_missings() {
-  CharacterVector chr(1);
-  chr[0] = NA_STRING;
-
   int int_s = NA_INTEGER;
-  std::string chr_s = std::string(chr[0]);
+  String chr_s = NA_STRING;
   bool lgl_s = NA_LOGICAL;
   double num_s = NA_REAL;
 
-  return(List::create(int_s, chr_s, lgl_s, num_s));
+  return List::create(int_s, chr_s, lgl_s, num_s);
 }
 
 /*** R
@@ -576,7 +573,7 @@ So
 
 * `IntegerVector` -> `int`: stored as the smallest integer. If you leave as is, it will be preserved, but no C++ operations are aware of the missingness: `evalCpp('NA_INTEGER + 1')` gives -2147483647.
 
-* `CharacterVector` -> `std::string`: the string "NA"
+* `CharacterVector` -> `String`: the string "NA"
 
 * `LogicalVector` -> `bool`: TRUE.  To work with missing values in logical vectors, use an `int` instead of a `bool`.
 
@@ -741,7 +738,7 @@ Rcpp knows how to convert from many STL data structures to their R equivalents, 
 
 ### Vectors
 
-A stl vector is very similar to an R vector, except that it expands efficiently.  This makes vectors appropriate to use when you don't know in advance how big the output will be.  Vectors are templated, which means that you need to specify the type of object the vector will contain when you create it: `vector<int>`, `vector<bool>`, `vector<double>`, `vector<std::string>`.  You can access individual elements of a vector using the standard `[]` notation, and you can add a new element to the end of the vector using `.push_back()`.  If you have some idea in advance how big the vector will be, you can use `.reserve()` to allocate sufficient storage.
+A stl vector is very similar to an R vector, except that it expands efficiently.  This makes vectors appropriate to use when you don't know in advance how big the output will be.  Vectors are templated, which means that you need to specify the type of object the vector will contain when you create it: `vector<int>`, `vector<bool>`, `vector<double>`, `vector<String>`.  You can access individual elements of a vector using the standard `[]` notation, and you can add a new element to the end of the vector using `.push_back()`.  If you have some idea in advance how big the vector will be, you can use `.reserve()` to allocate sufficient storage.
 
 The following code implements run length encoding (`rle`). It produces two vectors of output: a vector of values, and a vector `lengths` giving how many times each element is repeated. It works by looping through the input vector `x` comparing each value to the previous: if it's the same, then it increments the last value in `lengths`; if it's different, it adds the value to the end of `values`, and sets the corresponding length to 1.
 
@@ -805,6 +802,7 @@ LogicalVector duplicated(IntegerVector x) {
 A map is similar to a set, but instead of storing presence or absence, it can store additional data. It's useful for functions like `table` or `match` that need to look up a value. As with sets, there are ordered (`std::map`) and unordered (`std::tr1::unorded_map`) versions, but if output order matters it's usually faster to use an unordered map and sort the results. 
 
 Since maps have a value and a key, you need to specify both when initialising a map: `map<double, int>`, `unordered_map<int, double>`, and so on.
+
 
 XXX: Insert example implementation of match when `String` complete
 
