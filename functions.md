@@ -1,126 +1,174 @@
 # Functions
 
-If you're reading this book, you've probably already created many R functions, and you're familiar with the basics of how they work. This chapter will help make concrete your knowledge of functions, and help you understand some of the more important underlying details.
+Functions are a fundamental building block of R: to master many of the more advanced techniques in this book, you need a solid foundation in how functions work. If you're reading this book, you've probably already created many R functions, and you're familiar with the basics of how they work. The focus of this chapter is to turn your existing, informal, knowledge of functions into a rigorous understanding of what functions are and how they work. You'll see some interesting tricks and techniques in this chapter, but most of what you'll learn is more important as building blocks for more advanced techniques.
 
-The knowledge in this chapter is an important building block for doing useful things with functions.
+Functions in R are considerably more flexible than most languages. As with much of R, there are few guard rails: it's quite possible to do things that are extremely ill-advised. For example, all of the standard operators in R are functions and you can override with your own alternatives:
 
-All functions have four components
+    "+" <- function(e1, e2) sum(e1, e2, runif(1))
 
-* `body(f)`: the quoted object representing the code inside the function
-* `formals(f)`: the argument list to the function
-* `environment(f)`: the environment in which the function was defined
-* `attr(f, "srcref")`: the source code used to create the function
+Most of the time this is a really bad idea, but occassionally it can allow you to do something that would have otherwise been impossible. (For example, it made it possible to write the `dplyr` package which can translate R expressions into SQL expressions).
 
-(There is an exeception to this rule: primitive functions, which use `.Primitive` to call C code directly are handled specially: e.g. `formals(sum)`, `body(sum)`, `environment(sum)`)
+This chapter is organised around the three main components of a function:
 
-These can also be used to modify the structure of the function in their assignment form.
+* the `body()`, the code inside the function
+
+* the `formals()`, the argument list, that controls how you can call a function
+
+* the `environment()` which determines how variables referred to inside the 
+
+* (There's also one more component of a function that we won't talk about here, the source code of the function, which you can access with `attr(, "source"))`
 
 When you print a function in R, it shows you the formals, the source code and the environment. If the environment isn't displayed, it means that the function was created in the global environment. 
 
     f <- function(x) x
     f
-    # function(x) x
+    
+    formals(f)
+    body(f)
     environment(f)
-    # <environment: R_GlobalEnv>
-    
-    print
-    # function (x, ...) 
-    # UseMethod("print")
-    # <environment: namespace:base>
 
+There is an exeception to this rule: primitive functions, like `sum`:
 
-Functions in R are created by `function`. They consist of an argument list (which can include default values), and a body of code to execute when evaluated. In R arguments are passed-by-value, so the only way a function can affect the outside world is through its return value:
+    sum
+    formals(sum)
+    body(sum)
+    environment(sum)
 
-    f <- function(x) {
-      x$a <- 2
+These are functions that call C code directly, (with `.Primitive()`). Primitive functions contain no R code and exist almost entirely in C, so their `formals()`, `body()` and `environment()` are all `NULL`. They are only found in the `base` package, and since they operate at a lower-level than most functions, they can be more efficient (primitive replacement functions don't have to make copies), and can have different rules for argument matching (e.g. `switch` and `call`). 
+
+The assignment forms of `body()`, `formals()`, and `environment()` can also be used to modify functions. This is a useful technique which we'll explore in more detail in [[computing in the language]].
+
+## `environment(f)`: lexical scoping
+
+Scoping is the set of rules that govern how R looks up the value of a symbol, or name. That is, scoping is the set rules that R applies to go from the symbol `x`, to its value `10` in the following example.
+
+    x <- 10
+    x
+    # [1] 10
+
+Understanding scoping allows you to:
+
+* build tools by composing functions, as described in [[first-class-functions]]
+* overrule the usual evaluation rules and [[computing-on-the-language]]
+
+R has two types of scoping: __lexical scoping__, implemented automatically at the language level, and __dynamic scoping__, used in select functions to save typing during interactive analysis. We describe lexical scoping here because it is intimately tied to function creation. Dynamic scoping is described in the context of [[controlling evaluation|Evaluation]].
+
+Lexical scoping looks up symbol values using how functions are nested when they were written, not when they were called. With lexical scoping, you can figure out where the value of each variable will be looked up only by looking at the definition of the function, you don't need to know anything about how the function is called.
+
+The "lexical" in lexical scoping doesn't correspond to the usual English definition ("of or relating to words or the vocabulary of a language as distinguished from its grammar and construction") but comes from the computer science term "lexing", which is part of the process that converts code represented as text to meaningful pieces that the programming language understands. It's lexical in this sense, because you only need the definition of the functions, not how they are called.
+
+### Name masking
+
+The following example illustrates the basic principle:
+
+    f <- function() { 
+      x <- 1
+      y <- 2
+      c(1, 2)
     }
-    x <- list(a = 1)
     f()
-    x$a
+    rm(f)
 
-Functions can return only a single value, but this is not a limitation in practice because you can always return a list containing any number of objects.
+If a name isn't defined inside a function, it will look one level up.
 
-When calling a function you can specify arguments by position, or by name:
+    x <- 1
+    g <- function() { 
+      y <- 2
+      c(x, y)
+    g()
+    rm(x, g)
 
-    mean(1:10)
-    mean(x = 1:10)
-    mean(x = 1:10, trim = 0.05)
+The same rules apply if a `function` is defined inside another function.  First it looks inside the current function, then where that function was defined, and so on, all the way until the global environment. Run the following code in your head, then confirm the output by running the R code.
 
-Arguments are matched first by exact name, then by prefix matching and finally by position.
+    x <- 1
+    h <- function() { 
+      y <- 2
+      i <- function() {
+        z <- 3
+        c(x, y, z)
+      }
+      i()
+    }
+    h()
+    rm(x, h)
 
-## Creating functions
+The same rules apply to closures, functions that return functions. The following function, `j()`, returns a function.  What do you think this function will return when we call it?
 
-The tool we use for creating functions is `function`. It is very close to being an ordinary R function, but it has special syntax: the last argument to the function is outside the call and provides the body of the new function.  If we don't assign the results of `function` to a variable we get an anonymous function:
+    j <- function(x) {
+      y <- 2
+      function() {
+        c(x, y)
+      }
+    }
+    k <- j(1)
+    k()
+    rm(j, k)
 
-    function(x) 3
-    # function(x) 3
+This seems a little magical (how does R know what the value of `y` is after the function has been called), but it's because every function stores the environment in which it's defined. [[Environments]] gives some pointers on how you can dive in and figure out what some of the values are.
 
-## Anonymous functions
+That the same principles apply regardless of what the variable contains - finding functions works exactly the same way as finding variables:
 
-In R, functions are objects in their own right. Unlike many other programming languages, functions aren't automatically bound to a name: they can exist independently. You might have noticed this already, because when you create a function, you use the usual assignment operator to give it a name. 
+    l <- function(x) x + 1
+    m <- function() {
+      l <- function(x) x * 2
+      l(10)
+    }
+    rm(l, m)
 
-Given the name of a function as a string, you can find that function using `match.fun`. The inverse is not possible: because not all functions have a name, or functions may have more than one name. Functions that don't have a name are called __anonymous functions__. 
+There is one small tweak to the rule of functions. If you are using a variable in a context where it's obvious that you want a function (e.g. `f(3)`), R will keep searching up the environments until it finds a function.  This means that in the following example `n` takes on a different value depending on whether R is looking for a function or a regular value.
 
-You can call anonymous functions, but the code is a little tricky to read because you must use parentheses in two different ways: to call a function, and to make it clear that we want to call the anonymous function `function(x) 3` not inside our anonymous function call a function called `3` (not a valid function name):
+    n <- function(x) x / 2
+    o <- function() {
+      n <- 10
+      n(n)
+    } 
 
-    (function(x) 3)()
-    # [1] 3
-    
-    # Exactly the same as
-    f <- function(x) 3
-    f()
-    
-    function(x) 3()
-    # function(x) 3()
+### A fresh start
 
-The syntax extends in a straightforward way if the function has parameters
+What happens to the values in between invocations of a function? What will happen the first time you run this function? What will happen the second time? (If you haven't seen `exists` before it returns `TRUE` if there's a variable of that name, otherwise it returns `FALSE`)
 
-    (function(x) x)(3)
-    # [1] 3
-    (function(x) x)(x = 4)
-    # [1] 4
-
-Like all functions in R, anoynmous functions have `formals`, `body` and `environment`
-  
-    formals(function(x = 4) g(x) + h(x))
-    # $x
-    # [1] 4
-
-    body(function(x = 4) g(x) + h(x))
-    # g(x) + h(x)
-    
-    environment(function(x = 4) g(x) + h(x))
-    # <environment: R_GlobalEnv>
-
-## Closures 
-
-"An object is data with functions. A closure is a function with data." 
---- [John D Cook](http://twitter.com/JohnDCook/status/29670670701)
-
-Anonymous functions are most useful in conjunction with closures, a function written by another function. Closures are so called because they __enclose__ the environment of the parent function, and can access all variables and parameters in that function. This is useful because it allows us to have two levels of parameters. One level of parameters (the parent) controls how the function works. The other level (the child) does the work. The following example shows how can use this idea to generate a family of power functions. The parent function (`power`) creates child functions (`square` and `cube`) that actually do the hard work.
-
-    power <- function(exponent) {
-      function(x) x ^ exponent
+    j <- function() {
+      if (!exists("a")) {  
+        a <- 1
+      } else {
+        a <- a + 1
+      }
+      print(a)
     }
 
-    square <- power(2)
-    square(2) # -> [1] 4
-    square(4) # -> [1] 16
+You might be surprised that it returns the same value, `1`, every time. This is because every time a function is called, a new environment is created to host execution. A function has no way to tell what happened the last time it was run.
 
-    cube <- power(3)
-    cube(2) # -> [1] 8
-    cube(4) # -> [1] 64
+### Dynamic lookup
 
-An interesting property of functions in R is that basically every function in R is a closure, because all functions remember the environment in which they are created, typically either the global environment, if it's a function that you've written, or a package environment, if it's a function that someone else has written. 
+Lexical scoping determines where to look for values, not when to look for them. Unlike some languages, R looks up at the values at run-time, not when the function is created.  This means results from a function can be different depending on objects outside its environment:
 
-But this isn't very useful because functions in R rely on lexical scoping:
+    f <- function() x
+    x <- 15
+    f()
 
-    f(1)
-    # Error in f(1) : could not find function "+"
+    x <- 20
+    f()
 
-## Special function types
+Generally, this is behaviour to be avoided.  To detect this situation, you can use `codetools::findGlobals`. Manually overriding the environment to the empty environment doesn't work, because R relies on lexical scoping to find _everything_, even the `+` operator.
 
-There are two types of special functions R: infix operators, and replacement functions.
+    f <- function() x + 1
+
+    codetools::findGlobals(f)
+
+    environment(f) <- emptyenv()
+    f()
+
+### Exercises
+
+* What does the following code return? Why? How is each of the 3 `c`'s interpreted?
+
+        c <- 10
+        c(c = c)
+
+## `body(f)`: types of functions
+
+
+
 
 ### Infix operators
 
@@ -163,94 +211,37 @@ This works because `names(x)[2] <- "two"` is evaluated as `x <- "names<-"(x, "[<
 
 Typically, modifying in place will not create a copy of the data, but if you're depending on that for high performance, it's best to double check.
 
-## Lexical scoping
-
-Scoping is the set of rules that govern how R looks up the value of a symbol, or name. That is, scoping is the set rules that R applies to go from the symbol `x`, to its value `10` in the following example.
-
-    x <- 10
-    x
-    # [1] 10
-
-R has two types of scoping: __lexical scoping__, implemented automatically at the language level, and __dynamic scoping__, used in select functions to save typing during interactive analysis. This document describes lexical scoping, as well as environments (the underlying data structure). Dynamic scoping is described in the context of [[controlling evaluation|Evaluation]].
-
-Understanding scoping allows you to:
-
-* build tools by composing functions, as described in [[first-class-functions]]
-* overrule the usual evaluation rules and [[computing-on-the-language]]
-
-Lexical scoping looks up symbol values using how functions are nested when they were written, not when they were called. With lexical scoping, you can figure out where the value of each variable will be looked up only by looking at the definition of the function, you don't need to know anything about how the function is called.
-
-The "lexical" in lexical scoping doesn't correspond to the usual English definition ("of or relating to words or the vocabulary of a language as distinguished from its grammar and construction") but comes from the computer science term "lexing", which is part of the process that converts code represented as text to meaningful pieces that the programming language understands.  It's lexical in this sense, because you only need the definition of the functions, not how they are called.
-
-The following example illustrates the basic principle:
-
-    x <- 5
-    f <- function() { 
-      y <- 10
-      c(x = x, y = y)
-    }
-    f()
-    #  x  y 
-    #  5 10
-
-Lexical scoping is the rule that determines where values are looked for, not when. Unlike some languages, R looks up at the values at run-time, not when the function is created.  This means results from a function can be different depending on objects outside its environment:
-
-    x <- 15
-    f()
-    #  x  y 
-    # 15 10
-    x <- 20
-    f()
-    #  x  y 
-    # 20 10
-
-Generally, this is behaviour to be avoided.  To detect this situation, you can use `codetools::findGlobals`, which is automatically run by `R CMD check`.  Manually overriding the environment to the empty environment doesn't work, because R relies on lexical scoping to find _everything_, even the `+` operator.
-
-    f <- function(x) x + 1
-    environment(f) <- emptyenv()
-    f
-    # function(x) x + 1
-    # <environment: R_EmptyEnv>
-
-If a name is defined inside a function, it will mask the top-level definition:
-
-    g <- function() { 
-      x <- 21
-      y <- 11
-      c(x = x, y = y)
-    }
-    f()
-    #  x  y 
-    # 20 10
-    g()
-    #  x  y 
-    # 21 11
-
-The same rules apply to closures, functions that return functions:
-
-```R
-x <- 10
-f <- function() {
-  y <- 1
-  function() {
-    c(x = x, y = y)
-  }
-}
-g <- f()
-g()
-```
-
-This seems a little magical (how does R know what the value of `y` is after the function has been called), but it's because every function stores the environment in which it's defined.  [[Environments]] gives some pointers on how you can dive in and figure out what some of the values are.
 
 ## Return values
 
+Pure functions.
+
 Invisable value.
 
-## Function arguments ("formals")
+In R arguments are passed-by-value, so the only way a function can affect the outside world is through its return value:
+
+    f <- function(x) {
+      x$a <- 2
+    }
+    x <- list(a = 1)
+    f()
+    x$a
+
+Functions can return only a single value, but this is not a limitation in practice because you can always return a list containing any number of objects.
+
+## `formals(f)`: function arguments
 
 R's function call semantics
 
-Default values.
+When calling a function you can specify arguments by position, or by name:
+
+    mean(1:10)
+    mean(x = 1:10)
+    mean(x = 1:10, trim = 0.05)
+
+Arguments are matched first by exact name, then by prefix matching and finally by position.
+
+
 
 ### Lazy evaluation
 
@@ -323,6 +314,7 @@ There is a special argument called `...`.  This argument will match any argument
 To capture `...` in a form that is easier to work with, you can use `list(...)`.
 
 Using `...` comes with a cost - any misspelled arguments will be silently ignored.  It's often better to be explicit instead of explicit, so you might instead ask users to supply a list of additional arguments.  And this is certainly easier if you're trying to use `...` with multiple additional functions.
+
 
 ## Exercises
 

@@ -20,6 +20,72 @@ Ways in which functions can have side effects
 
 You should be familiar with the basic properties of [[scoping and environments|Scoping]] before reading this chapter.
 
+### Anonymous functions
+
+In R, functions are objects in their own right. Unlike many other programming languages, functions aren't automatically bound to a name: they can exist independently. You might have noticed this already, because when you create a function, you use the usual assignment operator to give it a name. 
+
+Given the name of a function as a string, you can find that function using `match.fun`. The inverse is not possible: because not all functions have a name, or functions may have more than one name. Functions that don't have a name are called __anonymous functions__. 
+
+You can call anonymous functions, but the code is a little tricky to read because you must use parentheses in two different ways: to call a function, and to make it clear that we want to call the anonymous function `function(x) 3` not inside our anonymous function call a function called `3` (not a valid function name):
+
+    (function(x) 3)()
+    # [1] 3
+    
+    # Exactly the same as
+    f <- function(x) 3
+    f()
+    
+    function(x) 3()
+    # function(x) 3()
+
+The syntax extends in a straightforward way if the function has parameters
+
+    (function(x) x)(3)
+    # [1] 3
+    (function(x) x)(x = 4)
+    # [1] 4
+
+Like all functions in R, anoynmous functions have `formals`, `body`, `environment` and a `srcref`
+  
+    formals(function(x = 4) g(x) + h(x))
+    # $x
+    # [1] 4
+
+    body(function(x = 4) g(x) + h(x))
+    # g(x) + h(x)
+    
+    environment(function(x = 4) g(x) + h(x))
+    # <environment: R_GlobalEnv>
+
+    attr(function(x = 4) g(x) + h(x), "srcref")
+    # function(x = 4) g(x) + h(x)
+    
+### Closures 
+
+"An object is data with functions. A closure is a function with data." 
+--- [John D Cook](http://twitter.com/JohnDCook/status/29670670701)
+
+Anonymous functions are most useful in conjunction with closures, a function written by another function. Closures are so called because they __enclose__ the environment of the parent function, and can access all variables and parameters in that function. This is useful because it allows us to have two levels of parameters. One level of parameters (the parent) controls how the function works. The other level (the child) does the work. The following example shows how can use this idea to generate a family of power functions. The parent function (`power`) creates child functions (`square` and `cube`) that actually do the hard work.
+
+    power <- function(exponent) {
+      function(x) x ^ exponent
+    }
+
+    square <- power(2)
+    square(2) # -> [1] 4
+    square(4) # -> [1] 16
+
+    cube <- power(3)
+    cube(2) # -> [1] 8
+    cube(4) # -> [1] 64
+
+An interesting property of functions in R is that basically every function in R is a closure, because all functions remember the environment in which they are created, typically either the global environment, if it's a function that you've written, or a package environment, if it's a function that someone else has written. 
+
+But this isn't very useful because functions in R rely on lexical scoping:
+
+    f(1)
+    # Error in f(1) : could not find function "+"
+
 
 ## Closures
 
