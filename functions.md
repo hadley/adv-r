@@ -2,12 +2,6 @@
 
 Functions are a fundamental building block of R: to master many of the more advanced techniques in this book, you need a solid foundation in how functions work. If you're reading this book, you've probably already created many R functions, and you're familiar with the basics of how they work. The focus of this chapter is to turn your existing, informal, knowledge of functions into a rigorous understanding of what functions are and how they work. You'll see some interesting tricks and techniques in this chapter, but most of what you'll learn is more important as building blocks for more advanced techniques.
 
-Functions in R are considerably more flexible than most languages. As with much of R, there are few guard rails: it's quite possible to do things that are extremely ill-advised. For example, all of the standard operators in R are functions and you can override with your own alternatives:
-
-    "+" <- function(e1, e2) sum(e1, e2, runif(1))
-
-Most of the time this is a really bad idea, but occassionally it can allow you to do something that would have otherwise been impossible. (For example, it made it possible to write the `dplyr` package which can translate R expressions into SQL expressions).
-
 This chapter is organised around the three main components of a function:
 
 * the `body()`, the code inside the function
@@ -104,7 +98,7 @@ The same rules apply to closures, functions that return functions. The following
     k()
     rm(j, k)
 
-This seems a little magical (how does R know what the value of `y` is after the function has been called), but it's because every function stores the environment in which it's defined. [[Environments]] gives some pointers on how you can dive in and figure out what some of the values are.
+This seems a little magical (how does R know what the value of `y` is after the function has been called), but it works because `k` keeps around the environment in which it was defined, which includes the value of `x`.  [[Environments]] gives some pointers on how you can dive in and figure out what some of the values are.
 
 That the same principles apply regardless of what the variable contains - finding functions works exactly the same way as finding variables:
 
@@ -115,13 +109,13 @@ That the same principles apply regardless of what the variable contains - findin
     }
     rm(l, m)
 
-There is one small tweak to the rule of functions. If you are using a variable in a context where it's obvious that you want a function (e.g. `f(3)`), R will keep searching up the environments until it finds a function.  This means that in the following example `n` takes on a different value depending on whether R is looking for a function or a regular value.
+There is one small tweak to the rule for functions. If you are using a variable in a context where it's obvious that you want a function (e.g. `f(3)`), R will keep searching up the environments until it finds a function.  This means that in the following example `n` takes on a different value depending on whether R is looking for a function or a regular value.
 
     n <- function(x) x / 2
     o <- function() {
       n <- 10
       n(n)
-    } 
+    }
 
 ### A fresh start
 
@@ -140,7 +134,7 @@ You might be surprised that it returns the same value, `1`, every time. This is 
 
 ### Dynamic lookup
 
-Lexical scoping determines where to look for values, not when to look for them. Unlike some languages, R looks up at the values at run-time, not when the function is created.  This means results from a function can be different depending on objects outside its environment:
+Lexical scoping determines where to look for values, not when to look for them. Unlike some languages, R looks up at the values at run-time, not when the function is created. This means results from a function can be different depending on objects outside its environment:
 
     f <- function() x
     x <- 15
@@ -149,21 +143,53 @@ Lexical scoping determines where to look for values, not when to look for them. 
     x <- 20
     f()
 
-Generally, this is behaviour to be avoided.  To detect this situation, you can use `codetools::findGlobals`. Manually overriding the environment to the empty environment doesn't work, because R relies on lexical scoping to find _everything_, even the `+` operator.
+Generally, this behaviour is to be avoided because it means that the behaviour of the function will change depend on external variables, and is often an accidental error. One way to detect this situation is the `findGlobals()` function from `codetools`:
 
     f <- function() x + 1
 
     codetools::findGlobals(f)
 
+Another way to try and solve the problem would be to manually change the environment of the function to the `emptyenv()`, an environment which contains absolutely nothing:
+
     environment(f) <- emptyenv()
     f()
 
+This doesn't work because R relies on lexical scoping to find _everything_, even the `+` operator.  
+
+You can use this same idea to do other things that are extremely ill-advised. For example, since all of the standard operators in R are functions, you can override them with your own alternatives.  If you ever are feeling particularly evil, run the following code while your friend is away from their computer:
+
+    "(" <- function(e1) {
+      if (is.numeric(e1) && runif(1) < 0.1) {
+        e1 + 1
+      } else {
+        e1
+      }
+    }
+
+This will introduce a particularly pernicious bug: 10% of the time, 1 will be added to any numeric operation carried out inside parentheses. This is yet another good reason to regularly restart with a clean R session!
+
+Most of the time this is a really bad idea, but it can occassionally allow you to do something that would have otherwise been impossible. For example, this feature makes it for the `dplyr` package to translate R expressions into SQL expressions.
+
 ### Exercises
 
-* What does the following code return? Why? How is each of the 3 `c`'s interpreted?
+* What does the following code return? Why? What does each of the three `c`'s mean?
 
         c <- 10
         c(c = c)
+
+* (From the R inferno 8.2.36): If `weirdFun()()()` is a valid command, what does `weirdFun()` return? Write an example.
+
+* What does the following function return? Make a prediction before running the code yourself.
+
+      f <- function(x) {
+        f <- function(x) {
+          f <- function(x) {
+            x ^ 2
+          }
+          f(x) + 1
+        }
+        f(x) * 2
+      }
 
 ## `body(f)`: types of functions
 
@@ -214,20 +240,79 @@ Typically, modifying in place will not create a copy of the data, but if you're 
 
 ## Return values
 
-Pure functions.
+The last expression evaluated in a function becomes the return value, the result of invoking the function. 
 
-Invisable value.
+    f <- function(x) {
+      if (x < 10) {
+        0
+      } else {
+        10
+      }
+    }
+    f(5)
+    f(15)
 
-In R arguments are passed-by-value, so the only way a function can affect the outside world is through its return value:
+Generally, I think it's good style to reserve the use of an explicit `return()` for when you are returning early, such as for an error, or a simple case of the function. This style of programming can also reduce the level of indentation, and generally make functions easier to understand because you can reason about them locally.
+
+    f <- function(x, y) {
+      if (!x) return(y)
+
+      # complicated processing here
+    }
+
+
+Functions can return only a single value, but this is not a limitation in practice because you can always return a list containing any number of objects.
+
+The functions that are the most easy understand and reason about are pure functions, functions that always map the same input to the same output and have no other impact on the workspace. R protects you from one type of side-effect: arguments are passed-by-value, so modifying a function argument does not change the original value:
 
     f <- function(x) {
       x$a <- 2
+      x
     }
     x <- list(a = 1)
-    f()
+    f(x)
     x$a
 
-Functions can return only a single value, but this is not a limitation in practice because you can always return a list containing any number of objects.
+This is a notable exception to languages like Java where you can modify the inputs to a function. This copy-on-modify behaviour has important performance consequences which are discussed in depth in [[profiling]]. (Note that the performance consequences are a result of R's implementation of copy-on-modify semantics, they are not true in general. Clojure is a new language that makes extensive use of copy-on-modify semantics with limited performance consequences.)
+
+Most base R functions are pure, with a few notable exceptions:
+
+* `library` which loads a package, and hence modifies the search path
+
+* `setwd`, `Sys.setenv`, `Sys.setlocale` which change the working directory, evnironment variables and the locale respectively
+
+* `plot` and friends which produce graphical output
+
+* `write`, `write.csv`, `saveRDS` etc which save output to disk
+
+* `options` and `par` which modify global settings
+
+* random number generators which produce different numbers each time you run then
+
+It's generally a good idea to minimise the use of side effects, and where possible have special functions that are called only for their side effects.  Pure functions are easier to test (because all you need to worry about are the input values and the output), and are less likely to work differently on different versions of R or on different platforms.  
+
+Functions can return `invisible` values, which are not print out by default when you call the function.
+
+    f1 <- function() 1
+    f2 <- function() invisible(1)
+
+    f1()
+    f2()
+    f1() == 1
+    f2() == 1
+
+You can always force an invisible value to be display by wrapping it in parentheses:
+
+    (f2())
+
+The most common function that returns invisibly is `<-`:
+
+    a <- 2
+    (a <- 2)
+
+And this is what makes it possible to assign one value to multiple variables:
+
+    a <- b <- c <- d <- 2
 
 ## `formals(f)`: function arguments
 
@@ -241,7 +326,7 @@ When calling a function you can specify arguments by position, or by name:
 
 Arguments are matched first by exact name, then by prefix matching and finally by position.
 
-
+Generally, you only want to use positional matching for the first one or two arguments: they will be the mostly commonly used, and most readers will probably know what they are. Avoid using positional matching for less commonly used arguments, and only use readable abbreviations with partial matching.
 
 ### Lazy evaluation
 
@@ -285,6 +370,8 @@ More technically, an unevaluated argument is called a __promise__, or a thunk. A
 * the environment where the expression was created and where it should be
   evaluated
 
+You can find more information about a promise using `langr::promise_info`.  This uses some of R's C api to extract information about the promise without evaluating it (which is otherwise very tricky).
+
 You may notice this is rather similar to a closure with no arguments, and in many languages that don't have laziness built in like R, this is how you can implement laziness.
 
 <!-- When is it useful? http://lambda-the-ultimate.org/node/2273 -->
@@ -307,6 +394,11 @@ And you can use it to write functions that are not possible otherwise
 
 This function would not work without lazy evaluation because both `x` and `y` would always be evaluated, testing if `a > 0` even if `a` was NULL.
 
+You could even write your own versions of `if`
+
+    myif <- function(cond, true, false) if (cond) true else false
+    only_if(cond, true) if (cond) true
+
 ### `...`
 
 There is a special argument called `...`.  This argument will match any arguments not otherwise matched, and can be used to call other functions.  This is useful if you want to collect arguments to call another function, but you don't want to prespecify their possible names.
@@ -314,8 +406,3 @@ There is a special argument called `...`.  This argument will match any argument
 To capture `...` in a form that is easier to work with, you can use `list(...)`.
 
 Using `...` comes with a cost - any misspelled arguments will be silently ignored.  It's often better to be explicit instead of explicit, so you might instead ask users to supply a list of additional arguments.  And this is certainly easier if you're trying to use `...` with multiple additional functions.
-
-
-## Exercises
-
-* (From the R inferno 8.2.36): If `weirdFun()()()` is a valid command, what does `weirdFun()` return? Write an example.
