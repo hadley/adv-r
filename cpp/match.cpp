@@ -1,5 +1,16 @@
 #include <Rcpp.h>
+
+namespace boost{
+    std::size_t hash_value(Rcpp::String);
+}
+
 #include <boost/unordered_map.hpp>
+
+namespace boost{
+    std::size_t hash_value(Rcpp::String obj){
+        return hash_value<SEXP>( obj.get_sexp() ) ;
+    }
+}
 using namespace Rcpp;
 
 // // [[Rcpp::export]]
@@ -68,23 +79,23 @@ library(microbenchmark)
 x <- sample(letters, 1e4, rep = T)
 microbenchmark(
   match(x, letters),
-  match1(x, letters),
-  match2(x, letters),
+#  match1(x, letters),
+#  match2(x, letters),
   match3(x, letters)
 )
 
 x <- replicate(1e4, paste(sample(letters, 10), collapse = ""))
 microbenchmark(
   match(x[1:10], x),
-  match1(x[1:10], x),
-  match2(x[1:10], x),
+#  match1(x[1:10], x),
+#  match2(x[1:10], x),
   match3(x[1:10], x)
 )
 
 microbenchmark(
   match(x[9990:10000], x),
-  match1(x[9990:10000], x),
-  match2(x[9990:10000], x),
+#  match1(x[9990:10000], x),
+#  match2(x[9990:10000], x),
   match3(x[9990:10000], x)
 )
 
