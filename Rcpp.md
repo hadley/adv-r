@@ -262,6 +262,8 @@ And for each function that you want availble within R, you need to prefix it wit
 // [[Rcpp::export]]
 ```
 
+(Note that the space is mandatory)
+
 Then using `sourceCpp("path/to/file.cpp")` will compile the C++ code, create the matching R functions and add them to your current session.  (Note that these functions will not persist across `save()` and `load()`, such as when you restore your workspace.)
 
 For example, running `sourceCpp` on the following file first compiles the C++ code and then compares it to native equivalent:
@@ -350,7 +352,7 @@ NumericVector f5(NumericVector x, NumericVector y) {
   NumericVector out(n);
 
   for (int i = 0; i < n; ++i) {
-    out[i] = std::min(x[i], y[i]);
+    out[i] = std::min(x1[i], y1[i]);
   }
 
   return out;
@@ -461,7 +463,7 @@ There are also classes for many more specialised language objects: `Environment`
 
 ## Rcpp sugar
 
-Rcpp provides a lot of "sugar", C++ functions that work very similarly to their R equivalents. (The main difference is that they don't recycle their inputs - you need to do that yourself). Rcpp sugar makes it possible to write efficient C++ code that looks almost identical to the R equivalent. If a sugar version of the function you're interested exists, you should use it: it's expressive and well tested. Sugar functions aren't always faster than your hand-written equivalent, but they will get faster as more time is spend on optimising Rcpp.
+Rcpp provides a lot of "sugar", C++ functions that work very similarly to their R equivalents. (The main difference is that they don't recycle their inputs - you need to do that yourself). Rcpp sugar makes it possible to write efficient C++ code that looks almost identical to the R equivalent. If a sugar version of the function you're interested exists, you should use it: it's expressive and well tested. Sugar functions aren't always faster than your hand-written equivalent, but they will get faster as more time is spent on optimising Rcpp.
 
 Sugar functions can be roughly broken down into
 
@@ -472,7 +474,7 @@ Sugar functions can be roughly broken down into
 
 ### Arithmetic and logical operators 
 
-All the basic arithmetic and logical operators are vectorised: `+` `*`, `-`, `/`, `pow`, `<`, `<=`, `>`, `>=`, `==`, `!=`, `!`.  For example, we could use sugar to considerably simply the implementation of our `pdist2` function:
+All the basic arithmetic and logical operators are vectorised: `+` `*`, `-`, `/`, `pow`, `<`, `<=`, `>`, `>=`, `==`, `!=`, `!`.  For example, we could use sugar to considerably simply the implementation of our `pdist2` function.  (If you don't remember I've included the R version of `pdist2`, `pdist1`, as well.  Note the similarities with the Rcpp sugar version.)
 
 ```r
 pdist1 <- function(x, ys) {
@@ -654,7 +656,7 @@ Another alternative is the similarly named sugar function `is_na`: it takes a ve
 
 The real strength of C++ shows itself when you need to implement more complex algorithms. The standard template library (STL) provides set of extremely useful data structures and algorithms. This section will explain the most important algorithms and data structures and point you in the right direction to learn more.  We can't teach you everything you need to know about the STL, but hopefully the examples will at least show you the power of the STL, and persuade that it's useful to learn more. 
 
-If you need an algorithm or data strucutre that isn't implemented in STL, a good place to look is [boost](http://www.boost.org/doc/). Installing boost on to your computer is beyond the scope of this chapter, but once you have it installed, you can use `boost` data structures and algorithms by including the appropriate header file with (e.g.) `#include <boost/array.h>`.
+If you need an algorithm or data strucutre that isn't implemented in STL, a good place to look is [boost](http://www.boost.org/doc/). Installing boost on to your computer is beyond the scope of this chapter, but once you have it installed, you can use `boost` data structures and algorithms by including the appropriate header file with (e.g.) `#include <boost/array.hpp>`.
 
 ### Using iterators
 
@@ -709,7 +711,7 @@ IntegerVector findInterval2(NumericVector x, NumericVector breaks) {
 
   for(it = x.begin(), out_it = out.begin(); it != x.end(); ++it, ++out_it) {
     pos = std::upper_bound(breaks.begin(), breaks.end(), *it);
-    *out_it = std::distance(pos, breaks.begin());
+    *out_it = std::distance(breaks.begin(), pos);
   }
 
   return out;
@@ -744,7 +746,7 @@ The following code implements run length encoding (`rle`). It produces two vecto
 
 ```cpp
 // [[Rcpp::export]]
-List rle2(NumericVector x) {
+List rleC(NumericVector x) {
   std::vector<int> lengths;
   std::vector<double> values;
 
@@ -784,13 +786,13 @@ The following function uses an unordered set to implement an equivalent to `dupl
 
 ```cpp
 // [[Rcpp::export]]
-LogicalVector duplicated(IntegerVector x) {
+LogicalVector duplicatedC(IntegerVector x) {
   std::tr1::unordered_set<int> seen;
   int n = x.size();
   LogicalVector out(n);
 
   for (int i = 0; i < n; ++i) {
-    out[i] = seen.insert(x[i]).second;
+    out[i] = !seen.insert(x[i]).second;
   }
 
   return out;
@@ -965,7 +967,7 @@ The original blog post forgot to do this, and hence introduced a bug in the C++ 
 microbenchmark(
   vacc1(age, female, ily),
   vacc2(age, female, ily),
-  vacc3(age, female, ily)
+  vacc3(age, female, ily))
 ```
 
 Not surprisingly, our original approach with loops is very slow.  Vectorising in R gives a huge speedup, and we can eke out even more performance (~10x) with the C++ loop. I was a little surprised that the C++ was so much faster, but it is because the R version has to create 11 vectors to store intermediate results, where the C++ code only needs to create 1. 
