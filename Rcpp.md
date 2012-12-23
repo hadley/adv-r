@@ -986,11 +986,11 @@ To generate a new Rcpp package that includes a simple hello, world function you 
 > Rcpp.package.skeleton("NewPackage", attributes = TRUE)
 ```
 
-To generate a package based on C++ files that you've been using with `sourceCpp` you can use the `cpp_files` parameter:
+To generate a package based on C++ files that you've been using with `sourceCpp` you can use the `code_files` (`cpp_files` in older versions of Rcpp) parameter:
 
 ```r
 > Rcpp.package.skeleton("NewPackage", example_code = FALSE, 
-                        cpp_files = c("convolve.cpp"))
+                        code_files = c("convolve.cpp"))
 ```
 
 To add `Rcpp` to an existing package, your put your C++ files in the `src/` directory and modify/create the following configuration files:
