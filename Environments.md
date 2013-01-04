@@ -59,6 +59,27 @@ Environments are the data structure that powers scoping.  There are multiple env
 * the environment where the function was defined
 * the environment that is created every time a function is run
 * the environment where the function lives
+* the environment where a function is called from
+
+To make things a little easier to understand, we'll create a `where` function that tells us where a variable was defined:
+
+    where <- function(name, env = parent.frame()) {
+      # Base case of recursion
+      if (identical(env, emptyenv())) {
+        stop("Can't find ", name, call. = FALSE)
+      }
+
+      if (name %in% ls(env)) {
+        env
+      } else {
+        where(name, parent.env(env))
+      }
+    }
+    where("where")
+    where("mean")
+    where("t.test")
+
+It works in the same way as regular variable look up in R, but instead of returning the value it returns the environment.
 
 ### The environment where the function was defined.
 
@@ -113,11 +134,34 @@ f()
 f()
 ```
 
+### The environment where the function was called
+
+Note that a called function has a call stack, and an environment has an environment stack. 
+
+To make these distinctions easier to understand and explore, let's define some consistently named functions:
+
+  parent_c <- function(n = 1) {
+    parent.frame(c)
+  }
+
+  parent_d <- function(n = 1) {
+    env <- parent_c()
+    for (i in seq_len(n)) env <- parent.env(env)
+    env
+  }
+
+Can we draw a graph that connects them all together?
+
 ### The environment where the function lives
 
 The environment of a function, and the environment where it lives might be different. In the example above, we changed the environment of `f` to be the `emptyenv()`, but it still lived in the `globalenv()`.  
 
 The environment where the function lives determines how we find the function, the environment of the function determins how it finds values inside the function. This important distinction is what enables package [[namespaces]] to work.
+
+For example, take the `mean` function:
+
+  environment(mean)
+  where("mean")
 
 ## Modifying and assigning values
 
@@ -154,7 +198,7 @@ I generally prefer to use the first form, because it is so compact.  However, yo
 
 ### `<<-`
 
-Another way to change values is the `<<-`. The regular assignment arrow, `<-`, always creates a variable in the current environmnt.  The special assignment arrow, `<<-`, tries to modify an existing variable by walking up the parent environments. If it doesn't find one, it will create a new variable in the global environment.
+Another way to change values is `<<-`. The regular assignment arrow, `<-`, always creates a variable in the current environmnt.  The special assignment arrow, `<<-`, tries to modify an existing variable by walking up the parent environments. If it doesn't find one, it will create a new variable in the global environment.
 
 ```R
 f <- function() {
@@ -174,9 +218,7 @@ We'll come back to this idea in depth in [[first-class-functions]].
 
 ### delayedAssign
 
-Delayed assign is particularly useful for doing expensive operations that
-you're not sure you'll need. This is the essence of lazyness - put off doing
-any work until the last possible minute.
+Another special type of assignment is `delayedAssign`: rather than assigning the result of an expression immediately, it creates and stores a promise to evaluate the expression is needed (much like the default lazy evaluation of arguments in R functions).
 
 To create a variable `x`, that is the sum of the values `a` and `b`, but is not evaluated until we need, we use `delayedAssign`:
 
@@ -189,11 +231,29 @@ To create a variable `x`, that is the sum of the values `a` and `b`, but is not 
 
 `delayedAssign` also provides two parameters that control where the evaluation happens (`eval.env`) and which in environment the variable is assigned in (`assign.env`).
 
-Autoload is an example of this, it's a wrapper around `delayedAssign` for functions or data in a package - it makes R behave as if the package is loaded, but it doesn't actually load it (i.e. do any work) until you call one of the functions.  This is the way that data sets in most packages work - you can call (e.g.) `diamonds` after `library(ggplot2)` and it just works, but it isn't loaded into memory unless you actually use it.
+We could make an infix version of this function. The main complication is that `delayedAssign` uses non-standard evaluation (to capture the representation of the second argument), so we need to use substitute to construct the call manually.
+
+    "%<d-%" <- function(x, value) {
+      x <- substitute(x)
+      if (!is.name(x)) stop("Left-hand side must be a name")
+
+      value <- substitute(value)
+
+      env <- parent.frame()
+      eval(substitute(delayedAssign(deparse(x), value, 
+        eval.env = env, assign.env = env), list(value = value)))
+    }
+
+    a %<d-% 1
+    a
+    b %<d-% {Sys.sleep(1); 1}
+    b
+
+One application of `delayedAssign` is `autoload`, a wrapper for functions or data in a package that makes R behave as if the package is loaded, but it doesn't actually load it (i.e. do any work) until you call one of the functions.  This is the way that data sets in most packages work - you can call (e.g.) `diamonds` after `library(ggplot2)` and it just works, but it isn't loaded into memory unless you actually use it.
 
 ### Active bindings
 
-`makeActiveBinding` allows you to create names that look like variables, but act like functions. Every time you access the object a function is run. This lets you do crazy things like:
+`makeActiveBinding` allows you to create names that look like variables, but act like zero-argument functions. Every time you access the object a function is run. This lets you do crazy things like:
 
     makeActiveBinding("x", function(...) rnorm(1), globalenv())
     x
@@ -202,6 +262,23 @@ Autoload is an example of this, it's a wrapper around `delayedAssign` for functi
     # [1] -1.659971
     x
     # [1] -1.040291
+
+We could also make an infix version of this function:
+
+    "%<a-%" <- function(x, value) {
+      x <- substitute(x)
+      if (!is.name(x)) stop("Left-hand side must be a name")
+
+      value <- substitute(value)
+      env <- parent.frame()
+      f <- make_function(list(), value, env)
+
+      makeActiveBinding(deparse(x), f, env)
+    }
+
+    x %<a-% runif(1)
+    x
+    x
 
 ### Explicit scoping with `local`
 
@@ -242,4 +319,3 @@ eval.parent <- function (expr, n = 1) {
   eval(expr, p)
 }
 ```
-
