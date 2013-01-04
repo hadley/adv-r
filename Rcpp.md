@@ -726,7 +726,7 @@ The key points are:
 
 * `upper_bound` returns an iterator. If we wanted the value of the `upper_bound` we could dereference it; to figure out its location, we use the `distance` function.
 
-* Small note: if we want this function to be as fast as `findInterval` in R (which uses hand-written C code), we need to cache the calls to `.begin()` and `.end()`.  This is easy, but it distracts from this example so it has been omitted.  Making this change yields a function that's slightly faster than R's `findInterval` function, but is about 1/10 of the code.
+* Small note: if we want this function to be as fast as `findInterval` in R (which uses hand-written C code), we need to compute the calls to `.begin()` and `.end()` once and save the results.  This is easy, but it distracts from this example so it has been omitted.  Making this change yields a function that's slightly faster than R's `findInterval` function, but is about 1/10 of the code.
 
 It's generally better to use algorithms from the STL than hand rolled loops.  In "Effective STL", Scott Meyer gives three reasons: efficiency, correctness and maintainability. Algorithms from the STL are written by C++ experts to be extremely efficient, and they have been around for a long time so they are well tested. Using standard algorithms also makes the intent of your code more clear, helping to make it more readable and more maintainable.
 
