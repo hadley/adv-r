@@ -63,21 +63,23 @@ Environments are the data structure that powers scoping.  There are multiple env
 
 To make things a little easier to understand, we'll create a `where` function that tells us where a variable was defined:
 
-    where <- function(name, env = parent.frame()) {
-      # Base case of recursion
-      if (identical(env, emptyenv())) {
-        stop("Can't find ", name, call. = FALSE)
-      }
+```R
+where <- function(name, env = parent.frame()) {
+  # Base case of recursion
+  if (identical(env, emptyenv())) {
+    stop("Can't find ", name, call. = FALSE)
+  }
 
-      if (name %in% ls(env)) {
-        env
-      } else {
-        where(name, parent.env(env))
-      }
-    }
-    where("where")
-    where("mean")
-    where("t.test")
+  if (name %in% ls(env)) {
+    env
+  } else {
+    where(name, parent.env(env))
+  }
+}
+where("where")
+where("mean")
+where("t.test")
+```
 
 It works in the same way as regular variable look up in R, but instead of returning the value it returns the environment.
 
@@ -171,6 +173,18 @@ where("mean")
 
 ## Modifying and assigning values
 
+There are a suprising number of ways to do assignment in R:
+
+* The regular behaviour where 
+
+* Assignment with the double arrow which assigns in a similar way to how variable lookup works so that `i <<- i + 1` modifies the binding of the original `i`
+
+* Lazy assignment, where the expression isn't evaluated until you look up the value
+
+* Active assignment, where the value evaluates a function every time, so it can return different values
+
+### Usual behaviour
+
 You already know the standard ways of modifying and accessing values in the current environment (e.g. `x <- 1; x`).  To modify values in other environments we have a few new techniques:
 
 * treating environments like lists
@@ -222,7 +236,7 @@ If it doesn't find an existing variable of that name, it will create one in the 
 
 We'll come back to this idea in depth in [[first-class-functions]].
 
-### delayedAssign
+### Lazy evaluation
 
 Another special type of assignment is `delayedAssign`: rather than assigning the result of an expression immediately, it creates and stores a promise to evaluate the expression is needed (much like the default lazy evaluation of arguments in R functions).
 
@@ -261,7 +275,7 @@ b
 
 One application of `delayedAssign` is `autoload`, a wrapper for functions or data in a package that makes R behave as if the package is loaded, but it doesn't actually load it (i.e. do any work) until you call one of the functions.  This is the way that data sets in most packages work - you can call (e.g.) `diamonds` after `library(ggplot2)` and it just works, but it isn't loaded into memory unless you actually use it.
 
-### Active bindings
+### Repeated evaluation
 
 `makeActiveBinding` allows you to create names that look like variables, but act like zero-argument functions. Every time you access the object a function is run. This lets you do crazy things like:
 
