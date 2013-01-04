@@ -15,7 +15,7 @@ ls(e)
 e$a
 ```
 
-You can extract their contents using `$` or `[[`, or `get`.  `$` and `[[` will only look in that environment, but `get` will also look in all parents.
+You can extract their contents using `$` or `\[[`, or `get`.  `$` and `[[` will only look in that environment, but `get` will also look in all parents.
 
 ```R
 b <- 2
