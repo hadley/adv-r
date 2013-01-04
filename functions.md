@@ -223,17 +223,59 @@ Most of the time changing the behaviour of base functions is a really bad idea, 
 
 ## Function arguments
 
-R's function call semantics
+It's useful to distinguish between the formal arguments and the actual arguments to a function.  The formal arguments are a property of the function, whereas the actual or calling arguments vary each time you call the function. This section discusses how calling arguments are mapped to formal arguments, how default arguments work and the impact of lazy evaluation.
 
-When calling a function you can specify arguments by position, or by name:
+### Calling functions
+
+When calling a function you can specify arguments by position, by complete name, or by partial name. Arguments are matched first by exact name, then by prefix matching and finally by position.
+
+    f <- function(abcdef, bcde1, bcde2) {
+      list(a = abcdef, b1 = bcde1, b2 = bcde2)
+    }
+    f(1, 2, 3)
+    f(2, 3, abcdef = 1)
+    # Can abbreviate long argument names:
+    f(2, 3, a = 1)
+    # Doesn't work because abbreviation is ambiguous
+    f(1, 3, b = 1)
+
+Generally, you only want to use positional matching for the first one or two arguments: they will be the mostly commonly used, and most readers will probably know what they are. Avoid using positional matching for less commonly used arguments, and only use readable abbreviations with partial matching. (If you are writing code for a package that you want to publish on CRAN you can not use partial matching.)  Named arguments should always come after unnamed arguments.
+
+These are good calls:
 
     mean(1:10)
+    mean(1:10, trim = 0.05)
+
+This is probably overkill:
+
     mean(x = 1:10)
-    mean(x = 1:10, trim = 0.05)
 
-Arguments are matched first by exact name, then by prefix matching and finally by position.
+And these are just confusing:
 
-Generally, you only want to use positional matching for the first one or two arguments: they will be the mostly commonly used, and most readers will probably know what they are. Avoid using positional matching for less commonly used arguments, and only use readable abbreviations with partial matching.
+    mean(1:10, n = T)
+    mean(1:10, , FALSE)
+    mean(1:10, 0.05)
+    mean(, TRUE, x = c(1:10, NA))
+
+### Default and missing arguments
+
+Function arguments in R can have default values. Since arguments in R are evaluated lazily (more on that below), arguments can refer to others:
+
+You can detect if an argument was supplied or not with the `missing()` function.
+
+    f <- function(a, b) {
+      c(a_missing = missing(a), b_missing = missing(b))
+    }
+    f(a = 1)
+    f(b = 2)
+
+However, I generally recommend against using missing because it makes it difficult to call programmatically from other functions (without using complicated work arounds).  Generally, it's better to set a default value of `NULL` and then check with `is.null()`.
+
+    f <- function(a = NULL, b = NULL) {
+      c(a_missing = is.null(a), b_missing = is.null(b))
+    }
+    f(a = 1)
+    f(b = 2)
 
 ### Lazy evaluation
 
@@ -256,17 +298,34 @@ If you want to ensure that an argument is evaluated you can use `force`:
     # user  system elapsed 
     #    0       0  10.001  
 
-Default arguments are evaluated in the environment where they are defined. This means that if the expression depends on the current environment the results will be different depending on whether you use the default value or explicitly provide it.
+This is important when creating closures with `lapply` or a loop:
+
+    add <- function(x) {
+      function(y) x + y
+    }
+    adders <- lapply(1:10, add)
+    adders[[1]](10)
+    adders[[10]](10)
+
+If you don't force evaluation (as below), `x` is lazily evaluated the first time that you call one of the adder functions. At this point, the loop is complete and the final value of `x` is 10.  Therefore all of the adder functions will add 10 on to their input, probably not what you wanted!
+
+    add <- function(x) {
+      force(x)
+      function(y) x + y
+    }
+    adders <- lapply(1:10, add)
+    adders[[1]](10)
+    adders[[10]](10)
+
+Default arguments are evaluated inside the function. This means that if the expression depends on the current environment the results will be different depending on whether you use the default value or explicitly provide it.
 
     f <- function(x = ls()) {
       a <- 1
-      g(x)
-    }
-    g <- function(x) {
-      b <- 2
       x
     }
+    # ls() evaluated inside f:
     f()
+    # ls() evaluated in global environment:
     f(ls())
 
 More technically, an unevaluated argument is called a __promise__, or a thunk. A promise is made up of two parts:
@@ -279,32 +338,34 @@ More technically, an unevaluated argument is called a __promise__, or a thunk. A
 
 You can find more information about a promise using `langr::promise_info`.  This uses some of R's C api to extract information about the promise without evaluating it (which is otherwise very tricky).
 
-You may notice this is rather similar to a closure with no arguments, and in many languages that don't have laziness built in like R, this is how you can implement laziness.
+Laziness makes is useful in if statements - the second statement will be evaluated only if the first is true.
 
-<!-- When is it useful? http://lambda-the-ultimate.org/node/2273 -->
+    if (!is.null(x) && x > 0) {
 
-This is particularly useful in if statements:
-
-    if (!is.null(x) && y > 0)
-
-And you can use it to write functions that are not possible otherwise
-
-    and <- function(x, y) {
-      if (!x) FALSE else y
     }
-    
-    a <- 1
-    and(!is.null(a), a > 0)
 
-    a <- NULL
-    and(!is.null(a), a > 0)
+We could implement "&&" ourselves:
 
-This function would not work without lazy evaluation because both `x` and `y` would always be evaluated, testing if `a > 0` even if `a` was NULL.
+    "&&" <- function(x, y) {
+      if (!x) return(FALSE)
+      if (!y) return(FALSE)
 
-You could even write your own versions of `if`
+      TRUE
+    }
+    y <- NULL
+    !is.null(y) && y > 0
 
-    myif <- function(cond, true, false) if (cond) true else false
-    only_if(cond, true) if (cond) true
+This function would not work without lazy evaluation because both `x` and `y` would always be evaluated, testing if `y > 0` even if `y` was NULL.
+
+You can also use laziness to sometimes elimate an if statement altogether. For example, instead of:
+
+    if (!is.null(y)) stop("Y is null")
+
+You could write:
+  
+    !is.null(y) || stop("Y is null")
+
+Functions like `&&` and `||` have to be implemented as special cases in languages that don't support lazy evaluation because otherwise `x` and `y` are evaluated when you call the function, and `y` might be a statement that doesn't make sense unless `x` is true.
 
 ### `...`
 
@@ -405,7 +466,6 @@ Generally, I think it's good style to reserve the use of an explicit `return()` 
       # complicated processing here
     }
 
-
 Functions can return only a single value, but this is not a limitation in practice because you can always return a list containing any number of objects.
 
 The functions that are the most easy understand and reason about are pure functions, functions that always map the same input to the same output and have no other impact on the workspace. R protects you from one type of side-effect: arguments are passed-by-value, so modifying a function argument does not change the original value:
@@ -418,7 +478,7 @@ The functions that are the most easy understand and reason about are pure functi
     f(x)
     x$a
 
-This is a notable exception to languages like Java where you can modify the inputs to a function. This copy-on-modify behaviour has important performance consequences which are discussed in depth in [[profiling]]. (Note that the performance consequences are a result of R's implementation of copy-on-modify semantics, they are not true in general. Clojure is a new language that makes extensive use of copy-on-modify semantics with limited performance consequences.)
+This is notably different to languages like Java where you can modify the inputs to a function. This copy-on-modify behaviour has important performance consequences which are discussed in depth in [[profiling]]. (Note that the performance consequences are a result of R's implementation of copy-on-modify semantics, they are not true in general. Clojure is a new language that makes extensive use of copy-on-modify semantics with limited performance consequences.)
 
 Most base R functions are pure, with a few notable exceptions:
 
@@ -460,3 +520,5 @@ And this is what makes it possible to assign one value to multiple variables:
     a <- b <- c <- d <- 2
 
 ### Exercises
+
+* 
