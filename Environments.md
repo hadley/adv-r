@@ -110,16 +110,18 @@ But when we run it, we don't get the error we expect.  Because R uses its scopin
 
 What do you think the following function will return the first time we run it?  What about the second?
 
-    f <- function(x) {
-      if (!exists("a")) {
-        message("Defining a")
-        a <- 1
-      } else {
-        a <- a + 1 
-      }
-      a
-    }
-    f()
+```R
+f <- function(x) {
+  if (!exists("a")) {
+    message("Defining a")
+    a <- 1
+  } else {
+    a <- a + 1 
+  }
+  a
+}
+f()
+```
 
 You might be surprised that it returns the same value every time.  This is because every time a function is called, a new environment is created to host execution. You can see this more easily by returning the environment inside the function: using `environment()` with no arguments returns the current environment (try running it at the top-level)  Each time you run the function a new function is created.  But they all have the same parent environment - that's the environment where the function was defined.
 
@@ -140,15 +142,17 @@ Note that a called function has a call stack, and an environment has an environm
 
 To make these distinctions easier to understand and explore, let's define some consistently named functions:
 
-  parent_c <- function(n = 1) {
-    parent.frame(c)
-  }
+```R
+parent_c <- function(n = 1) {
+  parent.frame(c)
+}
 
-  parent_d <- function(n = 1) {
-    env <- parent_c()
-    for (i in seq_len(n)) env <- parent.env(env)
-    env
-  }
+parent_d <- function(n = 1) {
+  env <- parent_c()
+  for (i in seq_len(n)) env <- parent.env(env)
+  env
+}
+```
 
 Can we draw a graph that connects them all together?
 
@@ -160,8 +164,10 @@ The environment where the function lives determines how we find the function, th
 
 For example, take the `mean` function:
 
-  environment(mean)
-  where("mean")
+```R
+environment(mean)
+where("mean")
+```
 
 ## Modifying and assigning values
 
@@ -222,32 +228,36 @@ Another special type of assignment is `delayedAssign`: rather than assigning the
 
 To create a variable `x`, that is the sum of the values `a` and `b`, but is not evaluated until we need, we use `delayedAssign`:
 
-    a <- 1
-    b <- 2
-    delayedAssign("x", a + b)
-    a <- 10
-    x
-    # [1] 12
+```R
+a <- 1
+b <- 2
+delayedAssign("x", a + b)
+a <- 10
+x
+# [1] 12
+```
 
 `delayedAssign` also provides two parameters that control where the evaluation happens (`eval.env`) and which in environment the variable is assigned in (`assign.env`).
 
-We could make an infix version of this function. The main complication is that `delayedAssign` uses non-standard evaluation (to capture the representation of the second argument), so we need to use substitute to construct the call manually.
+We could make an infix version of this function. The main complication is that `delayedAssign` uses non-standard evaluation (to capture the representation of the second argument), so we need to use substitute to construct the call manually. 
 
-    "%<d-%" <- function(x, value) {
-      x <- substitute(x)
-      if (!is.name(x)) stop("Left-hand side must be a name")
+```R
+"%<d-%" <- function(x, value) {
+  x <- substitute(x)
+  if (!is.name(x)) stop("Left-hand side must be a name")
 
-      value <- substitute(value)
+  value <- substitute(value)
 
-      env <- parent.frame()
-      eval(substitute(delayedAssign(deparse(x), value, 
-        eval.env = env, assign.env = env), list(value = value)))
-    }
+  env <- parent.frame()
+  eval(substitute(delayedAssign(deparse(x), value, 
+    eval.env = env, assign.env = env), list(value = value)))
+}
 
-    a %<d-% 1
-    a
-    b %<d-% {Sys.sleep(1); 1}
-    b
+a %<d-% 1
+a
+b %<d-% {Sys.sleep(1); 1}
+b
+```
 
 One application of `delayedAssign` is `autoload`, a wrapper for functions or data in a package that makes R behave as if the package is loaded, but it doesn't actually load it (i.e. do any work) until you call one of the functions.  This is the way that data sets in most packages work - you can call (e.g.) `diamonds` after `library(ggplot2)` and it just works, but it isn't loaded into memory unless you actually use it.
 
@@ -255,30 +265,34 @@ One application of `delayedAssign` is `autoload`, a wrapper for functions or dat
 
 `makeActiveBinding` allows you to create names that look like variables, but act like zero-argument functions. Every time you access the object a function is run. This lets you do crazy things like:
 
-    makeActiveBinding("x", function(...) rnorm(1), globalenv())
-    x
-    # [1] 0.4754442
-    x
-    # [1] -1.659971
-    x
-    # [1] -1.040291
+```R
+makeActiveBinding("x", function(...) rnorm(1), globalenv())
+x
+# [1] 0.4754442
+x
+# [1] -1.659971
+x
+# [1] -1.040291
+```
 
 We could also make an infix version of this function:
 
-    "%<a-%" <- function(x, value) {
-      x <- substitute(x)
-      if (!is.name(x)) stop("Left-hand side must be a name")
+```R
+"%<a-%" <- function(x, value) {
+  x <- substitute(x)
+  if (!is.name(x)) stop("Left-hand side must be a name")
 
-      value <- substitute(value)
-      env <- parent.frame()
-      f <- make_function(list(), value, env)
+  value <- substitute(value)
+  env <- parent.frame()
+  f <- make_function(list(), value, env)
 
-      makeActiveBinding(deparse(x), f, env)
-    }
+  makeActiveBinding(deparse(x), f, env)
+}
 
-    x %<a-% runif(1)
-    x
-    x
+x %<a-% runif(1)
+x
+x
+```
 
 ### Explicit scoping with `local`
 
