@@ -62,46 +62,6 @@ There are a few special environments that you can access directly:
 
 The only environment that doesn't have a parent is emptyenv(), which is the eventual parent of every other environment. The most common environment is the global environment (globalenv()) which corresponds to the to your top-level workspace. The parent of the global environment is one of the packages you have loaded (the exact order will depend on which packages you have loaded in which order). The eventual parent will be the base environment, which is the environment of "base R" functionality, which has the empty environment as a parent.
 
-## Explicit scoping with `local`
-
-Sometimes it's useful to be able to create a new scope without embedding inside a function.  The `local` function allows you to do exactly that - it can be useful if you need some temporary variables to make an operation easier to understand, but want to throw them away afterwards:
-
-```R
-df <- local({
-  x <- 1:10
-  y <- runif(10)
-  data.frame(x = x, y = y)
-})
-```
-
-`local` has relatively limited uses (typically because most of the time scoping is best accomplished using R's regular function based rules) be particularly useful in conjunction with `<<-`. You can use this if you want to make a private variable that's shared between two functions:
-
-```R
-get <- NULL
-set <- NULL
-local({
-  a <- 1
-  get <<- function() a
-  set <<- function(value) a <<- value
-})
-get()
-set(10)
-a
-get()
-```
-
-If you have read [[computing-on-the-language]], you should be able to make sense of the source code of `local`:
-
-```R
-local <- function (expr, envir = new.env()) {
-  eval.parent(substitute(eval(quote(expr), envir)))  
-}
-eval.parent <- function (expr, n = 1) {
-  p <- parent.frame(n + 1)
-  eval(expr, p)
-}
-```
-
 ## Function environments
 
 There are multiple environments associated with each function, and it's easy to get confused between them. 
@@ -492,3 +452,79 @@ x
 ```
 
 ### Exercises
+
+
+## Explicit scoping with `local`
+
+Sometimes it's useful to be able to create a new scope without embedding inside a function.  The `local` function allows you to do exactly that - it can be useful if you need some temporary variables to make an operation easier to understand, but want to throw them away afterwards:
+
+```R
+df <- local({
+  x <- 1:10
+  y <- runif(10)
+  data.frame(x = x, y = y)
+})
+```
+
+`local` has relatively limited uses (typically because most of the time scoping is best accomplished using R's regular function based rules) be particularly useful in conjunction with `<<-`. You can use this if you want to make a private variable that's shared between two functions:
+
+```R
+a <- 10
+local({
+  a <- 1
+  my_get <<- function() a
+  my_set <<- function(value) a <<- value
+})
+my_get()
+my_set(10)
+a
+my_get()
+```
+
+### How does local work?
+
+The source code for `local` is relatively hard to understand because it is very concise. If you have read [[computing-on-the-language]], you should be able to puzzle it out, but to make it a bit easier I have rewritten it in a simpler style below. 
+
+```R
+local2 <- function(expr, envir = new.env()) {
+  env <- parent.frame()
+  call <- substitute(eval(quote(expr), envir))
+
+  eval(call, env)
+}
+a <- 100
+local2({
+  b <- a + sample(10, 1)
+  my_get <<- function() b
+})
+my_get()
+```
+
+You might wonder we can't simplify to this:
+
+```R
+local3 <- function(expr, envir = new.env()) {
+  eval(substitute(expr), envir)
+}
+local3({
+  b <- a + sample(10, 1)
+  my_get <<- function() b
+})
+my_get()
+
+local({
+  a <- 2
+  eval <- function(...) print("1")
+  local(a <- 1)
+  a
+})
+
+local3({
+  a <- 2
+  eval <- function(...) print("1")
+  local3(a <- 1)
+  a
+})
+
+```
+
