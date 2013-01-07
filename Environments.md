@@ -300,30 +300,30 @@ You already know the standard ways of modifying and accessing values in the curr
 
 * treating environments like lists
 
-```R
-e <- new.env()
-e$a <- 1
-e$a
-```
+  ```R
+  e <- new.env()
+  e$a <- 1
+  e$a
+  ```
 
 * assign and get
 
-```R
-e <- new.env()
-assign("a", 1, envir = e)
-get("a", envir = e)
-```
+  ```R
+  e <- new.env()
+  assign("a", 1, envir = e)
+  get("a", envir = e)
+  ```
 
 * evaluating expressions inside an environment
 
-```R
-e <- new.env()
-eval(quote(a <- 1), e)
-eval(quote(a), e)
-# OR 
-evalq(a <- 1, e)
-evalq(a, e)
-```
+  ```R
+  e <- new.env()
+  eval(quote(a <- 1), e)
+  eval(quote(a), e)
+  # OR 
+  evalq(a <- 1, e)
+  evalq(a, e)
+  ```
 
 I generally prefer to use the first form, because it is so compact.  However, you'll see all three forms in R code in the wild.
 
@@ -483,7 +483,7 @@ my_get()
 
 ### How does local work?
 
-The source code for `local` is relatively hard to understand because it is very concise. If you have read [[computing-on-the-language]], you should be able to puzzle it out, but to make it a bit easier I have rewritten it in a simpler style below. 
+The source code for `local` is relatively hard to understand because it is very concise and uses some sutble features of evaluation (including non-standard evaluation of both arguments). If you have read [[computing-on-the-language]], you might be able to puzzle it out, but to make it a bit easier I have rewritten it in a simpler style below. 
 
 ```R
 local2 <- function(expr, envir = new.env()) {
@@ -503,13 +503,12 @@ my_get()
 You might wonder we can't simplify to this:
 
 ```R
-
 local3 <- function(expr, envir = new.env()) {
   eval(substitute(expr), envir)
 }
 ```
 
-But it's because of how the arguments are evaluated - default arguments are evalauted in the scope of the function so that `local(x)` is not the same as `local(x, new.env())` without special effort.  
+But it's because of how the arguments are evaluated - default arguments are evalauted in the scope of the function so that `local(x)` would not the same as `local(x, new.env())` without special effort.  
 
 `local` is effectively identical to 
 
