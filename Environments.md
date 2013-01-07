@@ -503,28 +503,30 @@ my_get()
 You might wonder we can't simplify to this:
 
 ```R
+
 local3 <- function(expr, envir = new.env()) {
   eval(substitute(expr), envir)
 }
-local3({
-  b <- a + sample(10, 1)
-  my_get <<- function() b
-})
-my_get()
-
-local({
-  a <- 2
-  eval <- function(...) print("1")
-  local(a <- 1)
-  a
-})
-
-local3({
-  a <- 2
-  eval <- function(...) print("1")
-  local3(a <- 1)
-  a
-})
-
 ```
 
+But it's because of how the arguments are evaluated - default arguments are evalauted in the scope of the function so that `local(x)` is not the same as `local(x, new.env())` without special effort.  
+
+`local` is effectively identical to 
+
+```R
+local4 <- function(expr, envir = new.env()) {
+  envir <- eval(quote(envir), parent.frame())
+  eval(substitute(expr), envir)
+}
+```
+
+But a better implementation might be
+
+```R
+local5 <- function(expr, envir = NULL) {
+  if (is.null(envir))
+    envir <- new.env(parent = parent.frame())
+
+  eval(substitute(expr), envir)  
+}
+```
