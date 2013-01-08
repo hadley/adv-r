@@ -2,7 +2,7 @@ pandoc --chapters --listings --latex-engine xelatex -o book.pdf \
   Introduction.md \
   Functions.md \
   Environments.md \
-  First-class-functions.md \
+  Functional-programming.md \
   Evaluation.md \
   Computing-on-the-language.md \
   Exceptions-debugging.md \

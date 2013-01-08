@@ -8,7 +8,7 @@
 * Functional programming
   * [[Functions]]
   * [[Environments]]
-  * [[First class functions|First-class-functions]]
+  * [[Functional programming]]
 * Objected oriented programming
   * [[The S3 object system|S3]]
   * [[The S4 object system|S4]]

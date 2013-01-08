@@ -367,7 +367,7 @@ f <- function() {
 f()
 ```
 
-We'll come back to this idea in depth in [[first-class-functions]].
+We'll come back to this idea in depth in [[functional programming]].
 
 ### Delayed bindings
 
