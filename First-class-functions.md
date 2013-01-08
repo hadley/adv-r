@@ -81,11 +81,20 @@ Anonymous functions are most useful in conjunction with closures, a function wri
 
 An interesting property of functions in R is that basically every function in R is a closure, because all functions remember the environment in which they are created, typically either the global environment, if it's a function that you've written, or a package environment, if it's a function that someone else has written. 
 
-But this isn't very useful because functions in R rely on lexical scoping:
+Note that when you look at the source of a closure, you don't see anything terribly useful:
 
-    f(1)
-    # Error in f(1) : could not find function "+"
+```R
+square
+cube
+```
 
+That's because the function itself doesn't change - but the environment in which it looks up variables does change.  The pryr package provides the `unenclose` function to make it a bit easier to see what's going on:
+
+```R
+library(pryr)
+unenclose(square)
+unenclose(cube)
+```
 
 ## Closures
 

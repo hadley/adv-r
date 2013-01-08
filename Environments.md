@@ -1,5 +1,7 @@
 # Environments
 
+(This package uses many functions found in the `pryr` package to pry bar the covers of R and look inside the messy details.  Install `pryr` by running `devtools::install_github("pryr")`)
+
 ## Introduction
 
 An __environment__ is very similar to a list, with two important differences. Firstly, an environment has reference semantics: R's usual copy on modify rules do not apply. Secondly, an environment has a parent: if an object is not found in an environment, then R will look in its parent. Technically, an environment is made up of a __frame__, a collection of named objects (like a list), and link to a parent environment.  
@@ -71,26 +73,16 @@ There are multiple environments associated with each function, and it's easy to 
 * the environment that is created every time a function is run
 * the environment where a function is called from
 
-To make things a little easier to understand, we'll create a `where` function that tells us where a variable was defined:
+To make things a little easier to understand, we'll use pryr's `where` function that tells us where a variable was defined:
 
 ```R
-where <- function(name, env = parent.frame()) {
-  if (identical(env, emptyenv())) {
-    stop("Can't find ", name, call. = FALSE)
-  }
-
-  if (name %in% ls(env, all.names = TRUE)) {
-    env
-  } else {
-    where(name, parent.env(env))
-  }
-}
+pryr::where
 where("where")
 where("mean")
 where("t.test")
 ```
 
-This function works in the same way as regular variable look up in R, recursing up the stack of environments until the name is found, but instead of returning the value it returns the environment.
+`where()` works in the same way as regular variable look up in R, recursing up the stack of environments until the name is found, but instead of returning the value it returns the environment.
 
 It's easiest to work with environments recursively, so we'll see this basic structure a lot. There are three main components: the base case (what happens when we've recursed down to the empty environment), a boolean that determines if we've found what we wanted, and the recursive statement that uses `parent.env()`.  `parent.frame()` confusingly returns the environment from which our function is run, we'll learn more about that later in the chapter.
 
@@ -228,9 +220,9 @@ x <- 20
 g()
 ```
 
-The top-level `x` is a red herring: using the regular scoping rules, `g()` looks first where it is defined and finds the value of `x` is 10.  However, it is still meaningful to ask what value `x` is associated in the environment where the function is called.  So `x` is 10 in the environment where `g()` is defined, but it is 20 in the environment from which `g()` is __called__.  
+The top-level `x` is a red herring: using the regular scoping rules, `g()` looks first where it is defined and finds the value of `x` is 10.  However, it is still meaningful to ask what value `x` is associated in the environment where `g()` is called.  So `x` is 10 in the environment where `g()` is defined, but it is 20 in the environment from which `g()` is __called__.  
 
-We can access this environment using the confusingly named function, `parent.frame()`. This function returns the __environment__ from which the function was called.  We can use that to look up the value of names in the environment from which the funtion was called.
+We can access this environment using the confusingly named function `parent.frame()`. This function returns the __environment__ from which the function was called.  We can use that to look up the value of names in the environment from which the funtion was called.
 
 ```R
 f <- function(x) {
@@ -271,18 +263,15 @@ lapply(es, function(e) get("x", e))
 lapply(es, function(e) get("y", e))
 ```
 
-So there are two separate strands of parents when a function is called: the calling environments, and the definition environments. And each of the calling environment will also have a stack of environments in which it was defined.
+So there are two separate strands of parents when a function is called: the calling environments, and the defining environments. Each calling environment will also have a stack of defining environments. Note that while called function has both a stack of called environemnts and a stack of defining environments, an environment (or a function object) has only a stack of defining environments.
 
-The practical implications of this idea are discussed in [[controlling evaluation]]
+Looking up variables in the calling environment rather than in the defining argument is called __dynamic scoping__.  Few languages implement dynamic scoping (emac's lisp is a [notable exception](http://www.gnu.org/software/emacs/emacs-paper.html#SEC15)) because dynamic scoping makes it much harder to reason about how a function operates: not only do you need to know how it was defined, you also need to know in what context it was called.  Dynamic scoping is primarily useful for developing functions that aid interactive data analysis, and is one of the topics discussed in [[controlling evaluation]]
 
-Note that a called function has a call stack, and an environment has an environment stack. 
+## Assignment: binding names to values
 
+Assignment is the act of binding (or rebinding) a name to a value, in an environment. It is the counterpart to scoping, which are the set of rules that determins how when given a name, R finds the associated value. Compared to most languages, R has extremely flexible tools for binding names to values. In fact, you can not only bind values to names, but you can also bind expressions (promises) or even functions, so that every time you access the value associated with a name, you get something different!
 
-## Binding names to values
-
-Assigning means that we are binding (or rebinding) a name to a value in an environment.
-
-There are a suprising number of ways to do assignment in R:
+The remainder of this section will discuss the four main ways of binding names to values in R:
 
 * The regular behaviour, `name <- value`, where the name is immediately associated with the value in the current environment. `assign("name", value)` works similarly, but allows assignment in any environment.
 
@@ -294,7 +283,7 @@ There are a suprising number of ways to do assignment in R:
 
 The following sections explain each behaviour in more detail.
 
-### Usual behaviour
+### Regular binding
 
 You already know the standard ways of modifying and accessing values in the current environment (e.g. `x <- 1; x`).  To modify values in other environments we have a few new techniques:
 
@@ -320,12 +309,13 @@ You already know the standard ways of modifying and accessing values in the curr
   e <- new.env()
   eval(quote(a <- 1), e)
   eval(quote(a), e)
-  # OR 
+  # alternatively, you can use the helper function evalq
+  # evalq(x, e) is exactly equivalent to eval(quote(x), e)
   evalq(a <- 1, e)
   evalq(a, e)
   ```
 
-I generally prefer to use the first form, because it is so compact.  However, you'll see all three forms in R code in the wild.
+I generally prefer to use the first form because it is so compact.  However, you'll see all three forms in R code in the wild.
 
 ### `<<-`
 
@@ -379,77 +369,54 @@ f()
 
 We'll come back to this idea in depth in [[first-class-functions]].
 
-### Lazy evaluation
+### Delayed bindings
 
-Another special type of assignment is `delayedAssign`: rather than assigning the result of an expression immediately, it creates and stores a promise to evaluate the expression is needed (much like the default lazy evaluation of arguments in R functions).
-
-To create a variable `x`, that is the sum of the values `a` and `b`, but is not evaluated until we need, we could use `delayedAssign`:
+Another special type of assignment is a delayed binding: rather than assigning the result of an expression immediately, it creates and stores a promise to evaluate the expression when needed (much like the default lazy evaluation of arguments in R functions).  We can create delayed bindings with the special assignment operator `%<d-%`, provided by the pryr package.
 
 ```R
-a <- 1
-b <- 2
-delayedAssign("x", a + b)
-a <- 10
-x
-# [1] 12
-```
-
-`delayedAssign` also provides two parameters that control where the evaluation happens (`eval.env`) and which in environment the variable is assigned in (`assign.env`).
-
-We could make an infix version of this function. The main complication is that `delayedAssign` uses non-standard evaluation (to capture the representation of the second argument), so we need to use substitute to construct the call manually. 
-
-```R
-"%<d-%" <- function(x, value) { #">
-  name <- substitute(x)
-  if (!is.name(name)) stop("Left-hand side must be a name")
-
-  value <- substitute(value)
-
-  env <- parent.frame()
-  eval(substitute(delayedAssign(deparse(name), value, 
-    eval.env = env, assign.env = env), list(value = value)))
-}
-
-a %<d-% 1
+library(pryr)
+a %<d-% 1 #>
 a
-b %<d-% {Sys.sleep(1); 1}
+b %<d-% {Sys.sleep(1); 1} #>
 b
 ```
 
-One application of `delayedAssign` is `autoload`, a function that powers `library()`. `autoload` makes R behave as if the code and data in a package is loaded in memory, but it doesn't actually do any work until you call one of the functions or access a dataset. This is the way that data sets in most packages work - you can call (e.g.) `diamonds` after `library(ggplot2)` and it just works, but it isn't loaded into memory unless you actually use it.
-
-### Repeated evaluation
-
-`makeActiveBinding` allows you to create names that look like variables, but act like zero-argument functions. Every time you access the object a function is run. This lets you do crazy things like:
+Note that we need to be careful with more complicated expressions because user created infix functions have the lowest possible precendence: `x %<d-% a + b` is interpreted as `(x %<d-% a) + b`, so we need to use parentheses ourselves:
 
 ```R
-makeActiveBinding("x", function(...) rnorm(1), globalenv())
-x
-# [1] 0.4754442
-x
-# [1] -1.659971
-x
-# [1] -1.040291
+x %<d-% (a + b) #>
+a <- 5
+b <- 5
+a + b
 ```
 
-We could also make an infix version of this function:
+`%<d-%` is a wrapper around the base `delayedAssign()` function, which you may need to use directly if you need more control. `delayedAssign()` has four parameters:
+
+* `x`: a variable name given as a quoted string
+* `value`: an unquoted expression to be assigned to x
+* `eval.env`: the environment in which to evaluate the expression
+* `assign.env`: the environment in which to create the binding
+
+Writing `%<a-%` is straightforward, bearing in mind that `makeActiveBinding` uses non-standard evaluation to capture the representation of the second argument, so we need to use substitute to construct the call manually. 
+
+One application of `delayedAssign` is `autoload`, a function that powers `library()`. `autoload` makes R behave as if the code and data in a package is loaded in memory, but it doesn't actually do any work until you call one of the functions or access a dataset. This is the way that data sets in most packages work - you can call (e.g.) `diamonds` after `library(ggplot2)` and it just works, but it isn't loaded into memory unless you actually use it.
+
+### Active bindings
+
+You can create __active__ bindings where the value is recomputed every time you access the name:
 
 ```R
-"%<a-%" <- function(x, value) { #">
-  x <- substitute(x)
-  if (!is.name(x)) stop("Left-hand side must be a name")
-
-  value <- substitute(value)
-  env <- parent.frame()
-  f <- make_function(list(), value, env)
-
-  makeActiveBinding(deparse(x), f, env)
-}
-
 x %<a-% runif(1) #>
 x
 x
 ```
+
+`%<a-%` is a wrapper for the base function `makeActiveBinding()`. You may want to use this function directly if you want more control. It has three arguments:
+
+* `sym`: a variable name, represented as a name object or a string
+* `fun`: a single argument function. Getting the value of `sym` calls `fun` with zero arguments, and setting the value of `sym` calls `fun` with one argument, the value.
+* `env`: the environment in which to create the binding.
+
 
 ### Exercises
 

@@ -311,47 +311,40 @@ This makes the function much much easier to understand - it's just calling `writ
 
 ## Creating a function
 
+Building up a function by hand is also useful when you can't use a closure because you don't know in advance what the arguments will be. We'll use `pryr::make_function` to build up a function from its components pieces: an argument list, a quoted body (the code to run) and the environment in which it is defined (which defaults to the current environment):
 
-Building up a function by hand is also useful when you can't use a closure because you don't know in advance what the arguments will be.
+```R
+add <- make_function(alist(a = 1, b = 2), quote(a + b))
+```
 
+Note that to use this function we need to use the special `alist` function to create an **a**rgument list.
 
-A function has three components: its arguments, body (code to run) and the environment in which its defined. There are a few ways we can create a  function from these three components. R doesn't have a function that takes exactly these arguments, but we can make one:
+```R
+add2 <- make_function(alist(a = 1, b = a), quote(a + b))
+add(1)
+add(1, 2)
 
-    make_function <- function(args, body, env = parent.frame()) {
-      args <- as.pairlist(args)
-      eval(call("function", args, body), env)
-    }
+add3 <- make_function(alist(a = , b = ), quote(a + b))
+```
 
-There is the one place in R where we need to care about the difference between a pairlist and a list: argument lists must be provided as pairlists.
+We could use `make_function` to create an `unenclose` function that takes a closure and modifies it so when you look at the source you can see what's going on: 
 
-To use this function we need to use the special `alist` function to create an **a**rgument list.
+```R
+unenclose <- function(f) {
+  stopifnot(is.function(f))
+  env <- environment(f)
 
-    add <- make_function(alist(a = 1, b = a), quote(a + b))
-    add(1)
-    add(1, 2)
+  make_function(formals(f), substitute2(body(f), env), parent.env(env))
+}
 
-    add2 <- make_function(alist(a = 1, b = a), quote(a + b + d))
-    d <- 3
-    add2(1)
-
-We don't use any special evaluation tricks here because we want `make_function` to be a building block for other functions. 
-
-For example, we could create an `unenclose` function that takes a closure and modifies it so when you look at the source you can see what's going on: 
-
-    unenclose <- function(f) {
-      stopifnot(is.function(f))
-      env <- environment(f)
-
-      make_function(formals(f), substitute2(body(f), env), parent.env(env))
-    }
-
-    f <- function(x) {
-      function(y) { 
-        x + y
-      }
-    }
-    f(1)
-    unenclose(f(1))
+f <- function(x) {
+  function(y) { 
+    x + y
+  }
+}
+f(1)
+unenclose(f(1))
+```
 
 (Note we need to use `substitute2` here, because `substitute` doesn't evaluate its arguments).
 
