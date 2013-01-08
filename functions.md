@@ -39,7 +39,7 @@ There is an exeception to this rule: primitive functions, like `sum`:
 
 These are functions that call C code directly with `.Primitive()`. Primitive functions contain no R code and exist almost entirely in C, so their `formals()`, `body()` and `environment()` are all `NULL`. They are only found in the `base` package, and since they operate at a lower-level than most functions, they can be more efficient (primitive replacement functions don't have to make copies), and can have different rules for argument matching (e.g. `switch` and `call`). 
 
-The assignment forms of `body()`, `formals()`, and `environment()` can also be used to modify functions. This is a useful technique which we'll explore in more detail in [[computing in the language]].
+The assignment forms of `body()`, `formals()`, and `environment()` can also be used to modify functions. This is a useful technique which we'll explore in more detail in [[computing on the language]].
 
 There are two other components that are possessed by some functions: the source of the function (which includes comments, unlike the `body()`), and if the function has been byte-code compiled, the byte code. 
 
@@ -79,7 +79,7 @@ You probably know some of these principles already - test your knowledge by ment
 
 ### Name masking
 
-The following example illustrates the basic principle:
+The following example illustrates the simplest principle, and you should have no problem predicting the output.
 
     f <- function() { 
       x <- 1
@@ -91,9 +91,9 @@ The following example illustrates the basic principle:
 
 If a name isn't defined inside a function, it will look one level up.
 
-    x <- 1
+    x <- 2
     g <- function() { 
-      y <- 2
+      y <- 1
       c(x, y)
     }
     g()
