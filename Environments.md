@@ -9,6 +9,8 @@ Understand environment objects is an important next step of understanding scopin
 * working in an fresh environment outside of a function with `local()`
 * four ways of binding names to values in an environment
 
+The [[functions]] chapter focusses on the essence of how scoping works, where this chapter will focus more on the details and show you how you can implement the behaviour yourself.
+
 This chapter uses many functions found in the `pryr` package to pry bar the covers of R and look inside the messy details.  Install `pryr` by running `devtools::install_github("pryr")`
 
 ## What is an environment?
