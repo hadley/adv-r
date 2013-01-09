@@ -245,6 +245,58 @@ As a developer you should also provide an alternative version that works when pa
 
 But hopefully a little thought, or maybe some experimentation, will show why this doesn't work.
 
+## How does local work?
+
+Rewrite to emphasise what local should do, and how you could implement it yourself.
+
+The source code for `local` is relatively hard to understand because it is very concise and uses some sutble features of evaluation (including non-standard evaluation of both arguments). If you have read [[computing-on-the-language]], you might be able to puzzle it out, but to make it a bit easier I have rewritten it in a simpler style below. 
+
+```R
+local2 <- function(expr, envir = new.env()) {
+  env <- parent.frame()
+  call <- substitute(eval(quote(expr), envir))
+
+  eval(call, env)
+}
+a <- 100
+local2({
+  b <- a + sample(10, 1)
+  my_get <<- function() b
+})
+my_get()
+```
+
+You might wonder we can't simplify to this:
+
+```R
+local3 <- function(expr, envir = new.env()) {
+  eval(substitute(expr), envir)
+}
+```
+
+But it's because of how the arguments are evaluated - default arguments are evalauted in the scope of the function so that `local(x)` would not the same as `local(x, new.env())` without special effort.  
+
+`local` is effectively identical to 
+
+```R
+local4 <- function(expr, envir = new.env()) {
+  envir <- eval(quote(envir), parent.frame())
+  eval(substitute(expr), envir)
+}
+```
+
+But a better implementation might be
+
+```R
+local5 <- function(expr, envir = NULL) {
+  if (is.null(envir))
+    envir <- new.env(parent = parent.frame())
+
+  eval(substitute(expr), envir)  
+}
+```
+
+
 ## Conclusion
 
 Now that you understand how our version of subset works, go back and read the source code for `subset.data.frame`, the base R version which does a little more. Other functions that work similarly are `with.default`, `within.data.frame`, `transform.data.frame`, and in the plyr package `.`, `arrange`, and `summarise`. Look at the source code for these functions and see if you can figure out how they work.

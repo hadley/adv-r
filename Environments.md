@@ -1,10 +1,21 @@
 # Environments
 
-(This package uses many functions found in the `pryr` package to pry bar the covers of R and look inside the messy details.  Install `pryr` by running `devtools::install_github("pryr")`)
-
 ## Introduction
 
+Understand environment objects is an important next step of understanding scoping. This chapter will teach you:
+
+* what an environment is and how to inspect and manipulate them
+* the four types of environment associated with a function
+* working in an fresh environment outside of a function with `local()`
+* four ways of binding names to values in an environment
+
+This chapter uses many functions found in the `pryr` package to pry bar the covers of R and look inside the messy details.  Install `pryr` by running `devtools::install_github("pryr")`
+
+## What is an environment?
+
 An __environment__ is very similar to a list, with two important differences. Firstly, an environment has reference semantics: R's usual copy on modify rules do not apply. Secondly, an environment has a parent: if an object is not found in an environment, then R will look in its parent. Technically, an environment is made up of a __frame__, a collection of named objects (like a list), and link to a parent environment.  
+
+We extend the family metaphor to other environments: the grandparent of a environment would be the parent's parent, the ancestors include all parent environments all the way up to the `emptyenv()`.  We rarely talk about the children of an environment because there are no back links: given an environment we have no way to find its children.
 
 The job of an environment is to associate, or __bind__, a set of names (this is a set in the formal sense: only one name) to their corresponding values.
 
@@ -12,7 +23,8 @@ You can create environments with `new.env()`, see their contents with `ls()`, an
 
 ```R
 e <- new.env()
-parent.env(e)
+# the default parent provided by new.env() is the calling environment
+parent.env(e) 
 ls(e)
 e$a <- 1
 ls(e)
@@ -27,7 +39,7 @@ ls(e)
 ls(e, all = TRUE)
 ```
 
-You can extract their contents using `$` or `\[\[`, or `get`.  `$` and `\[\[` will only look in that environment, but `get` will also look in all parents.
+You can extract elements of an environment using `$` or `\[\[`, or `get`.  `$` and `\[\[` will only look in that environment, but `get` looks up variable names using the regular scoping rules and so will also look in the parent environment, if neeeded.
 
 ```R
 b <- 2
@@ -36,7 +48,17 @@ e[["b"]]
 get("b", e)
 ```
 
-Environments can be also useful data structures because unlike almost every other type of object in R, modification takes place without a copy. This is not something that you should use without thought: it will violate users expectations about how R code works, but it can sometimes be critical for high performance code. The following example shows how you can use an environment to do this. It's important to make the parent environment the empty environment so that you don't accidentally inherit bindings from the global environment.
+You can determine if a binding exists in a environment with the `exists()` function, but beware that the default is to also check all parent environments, so you should usually call it with `inherits = FALSE`:
+
+```R
+exists("b", e)
+exists("b", e, inherits = FALSE)
+exists("a", e, inherits = FALSE)
+```
+
+Environments can be also useful data structures because unlike almost every other type of object in R, modification takes place without a copy. This is not something that you should use without thought: it will violate users expectations about how R code works, but it can sometimes be critical for high performance code. The following example shows how you can use an environment to do this. However, since the addition of [[R5]], you're generally better of using reference classes instead of raw environments.
+
+It's important to make the parent environment the empty environment so that you don't accidentally inherit bindings from the global environment.
 
 ```
 e <- new.env(parent = emptyenv())
@@ -54,7 +76,7 @@ ls(f)
 f$a
 ```
 
-Environments can be to simulate hashmaps common in other packages, because internally name lookup is implemented with a hash, which means that lookup is O(1). See the CRAN package hash for an example. However, since the addition of [[R5]], you're generally better of using reference classes instead of raw environments.
+Environments can also be to simulate hashmaps common in other packages, because name lookup is implemented with a hash, which means that lookup is O(1). See the CRAN package hash for an example. 
 
 There are a few special environments that you can access directly:
 
@@ -62,29 +84,30 @@ There are a few special environments that you can access directly:
   * `baseenv()`: the environment of the base package
   * `emptyenv()`: the ultimate ancestor of all environments
 
-The only environment that doesn't have a parent is emptyenv(), which is the eventual parent of every other environment. The most common environment is the global environment (globalenv()) which corresponds to the to your top-level workspace. The parent of the global environment is one of the packages you have loaded (the exact order will depend on which packages you have loaded in which order). The eventual parent will be the base environment, which is the environment of "base R" functionality, which has the empty environment as a parent.
+The only environment that doesn't have a parent is `emptyenv()`, which is the eventual parent of every other environment. The most common environment is the global environment (`globalenv()`) which corresponds to the to your top-level workspace. The parent of the global environment is one of the packages you have loaded (the exact order will depend on which packages you have loaded in which order). The eventual parent will be the base environment, which is the environment of "base R" functionality, which has the empty environment as a parent.
 
-## Function environments
+Most of the time when you are working with environments, you will not create them directly, but they will be created as a consequence of working with functions. The following section discuss the four types of environment associated with a function.
 
-There are multiple environments associated with each function, and it's easy to get confused between them. 
+### Where
 
-* the environment where the function was created
-* the environment where the function lives
-* the environment that is created every time a function is run
-* the environment where a function is called from
-
-To make things a little easier to understand, we'll use pryr's `where` function that tells us where a variable was defined:
+We can apply our new knowledge of environments to create a helpful function called `where` function that tells us where a variable was defined:
 
 ```R
-pryr::where
+library(pryr)
 where("where")
 where("mean")
 where("t.test")
+x <- 5
+where("x")
 ```
 
-`where()` works in the same way as regular variable look up in R, recursing up the stack of environments until the name is found, but instead of returning the value it returns the environment.
+`where()` works in the same way as regular variable look up in R, recursing up the stack of environments until the name is found, but instead of returning the value it returns the environment. Note that to check if the environment is the same as the empty environment, we need to use `identical()`: this is the scalar equivalent of the vectorised `==` and works with any object type.
 
-It's easiest to work with environments recursively, so we'll see this basic structure a lot. There are three main components: the base case (what happens when we've recursed down to the empty environment), a boolean that determines if we've found what we wanted, and the recursive statement that uses `parent.env()`.  `parent.frame()` confusingly returns the environment from which our function is run, we'll learn more about that later in the chapter.
+```R
+where
+```
+
+It's natural work with environments recursively, so we'll see this style of function structure frequency. There are three main components: the base case (what happens when we've recursed down to the empty environment), a boolean that determines if we've found what we wanted, and the recursive statement that re-calls the function using the parent of the current environment. `parent.frame()` is often a good default for the environment, and we'll learn more about it later in the chapter.
 
 ```R
 f <- function(..., env = parent.frame()) {
@@ -119,9 +142,34 @@ f2 <- function(..., env = parent.frame()) {
 }
 ```
 
+### Exercises
+
+* Using `parent.env()` and a loop (or a recursive function), verify that `globalenv()` ancestors include `baseenv()` and `emptyenv()`
+
+* Write your own version of `get()` using a function written in the style of `where()`.  
+ 
+* Write a function called `fget()` that finds only function objects. It should have two arguments, `name` and `env`, and should obey the regular scoping rules for functions: if there's an object with a matching name that's not a function, look in the parent. (This function should be a equivalent to `match.fun()` extended to take a second argument).  For an added challenge, also add an `inherits` argument which controls whether the function recurses down the parents or only looks in one environment.
+
+* Write your own version of `exists(inherits = FALSE)` (Hint: use `ls()`).  Write a recursive version that behaves like `inherits = TRUE`.
+
+* Something to do with `search()`?
+
+* Something with `lockBinding()`?
+
+## Function environments
+
+There are multiple environments associated with each function, and it's easy to get confused between them. 
+
+* the environment where the function was created
+* the environment where the function lives
+* the environment that is created every time a function is run
+* the environment where a function is called from
+
+The following sections will explain why each of these environments are important, how to access them, and how you might use them.
+
 ### The environment where the function was created
 
-When a function is created, it gains a pointer to the environment where it was made. This is commonly known as the environment of the function. You can access this environment with the `environment()` function. 
+When a function is created, it gains a pointer to the environment where it was made. This is the parent enviroment of the function used by scoping. You can access this environment with the `environment()` function. 
 
 ```R
 x <- 1
@@ -132,7 +180,7 @@ environment(plot)
 environment(t.test)
 ```
 
-We'll make a function an equivalent function that is safer (it throws an error if the input isn't a function), more consistent (can take a function name as an argument not just a function), and more informative (better name), we'll create `funenv()`:
+To make a function an equivalent function that is safer (it throws an error if the input isn't a function), more consistent (can take a function name as an argument not just a function), and more informative (better name), we'll create `funenv()`:
 
 ```R
 funenv <- function(f) {
@@ -141,9 +189,7 @@ funenv <- function(f) {
 }
 ```
 
-This is the parent enviroment of the function used by scoping.
-
-It's also possible to modify the environment of a function, using the assignment form of `environment`.  This is rarely useful, but we can use it to illustrate how fundamental scoping is to R. One complaint that people sometimes make about R is that the function `f` defined above really should generate an error, because there is no variable `y` defined inside of R.  Well, we could fix that by manually modifying the environment of `f` so it can't find y inside the global environment:
+It's also possible to modify the environment of a function, using the assignment form of `environment`. This is rarely useful, but we can use it to illustrate how fundamental scoping is to R. One complaint that people sometimes make about R is that the function `f` defined above really should generate an error, because there is no variable `y` defined inside of R.  Well, we could fix that by manually modifying the environment of `f` so it can't find y inside the global environment:
 
 ```R
 f <- function(x) x + y
@@ -155,7 +201,16 @@ But when we run it, we don't get the error we expect. Because R uses its scoping
 
 ### The environment where the function lives
 
-The environment of a function, and the environment where it lives might be different. In the example above, we changed the environment of `f` to be the `emptyenv()`, but it still lived in the `globalenv()`.  
+The environment of a function, and the environment where it lives might be different. In the example above, we changed the environment of `f` to be the `emptyenv()`, but it still lived in the `globalenv()`:
+
+```R
+f <- function(x) x + y
+funenv("f")
+where("f")
+environment(f) <- emptyenv()
+funenv("f")
+where("f")
+```
 
 The environment where the function lives determines how we find the function, the environment of the function determins how it finds values inside the function. This important distinction is what enables package [[namespaces]] to work.
 
@@ -176,11 +231,11 @@ length(ls(where("t.test")))
 
 ### The environment created every time a function is run
 
-What do you think the following function will return the first time we run it?  What about the second?
+Recall how function scoping works. What will the following function will return the first time we run it?  What about the second?
 
 ```R
 f <- function(x) {
-  if (!exists("a")) {
+  if (!exists("a", inherits = FALSE)) {
     message("Defining a")
     a <- 1
   } else {
@@ -191,7 +246,7 @@ f <- function(x) {
 f()
 ```
 
-You might be surprised that it returns the same value every time. This is because every time a function is called, a new environment is created to host execution. You can see this more easily by returning the environment inside the function: using `environment()` with no arguments returns the current environment (try running it at the top level). Each time you run the function a new function is created. But they all have the same parent environment, the environment where the function was created.
+You should recall that it returns the same value every time. This is because every time a function is called, a new environment is created to host execution. We can see this more easily by returning the environment inside the function: using `environment()` with no arguments returns the current environment (try running it at the top level). Each time you run the function a new function is created. But they all have the same parent environment, the environment where the function was created.
 
 ```R
 f <- function(x) {
@@ -237,7 +292,7 @@ x <- 20
 g()
 ```
 
-In more complicated scenarios, there's not just one parent call, but also a parent of a parent and so on. We can get a list of all calling environments using `sys.frames()`
+In more complicated scenarios, there's not just one parent call, but a sequence of calls all the way back to the initiating function called from the top-level. We can get a list of all calling environments using `sys.frames()`
 
 ```R
 y <- 10
@@ -263,59 +318,113 @@ lapply(es, function(e) get("x", e))
 lapply(es, function(e) get("y", e))
 ```
 
-So there are two separate strands of parents when a function is called: the calling environments, and the defining environments. Each calling environment will also have a stack of defining environments. Note that while called function has both a stack of called environemnts and a stack of defining environments, an environment (or a function object) has only a stack of defining environments.
+There are two separate strands of parents when a function is called: the calling environments, and the defining environments. Each calling environment will also have a stack of defining environments. Note that while called function has both a stack of called environemnts and a stack of defining environments, an environment (or a function object) has only a stack of defining environments.
 
 Looking up variables in the calling environment rather than in the defining argument is called __dynamic scoping__.  Few languages implement dynamic scoping (emac's lisp is a [notable exception](http://www.gnu.org/software/emacs/emacs-paper.html#SEC15)) because dynamic scoping makes it much harder to reason about how a function operates: not only do you need to know how it was defined, you also need to know in what context it was called.  Dynamic scoping is primarily useful for developing functions that aid interactive data analysis, and is one of the topics discussed in [[controlling evaluation]]
 
+## Explicit scoping with `local`
+
+Sometimes it's useful to be able to create a new scope without embedding inside a function.  The `local` function allows you to do exactly that - it can be useful if you need some temporary variables to make an operation easier to understand, but want to throw them away afterwards:
+
+```R
+df <- local({
+  x <- 1:10
+  y <- runif(10)
+  data.frame(x = x, y = y)
+})
+```
+
+This is equivalent to:
+
+```R
+df <- (function() {
+  x <- 1:10
+  y <- runif(10)
+  data.frame(x = x, y = y)
+})()
+```
+
+`local` has relatively limited uses (typically because most of the time scoping is best accomplished using R's regular function based rules) but it can be particularly useful in conjunction with `<<-`. You can use this if you want to make a private variable that's shared between two functions:
+
+```R
+a <- 10
+my_get <- NULL
+my_set <- NULL
+local({
+  a <- 1
+  my_get <<- function() a
+  my_set <<- function(value) a <<- value
+})
+my_get()
+my_set(10)
+a
+my_get()
+```
+
 ## Assignment: binding names to values
 
-Assignment is the act of binding (or rebinding) a name to a value, in an environment. It is the counterpart to scoping, which are the set of rules that determins how when given a name, R finds the associated value. Compared to most languages, R has extremely flexible tools for binding names to values. In fact, you can not only bind values to names, but you can also bind expressions (promises) or even functions, so that every time you access the value associated with a name, you get something different!
+Assignment is the act of binding (or rebinding) a name to a value in an environment. It is the counterpart to scoping, the set of rules that determines how to find the value associated with a name. Compared to most languages, R has extremely flexible tools for binding names to values. In fact, you can not only bind values to names, but you can also bind expressions (promises) or even functions, so that every time you access the value associated with a name, you get something different!
 
 The remainder of this section will discuss the four main ways of binding names to values in R:
 
-* The regular behaviour, `name <- value`, where the name is immediately associated with the value in the current environment. `assign("name", value)` works similarly, but allows assignment in any environment.
+* With the regular behaviour, `name <- value`, the name is immediately associated with the value in the current environment. `assign("name", value)` works similarly, but allows assignment in any environment.
 
-* Assignment with the double arrow, `name <<- value` which assigns in a similar way to how variable lookup works so that `i <<- i + 1` modifies the binding of the original `i`.
+* The double arrow, `name <<- value`, assigns in a similar way to variable lookup, so that `i <<- i + 1` modifies the binding of the original `i`, which is not necessarily in the current environment.
 
-* Lazy assignment, `delayedAssign("name", expression)`, where the expression isn't evaluated until you look up the name.
+* Lazy assignment, `delayedAssign("name", expression)`, binds an expression isn't evaluated until you look up the name.
 
-* Active assignment, `makeActiveBinding("name", function)` where the value evaluates a function every time it is accessed, so it is "active", and can return different values.
+* Active assignment, `makeActiveBinding("name", function)` binds the name to a function, so it is "active" and can return different a value each time the name is found.
 
 The following sections explain each behaviour in more detail.
 
 ### Regular binding
 
-You already know the standard ways of modifying and accessing values in the current environment (e.g. `x <- 1; x`).  To modify values in other environments we have a few new techniques:
+You have probably used regular assignment in R thousands of times. Regular assignment immediately creates a binding between a name and a value in the current environment. 
 
-* treating environments like lists
+There are two types of names: syntactic and non-syntactic. Generally, syntactic names consist of letters, digits, `.` and `_`, and must start with a letter or `.` not followed by a number (so `.a` and `._` are syntactic but `.1` is not).  There are also a number of reserved words (e.g. `TRUE`, `NULL`, `if`, `function`, see `make.names()`).  A syntactic name can be used on the left hand side of `<-`:
+
+```R
+a <- 1
+._ <- 2
+a_b <- 3
+```
+
+However, a name can actually be any sequence of characters; if it's non-syntactic you just need to do a little more work:
+
+```R
+`a + b` <- 3
+`:)` <- "smile" 
+`    ` <- "spaces"
+ls()
+```
+
+`<-` creates a binding in the current environment. There are three techniques to create a binding in another environmnent:
+
+* treating an environment like a list
 
   ```R
   e <- new.env()
   e$a <- 1
-  e$a
   ```
 
-* assign and get
+* use `assign()`, which has three important arguments: the name, the value, and the environment in which to create the binding
 
   ```R
   e <- new.env()
   assign("a", 1, envir = e)
-  get("a", envir = e)
   ```
 
-* evaluating expressions inside an environment
+* evaluate `<-` inside the environment. (More on this in [[evaluation]])
 
   ```R
   e <- new.env()
   eval(quote(a <- 1), e)
-  eval(quote(a), e)
   # alternatively, you can use the helper function evalq
   # evalq(x, e) is exactly equivalent to eval(quote(x), e)
   evalq(a <- 1, e)
-  evalq(a, e)
   ```
 
-I generally prefer to use the first form because it is so compact.  However, you'll see all three forms in R code in the wild.
+I generally prefer to use the first form because it is so compact. However, you'll see all three forms in R code in the wild.
 
 ### `<<-`
 
@@ -333,11 +442,11 @@ f <- function() {
 f()
 ```
 
-If it doesn't find an existing variable of that name, it will create one in the global environment. This is usually undesirable, because global variables are usually undesirable. There's only one global environment so you can only store a single value, and it introduces non-obvious dependencies between functions.
+If it doesn't find an existing variable of that name, it will create one in the global environment. This is usually undesirable, because global variables introduce non-obvious dependencies between functions.
 
-The prefix equivalent of `name <<- value` is `assign("name", value, inherits = TRUE)`.
+`name <<- value` is equivalent to `assign("name", value, inherits = TRUE)`.
 
-To give you more idea how this works, we could implement it ourselves.  We use the same basic recipe as before. For the base case, we'll throw an error (where normally R will assign in the global environment), this should make it a little easier to see if we've made an error, and makes it more clear that the purpose of this function is to rebind existing names, not create a new binding. Otherwise we check to see if the name is found in the current environment, and if it is we do the assignment there. 
+To give you more idea how this works, we could implement `<<-` ourselves. I'm going to call it `rebind`, and emphasise that it's normally used to modify an existing binding. We'll implement it with our recursive recipe for working with environments. For the base case, we'll throw an error (where `<<-` would assign in the global environment), which emphasises the rebinding nature of this function. Otherwise we check to see if the name is found in the current environment: if it is, we do the assignment there; if not, we recurse.
 
 ```R
 reassign <- function(name, value, env = parent.frame()) {
@@ -345,7 +454,7 @@ reassign <- function(name, value, env = parent.frame()) {
     stop("Can't find ", name, call. = FALSE)
   }
 
-  if (name %in% ls(env, all = TRUE)) {
+  if (exists(name, env, inherits = FALSE)) {
     assign(name, value, env)
   } else {
     reassign(name, value, parent.env(env))
@@ -367,7 +476,7 @@ f <- function() {
 f()
 ```
 
-We'll come back to this idea in depth in [[functional programming]].
+We'll come back to this idea in depth, and see where it is useful in [[functional programming]].
 
 ### Delayed bindings
 
@@ -397,7 +506,7 @@ a + b
 * `eval.env`: the environment in which to evaluate the expression
 * `assign.env`: the environment in which to create the binding
 
-Writing `%<a-%` is straightforward, bearing in mind that `makeActiveBinding` uses non-standard evaluation to capture the representation of the second argument, so we need to use substitute to construct the call manually. 
+Writing `%<d-%` is straightforward, bearing in mind that `makeActiveBinding` uses non-standard evaluation to capture the representation of the second argument, so we need to use substitute to construct the call manually. 
 
 One application of `delayedAssign` is `autoload`, a function that powers `library()`. `autoload` makes R behave as if the code and data in a package is loaded in memory, but it doesn't actually do any work until you call one of the functions or access a dataset. This is the way that data sets in most packages work - you can call (e.g.) `diamonds` after `library(ggplot2)` and it just works, but it isn't loaded into memory unless you actually use it.
 
@@ -417,82 +526,6 @@ x
 * `fun`: a single argument function. Getting the value of `sym` calls `fun` with zero arguments, and setting the value of `sym` calls `fun` with one argument, the value.
 * `env`: the environment in which to create the binding.
 
-
 ### Exercises
 
-
-## Explicit scoping with `local`
-
-Sometimes it's useful to be able to create a new scope without embedding inside a function.  The `local` function allows you to do exactly that - it can be useful if you need some temporary variables to make an operation easier to understand, but want to throw them away afterwards:
-
-```R
-df <- local({
-  x <- 1:10
-  y <- runif(10)
-  data.frame(x = x, y = y)
-})
-```
-
-`local` has relatively limited uses (typically because most of the time scoping is best accomplished using R's regular function based rules) be particularly useful in conjunction with `<<-`. You can use this if you want to make a private variable that's shared between two functions:
-
-```R
-a <- 10
-local({
-  a <- 1
-  my_get <<- function() a
-  my_set <<- function(value) a <<- value
-})
-my_get()
-my_set(10)
-a
-my_get()
-```
-
-### How does local work?
-
-The source code for `local` is relatively hard to understand because it is very concise and uses some sutble features of evaluation (including non-standard evaluation of both arguments). If you have read [[computing-on-the-language]], you might be able to puzzle it out, but to make it a bit easier I have rewritten it in a simpler style below. 
-
-```R
-local2 <- function(expr, envir = new.env()) {
-  env <- parent.frame()
-  call <- substitute(eval(quote(expr), envir))
-
-  eval(call, env)
-}
-a <- 100
-local2({
-  b <- a + sample(10, 1)
-  my_get <<- function() b
-})
-my_get()
-```
-
-You might wonder we can't simplify to this:
-
-```R
-local3 <- function(expr, envir = new.env()) {
-  eval(substitute(expr), envir)
-}
-```
-
-But it's because of how the arguments are evaluated - default arguments are evalauted in the scope of the function so that `local(x)` would not the same as `local(x, new.env())` without special effort.  
-
-`local` is effectively identical to 
-
-```R
-local4 <- function(expr, envir = new.env()) {
-  envir <- eval(quote(envir), parent.frame())
-  eval(substitute(expr), envir)
-}
-```
-
-But a better implementation might be
-
-```R
-local5 <- function(expr, envir = NULL) {
-  if (is.null(envir))
-    envir <- new.env(parent = parent.frame())
-
-  eval(substitute(expr), envir)  
-}
-```
+* In `rebind()` it's unlikely that we want to assign in an ancestor of the global environment (i.e. a loaded package), modify the function to avoid recursing past the global environment.
