@@ -577,3 +577,33 @@ And this is what makes it possible to assign one value to multiple variables:
 ### Exercises
 
 * 
+
+## Everything is a function call
+
+Even operations for which R provides special syntax are just a disguise for ordinary function calls. This includes infix operators like `+`, control flow like `for`, `if`, and `while`, subsetting operators like `[]` and `$` and even the curly braces `{`. This means that each of these pairs of statements are exactly equivalent (note that `` `backticks` `` let you refer to functions or variables that have reserved or illegal names):
+
+    x + y
+    `+`(x, y)
+
+    for (i in 1:10) print(i)
+    `for`(i, 1:10, print(i))
+
+    if (i == 1) print("yes!") else print("no.")
+    `if`(i==1, print("yes"), print("no."))
+
+    x[3]
+    `[`(x, 3)
+
+    { print(1); print(2); print(3) }
+    `{`(print(1), print(2), print(3))
+
+It is possible to override the definitions of these special functions, but almost certainly a bad idea. However, it occasionally comes in handy to treat special functions as ordinary functions. For example, we could use `lapply` to add 3 to every element of a list by first defining a function `add`, like this:
+
+    add <- function(x, y) x + y
+    lapply(1:10, add, 3)
+
+But we can get the same effect using the built in `+` function.
+
+    lapply(1:10, `+`, 3)
+
+That everything in R is represented as a function call will be more important to know for [[computing on the language]].
