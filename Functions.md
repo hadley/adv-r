@@ -420,9 +420,9 @@ To capture `...` in a form that is easier to work with, you can use `list(...)`.
 Using `...` comes with a cost - any misspelled arguments will be silently ignored.  It's often better to be explicit instead of explicit, so you might instead ask users to supply a list of additional arguments.  And this is certainly easier if you're trying to use `...` with multiple additional functions.
 
 
-## Special functions
+## Special calls
 
-There are two special types of functions that behave differently to regular R functions: infix and replacement functions.
+R supports two additional syntaxes for calling functions you create: infix and replacement functions.
 
 ### Infix functions
 
@@ -434,6 +434,11 @@ For example, we could create a new operator that pastes together strings:
     "new" %+% " string"
 
 Note that when creating the function, you have to put the name in quotes because it's a special name.
+
+This is just a syntactic sugar for an ordinary function call; as far as R is concerned there is no difference between these two expressions:
+
+    "new" %+% " string"
+    `%+%`("new", "string")
 
 The names of infix functions are more flexible than regular R functions: they can contain any sequence of characters (except "%", of course). You will need to escape any special characters in the string used to define the function, but not when you call it:
 
@@ -452,7 +457,7 @@ R's default precedence rules mean that infix operators are composed from left to
 
 ### Replacement functions
 
-Replacement functions acts like they modify their arguments in place, and have the special name `xxx<-`. They typically have two arguments (`x` and `value`), although they can have more, and they must return the modified object. For example, the following function allows you to modify the second element of a vector:
+Replacement functions act like they modify their arguments in place, and have the special name `xxx<-`. They typically have two arguments (`x` and `value`), although they can have more, and they must return the modified object. For example, the following function allows you to modify the second element of a vector:
 
     "second<-" <- function(x, value) {
       x[2] <- value
@@ -461,6 +466,8 @@ Replacement functions acts like they modify their arguments in place, and have t
     x <- 1:10
     second(x) <- 5L
     x
+
+When R evaluates the assignment `second(x) <- 5`, it notices that the left hand side of the `<-` is not a simple name, so it looks for a function named `second<-` to do the replacement.
 
 If you want to supply additional arguments, they go in between `x` and `value`:
 
@@ -478,11 +485,13 @@ It's often useful to combine replacement and subsetting, and this works out of t
     names(x)[2] <- "two"
     names(x)
 
-This works because `names(x)[2] <- "two"` is evaluated as `x <- "names<-"(x, "[<-"(names(x), 2, "two"))`, i.e. it's efficient equivalent to:
+This works because the expression `names(x)[2] <- "two"` is evaluated as if you had written:
 
-    y <- names(x)
-    y[2] <- "two"
-    names(x) <- y
+    `*tmp*` <- names(x)
+    `*tmp*`[2] <- "two"
+    names(x) <- `*tmp*`
+
+(Yes, it really does create a local variable named `*tmp*`, which is removed afterwards.)
 
 ### Exercises
 
