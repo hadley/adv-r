@@ -7,9 +7,9 @@
 
 * Functional programming
   * [[Functions]]
-  * [[Environments]]
   * [[Functional programming]]
-* Objected oriented programming
+  * [[Environments]]
+* * Objected oriented programming
   * [[The S3 object system|S3]]
   * [[The S4 object system|S4]]
   * [[Reference based classes|R5]]
