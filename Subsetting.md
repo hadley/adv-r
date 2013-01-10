@@ -17,6 +17,14 @@ It's easiest to explain subsetting for 1d first, and then show how it generalise
 * character vector: return elements with matching names
 * logical vector: return all elements where the corresponding logical value is `TRUE`
 
+(Note for integers that it's not just subsetting that you can do.)
+
+* lookup tables
+* expanding aggregated counts
+* ordering
+* matching by hand
+* logical vs integer, boolean vs sets
+
 ## nd subsetting
 
 For higher dimensions these are separated by commas.
