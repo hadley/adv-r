@@ -2,7 +2,7 @@
 
 Functions are a fundamental building block of R: to master many of the more advanced techniques in this book, you need a solid foundation in how functions work. If you're reading this book, you've probably already created many R functions, and you're familiar with the basics of how they work. The focus of this chapter is to turn your existing, informal, knowledge of functions into a rigorous understanding of what functions are and how they work. You'll see some interesting tricks and techniques in this chapter, but most of what you'll learn is more important as building blocks for more advanced techniques.
 
-Hopefully most of this chapter will be revision and you can skim through it quickly, but you'll clarify your understand of functions as you go.
+Hopefully most of this chapter will be review and you can skim through it quickly, but you'll clarify your understand of functions as you go.
 
 In this chapter you will learn:
 
@@ -204,7 +204,7 @@ You can use this same idea to do other things that are extremely ill-advised. Fo
 
 This will introduce a particularly pernicious bug: 10% of the time, 1 will be added to any numeric operation carried out inside parentheses. This is yet another good reason to regularly restart with a clean R session!
 
-Most of the time changing the behaviour of base functions is a really bad idea, but it can occassionally allow you to do something that would have otherwise been impossible. For example, this feature makes it for the `dplyr` package to translate R expressions into SQL expressions.
+Most of the time changing the behaviour of base functions is a really bad idea, but it can occassionally allow you to do something that would have otherwise been impossible. For example, this feature makes it possible for the `dplyr` package to translate R expressions into SQL expressions.
 
 ### Exercises
 
@@ -556,7 +556,7 @@ Most base R functions are pure, with a few notable exceptions:
 
 It's generally a good idea to minimise the use of side effects, and where possible separate functions into pure and impure, isolating side effects to the smallest possible location. Pure functions are easier to test (because all you need to worry about are the input values and the output), and are less likely to work differently on different versions of R or on different platforms.  For example, this is one of the motivating principles of ggplot2: most operations work on an object that represents a plot, and only the final `print` or `plot` call has the side effect of actually drawing the plot.
 
-Functions can return `invisible` values, which are not print out by default when you call the function.
+Functions can return `invisible` values, which are not printed out by default when you call the function.
 
     f1 <- function() 1
     f2 <- function() invisible(1)
@@ -566,7 +566,7 @@ Functions can return `invisible` values, which are not print out by default when
     f1() == 1
     f2() == 1
 
-You can always force an invisible value to be display by wrapping it in parentheses:
+You can always force an invisible value to be displayed by wrapping it in parentheses:
 
     (f2())
 
