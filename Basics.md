@@ -2,7 +2,9 @@
 
 ## Data structures
 
-The basic data structure in R is the vector, which comes in two basic flavours: atomic vectors and lists. Atomic vectors are logical, integer, numeric, character and raw. Common vector properties are mode, length and names:
+The basic data structure in R is the vector, which comes in two basic flavours: atomic vectors and lists. Atomic vectors can be logical, integer, numeric, or character, or less commonly complex or raw. 
+
+Vectors have three properties: `mode`, `length` and `names`:
 
     x <- 1:10
     mode(x)
@@ -38,7 +40,7 @@ All vectors can also have additional arbitrary attributes - these can be thought
 
 Another extremely important data structure is the data.frame. A data frame is a named list with a restriction that all elements must be vectors of the same length. Each element in the list represents a column, which means that each column must be one type, but a row may contain values of different types.
 
-## Argument matching
+## Attributes
 
 ## Subsetting
 
