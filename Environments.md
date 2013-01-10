@@ -58,6 +58,13 @@ exists("b", e, inherits = FALSE)
 exists("a", e, inherits = FALSE)
 ```
 
+Another useful technique to view an environment is to coerce it to a list:
+
+```R
+as.list(e)
+str(e)
+```
+
 Environments can be also useful data structures because unlike almost every other type of object in R, modification takes place without a copy. This is not something that you should use without thought: it will violate users expectations about how R code works, but it can sometimes be critical for high performance code. The following example shows how you can use an environment to do this. However, since the addition of [[R5]], you're generally better of using reference classes instead of raw environments.
 
 It's important to make the parent environment the empty environment so that you don't accidentally inherit bindings from the global environment.
