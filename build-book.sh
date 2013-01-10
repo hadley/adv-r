@@ -24,4 +24,5 @@ pandoc --chapters --listings --latex-engine xelatex -o book.pdf \
   Namespaces.md \
   git.md \
   Release.md \
-  Vocabulary.md && open book.pdf
+  Vocabulary.md \
+  Data-structures.md && open book.pdf
