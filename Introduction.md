@@ -40,6 +40,8 @@ Other recommendations for becoming a better programmer:
 
 * [The pragmatic programmer](http://amzn.com/020161622X?tag=hadlwick-20), by Andrew Hunt and David Thomas.
 
+One of the most helpful attitudes is a scientific mindset: if you don't understand how something works in R, develop a hypothesis and then test it with a small experiment. The mental exercise of developing these experiments is very helpful.
+
 ## What you will get out of this book
 
 This book describes the skills that I think you need to be an advanced R developer, producing reproducible code that can be used in a wide variety of circumstances.
