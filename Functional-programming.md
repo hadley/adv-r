@@ -1,26 +1,118 @@
-# First class functions
+# Functional programming
 
-R supports "first class functions", functions that can be:
+At it's R, R is functional programming language which means it supports "first class functions", functions that can be:
 
 * created anonymously,
 * assigned to variables and stored in data structures,
 * returned from functions (closures),
 * passed as arguments to other functions (higher-order functions)
 
-You've already learned about anonymous functions in [[functions]]. This chapter will explore the other three properties, and show how they can remove redundancy in your code. The chapter concludes with an exploration of numerical integration, showing how all of the properties of first-class functions can be used to solve a real problem.
+This chapter will explore these properties, and show how they can remove redundancy in your code. Each technique is relatively simple by itself, but combined they give a flexible toolkit.
 
-<!-- 
-## Pure functions
+The chapter concludes with an exploration of numerical integration, showing how all of the properties of first-class functions can be used to solve a real problem.
 
-Why pure functions are easy to reason about:
-Always easier to reason about things locally.
+## Motivation
 
-Ways in which functions can have side effects
- -->
+Imagine you've loaded a data file that uses -99 to represent missing values.  
+When you first start writing R code, you might write code like the block below.
 
-You should be familiar with the basic properties of [[scoping and environments|Scoping]] before reading this chapter.
+```R
+# Fix missing values
+df$a[df$a == -99] <- NA
+df$b[df$b == -99] <- NA
+df$c[df$c == -98] <- NA
+df$d[df$d == -99] <- NA
+df$e[df$e == -99] <- NA
+df$f[df$g == -99] <- NA
+```
 
-### Anonymous functions
+But the problem with using copy-and-paste is that it's easy to make mistakes that are hard to spot (there are two in the block above).  
+
+The key problem with that code is that there is much duplication of an idea: that missing values are represented as -99.  Duplication is bad because it allows for inconsistencies (i.e. bugs). It also makes the code harder to change - if the the representation of missing value changes from -99 to 9999, then we need to make the change in many places.
+
+The pragmatic programmers, Dave Thomas and Andy Hunt, popularised the "do not repeat yourself", or DRY, principle.  This principle states that "every piece of knowledge must have a single, unambiguous, authoritative representation within a system". Adhering to this principle avoids bugs due to inconsistencies, and makes software easy to adapt to changes in requirements.
+
+The ideas of functional programming are important because they give us new tools to reduce duplication.
+
+Firstly, we could create a function that fixes missing values in a single vector:
+
+```R
+fix_missing <- function(x) {
+  x[x == -99] <- NA
+  x
+}
+df$a <- fix_missing(df$a)
+df$b <- fix_missing(df$b)
+df$c <- fix_missing(df$c)
+df$d <- fix_missing(df$d)
+df$e <- fix_missing(df$e)
+df$f <- fix_missing(df$e)
+```
+
+This reduces the scope for errors, but we've still made one. A big advantage of using the function is that we can then use functions that work with that functions to apply it to all columns in our data frame:
+
+```R
+df[] <- lapply(df, fix_missing)
+```
+
+Or only just a few.
+
+```R
+numeric <- vapply(df, is.numeric, logical(1))
+df[numeric] <- lapply(df[numeric], fix_missing)
+```
+
+This is functional programming: we've combined two functions, one which encapsulates the idea of do something to each column, and one which encapulsates the idea of replacing -99 with NA to replace -99 with NA in every column. We'll see this theme of composability recur throughout the chapter.
+
+Now consider a related problem:
+
+```R
+mean(df$a)
+median(df$a)
+sd(df$a)
+mad(df$a)
+IQR(df$a)
+
+mean(df$b)
+median(df$b)
+sd(df$b)
+mad(df$b)
+IQR(df$b)
+
+mean(df$c)
+median(df$c)
+sd(df$c)
+mad(df$c)
+IQR(df$c)
+```
+
+What are the two sources of duplication here, and how could you remove them?
+
+You might come up with something like this:
+
+```R
+summary <- function(x) { 
+  c(mean(x), median(x), sd(x), mad(x), IQR(x))
+}
+
+vapply(df, summary, numeric(5))
+```
+
+Now what if our summary function looked like this:
+
+```R
+summary <- function(x) { 
+ c(mean(x, na.rm = TRUE), 
+   median(x, na.rm = TRUE), 
+   sd(x, na.rm = TRUE), 
+   mad(x, na.rm = TRUE), 
+   IQR(x, na.rm = TRUE))
+}
+```
+
+Can you see some duplication in this function?  The rest of the chapter will 
+
+## Anonymous functions
 
 In R, functions are objects in their own right. Unlike many other programming languages, functions aren't automatically bound to a name: they can exist independently. You might have noticed this already, because when you create a function, you use the usual assignment operator to give it a name. 
 
@@ -60,7 +152,7 @@ Like all functions in R, anoynmous functions have `formals`, `body`, `environmen
     attr(function(x = 4) g(x) + h(x), "srcref")
     # function(x = 4) g(x) + h(x)
     
-### Closures 
+## Closures 
 
 "An object is data with functions. A closure is a function with data." 
 --- [John D Cook](http://twitter.com/JohnDCook/status/29670670701)
@@ -96,7 +188,7 @@ unenclose(square)
 unenclose(cube)
 ```
 
-## Closures
+### Built-in functions
 
 There are two useful built-in functions that return closures:
 
@@ -133,8 +225,7 @@ There are two useful built-in functions that return closures:
 
 * `ecdf`
 
-## Mutable state
-
+### Mutable state
 
 The ability to manage variables at two levels makes it possible to maintain the state across function invocations by allowing a function to modify variables in the environment of its parent. Key to managing variables at different levels is the double arrow assignment operator (`<<-`). Unlike the usual single arrow assignment (`<-`) that always assigns in the current environment, the double arrow operator will keep looking up the chain of parent environments until it finds a matching name.
 
@@ -159,7 +250,6 @@ The new function is a closure, and its environment is the enclosing environment.
     counter_two() # -> [1] 1
 
 This is an important technique because it is one way to generate "mutable state" in R. [[R5]] expands on this idea in considerably more detail.
-
 
 
 ## Higher-order functions
