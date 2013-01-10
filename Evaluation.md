@@ -166,6 +166,8 @@ When evaluating code in a non-standard way, it's also a good idea to test your c
 
 And it works :)
 
+### Other approaches
+
 There is one other approach we could use: a formula. `~` works much like quote, but it also captures the environment in which it is created. We need to extract the second component of the formula because the first component is `~`.
 
     subset <- function(x, f) {

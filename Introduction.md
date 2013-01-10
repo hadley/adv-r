@@ -70,7 +70,7 @@ After reading this book, you will be:
 * R developers who want to take it to the next level - who are ready to
   release their own code into the wild
 
-To get the most out of this look you should already be familiar with the basi data structures as described in [[data structures]], and you should have started developing your R [[vocabulary]].
+To get the most out of this look you should already be familiar with the basic [[data structures]], understand how [[subsetting]] works, and you should have started developing your R [[vocabulary]].
 
 ## Acknowledgements
 

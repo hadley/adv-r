@@ -41,8 +41,8 @@ Packages are the fundamental unit of reproducible R code. They include reusable 
 
 ## Appendices
 
-* Introduction to markdown
 * [[Data structures]]
+* [[Subsetting]]
 * [[Vocabulary]]
 
   [lang-def]:http://cran.r-project.org/doc/manuals/R-lang.html
