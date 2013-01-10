@@ -438,7 +438,12 @@ Note that when creating the function, you have to put the name in quotes because
 This is just a syntactic sugar for an ordinary function call; as far as R is concerned there is no difference between these two expressions:
 
     "new" %+% " string"
-    `%+%`("new", "string")
+    `%+%`("new", " string")
+
+Or indeed between
+
+    1 + 5
+    `+`(1, 5)
 
 The names of infix functions are more flexible than regular R functions: they can contain any sequence of characters (except "%", of course). You will need to escape any special characters in the string used to define the function, but not when you call it:
 
