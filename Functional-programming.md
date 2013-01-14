@@ -1,6 +1,6 @@
 # Functional programming
 
-At it's R, R is functional programming language which means it supports "first class functions", functions that can be:
+At it's core, R is functional programming language which means it supports "first class functions", functions that can be:
 
 * created anonymously,
 * assigned to variables and stored in data structures,
