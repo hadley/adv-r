@@ -62,9 +62,9 @@ numeric <- vapply(df, is.numeric, logical(1))
 df[numeric] <- lapply(df[numeric], fix_missing)
 ```
 
-This is functional programming: we've combined two functions, one which encapsulates the idea of do something to each column, and one which encapulsates the idea of replacing -99 with NA to replace -99 with NA in every column. We'll see this theme of composability recur throughout the chapter.
+Using `lapply` is an example of functional programming: we've combined (or __composed__) two functions, one which encapsulates the idea of doing something to each column, and one which encapulsates the idea of replacing -99 with NA to replace -99 with NA in every column. If each function does solves one simple problem, then the ideas of functional programming allow us to join multiple simple functions together to solve complex problems.
 
-Now consider a related problem:
+Now consider a related problem: once we've cleaned up our data, we might want t run the same set of numerical summary functions on each variable.  We could write code like this:
 
 ```R
 mean(df$a)
@@ -86,7 +86,7 @@ mad(df$c)
 IQR(df$c)
 ```
 
-What are the two sources of duplication here, and how could you remove them?
+But we'd be better off identifying the sources of duplication and then removing them.  What are they and how would you remove them?
 
 You might come up with something like this:
 
@@ -110,7 +110,7 @@ summary <- function(x) {
 }
 ```
 
-Can you see some duplication in this function?  The rest of the chapter will 
+Can you see some duplication in this function? All five functions are called with the same arguments (`x` and `na.rm`) which we had to repeat five times.  Again, this duplication makes our code fragile: it's easy to introduce bugs and hard to modify the code to adapt to changing requirements.  In this chapter, you'll learn more techniques for reducing this sort of duplication, learning tools for working with functions.
 
 ## Anonymous functions
 
@@ -151,8 +151,8 @@ Like all functions in R, anoynmous functions have `formals`, `body`, `environmen
 
     attr(function(x = 4) g(x) + h(x), "srcref")
     # function(x = 4) g(x) + h(x)
-    
-## Closures 
+
+## Closures
 
 "An object is data with functions. A closure is a function with data." 
 --- [John D Cook](http://twitter.com/JohnDCook/status/29670670701)
@@ -186,6 +186,18 @@ That's because the function itself doesn't change - but the environment in which
 library(pryr)
 unenclose(square)
 unenclose(cube)
+```
+
+Going back to our initial example, imagine the missing values were inconsistently recorded: in some columns they were -99, in others they were `9999` and in others they were `"."`. We could use a closure to create a remove missing function for each case.
+
+```R
+missing_remover <- function(na) {
+  x[x == na] <- NA
+  x
+}
+remove_99 <- missing_remover(-99)
+remove_9999 <- missing_remover(-9999)
+remove_dot <- missing_remover(".")
 ```
 
 ### Built-in functions
@@ -227,7 +239,7 @@ There are two useful built-in functions that return closures:
 
 ### Mutable state
 
-The ability to manage variables at two levels makes it possible to maintain the state across function invocations by allowing a function to modify variables in the environment of its parent. Key to managing variables at different levels is the double arrow assignment operator (`<<-`). Unlike the usual single arrow assignment (`<-`) that always assigns in the current environment, the double arrow operator will keep looking up the chain of parent environments until it finds a matching name.
+The ability to manage variables at two levels makes it possible to maintain the state across function invocations by allowing a function to modify variables in the environment of its parent. Key to managing variables at different levels is the double arrow assignment operator (`<<-`). Unlike the usual single arrow assignment (`<-`) that always assigns in the current environment, the double arrow operator will keep looking up the chain of parent environments until it finds a matching name. 
 
 This makes it possible to maintain a counter that records how many times a function has been called, as shown in the following example. Each time `new_counter` is run, it creates an environment, initialises the counter `i` in this environment, and then creates a new function.
 
@@ -252,11 +264,52 @@ The new function is a closure, and its environment is the enclosing environment.
 This is an important technique because it is one way to generate "mutable state" in R. [[R5]] expands on this idea in considerably more detail.
 
 
-## Higher-order functions
+## Functions that take functions as arguments
 
-The power of closures is tightly coupled to another important class of functions: higher-order functions (HOFs), functions that take functions as arguments. Mathematicians distinguish between functionals, which accept a function and return a scalar, and function operators, which accept a function and return a function. Integration over an interval is a functional, the indefinite integral is a function operator.
+The power of closures is tightly coupled to another important class of functions: higher-order functions (HOFs), which include functions that take functions as arguments. Mathematicians distinguish between functionals, which accept a function and return a scalar, and function operators, which accept a function and return a function. Integration over an interval is a functional, the indefinite integral is a function operator.  However, this distinction isn't important from our perspective, unless you're trying to communicate with a mathematician. 
+
+Closures allow us to create multiple functions from a template, and then HOF allow us to do something with them.
 
 Higher-order functions of use to R programmers fall into two main camps: data structure manipulation and mathematical tools, as described below.
+
+### `lapply`, `vapply` and `mapply`
+
+The three most important HOFs you're likely to use are from the `apply` family.
+The family includes `apply`, `lapply`, `mapply`, `tapply`, `sapply`, `vapply`, and `by`. Each of these functions processes breaks up a data structure in some way, applies the function to each piece and then joins them back together again. The `**ply` functions of the `plyr` package which attempt to unify the base apply functions by cleanly separating based on the type of input they break up and the type of output that they produce.
+
+However, most of those functions are most useful for data analysis, rather than programming, so in this section we'll focus on the three functions that you're most likely to use as an R programming: `lapply`, `vapply` and `Map`.
+
+Each of these functions provides a way to eliminate a certain type of for loop.  `lapply` and `vapply` work the same way apart from the type of output and look like:
+
+```
+for(i in seq_along(x)) {
+  output[i] <- f(x[i], y, z)
+}
+a <- c(1, 2, 3)
+b <- c("a", "b", "c")
+lapply(a, f, b)
+# list(f(1, b), f(2, b), f(3, b))
+
+```
+
+`Map` is useful when you have multiple sets of inputs that you want to be called in parallel.
+
+```
+for(i in seq_along(x)) {
+  output[i] <- f(x[i], y[i], z[i])
+}
+
+Map(f, a, b, SIMPLIFY = FALSE)
+# list(f(1, "a"), f(2, "b"), f(3, "b"))
+```
+
+What if you have arguments that you don't want to be split up?  Use an anonymous function!
+
+```R
+Map(function(x, y) f(x, y, z), xs, ys)
+```
+
+Note: you may be more familiar with `mapply` than Map. I prefer map because it is equivalent to `mapply` with `simplify = FALSE` which is almost always what you want.
 
 ### Data structure manipulation
 
@@ -294,9 +347,6 @@ The following example shows some simple uses:
 
 The next two functions work with more general classes of functions:
 
-* `Map`: can take more than one vector as an input and calls `f`
-  element-by-element on each input. It returns a list.
-
 * `Reduce` recursively reduces a vector to a single value by first calling `f`
   with the first two elements, then the result of `f` and the second element
   and so on.
@@ -323,15 +373,6 @@ Apart from `Map`, the implementation of these five vector-processing HOFs is str
 -->
 
 Other families of higher-order functions include:
-
-* The `apply` family: `eapply`, `lapply`, `mapply`, `tapply`, `sapply`,
-  `vapply`, `by`. Each of these functions processes breaks up a data structure
-  in some way, applies the function to each piece and then joins them back
-  together again.
-
-* The `**ply` functions of the `plyr` package which attempt to unify the base
-  apply functions by cleanly separating based on the type of input they break
-  up and the type of output that they produce.
 
 * The array manipulation functions modify arrays to compute various margins or
   other summaries, or generalise matrix multiplication in various ways:
@@ -409,7 +450,8 @@ Calling a function from a list is straightforward: just get it out of the list f
 
     x <- runif(1e5)
     system.time(compute_mean$base(x))
-    system.time(compute_mean$manual(x))
+    system.time(compute_mean[[2]](x))
+    system.time(compute_mean[["manual"]](x))
     
 If we want to call all functions to check that we've implemented them correctly and they return the same answer, we can use `lapply`, either with an anonymous function, or a new function that calls it's first argument with all other arguments:
 
@@ -456,7 +498,7 @@ But this leads to a lot of duplication - each function is almost identical apart
     }
     funs2 <- lapply(funs, remove_missings)
 
-We could also take a more general approach. A useful function here is `Curry` (named after a famous computer scientist Haskell Curry, not the food), which implements "partial function application". What the curry function does is create a new function that passes on the arguments you specify. A example will make this more clear:
+We could also take a more general approach. A useful function here is `Curry` (named after the famous computer scientist Haskell Curry, not the food), which implements "partial function application". What the curry function does is create a new function that passes on the arguments you specify. A example will make this more clear:
 
     add <- function(x, y) x + y
     addOne <- function(x) add(x, 1)
@@ -473,7 +515,7 @@ One way to implement `Curry` is as follows:
 
 (You should be able to figure out how this works.  See the exercises.)
 
-But implementing it like this prevents arguments from being lazily evaluated, so it has a somewhat more complicated implementation, basically working by building up an anonymous function by hand. You should be able to work out how this works after you've read the [[computing on the language]] chapter.  (Hopefully this function will be included in a future version of R.)
+But implementing it like this prevents arguments from being lazily evaluated, so it has a somewhat more complicated implementation, basically working by building up an anonymous function by hand. You should be able to work out how this works after you've read the [[computing on the language]] chapter.  `curry` is implemented in the `pryr` package.
 
     Curry <- function(FUN, ...) {
       args <- match.call(expand.dots = FALSE)$...
