@@ -20,7 +20,7 @@ There are XXX components to package level documentation.  None of them are compu
 
 The `README` file lives in the package directory. It should be fairly short (3-4 paragraphs) and answer the following questions:
 
-* Why should someone be use your package?
+* Why should someone use your package?
 * How does it compare to other existing solutions?
 * What are the main functions?
 
