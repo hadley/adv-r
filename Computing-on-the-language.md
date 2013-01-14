@@ -1,14 +1,57 @@
 # Computing on the language
 
-Writing R code that modifies R code. Why?
+In this section you'll learn how to write R code that modifies other R code.  Why might you want to do this?
+
+* to work around functions that use non-standard evaluation rules (like lattice functions, )
+
+* to create refactoring tools that modify your existing functions
+
+* to create tools that inspect functions and warn you of common problems
+
+* to extend the tools you learned in [[evaluation]] to create even more flexible functions for interactive data analysis
 
 ## Basics of R code
 
-There are three fundamental building blocks of R code:
+To compute on the language, we first need to be understand the structure of the language. That's going to require some new vocabulary, some new tools and some new ways of thinking about R code. Thoroughout this chapter we're going to use tools from the `pryr` package to help see what's going on.  If you don't already have it, install it by running `pryr::install_github("pryr")`
 
-* __names__, which represent the name, not value, of a variable
-* __constants__, like `"a"` or `1:10`
-* __calls__, which represents a function call
+The first thing we need to discuss is the distinction between an operation and it's result:
+
+```R
+x <- 4
+y <- x * 10
+```
+
+We want to distinguish between the operation of multiplying x by 10 and assinging the result to `y`, vs. the actual result.  In R, we can capture the operation with `quote()`:
+
+```R
+quote(y <- x * 10)
+```
+
+`quote()` gives us back exactly the expression that we typed in. Every expression is a tree, and we can use `pryr::call_tree()` to see the hierarchy more clearly.
+
+```R
+call_tree(quote(y <- x * 10))
+```
+
+There are three basic things you'll see in a call tree.  Names and constants form the leaves, or terminal nodes of the tree:
+
+* __names__, which represent the name, not value, of a variable. These are prefixed with `'`
+
+* __constants__, are atomic vectors, like `"a"` or `1:10`
+
+Whereas the internal nodes are all made up of calls:
+
+* __calls__, which represents a function call. These are suffixed with `()`.
+
+Even things in R that don't look like calls still follow this same hierarchical structre:
+
+```R
+call_tree(quote(a + b))
+call_tree(quote(if (x > 1) x else 1/x))
+call_tree(quote(function(x, y) {x * y}))
+```
+
+There are three fundamental building blocks of R code:
 
 Collectively I'll call these three things parsed code, because they each represent a stand-alone piece of R code that you could run from the command line. 
 
@@ -568,7 +611,7 @@ capply <- function(X, FUN, ...) {
 capply(expression(1, 2, 3), identity)
 capply(quote(f(1, 2, 3)), identity)
 capply(formals(data.frame), identity)
-capply(function(x) x + 1, identity)
+capply(quote(function(x) x + 1), identity)
 ```  
 
 This leads to:
