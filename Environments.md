@@ -194,17 +194,13 @@ f2 <- function(..., env = parent.frame()) {
 
 ### Exercises
 
-* Using `parent.env()` and a loop (or a recursive function), verify that the ancestors of `globalenv()` include `baseenv()` and `emptyenv()`
+* Using `parent.env()` and a loop (or a recursive function), verify that the ancestors of `globalenv()` include `baseenv()` and `emptyenv()`.  Use the same basic idea to implement your own version of `search()`.
 
 * Write your own version of `get()` using a function written in the style of `where()`.  
  
 * Write a function called `fget()` that finds only function objects. It should have two arguments, `name` and `env`, and should obey the regular scoping rules for functions: if there's an object with a matching name that's not a function, look in the parent. (This function should be a equivalent to `match.fun()` extended to take a second argument). For an added challenge, also add an `inherits` argument which controls whether the function recurses down the parents or only looks in one environment.
 
 * Write your own version of `exists(inherits = FALSE)` (Hint: use `ls()`).  Write a recursive version that behaves like `inherits = TRUE`.
-
-* Something to do with `search()`?
-
-* Something with `lockBinding()`?
 
 ## Function environments
 
@@ -379,6 +375,12 @@ lapply(es, function(e) get("y", e))
 There are two separate strands of parents when a function is called: the calling environments, and the defining environments. Each calling environment will also have a stack of defining environments. Note that while called function has both a stack of called environemnts and a stack of defining environments, an environment (or a function object) has only a stack of defining environments.
 
 Looking up variables in the calling environment rather than in the defining argument is called __dynamic scoping__.  Few languages implement dynamic scoping (emac's lisp is a [notable exception](http://www.gnu.org/software/emacs/emacs-paper.html#SEC15)) because dynamic scoping makes it much harder to reason about how a function operates: not only do you need to know how it was defined, you also need to know in what context it was called.  Dynamic scoping is primarily useful for developing functions that aid interactive data analysis, and is one of the topics discussed in [[controlling evaluation]]
+
+### Exercises
+
+* Write an enhanced version of `str()` that provides more information about functions: show where the function was found and what environment it was defined in. Can you list objects that the function will be able to access but the user of the function cannot?
+
+* 
 
 ## Explicit scoping with `local`
 
@@ -620,3 +622,7 @@ x
 * In `rebind()` it's unlikely that we want to assign in an ancestor of the global environment (i.e. a loaded package), so modify the function to avoid recursing past the global environment.
 
 * Create a version of `assign()` that will only bind new names, never re-bind old names.  Some programming languages only do this, and are known as [single assignment](http://en.wikipedia.org/wiki/Assignment_(computer_science)#Single_assignment) languages.
+
+* Implement `str` for environments, listing all bindings in the environment, and briefly describing their contents (you might want to use `str` recursively). Use `bindingIsActive()` to determine if a binding is active. Indicate if bindings are locked (see `bindingIsLocked()`). Show the expressions (not the results) for delayed bindings (see the help for `delayedAssign` for hints).  Show the amount of memory the environment occupies using `object.size()`
+
+* Write an assignment function that can do active, delayed and locked bindings. What might you call it? What arguments should it take? Can you guess which sort of assignment it should do based on the expression?
