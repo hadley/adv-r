@@ -334,23 +334,25 @@ If you want to ensure that an argument is evaluated you can use `force`:
 
 This is important when creating closures with `lapply` or a loop:
 
-    add <- function(x) {
-      function(y) x + y
-    }
-    adders <- lapply(1:10, add)
-    adders[[1]](10)
-    adders[[10]](10)
+```r
+add <- function(x) {
+  function(y) x + y
+}
+adders <- lapply(1:10, add)
+adders[[1]](10)
+adders[[10]](10)
+```
 
 `x` is lazily evaluated the first time that you call one of the adder functions. At this point, the loop is complete and the final value of `x` is 10.  Therefore all of the adder functions will add 10 on to their input, probably not what you wanted!  Manually forcing evaluation fixes the problem:
-
-    add <- function(x) {
-      force(x)
-      function(y) x + y
-    }
-    adders <- lapply(1:10, add)
-    adders[[1]](10)
-    adders[[10]](10)
-
+```r
+add <- function(x) {
+  force(x)
+  function(y) x + y
+}
+adders2 <- lapply(1:10, add)
+adders[[1]](10)
+adders[[10]](10)
+```
 This code is exactly equivalent to
 
     add <- function(x) {
