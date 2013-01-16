@@ -30,7 +30,7 @@ Sample pictures.
 
 ### Copy-on-modify semantics
 
-If much of your time is taken up by `[` or `[[` then you may be victim of the most common cause of performance problems in R: its copy on modify semantics.  In R, it's easy to think that you're modifying an object in place, but you're actually creating a new copy each time. 
+If much of your time is taken up by `[` or \[\[ then you may be victim of the most common cause of performance problems in R: its copy on modify semantics.  In R, it's easy to think that you're modifying an object in place, but you're actually creating a new copy each time. 
 
 It's not that loops are slow, it's that if you're not careful every time you modify an object inside a list it makes a complete copy. C functions are usually faster not because the loop is written in C, but because C's default behaviour is to modify in place, not make a copy. This is less safe, but much more efficient. If you're modifying a data structure in a loop, you can often get big performance gains by switching to the vectorised equivalent.  When working with matrices and data frames, this often means creating a large object that you can combine with a single operation.
 
@@ -46,15 +46,15 @@ Take the following code that subtracts the median from each column of a large da
     })
 
 It's rather slow - we only have 100 columns and 10,000 rows, but it's still taking over second. We can use `address()` to see what's going on. This function returns the memory address that the object occupies:
-
-    system.time({
-      for(i in seq_along(medians)) {
-        x[, i] <- x[, i] - medians[i]
-        print(address(x))
-        print(address(x[[i]]))
-      }
-    })
-
+```r
+system.time({
+  for(i in seq_along(medians)) {
+    x[, i] <- x[, i] - medians[i]
+    print(address(x))
+    print(address(x[[i]]))
+  }
+})
+```
 Each iteration of the loop prints a different memory address - the complete data frame is being modified and copied for each iteration.
 
 We can rewrite it to be much faster by eliminating all those copies, and instead relying on vectorised data frame subtraction: if you subtract a list from a data frame, the elements of the list are matched up with the elements of the data frame. That loop occurs at the C-level, which means the data frame is only copied once, not many many times.
@@ -67,20 +67,20 @@ The art of R performance improvement is to build up a good intuitions for what o
 
 * `structure(x, class = "c")` makes a copy.  `class(x) <- c` does not.
 
-* Modifying a vector in place with `[<-` or `[[<-` does not make a copy.  Modifying a data frame in place does make a copy. Modifying a list in place makes a copy, but it's a shallow copy: each individual component of the list is not copied. 
+* Modifying a vector in place with `[<-` or \[\[<- does not make a copy.  Modifying a data frame in place does make a copy. Modifying a list in place makes a copy, but it's a shallow copy: each individual component of the list is not copied. 
 
 * `names<-`, `attr<-` and `attributes<-` don't make a copy
 
 * Avoid modifying complex objects (like data frames) repeatedly and instead pull out the component you want to modify, modify it, and then put it back in.  If that doesn't work, converting it to a simpler object type and then converting back might help:
-
-      system.time({
-        y <- as.list(x)
-        for(i in seq_along(medians)) {
-          y[[i]] <- y[[i]] - medians[i]
-        }
-        x <- as.data.frame(y)
-      })
-
+```r
+system.time({
+  y <- as.list(x)
+  for(i in seq_along(medians)) {
+    y[[i]] <- y[[i]] - medians[i]
+  }
+  x <- as.data.frame(y)
+})
+```
 Generally, building up a rich vocabulaory of vectorised functions will help you write performant code.  Vectorisation basically means pushing a for-loop from R in C so that only one copy of the data structure is made.
 
 If you thinking copying is causing a bottleneck in your program, then I recommend running some small experiments using `address()` and `microbenchmark` as described below. 
@@ -179,22 +179,22 @@ However, it's important to notice the units: microseconds. There are a million m
 ### Extracting variables out of a data frame
 
 For the plyr package, I did a lot of experimentation to figure out the fastest way of extracting data out of a data frame.
-
+```r
     n <- 1e5
     df <- data.frame(matrix(runif(n * 100), ncol = 100))
     x <- df[[1]]
     x_ran <- sample(n, 1e3)
 
     microbenchmark(
-      x[x_ran]
+      x[x_ran],
       df[x_ran, 1],
       df[[1]][x_ran],
       df$X1[x_ran],
       df[["X1"]][x_ran],
       .subset2(df, 1)[x_ran],
-      .subset2(df, "X1")[x_ran],
+      .subset2(df, "X1")[x_ran]
     )
-
+```
 Again, the units are in microseconds, so you only need to care if you're doing hundreds of thousands of data frame subsets - but for plyr I am doing that so I do care.
 
 ### Vectorised operations on a data frame
