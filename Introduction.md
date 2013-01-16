@@ -70,14 +70,12 @@ After reading this book, you will be:
 * R developers who want to take it to the next level - who are ready to
   release their own code into the wild
 
-To get the most out of this look you should already be familiar with the basic [[data structures]], understand how [[subsetting]] works, and you should have started developing your R [[vocabulary]].
+To get the most out of this look you should already be familiar with the basic [[data structures]], understand how [[subsetting]] works, and you should have started developing your R [[vocabulary]]. You should be somewhat familiar with the apply family of functions (like `apply()` and `lapply()`), although you may well struggle to deploy them effectively.
 
 ## Acknowledgements
 
-I would particularly like to thank the tireless contributors to R-help. There are too many that have helped me over the years to list individually, but I'd particularly like to thank Luke Tierney, John Chambers, and Brian Ripley for correcting countless of my misunderstandings and helping me to deeply understand R.
+I would particularly like to thank the tireless contributors to R-help and [stackoverflow](http://stackoverflow.com/questions/tagged/r). There are too many that have helped me over the years to list individually, but I'd particularly like to thank Luke Tierney, John Chambers, and Brian Ripley for correcting countless of my misunderstandings and helping me to deeply understand R.
 
-More recently, [stackoverflow](http://stackoverflow.com/questions/tagged/r) has become a fantastic resource.
-
-Feedback of the many people who read draft versions of the book (wiki), especially those who fixed many typos: 
+Feedback of the many people who read draft versions of the book (wiki), especially those who fixed many typos.
 
 Twitter
