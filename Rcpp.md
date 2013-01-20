@@ -661,7 +661,7 @@ is_naC2(c(NA, 5.4, 3.2, NA))
 
 * Rewrite any of the functions from the first exercises to correctly deal with missing values. If `na.rm` is true, ignore the missing values. If `na.rm` is false, return missing values the first time a missing value is encountered. Some functions you can practice with are: `min`, `max`, `range`, `mean`, `var`
 
-* `cumsum` and `diff` diff need slightly more complicated behaviour for missing values.
+* `cumsum` and `diff` need slightly more complicated behaviour for missing values.
 
 ## The STL
 
