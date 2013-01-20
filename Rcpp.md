@@ -629,7 +629,7 @@ To check if a value in a vector is missing, use the class method `is_na`:
 
 ```cpp
 // [[Rcpp::export]]
-LogicalVector is_na2(NumericVector x) {
+LogicalVector is_naC(NumericVector x) {
   int n = x.size();
   LogicalVector out(n);
   
@@ -640,11 +640,22 @@ LogicalVector is_na2(NumericVector x) {
 }
 
 /*** R
-  is_na2(c(NA, 5.4, 3.2, NA))
+  is_naC(c(NA, 5.4, 3.2, NA))
 */
 ```
 
 Another alternative is the similarly named sugar function `is_na`: it takes a vector and returns a logical vector.
+
+```
+// [[Rcpp::export]]
+LogicalVector is_naC2(NumericVector x) {
+  return is_na(x);
+}
+
+/*** R
+is_naC2(c(NA, 5.4, 3.2, NA))
+*/
+```
 
 ### Exercises
 
