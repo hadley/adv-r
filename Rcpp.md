@@ -667,7 +667,7 @@ is_naC2(c(NA, 5.4, 3.2, NA))
 
 The real strength of C++ shows itself when you need to implement more complex algorithms. The standard template library (STL) provides set of extremely useful data structures and algorithms. This section will explain the most important algorithms and data structures and point you in the right direction to learn more.  We can't teach you everything you need to know about the STL, but hopefully the examples will at least show you the power of the STL, and persuade that it's useful to learn more. 
 
-If you need an algorithm or data strucutre that isn't implemented in STL, a good place to look is [boost](http://www.boost.org/doc/). Installing boost on to your computer is beyond the scope of this chapter, but once you have it installed, you can use `boost` data structures and algorithms by including the appropriate header file with (e.g.) `#include <boost/array.hpp>`.
+If you need an algorithm or data structure that isn't implemented in STL, a good place to look is [boost](http://www.boost.org/doc/). Installing boost on to your computer is beyond the scope of this chapter, but once you have it installed, you can use `boost` data structures and algorithms by including the appropriate header file with (e.g.) `#include <boost/array.hpp>`.
 
 ### Using iterators
 
