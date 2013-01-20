@@ -484,7 +484,7 @@ pdist1 <- function(x, ys) {
 
 ```cpp
 // [[Rcpp::export]]
-NumericVector pdist3(double x, NumericVector ys) {
+NumericVector pdist2(double x, NumericVector ys) {
   return pow((x - ys), 2);
 }
 ```
