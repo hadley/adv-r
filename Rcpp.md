@@ -459,7 +459,7 @@ List lapply1(List input, Function f) {
 */
 ```
 
-There are also classes for many more specialised language objects: `Environment`, ComplexVector`, `RawVector`, `DottedPair`, `Language`,  `Promise`, `Symbol`, `WeakReference` and so on. These are beyond the scope of this chapter and won't be discussed further.
+There are also classes for many more specialised language objects: `Environment`, `ComplexVector`, `RawVector`, `DottedPair`, `Language`,  `Promise`, `Symbol`, `WeakReference` and so on. These are beyond the scope of this chapter and won't be discussed further.
 
 ## Rcpp sugar
 
