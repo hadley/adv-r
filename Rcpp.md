@@ -474,17 +474,17 @@ Sugar functions can be roughly broken down into
 
 ### Arithmetic and logical operators 
 
-All the basic arithmetic and logical operators are vectorised: `+` `*`, `-`, `/`, `pow`, `<`, `<=`, `>`, `>=`, `==`, `!=`, `!`.  For example, we could use sugar to considerably simply the implementation of our `pdist2` function.  (If you don't remember I've included the R version of `pdist2`, `pdist1`, as well.  Note the similarities with the Rcpp sugar version.)
+All the basic arithmetic and logical operators are vectorised: `+` `*`, `-`, `/`, `pow`, `<`, `<=`, `>`, `>=`, `==`, `!=`, `!`.  For example, we could use sugar to considerably simply the implementation of our `pdistC` function.  (If you don't remember I've included the R version of `pdistC`, `pdistR`, as well.  Note the similarities with the Rcpp sugar version.)
 
 ```r
-pdist1 <- function(x, ys) {
+pdistR <- function(x, ys) {
   (x - ys) ^ 2
 }
 ```
 
 ```cpp
 // [[Rcpp::export]]
-NumericVector pdist2(double x, NumericVector ys) {
+NumericVector pdistC2(double x, NumericVector ys) {
   return pow((x - ys), 2);
 }
 ```
@@ -496,19 +496,19 @@ The sugar function `any` and `all` are fully lazy, so that e.g `any(x == 0)` mig
 For example, we could use this to write an efficient funtion to determine whether or not a numeric vector contains any missing values. In R we could do `any(is.na(x))`:
 
 ```r
-any_na1 <- function(x) any(is.na(x))
+any_naR <- function(x) any(is.na(x))
 ```
 
 However that will do almost the same amount of work whether there's a missing value in the first position or the last. Here's the C++ implementation:
 
 ```cpp
 // [[Rcpp::export]]
-bool any_na2(NumericVector x) {
+bool any_naC(NumericVector x) {
   return is_true(any(is_na(x)));
 }
 ```
 
-Our C++ `any_na2` function is slightly slower `any_na1` when there are no missing values, or the missing value is at the end, but it's much faster when the first value is missing. 
+Our C++ `any_naC` function is slightly slower `any_na1` when there are no missing values, or the missing value is at the end, but it's much faster when the first value is missing. 
 
 ```r
 library(microbenchmark)
@@ -517,9 +517,9 @@ x1 <- c(x0, NA)
 x2 <- c(NA, x0)
 
 microbenchmark(
-  any_na1(x0), any_na2(x0),
-  any_na1(x1), any_na2(x1),
-  any_na1(x2), any_na2(x2))
+  any_naR(x0), any_naC(x0),
+  any_naR(x1), any_naC(x1),
+  any_naR(x2), any_naC(x2))
 ```
 
 ### Vector views
