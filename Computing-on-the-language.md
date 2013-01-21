@@ -653,3 +653,8 @@ We're going to focus on `getParseData` (a new feature in R 2.16) which gives us 
 
   [srcrefs]: http://journal.r-project.org/archive/2010-2/RJournal_2010-2_Murdoch.pdf
 
+
+<!-- Idea:
+Destructuring assignment
+  https://gist.github.com/4543212
+  https://github.com/crowding/ptools/blob/master/R/bind.R -->
