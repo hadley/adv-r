@@ -268,7 +268,7 @@ Closures are useful for making function factories, and are one way to manage mut
 
 ### Function factories
 
-Going back to our initial example, imagine the missing values were inconsistently recorded: in some columns they were -99, in others they were `9999` and in others they were `"."`. We could use a closure to create a remove missing function for each case.
+We've already seen one example of a function factory, `power()`. We might also need a function if our initial example was slightly more complicated: imagine the missing values were inconsistently recorded and in some columns they were -99, in others they were `9999` or `"."`. Rather than copying, pasting and modifying, we could use a closure to create a remove missing function for each case:
 
 ```R
 missing_remover <- function(na) {
@@ -280,76 +280,140 @@ remove_9999 <- missing_remover(-9999)
 remove_dot <- missing_remover(".")
 ```
 
+We'll see another compelling using function factories when we learn more about higher functions; they are very useful for maximum likelihood problems.
+
 ### Mutable state
 
-Having variables at two levels makes it possible to maintain state across function invocations by allowing a function to modify variables in the environment of its parent. Key to managing variables at different levels is the double arrow assignment operator (`<<-`). Unlike the usual single arrow assignment (`<-`) that always assigns in the current environment, the double arrow operator will keep looking up the chain of parent environments until it finds a matching name. ([[Environments]] has more details on how it works)
+Having variables at two levels makes it possible to maintain state across function invocations by allowing a function to modify variables in the environment of its parent. The key to managing variables at different levels is the double arrow assignment operator (`<<-`). Unlike the usual single arrow assignment (`<-`) that always assigns in the current environment, the double arrow operator will keep looking up the chain of parent environments until it finds a matching name. ([[Environments]] has more details on how it works)
 
 This makes it possible to maintain a counter that records how many times a function has been called, as shown in the following example. Each time `new_counter` is run, it creates an environment, initialises the counter `i` in this environment, and then creates a new function.
 
-    new_counter <- function() {
-      i <- 0
-      function() {
-        i <<- i + 1
-        i
-      }
-    }
+```R
+new_counter <- function() {
+  i <- 0
+  function() {
+    i <<- i + 1
+    i
+  }
+}
+```
 
-The new function is a closure, and its environment is the enclosing environment. When the closures `counter_one` and `counter_two` are run, each one modifies the counter in its enclosing environment and then returns the current count.
+The new function is a closure, and its environment is the enclosing environment. When the closures `counter_one` and `counter_two` are run, each one modifies the counter in its enclosing environment and then returns the current count. 
 
-    counter_one <- new_counter()
-    counter_two <- new_counter()
+```R
+counter_one <- new_counter()
+counter_two <- new_counter()
 
-    counter_one() # -> [1] 1
-    counter_one() # -> [1] 2
-    counter_two() # -> [1] 1
+counter_one() # -> [1] 1
+counter_one() # -> [1] 2
+counter_two() # -> [1] 1
+```
 
-This is an important technique because it is one way to generate "mutable state" in R. [[R5]] expands on this idea in considerably more detail. If you want to modify objects within a function, you're probably better off using R5 objects, rather than using this technique.  It's easier to document and you get a bit more of a safety net.
+We can use our environment inspection tools to see what's going on here:
+
+```R
+as.list(environment(counter_one))
+as.list(environment(counter_two))
+```
+
+The counters get around the "fresh start" limitation by not modifying variables in their local environment. Since the changes are made in the unchanging parent (or enclosing) environment, they are preserved across function calls.
+
+What happens if we don't use a closure? What happens if we only use `<-` instead of `<<-`? Make predictions about what will happen if you replace `new_counter()` with each variant below, then run the code and check your predictions.
+
+```R
+i <- 0
+new_counter2 <- function() {
+  i <<- i + 1
+  i
+}
+new_counter3 <- function() {
+  i <- 0
+  function() {
+    i <- i + 1
+    i
+  }
+}
+```
+
+Modifying values in a parent environment is an important technique because it is one way to generate "mutable state" in R. Mutable state is hard to achieve normally, because every time it looks like you're modifying an object, you're actually creating a copy and modifying that. That said, if you do need mutable objects, it's usually better to use the [[R5]] OO system, except in the simplest of cases. R5 objects are easier to document, and provide easier ways to inherit behaviour across functions.
+
+The power of closures is tightly coupled to another important class of functions: higher-order functions (HOFs), which include functions that take functions as arguments. Mathematicians distinguish between functionals, which accept a function and return a scalar, and function operators, which accept a function and return a function. Integration over an interval is a functional, the indefinite integral is a function operator. The following two chapters discuss functionals and function operators in turn.
 
 ### Exercises
 
-* Create a function that takes an index, `i`, as an argument and returns a function an argument `x` that subsets `x` with `i`.
+* What does the following statistical function do? What would be a better name for it? (The existing name is a bit of a hint)
+
+  ```R
+  bc <- function(lambda) {
+    if (lambda == 0) {
+      function(x) log(x)
+    } else {
+      function(x) (x ^ lambda - 1) / lambda
+    }
+  }
+  ```
+
+* Create a function `pick()`, that takes an index, `i`, as an argument and returns a function an argument `x` that subsets `x` with `i`.
   
   ```R
   lapply(mtcars, pick(5))
   ```
 
-* What does the `ecdf()` function return?
+* What does the `ecdf()` function do? What does it return?
 
-## Functions that take functions as arguments
+## Functionals 
 
-The power of closures is tightly coupled to another important class of functions: higher-order functions (HOFs), which include functions that take functions as arguments. Mathematicians distinguish between functionals, which accept a function and return a scalar, and function operators, which accept a function and return a function. Integration over an interval is a functional, the indefinite integral is a function operator.  However, this distinction isn't important from our perspective, unless you're trying to communicate with a mathematician. 
+Functionals are functions that take one or more functions as arguments, and return a number as an answer. In R, they are commonly used as a way to eliminate for loops.
 
-Closures allow us to create multiple functions from a template, and then HOF allow us to do something with them.
+Eliminating for loops is a good idea not because they're inefficient, but because it eliminate errors and more clearly expresses the intent of your programming.
 
-Higher-order functions of use to R programmers fall into two main camps: data structure manipulation and mathematical tools, as described below.
+May also implement algorithm more efficiently than you would naively
 
-### `lapply`, `vapply` and `mapply`
+They are particularly useful in conjunction with closures.
+
+```R
+for(x in xs)
+for(i in seq_along(xs))
+for(nm in names(xs))
+```
+
+### The apply family: `lapply`, `vapply` and `mapply`
 
 The three most important HOFs you're likely to use are from the `apply` family.
 The family includes `apply`, `lapply`, `mapply`, `tapply`, `sapply`, `vapply`, and `by`. Each of these functions processes breaks up a data structure in some way, applies the function to each piece and then joins them back together again. The `**ply` functions of the `plyr` package which attempt to unify the base apply functions by cleanly separating based on the type of input they break up and the type of output that they produce.
 
 However, most of those functions are most useful for data analysis, rather than programming, so in this section we'll focus on the three functions that you're most likely to use as an R programming: `lapply`, `vapply` and `Map`.
 
-Each of these functions provides a way to eliminate a certain type of for loop.  `lapply` and `vapply` work the same way apart from the type of output and look like:
+Each of these functions provides a way to eliminate a certain type of for loop.  `lapply` and `vapply` work the same way apart from the type of output and look like
 
-```
+```R
+# lapply(x, f, ...) ->
 for(i in seq_along(x)) {
-  output[i] <- f(x[i], y, z)
+  output[i] <- f(x[i], ...)
 }
+```
+
+To make it more concrete:
+
+```R
 a <- c(1, 2, 3)
 b <- c("a", "b", "c")
 lapply(a, f, b)
 # list(f(1, b), f(2, b), f(3, b))
-
 ```
 
 `Map` is useful when you have multiple sets of inputs that you want to be called in parallel.
 
-```
+```R
+# mapply(x, f, y, z) ->
 for(i in seq_along(x)) {
   output[i] <- f(x[i], y[i], z[i])
 }
+```
 
+To make it more concrete:
+
+```R
 Map(f, a, b, SIMPLIFY = FALSE)
 # list(f(1, "a"), f(2, "b"), f(3, "b"))
 ```
@@ -362,7 +426,32 @@ Map(function(x, y) f(x, y, z), xs, ys)
 
 Note: you may be more familiar with `mapply` than Map. I prefer map because it is equivalent to `mapply` with `simplify = FALSE` which is almost always what you want.
 
-### Data structure manipulation
+### Recursively applying a function
+
+```R
+out <- x[1]
+for(i in seq(2, length(x)) {
+  out <- f(out, x[i])
+}
+```
+
+`Reduce` recursively reduces a vector to a single value by first calling `f` with the first two elements, then the result of `f` and the second element and so on.
+
+If `x = 1:5` then the result would be `f(f(f(f(1, 2), 3), 4), 5)`.
+
+If `right = TRUE`, then the function is called in the opposite order: 
+`f(1, f(2, f(3, f(4, 5))))`. 
+
+```R
+for(i in seq(2, length(x)) {
+  out <- f(x[i], out)
+}
+```
+
+Reduce is useful for implementing many types of recursive operations:
+merges, finding smallest values, intersections, unions.
+
+### Logical predicates
 
 The first important family of higher-order functions manipulate vectors. They each take a function as their first argument, and a vector as their second argument. 
 
@@ -374,8 +463,20 @@ The first three functions take a logical predicate, a function that returns eith
 * `Find`: return the first element that matches the predicate (or the last
   element if `right = TRUE`).
 
+  ```R
+  for(i in seq_along(x)) {
+    if (f(x[[i]])) return(x[[i]])
+  }
+  ```
+
 * `Position`: return the position of the first element that matches the
   predicate (or the last element if `right = TRUE`).
+
+    ```R
+  for(i in seq_along(x)) {
+    if (f(x[[i]])) return(i)
+  }
+  ```
 
 The following example shows some simple uses:
 
@@ -396,51 +497,55 @@ The following example shows some simple uses:
     Position(is.prime, x, right = T)
     # 42
 
-The next two functions work with more general classes of functions:
 
-* `Reduce` recursively reduces a vector to a single value by first calling `f`
-  with the first two elements, then the result of `f` and the second element
-  and so on.
+### Matrix families
 
-  If `x = 1:5` then the result would be `f(f(f(f(1, 2), 3), 4), 5)`.
+```
+# apply
+for(i in seq_len(dims(x)[i])) {
+  x[i, ,] <- f(x[i, , ])
+}
+# sweep
+for(i in ) {
+  x[i , , ] <- f(x[i , , ], y[i])
+}
+# outer
+out <- matrix(nrow = length(x), ncol = length(y))
+for (i in seq_along(x)) {
+  for(j in seq_along(y)) {
+    out[i, j] <- f(x, y)
+  }
+}
+# tapply ?
+# replicate
+```
 
-  If `right = TRUE`, then the function is called in the opposite order: 
-  `f(1, f(2, f(3, f(4, 5))))`. 
 
-  You can also specify an `init` value in which case the result would be
-  `f(f(f(f(f(init, 1), 2),3), 4), 5)`
+### Other types of loops
 
-  Reduce is useful for implementing many types of recursive operations:
-  merges, finding smallest values, intersections, unions.
+That there are wide class of for loops that can not be simplified to a single existing function call in R.
 
+* modifying multiple elements in each cycle
 
-Apart from `Map`, the implementation of these five vector-processing HOFs is straightforward and I encourage you to read the source code to understand how they each work.
+* you don't know how long the answer will be. Examples: how long until you roll two sixes.  
+ 
+* `while(TRUE) {if (condition) break;}
 
-<!-- 
-  find_uses("package:base", "match.fun")
-  find_uses("package:stats", "match.fun")
-  find_args("package:base", "FUN")
-  find_args("package:stats", "FUN")
--->
+  ```R
+  i <- 0
+  while(TRUE) {
+    if (runif(1) > 0.9)
+    i <- i + 1
+  }
+  ```
 
-Other families of higher-order functions include:
+* you need to refer to multiple elements in the vector. e.g. `diff`, Fibonacci series, recursion.  Or you're doing a simulation where new values are based on the old.
 
-* The array manipulation functions modify arrays to compute various margins or
-  other summaries, or generalise matrix multiplication in various ways:
-  `apply`, `outer`, `kronecker`, `sweep`, `addmargins`.
+It's certainly possible to write functions that encapsulate these types of loops, but they are not built in to R.  Whether or not it's worth building your own function depends on how often you'll be using, and how much more expressive a better function name would be.
 
-<!-- `Negate` is a general example of the Compose pattern:
+### Exercises
 
-    Compose <- function(f, g) {
-      f <- match.fun(f)
-      g <- match.fun(g)
-      function(...) f(g(...))
-    }
-
-    Compose(sqrt, "+")(1, 8)
- -->
-
-### Mathematical higher order functions
+## Mathematical functionals
 
 <!-- 
   find_args("package:stats", "^f$")
@@ -478,9 +583,8 @@ In statistics, optimisation is often used for maximum likelihood estimation. Max
     optimise(nll1, c(0, 100))
     optimise(nll2, c(0, 100))
 
-### Exercises
 
-## Functions that input and output functions
+## Function operators
 
 A related use of function factories is to tweak the way that existing functions behase. Two built-in examples of this are functions `Negate` and `Vectorise`:
 
@@ -497,8 +601,16 @@ A related use of function factories is to tweak the way that existing functions 
   (Negate(is.null))(NULL)
   ```
 
-  This is most useful in conjunction with higher-order functions, as we'll see
-  in the next section.
+<!-- `Negate` is a general example of the Compose pattern:
+
+    Compose <- function(f, g) {
+      f <- match.fun(f)
+      g <- match.fun(g)
+      function(...) f(g(...))
+    }
+
+    Compose(sqrt, "+")(1, 8)
+ -->
 
 * `Vectorize` takes a non-vectorised function and vectorises with respect to
   the arguments given in the `vectorise.args` parameter. This doesn't
