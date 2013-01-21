@@ -4,19 +4,25 @@ At it's core, R is functional programming language which means it supports "firs
 
 * created anonymously,
 * assigned to variables and stored in data structures,
-* returned from functions (closures),
-* passed as arguments to other functions (higher-order functions)
+* returned from functions,
+* passed as arguments to other functions
 
-This chapter will explore these properties, and show how they can remove redundancy in your code. Each technique is relatively simple by itself, but combined they give a flexible toolkit.
+This chapter will explore these properties, and show how they can be used to remove redundancy and duplication in your code. Each technique is relatively simple by itself, but combined they provide a powerful set of techniques. They are especially useful when you want to solve a large class of problems with a small set of building blocks and tools to connect them together. 
 
-The chapter concludes with an exploration of numerical integration, showing how all of the properties of first-class functions can be used to solve a real problem.
+We'll start with a motivating example, showing how you can use functional programming techniques to reduce duplication in some typical code for cleaning data and summarising data. That will introduce us to four important topics: anonymous functions, closures, functions that take functions as input, and storing functions in a list.
+
+The final section in the chapter shows how we can apply this idea to numerical integration, building up a flexible family of composite integration tools starting from very simple primitives.
 
 ## Motivation
 
 Imagine you've loaded a data file that uses -99 to represent missing values.  
-When you first start writing R code, you might write code like the block below.
+When you first start writing R code, you might write code like this, dealing with duplication by using copy-and-paste.
 
 ```R
+set.seet(1014)
+df <- data.frame(replicate(6, sample(c(1:10, -99), 10, rep = T)))
+names(df) <- letters[1:6]
+
 # Fix missing values
 df$a[df$a == -99] <- NA
 df$b[df$b == -99] <- NA
@@ -26,15 +32,11 @@ df$e[df$e == -99] <- NA
 df$f[df$g == -99] <- NA
 ```
 
-But the problem with using copy-and-paste is that it's easy to make mistakes that are hard to spot (there are two in the block above).  
+One problem with using copy-and-paste is that it's easy to make mistakes (can you spot the two in the block above). The root cause is that one idea, that missing values are represent as -99, is duplicated many times. Duplication is bad because it allows for inconsistencies (i.e. bugs), and it mades the code harder to change: if the the representation of missing value changes from -99 to 9999, then we need to make the change in many places, not just one.
 
-The key problem with that code is that there is much duplication of an idea: that missing values are represented as -99.  Duplication is bad because it allows for inconsistencies (i.e. bugs). It also makes the code harder to change - if the the representation of missing value changes from -99 to 9999, then we need to make the change in many places.
+The pragmatic programmers, Dave Thomas and Andy Hunt, popularised the "do not repeat yourself", or DRY, principle. This principle states that "every piece of knowledge must have a single, unambiguous, authoritative representation within a system". Adhering to this principle prevents bugs due to inconsistencies, and makes software that is easier to adapt to changing requirements. The ideas of functional programming are important because they give us new tools to reduce duplication.
 
-The pragmatic programmers, Dave Thomas and Andy Hunt, popularised the "do not repeat yourself", or DRY, principle.  This principle states that "every piece of knowledge must have a single, unambiguous, authoritative representation within a system". Adhering to this principle avoids bugs due to inconsistencies, and makes software easy to adapt to changes in requirements.
-
-The ideas of functional programming are important because they give us new tools to reduce duplication.
-
-Firstly, we could create a function that fixes missing values in a single vector:
+We can start simply by creating a function that fixes missing values in a single vector:
 
 ```R
 fix_missing <- function(x) {
@@ -49,22 +51,69 @@ df$e <- fix_missing(df$e)
 df$f <- fix_missing(df$e)
 ```
 
-This reduces the scope for errors, but we've still made one. A big advantage of using the function is that we can then use functions that work with that functions to apply it to all columns in our data frame:
+This reduces the scope for errors, but we've still made one, because we've repeatedly applied our function to each column. A key idea of functional programming is __composition__: we want to combine our function for correcting missing values with a function that does something to each column in a data frame, like `lapply`.  
+
+`lapply` takes two inputs: a list and a function (since data frames are also lists, `lapply` also works on data frames). It applies the function to each element of the list and returns the resulting list. `lapply(x, f, ...)` is basically equivalent to the following for loop:
 
 ```R
+out <- vector("list", length(x))
+for (i in seq_along(x)) {
+  out[[i]] <- f(x[[i]], ...)
+}
+```
+
+The real `lapply()` is rather more complicated since it's implemented in C for efficiency, but the essence of the algorithm is the same. `lapply()` is known as a higher-order-function (HOF), as it's a function that takes a function as one of it's arguments. HOFs are an important part of functional programming and are discussed in more detail below.
+
+We can use `lapply()` in our problem with one small trick: rather than simply assigning the results to `df` we assign then to `df[]`, so R's usual subsetting rules take over and we get a data frame instead of a list.
+
+```R
+fix_missing <- function(x) {
+  x[x == -99] <- NA
+  x
+}
 df[] <- lapply(df, fix_missing)
 ```
 
-Or only just a few.
+As well as being more compact, there are two main advantages of this code over our previous code:
+
+* If the representation of missing values changes, we only need to change it in one place, and there is no way for some columns to be treated differently to others.
+
+* Our code works regardless of the number of columns in the data frame, and there is no way to miss a column because of a copy and paste error.
+
+Again, the key idea here is composition. We take two simple functions, one which does something to each column, and one which replaces -99 with NA, and combine them to replace -99 with NA in every column. One of ideas of functional programming is to write simple functions than can be understood in isolation and then compose them together to solve complex problems.
+
+What if different columns use different indicators for missing values?  You might be tempted to copy-and-paste:
 
 ```R
-numeric <- vapply(df, is.numeric, logical(1))
-df[numeric] <- lapply(df[numeric], fix_missing)
+fix_missing_99 <- function(x) {
+  x[x == -99] <- NA
+  x
+}
+fix_missing_999 <- function(x) {
+  x[x == -999] <- NA
+  x
+}
+fix_missing_9999 <- function(x) {
+  x[x == -999] <- NA
+  x
+}
 ```
 
-Using `lapply` is an example of functional programming: we've combined (or __composed__) two functions, one which encapsulates the idea of doing something to each column, and one which encapulsates the idea of replacing -99 with NA to replace -99 with NA in every column. If each function does solves one simple problem, then the ideas of functional programming allow us to join multiple simple functions together to solve complex problems.
+The next functional programming tool we'll talk about helps deal with this sort of duplication: where we have multiple functions that differ only by a parameter.  Closures, functions that return functions, allow us to make many functions from a template:
 
-Now consider a related problem: once we've cleaned up our data, we might want t run the same set of numerical summary functions on each variable.  We could write code like this:
+```R
+missing_fixer <- function(na_value) {
+  function(x) {
+    x[x == na_value] <- NA
+    x
+  }
+}
+fix_missing_99 <- missing_fixer(-99)
+fix_missing_999 <- missing_fixer(-999)
+fix_missing_9999 <- missing_fixer(-9999)
+```
+
+Let's now consider a new problem: once we've cleaned up our data, we might want to compute the same set of numerical summaries for each variable.  We could write code like this:
 
 ```R
 mean(df$a)
@@ -86,19 +135,18 @@ mad(df$c)
 IQR(df$c)
 ```
 
-But we'd be better off identifying the sources of duplication and then removing them.  What are they and how would you remove them?
+But we'd be better off identifying the sources of duplication and then removing them. Take a minute or two to think about how you might tackle this problem before reading on.
 
-You might come up with something like this:
+One approach would be to write a summary function and then apply it to each column:
 
 ```R
 summary <- function(x) { 
   c(mean(x), median(x), sd(x), mad(x), IQR(x))
 }
-
-vapply(df, summary, numeric(5))
+lapply(df, summary)
 ```
 
-Now what if our summary function looked like this:
+But there's still some duplication here. If we make the summary function slightly more realistic, it's easier to see the duplication:
 
 ```R
 summary <- function(x) { 
@@ -110,83 +158,115 @@ summary <- function(x) {
 }
 ```
 
-Can you see some duplication in this function? All five functions are called with the same arguments (`x` and `na.rm`) which we had to repeat five times.  Again, this duplication makes our code fragile: it's easy to introduce bugs and hard to modify the code to adapt to changing requirements.  In this chapter, you'll learn more techniques for reducing this sort of duplication, learning tools for working with functions.
+All five functions are called with the same arguments (`x` and `na.rm`) which we had to repeat five times. As before, this duplication makes our code fragile: it makes it easier to introduce bugs and harder to adapt to changing requirements. 
+
+We can take advantage of the final functional programming technique, storing functions in lists, to remove this duplication:
+
+```R
+funs <- c(mean, median, sd, mad, iqr)
+summary <- function(x) {
+  lapply(funs, function(f) f(x))
+}
+```
+
+The remainder of this chapter will discuss each technique in more detail.  But before we can start on those more complicated techniques, we need to start by revising a simple functional programming tool, anonymous functions.
 
 ## Anonymous functions
 
-In R, functions are objects in their own right. Unlike many other programming languages, functions aren't automatically bound to a name: they can exist independently. You might have noticed this already, because when you create a function, you use the usual assignment operator to give it a name. 
+In R, functions are objects in their own right. They aren't automatically bound to a name, unlike many other programming languages. You might have noticed this already, because when you create a function, you use the usual assignment operator to give it a name. It's possible to find the function given it's name using `match.fun()`. You can't do the opposite: not all functions have a name, and some functions have more than one name. Functions that don't have a name are called __anonymous functions__. 
 
-Given the name of a function as a string, you can find that function using `match.fun`. The inverse is not possible: because not all functions have a name, or functions may have more than one name. Functions that don't have a name are called __anonymous functions__. 
+We use anonymous functions when it's not worth the effort of creating a named function:
 
-You can call anonymous functions, but the code is a little tricky to read because you must use parentheses in two different ways: to call a function, and to make it clear that we want to call the anonymous function `function(x) 3` not inside our anonymous function call a function called `3` (not a valid function name):
+```R
+lapply(mtcars, function(x) length(unique(x)))
+Filter(function(x) !is.numeric(x), mtcars)
+integrate(function(x) sin(x) ^ 2, 0, pi)
+```
 
-    (function(x) 3)()
-    # [1] 3
-    
-    # Exactly the same as
-    f <- function(x) 3
-    f()
-    
-    function(x) 3()
-    # function(x) 3()
+Unfortunately the default R syntax for anonymous functions is quite verbose.  To make things a little more concise, `pryr` provides `f()`:
 
-The syntax extends in a straightforward way if the function has parameters
+```R
+lapply(mtcars, f(length(unique(x))))
+Filter(f(!is.numeric(x)), mtcars)
+integrate(f(sin(x) ^ 2), 0, pi)
+```
 
-    (function(x) x)(3)
-    # [1] 3
-    (function(x) x)(x = 4)
-    # [1] 4
+I'm not still sure whether I like this style or not, but it sure is compact!
 
-Like all functions in R, anoynmous functions have `formals`, `body`, `environment` and a `srcref`
+Like all functions in R, anoynmous functions have `formals()`, a `body()`, and a parent `environment()`:
   
-    formals(function(x = 4) g(x) + h(x))
-    # $x
-    # [1] 4
+```R
+formals(function(x = 4) g(x) + h(x))
+body(function(x = 4) g(x) + h(x))
+environment(function(x = 4) g(x) + h(x))
+```
 
-    body(function(x = 4) g(x) + h(x))
-    # g(x) + h(x)
-    
-    environment(function(x = 4) g(x) + h(x))
-    # <environment: R_GlobalEnv>
+You can call anonymous functions without giving them a name, but the code is a little tricky to read because you must use parentheses in two different ways: to call a function, and to make it clear that we want to call the anonymous function `function(x) 3` not inside our anonymous function call a function called `3` (not a valid function name):
 
-    attr(function(x = 4) g(x) + h(x), "srcref")
-    # function(x = 4) g(x) + h(x)
+```R
+(function(x) 3)()
 
-## Closures
+# Exactly the same as
+f <- function(x) 3
+f()
+
+function(x) 3()
+```
+
+The syntax extends in a straightforward way if the function has parameters:
+
+```R
+(function(x) x)(3)
+(function(x) x)(x = 4)
+```
+
+One of the most common uses for anonymous functions is to create closures, functions made by other functions. Closures are the topic of the next section.
+
+### Exercises
+
+* 
+
+### Introduction to closures
 
 "An object is data with functions. A closure is a function with data." 
 --- [John D Cook](http://twitter.com/JohnDCook/status/29670670701)
 
-Anonymous functions are most useful in conjunction with closures, a function written by another function. Closures are so called because they __enclose__ the environment of the parent function, and can access all variables and parameters in that function. This is useful because it allows us to have two levels of parameters. One level of parameters (the parent) controls how the function works. The other level (the child) does the work. The following example shows how we can use this idea to generate a family of power functions. The parent function (`power`) creates child functions (`square` and `cube`) that actually do the hard work.
+Anonymous functions are most useful in conjunction with closures, a function written by another function. Closures are so called because they __enclose__ the environment of the parent function, and can access all variables and parameters in that function. This is useful because it allows us to have two levels of parameters. One level of parameters (the parent) controls how the function works. The other level (the child) does the work. The following example shows how can use this idea to generate a family of power functions. The parent function (`power()`) creates child functions (`square()` and `cube()`) that do the work.
 
-    power <- function(exponent) {
-      function(x) x ^ exponent
-    }
+```R
+power <- function(exponent) {
+  function(x) x ^ exponent
+}
 
-    square <- power(2)
-    square(2) # -> [1] 4
-    square(4) # -> [1] 16
+square <- power(2)
+square(2) # -> [1] 4
+square(4) # -> [1] 16
 
-    cube <- power(3)
-    cube(2) # -> [1] 8
-    cube(4) # -> [1] 64
+cube <- power(3)
+cube(2) # -> [1] 8
+cube(4) # -> [1] 64
+```
 
-An interesting property of functions in R is that basically every function in R is a closure, because all functions remember the environment in which they are created, typically either the global environment, if it's a function that you've written, or a package environment, if it's a function that someone else has written. 
+In R, almost every function in R is a closure, because all functions remember the environment in which they are created, typically either the global environment, if it's a function that you've written, or a package environment, if it's a function that someone else has written. The only exception are primitive functions, which call directly in to C.
 
-Note that when you look at the source of a closure, you don't see anything terribly useful:
+When you print a closure, you don't see anything terribly useful:
 
 ```R
 square
 cube
 ```
 
-That's because the function itself doesn't change - but the environment in which it looks up variables does change.  The pryr package provides the `unenclose` function to make it a bit easier to see what's going on:
+That's because the function itself doesn't change; it's the enclosing environment that's different. The pryr package provides `unenclose()`, which substitutes the variables defined in the enclosing environment into the original functon. This makes it easier to see what's going on:
 
 ```R
 library(pryr)
 unenclose(square)
 unenclose(cube)
 ```
+
+Closures are useful for making function factories, and are one way to manage mutable state in R. 
+
+### Function factories
 
 Going back to our initial example, imagine the missing values were inconsistently recorded: in some columns they were -99, in others they were `9999` and in others they were `"."`. We could use a closure to create a remove missing function for each case.
 
@@ -200,53 +280,15 @@ remove_9999 <- missing_remover(-9999)
 remove_dot <- missing_remover(".")
 ```
 
-### Built-in functions
-
-There are two useful built-in functions that return closures:
-
-* `Negate` takes a function that returns a logical vector, and returns the
-  negation of that function. This can be a useful shortcut when the function
-  you have returns the opposite of what you need.
-
-        Negate <- function(f) {
-          f <- match.fun(f)
-          function(...) !f(...)
-        }
-      
-        (Negate(is.null))(NULL)
-
-  This is most useful in conjunction with higher-order functions, as we'll see
-  in the next section.
-
-* `Vectorize` takes a non-vectorised function and vectorises with respect to
-  the arguments given in the `vectorise.args` parameter. This doesn't
-  give you any magical performance improvements, but it is useful if you want
-  a quick and dirty way of making a vectorised function.
-
-  An mildly useful extension of `sample` would be to vectorize it with respect
-  to size: this would allow you to generate multiple samples in one call.
-
-        sample2 <- Vectorize(sample, "size", SIMPLIFY = FALSE)
-        sample2(1:10, rep(5, 4))
-        sample2(1:10, 2:5)
-
-  In this example we have used `SIMPLIFY = FALSE` to ensure that our newly
-  vectorised function always returns a list. This is usually a good idea.
-
-  `Vectorize` does not work with primitive functions.
-
-* `ecdf`
-
 ### Mutable state
 
-The ability to manage variables at two levels makes it possible to maintain the state across function invocations by allowing a function to modify variables in the environment of its parent. Key to managing variables at different levels is the double arrow assignment operator (`<<-`). Unlike the usual single arrow assignment (`<-`) that always assigns in the current environment, the double arrow operator will keep looking up the chain of parent environments until it finds a matching name. 
+Having variables at two levels makes it possible to maintain state across function invocations by allowing a function to modify variables in the environment of its parent. Key to managing variables at different levels is the double arrow assignment operator (`<<-`). Unlike the usual single arrow assignment (`<-`) that always assigns in the current environment, the double arrow operator will keep looking up the chain of parent environments until it finds a matching name. ([[Environments]] has more details on how it works)
 
 This makes it possible to maintain a counter that records how many times a function has been called, as shown in the following example. Each time `new_counter` is run, it creates an environment, initialises the counter `i` in this environment, and then creates a new function.
 
     new_counter <- function() {
       i <- 0
       function() {
-        # do something useful, then ...
         i <<- i + 1
         i
       }
@@ -261,8 +303,17 @@ The new function is a closure, and its environment is the enclosing environment.
     counter_one() # -> [1] 2
     counter_two() # -> [1] 1
 
-This is an important technique because it is one way to generate "mutable state" in R. [[R5]] expands on this idea in considerably more detail.
+This is an important technique because it is one way to generate "mutable state" in R. [[R5]] expands on this idea in considerably more detail. If you want to modify objects within a function, you're probably better off using R5 objects, rather than using this technique.  It's easier to document and you get a bit more of a safety net.
 
+### Exercises
+
+* Create a function that takes an index, `i`, as an argument and returns a function an argument `x` that subsets `x` with `i`.
+  
+  ```R
+  lapply(mtcars, pick(5))
+  ```
+
+* What does the `ecdf()` function return?
 
 ## Functions that take functions as arguments
 
@@ -427,6 +478,80 @@ In statistics, optimisation is often used for maximum likelihood estimation. Max
     optimise(nll1, c(0, 100))
     optimise(nll2, c(0, 100))
 
+### Exercises
+
+## Functions that input and output functions
+
+A related use of function factories is to tweak the way that existing functions behase. Two built-in examples of this are functions `Negate` and `Vectorise`:
+
+* `Negate` takes a function that returns a logical vector, and returns the
+  negation of that function. This can be a useful shortcut when the function
+  you have returns the opposite of what you need.
+
+  ```R
+  Negate <- function(f) {
+    f <- match.fun(f)
+    function(...) !f(...)
+  }
+
+  (Negate(is.null))(NULL)
+  ```
+
+  This is most useful in conjunction with higher-order functions, as we'll see
+  in the next section.
+
+* `Vectorize` takes a non-vectorised function and vectorises with respect to
+  the arguments given in the `vectorise.args` parameter. This doesn't
+  give you any magical performance improvements, but it is useful if you want
+  a quick and dirty way of making a vectorised function.
+
+  An mildly useful extension of `sample` would be to vectorize it with respect
+  to size: this would allow you to generate multiple samples in one call.
+
+  ```R
+  sample2 <- Vectorize(sample, "size", SIMPLIFY = FALSE)
+  sample2(1:10, rep(5, 4))
+  sample2(1:10, 2:5)
+  ```
+
+  In this example we have used `SIMPLIFY = FALSE` to ensure that our newly
+  vectorised function always returns a list. This is usually a good idea.
+
+  `Vectorize` does not work with primitive functions.
+
+
+### Exercises
+
+* What does the following function do? What would be a good name for it?
+
+  ```R
+  g <- function(f1, f2) {
+    function(...) f1(...) || f2(...)
+  } 
+  Filter(g(is.character, is.factor), mtcars)
+  ```
+
+  Can you extend the function to take any number of functions as input? You'll probably need a loop.
+
+* Write a function `and` that takes two function as input and returns a single function as an output that ands together the results of the two functions. Write a function `or` that combines the results with `or`.  Add a `not` function and you now have a complete set of boolean operators for predicate functions.
+
+* Create a function called `timer` that takes a function as input and returns as function as output. The new function should perform exactly the same as the old function, except that it should also print out how long it took to run.
+
+* What does the following function do? What would be a good name for it?
+
+  ```R
+  f <- function(g) {
+    stopifnot(is.function(g))
+    result <- NULL
+    function(...) {
+      if (is.null(result)) {
+        result <- g(...)
+      }
+      result
+    }
+  }
+  ```
+
 ## Lists of functions
 
 In R, functions can be stored in lists. Together with closures and higher-order functions, this gives us a set of powerful tools for reducing duplication in code.
@@ -575,6 +700,10 @@ A simpler solution in this case is to use `Map`, as described in the last chapte
     lapply(funs3, call_fun, c(1:100, (1:50) * 100))
 
 It's usually better to use `lapply` because it is more familiar to most R programmers, and it is somewhat simpler and so is slightly faster.
+
+### Exercises
+
+* Write a compose function that takes a list of function and creates a new function that calls them in order from left to right. 
 
 ## Case study: numerical integration
 
