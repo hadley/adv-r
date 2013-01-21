@@ -1,5 +1,7 @@
 # Advanced R development
-(Making reproducible code)
+
+## R Programming
+Making reusable code
 
 [[Introduction]]
 
