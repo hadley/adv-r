@@ -167,7 +167,7 @@ You might be surprised that it returns the same value, `1`, every time. This is 
 
 ### Dynamic lookup
 
-Lexical scoping determines where to look for values, not when to look for them. R looks looks for values when the function is run, not when it's created. This means results from a function can be different depending on objects outside its environment:
+Lexical scoping determines where to look for values, not when to look for them. R looks for values when the function is run, not when it's created. This means results from a function can be different depending on objects outside its environment:
 
     f <- function() x
     x <- 15
