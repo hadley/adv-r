@@ -625,6 +625,8 @@ x
 
 * Create a version of `assign()` that will only bind new names, never re-bind old names.  Some programming languages only do this, and are known as [single assignment](http://en.wikipedia.org/wiki/Assignment_(computer_science)#Single_assignment) languages.
 
+* Write an alternative to `<-` that never overrides an existing binding.  This would be useful if you running a test script multiple times and only want to generate the test data once.
+
 * Implement `str` for environments, listing all bindings in the environment, and briefly describing their contents (you might want to use `str` recursively). Use `bindingIsActive()` to determine if a binding is active. Indicate if bindings are locked (see `bindingIsLocked()`). Show the expressions (not the results) for delayed bindings (see the help for `delayedAssign` for hints).  Show the amount of memory the environment occupies using `object.size()`
 
 * Write an assignment function that can do active, delayed and locked bindings. What might you call it? What arguments should it take? Can you guess which sort of assignment it should do based on the expression?
