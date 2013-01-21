@@ -8,6 +8,7 @@ In this chapter you will learn:
 
 * The three main components of a function.
 * How scoping works, the process that looks up values from names.
+* That everything in R is a function call, even if it doesn't look like it
 * The three ways of supplying arguments to a function, and the impact of lazy evaluation.
 * The two types of special functions: infix and replacement functions.
 
@@ -204,8 +205,6 @@ You can use this same idea to do other things that are extremely ill-advised. Fo
 
 This will introduce a particularly pernicious bug: 10% of the time, 1 will be added to any numeric operation carried out inside parentheses. This is yet another good reason to regularly restart with a clean R session!
 
-Most of the time changing the behaviour of base functions is a really bad idea, but it can occassionally allow you to do something that would have otherwise been impossible. For example, this feature makes it possible for the `dplyr` package to translate R expressions into SQL expressions.
-
 ### Exercises
 
 * What does the following code return? Why? What does each of the three `c`'s mean?
@@ -228,6 +227,46 @@ Most of the time changing the behaviour of base functions is a really bad idea, 
       }
       f(10)
 
+## Everything is a function call
+
+The previous example of redefining `(` works because every operation in R is a function call, even operations with special syntax are just a disguise for ordinary function calls. This includes infix operators like `+`, control flow operators like `for`, `if`, and `while`, subsetting operators like `[]` and `$` and even the curly braces `{`. This means that each of these pairs of statements are exactly equivalent (note that `\`` let you refer to functions or variables that have reserved or illegal names):
+
+```R
+x + y
+`+`(x, y)
+
+for (i in 1:10) print(i)
+`for`(i, 1:10, print(i))
+
+if (i == 1) print("yes!") else print("no.")
+`if`(i==1, print("yes"), print("no."))
+
+x[3]
+`[`(x, 3)
+
+{ print(1); print(2); print(3) }
+`{`(print(1), print(2), print(3))
+```
+
+It is possible to override the definitions of these special functions, but almost certainly a bad idea. However, it can occassionally allow you to do something that would have otherwise been impossible. For example, this feature makes it possible for the `dplyr` package to translate R expressions into SQL expressions.
+
+It's more often useful to treat special functions as ordinary functions. For example, we could use `lapply` to add 3 to every element of a list by first defining a function `add`, like this:
+
+```R
+add <- function(x, y) x + y
+lapply(1:10, add, 3)
+```
+
+But we can get the same effect using the built in `+` function.
+
+```R
+lapply(1:10, `+`, 3)
+lapply(1:10, "+", 3)
+```
+
+Note the difference between `\`+\`` and `"+"`.  The first one is the value of the object called `+`, and the second is a string containing the character `+`.  The second version works because `lapply` can be given the name of a function instead of the function itself.
+
+That everything in R is represented as a function call will be more important to know for [[computing on the language]].
 
 ## Function arguments
 
@@ -593,33 +632,3 @@ And this is what makes it possible to assign one value to multiple variables:
 ### Exercises
 
 * 
-
-## Everything is a function call
-
-Even operations for which R provides special syntax are just a disguise for ordinary function calls. This includes infix operators like `+`, control flow like `for`, `if`, and `while`, subsetting operators like `[]` and `$` and even the curly braces `{`. This means that each of these pairs of statements are exactly equivalent (note that `` `backticks` `` let you refer to functions or variables that have reserved or illegal names):
-
-    x + y
-    `+`(x, y)
-
-    for (i in 1:10) print(i)
-    `for`(i, 1:10, print(i))
-
-    if (i == 1) print("yes!") else print("no.")
-    `if`(i==1, print("yes"), print("no."))
-
-    x[3]
-    `[`(x, 3)
-
-    { print(1); print(2); print(3) }
-    `{`(print(1), print(2), print(3))
-
-It is possible to override the definitions of these special functions, but almost certainly a bad idea. However, it occasionally comes in handy to treat special functions as ordinary functions. For example, we could use `lapply` to add 3 to every element of a list by first defining a function `add`, like this:
-
-    add <- function(x, y) x + y
-    lapply(1:10, add, 3)
-
-But we can get the same effect using the built in `+` function.
-
-    lapply(1:10, `+`, 3)
-
-That everything in R is represented as a function call will be more important to know for [[computing on the language]].
