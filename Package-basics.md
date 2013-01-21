@@ -28,13 +28,13 @@ If you don't want to create this by hand, you can use `devtools::create` which i
 
 Almost all R packages also have:
 
-* the `man/` directory where your [[function documentation|docs-function]]. In
+* the `man/` directory where your [[function documentation|documenting-functions]]. In
   the style of package development described in this book, you'll never
   personally touch the files in this directory. Instead, they will be
   automatically generated from comments in your source code using the
   `roxygen2` package
 
-After the code and function documentation, the most important optional components of an R package help your users learn how to use your package. The following files and directories are described in more detail in [[package documentation|docs-package]].
+After the code and function documentation, the most important optional components of an R package help your users learn how to use your package. The following files and directories are described in more detail in [[documenting packages]].
 
 * the `NEWS` file describes the changes in each version of the package. Using
   the standard R format will allow you to take advantage of many automated

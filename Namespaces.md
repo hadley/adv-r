@@ -72,7 +72,7 @@ There are two places you need to record your package's dependency:
 
 * In the `NAMESPACE` file, to make all the functions in the dependency
   available to your code. The easiest way to do this is to add `@import
-  package-name` to your [package documentation](docs-package):
+  package-name` to your [package documentation](documenting-packages):
 
         #' @docType package
         #' ...
