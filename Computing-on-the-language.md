@@ -162,6 +162,16 @@ It is basically an empty symbol, but you can't create it directly:
     
 You can either capture it from a missing argument of the formals of a function, as above, or create with `substitute()` or `bquote()`.
 
+## Capturing calls
+
+### `...`
+
+```R
+substitute(list(...))
+match.call(expand.dots= FALSE)$`...`
+```
+
+
 ## Modifying calls
 
 It's generally a bad idea to create code by operating on its string representation: there is no guarantee that you'll create valid code.  Don't get me wrong: pasting strings together will often allow you to solve your problem in the least amount of time, but it may create subtle bugs that will take your users hours to track down. Learning more about the structure of the R language and the tools that allow you to modify it is an investment that will pay off by allowing you to make more robust code.
