@@ -229,7 +229,7 @@ This will introduce a particularly pernicious bug: 10% of the time, 1 will be ad
 
 ## Everything is a function call
 
-The previous example of redefining `(` works because every operation in R is a function call, even operations with special syntax are just a disguise for ordinary function calls. This includes infix operators like `+`, control flow operators like `for`, `if`, and `while`, subsetting operators like `[]` and `$` and even the curly braces `{`. This means that each of these pairs of statements are exactly equivalent (note that `\`` let you refer to functions or variables that have reserved or illegal names):
+The previous example of redefining `(` works because every operation in R is a function call, even operations with special syntax are just a disguise for ordinary function calls. This includes infix operators like `+`, control flow operators like `for`, `if`, and `while`, subsetting operators like `[]` and `$` and even the curly braces `{`. This means that each of these pairs of statements are exactly equivalent.  Note that `` ` ``, the backtick, lets you refer to functions or variables that have reserved or illegal names:
 
 ```R
 x + y
@@ -264,7 +264,7 @@ lapply(1:10, `+`, 3)
 lapply(1:10, "+", 3)
 ```
 
-Note the difference between `\`+\`` and `"+"`.  The first one is the value of the object called `+`, and the second is a string containing the character `+`.  The second version works because `lapply` can be given the name of a function instead of the function itself.
+Note the difference between `` `+` `` and `"+"`.  The first one is the value of the object called `+`, and the second is a string containing the character `+`.  The second version works because `lapply` can be given the name of a function instead of the function itself.
 
 That everything in R is represented as a function call will be more important to know for [[computing on the language]].
 
