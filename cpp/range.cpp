@@ -71,6 +71,28 @@ NumericVector range3a(const NumericVector& x, const bool na_rm) {
   return out;
 }
 
+// If this was a pure c++ function, it might look like this
+struct MyRange {
+  double min;
+  double max;
+  MyRange() : min(R_PosInf), max(R_NegInf) {}
+};
+
+MyRange range(NumericVector x) {
+  MyRange out;
+  
+  int n = x.length();
+  for(int i = 0; i < n; ++i) {
+    if (R_IsNA(x[i])) continue;
+
+    if (x[i] < out.min) out.min = x[i];
+    if (x[i] > out.max) out.max = x[i];
+  }
+
+  return out;   
+}
+
+
 /*** R
 
 library(microbenchmark)
