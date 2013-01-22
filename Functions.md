@@ -602,6 +602,24 @@ modify(x, 1) <- 10
 x
 ```
 
+When you call `modify(x, 1) <- 10`, behind the scenes R turns it into:
+
+```R
+x <- `modify<-`(x, 1, 10)
+```
+
+This means you can't do things like:
+
+```R
+modify(get("x"), 1) <- 10`
+```
+
+because that gets turned into the invalid code:
+
+```R
+get("x") <- `modify<-`(get("x"), 1, 10)
+```
+
 It's often useful to combine replacement and subsetting, and this works out of the box:
 
 ```R
