@@ -250,10 +250,100 @@ and it allows us to create the `print.SequenceData` method based on an
 __abstract__ type `SequenceData`.  However, the method works as expected
 when it passed a __concrete__ type, in this case a `FibonacciData` object.
 
-## Advanced S3 
-
 ## S4
 
-## Closures
+    setClass("Sequence")
+    setGeneric("value", function(x)
+      standardGeneric("value"))
+    setGeneric("nextNum", function(x, n)
+      standardGeneric("nextNum"))
+
+    setMethod("nextNum", signature(x="Sequence", n="missing"),
+      function(x) {
+        stop("You cannot call the nextNum method on an abstract class")
+      })
+
+    setMethod("nextNum", signature(x="Sequence"),
+      function(x, n) {
+        for (i in 1:n) {
+          x <- nextNum(x)
+        }
+        x
+      })
+
+    setMethod("value", signature(x="Sequence"),
+      function(x) {
+        stop("You cannot call the value method on an abtract class")
+      })
+      
+    setClass("Fibonacci", representation(lastTwo="numeric"),
+      contains="Sequence")
+
+    Fibonacci <- function() {
+      new("Fibonacci", lastTwo=vector(mode="numeric"))
+    }
+
+## Closures as S3 objects
+
+    FibonacciGenerator <- function() {
+      lastTwo <- c()
+      function() {
+        lastTwo <<- c(tail(lastTwo, 1)),
+          ifelse(!length(lastTwo), 1, sum(lastTwo))
+        tail(lastTwo, 1)
+      }
+    }
+
+    Sequence <- function() {
+
+      nextNum <- function() {
+        stop("You cannot call the nextNum method on an abstract class")
+      }
+      value <- function() {
+        stop("You cannot call the value method on an abstract class")
+      }
+      object <- list(nextNum=nextNum, value=value)
+      class(object) <- "Sequence"
+      object
+    }
+
+    Fibonacci <- function() {
+      lastTwo <- c()
+      nextNum <- function() {
+        lastTwo <<- c(tail(lastTwo, 1))
+          ifelse(!length(lastTwo), 1, sum(lastTwo))
+        tail(lastTwo, 1)
+      }
+      value <- function() {
+        ifelse(!length(lastTwo), 0, tail(lastTwo, 1))
+      }
+      object <- list(nextNum=nextNum, value=value)
+      class(object) <- c("Fibonacci", "Sequence")
+      object
+    }
 
 ## R5
+
+    Sequence <- setRefClass("Sequence",
+      methods=list(
+        nextNum=function(n) {
+          stop("You cannot call the nextNum method on an abstract class")
+        },
+        value=function() {
+          stop("You cannot call the value method on an abstract class")
+        }
+    )
+
+    Fibonacci <- setRefClas("Fibonacci", contains="Sequence",
+      fields=list(lastTwo="numeric",
+      methods=list(
+        nextNum=function(n=1) {
+          lastTwo <<- c(tail(lastTwo, 1))
+            ifelse(!length(lastTwo), 1, sum(lastTwo))
+          tail(lastTwo, 1)
+        },
+        value=function() {
+          ifelse(!length(lastTwo), 0, tail(lastTwo, 1))
+        }
+      )
+    )
