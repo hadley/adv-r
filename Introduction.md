@@ -42,6 +42,10 @@ Other recommendations for becoming a better programmer:
 
 One of the most helpful attitudes is a scientific mindset: if you don't understand how something works in R, develop a hypothesis and then test it with a small experiment. The mental exercise of developing these experiments is very helpful.
 
+## Themes
+
+* Interactive data analysis vs. programming.  At the heart of R is a tension between interactive data analysis and programming. If you recognise and understand this tension, you'll understand why some functions drive you crazy when you're programming. For interactive use, you want functions that require as little typing as possible, and sometimes use a little magic to simplify your life. It's not a problem if they fail silently because you'll notice immediately.  For programming, you want to trade your time now for users time in the future. You're willing to spend a little more time to be explicit and verbose and spell out exactly what you want if it's going to save time in the future or produce more informative error messages.s
+
 ## What you will get out of this book
 
 This book describes the skills that I think you need to be an advanced R developer, producing reproducible code that can be used in a wide variety of circumstances.
