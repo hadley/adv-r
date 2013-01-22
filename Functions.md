@@ -24,19 +24,23 @@ There are three main components of a function:
 
 When you print a function in R, it shows you these three important components. If the environment isn't displayed, it means that the function was created in the global environment. 
 
-    f <- function(x) x
-    f
-    
-    formals(f)
-    body(f)
-    environment(f)
+```R
+f <- function(x) x
+f
+
+formals(f)
+body(f)
+environment(f)
+```
 
 There is an exeception to this rule: primitive functions, like `sum`:
 
-    sum
-    formals(sum)
-    body(sum)
-    environment(sum)
+```R
+sum
+formals(sum)
+body(sum)
+environment(sum)
+```
 
 These are functions that call C code directly with `.Primitive()`. Primitive functions contain no R code and exist almost entirely in C, so their `formals()`, `body()` and `environment()` are all `NULL`. They are only found in the `base` package, and since they operate at a lower-level than most functions, they can be more efficient (primitive replacement functions don't have to make copies), and can have different rules for argument matching (e.g. `switch` and `call`). 
 
@@ -54,9 +58,11 @@ There are two other components that are possessed by some functions: the source 
 
 Scoping is the set of rules that govern how R looks up the value of a symbol, or name. That is, scoping is the set of rules that R applies to go from the symbol `x`, to its value `10` in the following example.
 
-    x <- 10
-    x
-    # [1] 10
+```R
+x <- 10
+x
+# [1] 10
+```
 
 Understanding scoping allows you to:
 
@@ -82,49 +88,57 @@ You probably know some of these principles already - test your knowledge by ment
 
 The following example illustrates the simplest principle, and you should have no problem predicting the output.
 
-    f <- function() { 
-      x <- 1
-      y <- 2
-      c(x, y)
-    }
-    f()
-    rm(f)
+```R
+f <- function() { 
+  x <- 1
+  y <- 2
+  c(x, y)
+}
+f()
+rm(f)
+```
 
 If a name isn't defined inside a function, it will look one level up.
 
-    x <- 2
-    g <- function() { 
-      y <- 1
-      c(x, y)
-    }
-    g()
-    rm(x, g)
+```R
+x <- 2
+g <- function() { 
+  y <- 1
+  c(x, y)
+}
+g()
+rm(x, g)
+```
 
 The same rules apply if a function is defined inside another function.  First it looks inside the current function, then where that function was defined, and so on, all the way until the global environment. Run the following code in your head, then confirm the output by running the R code.
 
-    x <- 1
-    h <- function() { 
-      y <- 2
-      i <- function() {
-        z <- 3
-        c(x, y, z)
-      }
-      i()
-    }
-    h()
-    rm(x, h)
+```R
+x <- 1
+h <- function() { 
+  y <- 2
+  i <- function() {
+    z <- 3
+    c(x, y, z)
+  }
+  i()
+}
+h()
+rm(x, h)
+```
 
 The same rules apply to closures, functions that return functions. The following function, `j()`, returns a function.  What do you think this function will return when we call it?
 
-    j <- function(x) {
-      y <- 2
-      function() {
-        c(x, y)
-      }
-    }
-    k <- j(1)
-    k()
-    rm(j, k)
+```R
+j <- function(x) {
+  y <- 2
+  function() {
+    c(x, y)
+  }
+}
+k <- j(1)
+k()
+rm(j, k)
+```
 
 This seems a little magical (how does R know what the value of `y` is after the function has been called), but it works because `k` keeps around the environment in which it was defined, which includes the value of `x`.  [[Environments]] gives some pointers on how you can dive in and figure out what some of the values are.
 
@@ -132,21 +146,25 @@ This seems a little magical (how does R know what the value of `y` is after the 
 
 The same principles apply regardless of type of the associated value - finding functions works exactly the same way as finding variables:
 
-    l <- function(x) x + 1
-    m <- function() {
-      l <- function(x) x * 2
-      l(10)
-    }
-    rm(l, m)
+```R
+l <- function(x) x + 1
+m <- function() {
+  l <- function(x) x * 2
+  l(10)
+}
+rm(l, m)
+```
 
 There is one small tweak to the rule for functions. If you are using a name in a context where it's obvious that you want a function (e.g. `f(3)`), R will keep searching up the parent environments until it finds a function.  This means that in the following example `n` takes on a different value depending on whether R is looking for a function or a variable.
 
-    n <- function(x) x / 2
-    o <- function() {
-      n <- 10
-      n(n)
-    }
-    rm(n, o)
+```R
+n <- function(x) x / 2
+o <- function() {
+  n <- 10
+  n(n)
+}
+rm(n, o)
+```
 
 However, this can make for confusing code, and is generally best avoided.
 
@@ -154,14 +172,16 @@ However, this can make for confusing code, and is generally best avoided.
 
 What happens to the values in between invocations of a function? What will happen the first time you run this function? What will happen the second time? (If you haven't seen `exists` before it returns `TRUE` if there's a variable of that name, otherwise it returns `FALSE`)
 
-    j <- function() {
-      if (!exists("a")) {  
-        a <- 1
-      } else {
-        a <- a + 1
-      }
-      print(a)
-    }
+```R
+j <- function() {
+  if (!exists("a")) {  
+    a <- 1
+  } else {
+    a <- a + 1
+  }
+  print(a)
+}
+```
 
 You might be surprised that it returns the same value, `1`, every time. This is because every time a function is called, a new environment is created to host execution. A function has no way to tell what happened the last time it was run; each invocation is completely independent.
 
@@ -169,39 +189,46 @@ You might be surprised that it returns the same value, `1`, every time. This is 
 
 Lexical scoping determines where to look for values, not when to look for them. R looks for values when the function is run, not when it's created. This means results from a function can be different depending on objects outside its environment:
 
-    f <- function() x
-    x <- 15
-    f()
+```R
+f <- function() x
+x <- 15
+f()
 
-    x <- 20
-    f()
+x <- 20
+f()
+```
 
 You generally want to avoid this behavour because it means the function is no longer self-contained. This is a common error - if you make a spelling mistake in your code, you won't get an error when you create the function, and you might not even get one when you run the function, depending on what variables are defined in the global environment. 
 
 One way to detect this problem is the `findGlobals()` function from `codetools`. This function list all the external dependencies of a function:
 
-    f <- function() x + 1
-
-    codetools::findGlobals(f)
+```R
+f <- function() x + 1
+codetools::findGlobals(f)
+```
 
 Another way to try and solve the problem would be to manually change the environment of the function to the `emptyenv()`, an environment which contains absolutely nothing:
 
-    environment(f) <- emptyenv()
-    f()
+```R
+environment(f) <- emptyenv()
+f()
+```
 
 This doesn't work because R relies on lexical scoping to find _everything_, even the `+` operator.  
 
 You can use this same idea to do other things that are extremely ill-advised. For example, since all of the standard operators in R are functions, you can override them with your own alternatives.  If you ever are feeling particularly evil, run the following code while your friend is away from their computer:
 
-    "(" <- function(e1) {
-      if (is.numeric(e1) && runif(1) < 0.1) {
-        e1 + 1
-      } else {
-        e1
-      }
-    }
-    replicate(100, (1 + 2))
-    rm("(")
+```R
+"(" <- function(e1) {
+  if (is.numeric(e1) && runif(1) < 0.1) {
+    e1 + 1
+  } else {
+    e1
+  }
+}
+replicate(100, (1 + 2))
+rm("(")
+```
 
 This will introduce a particularly pernicious bug: 10% of the time, 1 will be added to any numeric operation carried out inside parentheses. This is yet another good reason to regularly restart with a clean R session!
 
@@ -209,23 +236,27 @@ This will introduce a particularly pernicious bug: 10% of the time, 1 will be ad
 
 * What does the following code return? Why? What does each of the three `c`'s mean?
 
-        c <- 10
-        c(c = c)
+  ```R
+  c <- 10
+  c(c = c)
+  ```
 
 * (From the R inferno 8.2.36): If `weirdFun()()()` is a valid command, what does `weirdFun()` return? Write an example.
 
 * What does the following function return? Make a prediction before running the code yourself.
 
+  ```R
+  f <- function(x) {
+    f <- function(x) {
       f <- function(x) {
-        f <- function(x) {
-          f <- function(x) {
-            x ^ 2
-          }
-          f(x) + 1
-        }
-        f(x) * 2
+        x ^ 2
       }
-      f(10)
+      f(x) + 1
+    }
+    f(x) * 2
+  }
+  f(10)
+  ```
 
 ## Everything is a function call
 
@@ -276,100 +307,118 @@ It's useful to distinguish between the formal arguments and the actual arguments
 
 When calling a function you can specify arguments by position, by complete name, or by partial name. Arguments are matched first by exact name, then by prefix matching and finally by position.
 
-    f <- function(abcdef, bcde1, bcde2) {
-      list(a = abcdef, b1 = bcde1, b2 = bcde2)
-    }
-    f(1, 2, 3)
-    f(2, 3, abcdef = 1)
-    # Can abbreviate long argument names:
-    f(2, 3, a = 1)
-    # Doesn't work because abbreviation is ambiguous
-    f(1, 3, b = 1)
+```R
+f <- function(abcdef, bcde1, bcde2) {
+  list(a = abcdef, b1 = bcde1, b2 = bcde2)
+}
+f(1, 2, 3)
+f(2, 3, abcdef = 1)
+# Can abbreviate long argument names:
+f(2, 3, a = 1)
+# Doesn't work because abbreviation is ambiguous
+f(1, 3, b = 1)
+```
 
 Generally, you only want to use positional matching for the first one or two arguments: they will be the mostly commonly used, and most readers will probably know what they are. Avoid using positional matching for less commonly used arguments, and only use readable abbreviations with partial matching. (If you are writing code for a package that you want to publish on CRAN you can not use partial matching.) Named arguments should always come after unnamed arguments.
 
 These are good calls:
 
-    mean(1:10)
-    mean(1:10, trim = 0.05)
+```R
+mean(1:10)
+mean(1:10, trim = 0.05)
+```
 
 This is probably overkill:
 
-    mean(x = 1:10)
+```R
+mean(x = 1:10)
+```
 
 And these are just confusing:
 
-    mean(1:10, n = T)
-    mean(1:10, , FALSE)
-    mean(1:10, 0.05)
-    mean(, TRUE, x = c(1:10, NA))
+```R
+mean(1:10, n = T)
+mean(1:10, , FALSE)
+mean(1:10, 0.05)
+mean(, TRUE, x = c(1:10, NA))
+```
 
 ### Default and missing arguments
 
 Function arguments in R can have default values. 
 
-    f <- function(a = 1, b = 2) {
-      c(a, b)
-    }
-    f()
+```R
+f <- function(a = 1, b = 2) {
+  c(a, b)
+}
+f()
+```
 
 Since arguments in R are evaluated lazily (more on that below), the default value can be defined in terms of other arguments:
 
-    g <- function(a = 1, b = a * 2) {
-      c(a, b)
-    }
-    g()
-    g(10)
+```R
+g <- function(a = 1, b = a * 2) {
+  c(a, b)
+}
+g()
+g(10)
+```
 
 Default arguments can even be defined in terms of variables defined within the function. This is generally bad practice, because it makes it hard to understand what the default values will be without reading the complete source code of the function, and should be avoided.
 
-    h <- function(a = 1, b = d) {
-      d <- (a + 1) ^ 2
-      c(a, b)
-    }
-    h()
-    h(10)
+```R
+h <- function(a = 1, b = d) {
+  d <- (a + 1) ^ 2
+  c(a, b)
+}
+h()
+h(10)
+```
 
 You can detect if an argument was supplied or not with the `missing()` function.
 
-    i <- function(a, b) {
-      c(missing(a), missing(b))
-    }
-    i()
-    i(a = 1)
-    i(b = 2)
-    i(1, 2)
+```R
+i <- function(a, b) {
+  c(missing(a), missing(b))
+}
+i()
+i(a = 1)
+i(b = 2)
+i(1, 2)
+```
 
 However, I generally recommend against using missing because it makes it difficult to call programmatically from other functions (without using complicated workarounds). Generally, it's better to set a default value of `NULL` and then check with `is.null()`.
 
-    j <- function(a = NULL, b = NULL) {
-      c(is.null(a), is.null(b))
-    }
-    j()
-    j(a = 1)
-    j(b = 2)
-    j(1, 2)
+```R
+j <- function(a = NULL, b = NULL) {
+  c(is.null(a), is.null(b))
+}
+j()
+j(a = 1)
+j(b = 2)
+j(1, 2)
+```
 
 ### Lazy evaluation
 
 By default, R function arguments are lazy - they're only evaluated if they're actually used:
 
-    f <- function(x) {
-      10
-    }
-    system.time(f(Sys.sleep(10)))
-    # user  system elapsed 
-    #    0       0       0  
+```R
+f <- function(x) {
+  10
+}
+system.time(f(Sys.sleep(10)))
+```
 
 If you want to ensure that an argument is evaluated you can use `force`: 
 
-    f <- function(x) {
-      force(x)
-      10
-    }
-    system.time(f(Sys.sleep(10)))
-    # user  system elapsed 
-    #    0       0  10.001  
+```R   
+f <- function(x) {
+  force(x)
+  10
+}
+system.time(f(Sys.sleep(10)))
+```
 
 This is important when creating closures with `lapply` or a loop:
 
@@ -393,63 +442,75 @@ adders2 <- lapply(1:10, add)
 adders[[1]](10)
 adders[[10]](10)
 ```
+
 This code is exactly equivalent to
 
-    add <- function(x) {
-      x
-      function(y) x + y
-    }
+
+```R
+add <- function(x) {
+  x
+  function(y) x + y
+}
+```
 
 because the force function is just defined as `force <- function(x) x`. However, using this function serves as a clear indication that you're forcing evaluation, rather than having accidentally typed `x`.
 
 Default arguments are evaluated inside the function. This means that if the expression depends on the current environment the results will be different depending on whether you use the default value or explicitly provide it.
 
-    f <- function(x = ls()) {
-      a <- 1
-      x
-    }
-    # ls() evaluated inside f:
-    f()
-    # ls() evaluated in global environment:
-    f(ls())
+```R
+f <- function(x = ls()) {
+  a <- 1
+  x
+}
+# ls() evaluated inside f:
+f()
+# ls() evaluated in global environment:
+f(ls())
+```
 
 More technically, an unevaluated argument is called a __promise__, or a thunk. A promise is made up of two parts:
 
-* an expression giving the delayed computation, which can be accessed with
-  `substitute` (see [[controlling evaluation|evaluation]] for more details)
+* an expression giving the delayed computation, which can be accessed with `substitute` (see [[controlling evaluation|evaluation]] for more details)
 
-* the environment where the expression was created and where it should be
-  evaluated
+* the environment where the expression was created and where it should be evaluated
 
 You can find more information about a promise using `langr::promise_info`.  This uses some of R's C api to extract information about the promise without evaluating it (which is otherwise very tricky).
 
 Laziness makes is useful in if statements - the second statement will be evaluated only if the first is true. (If it wasn't the statement would return an error because `NULL > 0` is a logical vector of length 0)
 
-    x <- NULL
-    if (!is.null(x) && x > 0) {
+```R
+x <- NULL
+if (!is.null(x) && x > 0) {
 
-    }
+}
+```
 
 We could implement "&&" ourselves:
 
-    "&&" <- function(x, y) {
-      if (!x) return(FALSE)
-      if (!y) return(FALSE)
+```R
+"&&" <- function(x, y) {
+  if (!x) return(FALSE)
+  if (!y) return(FALSE)
 
-      TRUE
-    }
-    y <- NULL
-    !is.null(y) && y > 0
+  TRUE
+}
+y <- NULL
+!is.null(y) && y > 0
+```
 
 This function would not work without lazy evaluation because both `x` and `y` would always be evaluated, testing if `y > 0` even if `y` was NULL.
 
 Sometimes you can also use laziness to elimate an if statement altogether. For example, instead of:
 
-    if (is.null(y)) stop("Y is null")
+```R
+if (is.null(y)) stop("Y is null")
+```
 
 You could write:
   
-    is.null(y) || stop("Y is null")
+```R   
+!is.null(y) || stop("Y is null")
+```
 
 Functions like `&&` and `||` have to be implemented as special cases in languages that don't support lazy evaluation because otherwise `x` and `y` are evaluated when you call the function, and `y` might be a statement that doesn't make sense unless `x` is true.
 
@@ -474,35 +535,45 @@ Most functions in R are "prefix" operators: the name of the function comes befor
 
 For example, we could create a new operator that pastes together strings:
 
-    "%+%" <- function(a, b) paste(a, b, sep = "")
-    "new" %+% " string"
+```R
+"%+%" <- function(a, b) paste(a, b, sep = "")
+"new" %+% " string"
+```
 
 Note that when creating the function, you have to put the name in quotes because it's a special name.
 
 This is just a syntactic sugar for an ordinary function call; as far as R is concerned there is no difference between these two expressions:
 
-    "new" %+% " string"
-    `%+%`("new", " string")
+```R
+"new" %+% " string"
+`%+%`("new", " string")
+```
 
 Or indeed between
 
-    1 + 5
-    `+`(1, 5)
+```R
+1 + 5
+`+`(1, 5)
+```
 
 The names of infix functions are more flexible than regular R functions: they can contain any sequence of characters (except "%", of course). You will need to escape any special characters in the string used to define the function, but not when you call it:
 
-    "% %" <- function(a, b) paste(a, b)
-    "%'%" <- function(a, b) paste(a, b)
-    "%/\\%" <- function(a, b) paste(a, b)
+```R
+"% %" <- function(a, b) paste(a, b)
+"%'%" <- function(a, b) paste(a, b)
+"%/\\%" <- function(a, b) paste(a, b)
 
-    "a" % % "b"
-    "a" %'% "b"
-    "a" %/\% "b"
+"a" % % "b"
+"a" %'% "b"
+"a" %/\% "b"
+```
 
 R's default precedence rules mean that infix operators are composed from left to right:
 
-    "%-%" <- function(a, b) paste("(", a, " - ", b, ")", sep = "")
-    "a" %-% "b" %-% "c"
+```R
+"%-%" <- function(a, b) paste("(", a, " - ", b, ")", sep = "")
+"a" %-% "b" %-% "c"
+```
 
 ### Replacement functions
 
@@ -533,16 +604,20 @@ x
 
 It's often useful to combine replacement and subsetting, and this works out of the box:
 
-    x <- c(a = 1, b = 2, c = 3)
-    names(x)
-    names(x)[2] <- "two"
-    names(x)
+```R
+x <- c(a = 1, b = 2, c = 3)
+names(x)
+names(x)[2] <- "two"
+names(x)
+```
 
 This works because the expression `names(x)[2] <- "two"` is evaluated as if you had written:
 
-    `*tmp*` <- names(x)
-    `*tmp*`[2] <- "two"
-    names(x) <- `*tmp*`
+```R
+`*tmp*` <- names(x)
+`*tmp*`[2] <- "two"
+names(x) <- `*tmp*`
+```
 
 (Yes, it really does create a local variable named `*tmp*`, which is removed afterwards.)
 
@@ -554,23 +629,27 @@ This works because the expression `names(x)[2] <- "two"` is evaluated as if you 
 
 The last expression evaluated in a function becomes the return value, the result of invoking the function. 
 
-    f <- function(x) {
-      if (x < 10) {
-        0
-      } else {
-        10
-      }
-    }
-    f(5)
-    f(15)
+```R
+f <- function(x) {
+  if (x < 10) {
+    0
+  } else {
+    10
+  }
+}
+f(5)
+f(15)
+```
 
 Generally, I think it's good style to reserve the use of an explicit `return()` for when you are returning early, such as for an error, or a simple case of the function. This style of programming can also reduce the level of indentation, and generally make functions easier to understand because you can reason about them locally.
 
-    f <- function(x, y) {
-      if (!x) return(y)
+```R
+f <- function(x, y) {
+  if (!x) return(y)
 
-      # complicated processing here
-    }
+  # complicated processing here
+}
+```
 
 Functions can return only a single value, but this is not a limitation in practice because you can always return a list containing any number of objects.
 
@@ -578,13 +657,15 @@ The functions that are the most easy understand and reason about are pure functi
 
 R protects you from one type of side-effect: arguments are passed-by-value, so modifying a function argument does not change the original value:
 
-    f <- function(x) {
-      x$a <- 2
-      x
-    }
-    x <- list(a = 1)
-    f(x)
-    x$a
+```R
+f <- function(x) {
+  x$a <- 2
+  x
+}
+x <- list(a = 1)
+f(x)
+x$a
+```
 
 This is notably different to languages like Java where you can modify the inputs to a function. This copy-on-modify behaviour has important performance consequences which are discussed in depth in [[profiling]]. (Note that the performance consequences are a result of R's implementation of copy-on-modify semantics, they are not true in general. Clojure is a new language that makes extensive use of copy-on-modify semantics with limited performance consequences.)
 
@@ -608,26 +689,34 @@ It's generally a good idea to minimise the use of side effects, and where possib
 
 Functions can return `invisible` values, which are not printed out by default when you call the function.
 
-    f1 <- function() 1
-    f2 <- function() invisible(1)
+```R
+f1 <- function() 1
+f2 <- function() invisible(1)
 
-    f1()
-    f2()
-    f1() == 1
-    f2() == 1
+f1()
+f2()
+f1() == 1
+f2() == 1
+````
 
 You can always force an invisible value to be displayed by wrapping it in parentheses:
 
-    (f2())
+```R
+(f2())
+```
 
 The most common function that returns invisibly is `<-`:
 
-    a <- 2
-    (a <- 2)
+```R
+a <- 2
+(a <- 2)
+```
 
 And this is what makes it possible to assign one value to multiple variables:
 
-    a <- b <- c <- d <- 2
+```R
+a <- b <- c <- d <- 2
+```
 
 ### Exercises
 
