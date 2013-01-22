@@ -8,6 +8,7 @@ In this chapter you will learn:
 
 * The three main components of a function.
 * How scoping works, the process that looks up values from names.
+* That everything in R is a function call, even if it doesn't look like it
 * The three ways of supplying arguments to a function, and the impact of lazy evaluation.
 * The two types of special functions: infix and replacement functions.
 
@@ -166,7 +167,7 @@ You might be surprised that it returns the same value, `1`, every time. This is 
 
 ### Dynamic lookup
 
-Lexical scoping determines where to look for values, not when to look for them. R looks looks for values when the function is run, not when it's created. This means results from a function can be different depending on objects outside its environment:
+Lexical scoping determines where to look for values, not when to look for them. R looks for values when the function is run, not when it's created. This means results from a function can be different depending on objects outside its environment:
 
     f <- function() x
     x <- 15
@@ -204,8 +205,6 @@ You can use this same idea to do other things that are extremely ill-advised. Fo
 
 This will introduce a particularly pernicious bug: 10% of the time, 1 will be added to any numeric operation carried out inside parentheses. This is yet another good reason to regularly restart with a clean R session!
 
-Most of the time changing the behaviour of base functions is a really bad idea, but it can occassionally allow you to do something that would have otherwise been impossible. For example, this feature makes it possible for the `dplyr` package to translate R expressions into SQL expressions.
-
 ### Exercises
 
 * What does the following code return? Why? What does each of the three `c`'s mean?
@@ -228,6 +227,46 @@ Most of the time changing the behaviour of base functions is a really bad idea, 
       }
       f(10)
 
+## Everything is a function call
+
+The previous example of redefining `(` works because every operation in R is a function call, even operations with special syntax are just a disguise for ordinary function calls. This includes infix operators like `+`, control flow operators like `for`, `if`, and `while`, subsetting operators like `[]` and `$` and even the curly braces `{`. This means that each of these pairs of statements are exactly equivalent.  Note that `` ` ``, the backtick, lets you refer to functions or variables that have reserved or illegal names:
+
+```R
+x + y
+`+`(x, y)
+
+for (i in 1:10) print(i)
+`for`(i, 1:10, print(i))
+
+if (i == 1) print("yes!") else print("no.")
+`if`(i==1, print("yes"), print("no."))
+
+x[3]
+`[`(x, 3)
+
+{ print(1); print(2); print(3) }
+`{`(print(1), print(2), print(3))
+```
+
+It is possible to override the definitions of these special functions, but almost certainly a bad idea. However, it can occassionally allow you to do something that would have otherwise been impossible. For example, this feature makes it possible for the `dplyr` package to translate R expressions into SQL expressions.
+
+It's more often useful to treat special functions as ordinary functions. For example, we could use `lapply` to add 3 to every element of a list by first defining a function `add`, like this:
+
+```R
+add <- function(x, y) x + y
+lapply(1:10, add, 3)
+```
+
+But we can get the same effect using the built in `+` function.
+
+```R
+lapply(1:10, `+`, 3)
+lapply(1:10, "+", 3)
+```
+
+Note the difference between `` `+` `` and `"+"`.  The first one is the value of the object called `+`, and the second is a string containing the character `+`.  The second version works because `lapply` can be given the name of a function instead of the function itself.
+
+That everything in R is represented as a function call will be more important to know for [[computing on the language]].
 
 ## Function arguments
 
@@ -334,7 +373,7 @@ If you want to ensure that an argument is evaluated you can use `force`:
 
 This is important when creating closures with `lapply` or a loop:
 
-```r
+```R
 add <- function(x) {
   function(y) x + y
 }
@@ -344,7 +383,8 @@ adders[[10]](10)
 ```
 
 `x` is lazily evaluated the first time that you call one of the adder functions. At this point, the loop is complete and the final value of `x` is 10.  Therefore all of the adder functions will add 10 on to their input, probably not what you wanted!  Manually forcing evaluation fixes the problem:
-```r
+
+```R
 add <- function(x) {
   force(x)
   function(y) x + y
@@ -405,11 +445,11 @@ This function would not work without lazy evaluation because both `x` and `y` wo
 
 Sometimes you can also use laziness to elimate an if statement altogether. For example, instead of:
 
-    if (!is.null(y)) stop("Y is null")
+    if (is.null(y)) stop("Y is null")
 
 You could write:
   
-    !is.null(y) || stop("Y is null")
+    is.null(y) || stop("Y is null")
 
 Functions like `&&` and `||` have to be implemented as special cases in languages that don't support lazy evaluation because otherwise `x` and `y` are evaluated when you call the function, and `y` might be a statement that doesn't make sense unless `x` is true.
 
@@ -417,7 +457,7 @@ Functions like `&&` and `||` have to be implemented as special cases in language
 
 There is a special argument called `...`.  This argument will match any arguments not otherwise matched, and can be used to call other functions.  This is useful if you want to collect arguments to call another function, but you don't want to prespecify their possible names.
 
-To capture `...` in a form that is easier to work with, you can use `list(...)`.
+To capture `...` in a form that is easier to work with, you can use `list(...)`. (See [[Computing on the language]] for other ways to capture ...)
 
 Using `...` comes with a cost - any misspelled arguments will be silently ignored.  It's often better to be explicit instead of explicit, so you might instead ask users to supply a list of additional arguments.  And this is certainly easier if you're trying to use `...` with multiple additional functions.
 
@@ -429,6 +469,8 @@ R supports two additional syntaxes for calling functions you create: infix and r
 ### Infix functions
 
 Most functions in R are "prefix" operators: the name of the function comes before the arguments. You can also create infix functions where the function name comes in between its arguments, like `+` or `-`.  All infix functions names must start and end with `%` and R comes with the following infix functions predefined: `%%`, `%*%`, `%/%`, `%in%`, `%o%`,  `%x%`. 
+
+(The complete list of built-in infix operators that don't need `%`is: `::, $, @, ^, *, /, +, -, >, >=, <, <=, ==, !=, !, &, &&, |, ||, ~, <-, <<-`)
 
 For example, we could create a new operator that pastes together strings:
 
@@ -466,24 +508,28 @@ R's default precedence rules mean that infix operators are composed from left to
 
 Replacement functions act like they modify their arguments in place, and have the special name `xxx<-`. They typically have two arguments (`x` and `value`), although they can have more, and they must return the modified object. For example, the following function allows you to modify the second element of a vector:
 
-    "second<-" <- function(x, value) {
-      x[2] <- value
-      x
-    }
-    x <- 1:10
-    second(x) <- 5L
-    x
+```R
+"second<-" <- function(x, value) {
+  x[2] <- value
+  x
+}
+x <- 1:10
+second(x) <- 5L
+x
+```
 
 When R evaluates the assignment `second(x) <- 5`, it notices that the left hand side of the `<-` is not a simple name, so it looks for a function named `second<-` to do the replacement.
 
 If you want to supply additional arguments, they go in between `x` and `value`:
 
-    "modify<-" <- function(x, position, value) {
-      x[position] <- value
-      x
-    }
-    modify(x, 1) <- 10
-    x
+```R
+"modify<-" <- function(x, position, value) {
+  x[position] <- value
+  x
+}
+modify(x, 1) <- 10
+x
+```
 
 It's often useful to combine replacement and subsetting, and this works out of the box:
 
@@ -528,7 +574,9 @@ Generally, I think it's good style to reserve the use of an explicit `return()` 
 
 Functions can return only a single value, but this is not a limitation in practice because you can always return a list containing any number of objects.
 
-The functions that are the most easy understand and reason about are pure functions, functions that always map the same input to the same output and have no other impact on the workspace. R protects you from one type of side-effect: arguments are passed-by-value, so modifying a function argument does not change the original value:
+The functions that are the most easy understand and reason about are pure functions, functions that always map the same input to the same output and have no other impact on the workspace. In other words, pure functions have no __side-effects__: they don't affect the state of the the world in anyway apart from the value they return. 
+
+R protects you from one type of side-effect: arguments are passed-by-value, so modifying a function argument does not change the original value:
 
     f <- function(x) {
       x$a <- 2
@@ -584,33 +632,3 @@ And this is what makes it possible to assign one value to multiple variables:
 ### Exercises
 
 * 
-
-## Everything is a function call
-
-Even operations for which R provides special syntax are just a disguise for ordinary function calls. This includes infix operators like `+`, control flow like `for`, `if`, and `while`, subsetting operators like `[]` and `$` and even the curly braces `{`. This means that each of these pairs of statements are exactly equivalent (note that `` `backticks` `` let you refer to functions or variables that have reserved or illegal names):
-
-    x + y
-    `+`(x, y)
-
-    for (i in 1:10) print(i)
-    `for`(i, 1:10, print(i))
-
-    if (i == 1) print("yes!") else print("no.")
-    `if`(i==1, print("yes"), print("no."))
-
-    x[3]
-    `[`(x, 3)
-
-    { print(1); print(2); print(3) }
-    `{`(print(1), print(2), print(3))
-
-It is possible to override the definitions of these special functions, but almost certainly a bad idea. However, it occasionally comes in handy to treat special functions as ordinary functions. For example, we could use `lapply` to add 3 to every element of a list by first defining a function `add`, like this:
-
-    add <- function(x, y) x + y
-    lapply(1:10, add, 3)
-
-But we can get the same effect using the built in `+` function.
-
-    lapply(1:10, `+`, 3)
-
-That everything in R is represented as a function call will be more important to know for [[computing on the language]].

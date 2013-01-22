@@ -23,7 +23,7 @@ The job of an environment is to associate, or __bind__, a set of names to values
 
   In the following code chunk, we create a new environment, create a "copy" and then modify the original environment. The copy also changes. If you change `e` to a list (or any other R datastructure) `e` and `f` are independent.
 
-  ```
+  ```R
   e <- new.env()
   f <- e
 
@@ -39,7 +39,7 @@ The job of an environment is to associate, or __bind__, a set of names to values
 
 Technically, an environment is made up of a __frame__, a collection of named objects (like a list), and a reference to a parent environment.  
 
-As well as powering maEnvironments can be also useful data structures because unlike almost every other type of object in R, modification takes place without a copy. This is not something that you should use without thought: it will violate users expectations about how R code works, but it can sometimes be critical for high performance code.  However, since the addition of [[R5]], you're generally better of using reference classes instead of raw environments. Environments can also be to simulate hashmaps common in other packages, because name lookup is implemented with a hash, which means that lookup is O(1). See the CRAN package hash for an example. 
+As well as powering scoping, environments can be also useful data structures because unlike almost every other type of object in R, modification takes place without a copy. This is not something that you should use without thought: it will violate users expectations about how R code works, but it can sometimes be critical for high performance code.  However, since the addition of [[R5]], you're generally better of using reference classes instead of raw environments. Environments can also be to simulate hashmaps common in other packages, because name lookup is implemented with a hash, which means that lookup is O(1). See the CRAN package hash for an example. 
 
 ### Manipulating and inspecting environments
 
@@ -78,13 +78,26 @@ str(as.list(e))
 str(as.list(e, all.names = TRUE))
 ```
 
-You can extract elements of an environment using `$` or `\[\[`, or `get`. `$` and `'[[` will only look in that environment, but `get` uses the regular scoping rules and will also look in the parent, if neeeded. `$` and `'[[` will return `NULL` if the name is not found, while `get` returns an error.
+You can extract elements of an environment using `$` or `'[[`, or `get`. `$` and `'[[` will only look in that environment, but `get` uses the regular scoping rules and will also look in the parent, if needed. `$` and `'[[` will return `NULL` if the name is not found, while `get` returns an error.
 
 ```R
 b <- 2
 e$b
 e[["b"]]
 get("b", e)
+```
+
+Deleting objects from environments works a little different to lists.  In a list you can remove an entry by setting it to `NULL`.  That doesn't work in environments, and instead you need to use `rm()`.
+
+```R
+e <- new.env()
+
+e$a <- 1
+e$a <- NULL
+ls(e)
+
+rm("a", envir = e)
+ls(e)
 ```
 
 Generally, when you create your own environment, you want to manually set the parent environment to the empty environment. This ensures you don't accidentally inherit objects from somewhere else:
@@ -128,7 +141,7 @@ lapply(search(), as.environment)
 
 ### Where
 
-We can apply our new knowledge of environments to create a helpful function called `where` that tells us in what environment a variable was defined:
+We can apply our new knowledge of environments to create a helpful function called `where` that tells us the environment where a variable lives:
 
 ```R
 library(pryr)
@@ -147,7 +160,7 @@ The definition of `where()` is fairly straightforward. It has two arguments; the
 where
 ```
 
-It's natural work with environments recursively, so we'll see this style of function structure frequently. There are three main components: 
+It's natural to work with environments recursively, so we'll see this style of function structure frequently. There are three main components: 
 
 * the base case (what happens when we've recursed down to the empty environment)
 
@@ -217,7 +230,7 @@ The following sections will explain why each of these environments are important
 
 ### The environment where the function was created
 
-When a function is created, it gains a reference to the environment where it was made. This is the parent enviroment of the function used by lexical scoping. You can access this environment with the `environment()` function:
+When a function is created, it gains a reference to the environment where it was made. This is the parent, or enclosing, enviroment of the function used by lexical scoping. You can access this environment with the `environment()` function:
 
 ```R
 x <- 1
@@ -237,6 +250,25 @@ funenv <- function(f) {
 }
 funenv("plot")
 funenv("t.test")
+```
+
+Unsurprisinly, the enclosing environment is particularly important for closures:
+
+```R
+plus <- function(x) {
+  function(y) x + y 
+}
+plus_one <- plus(1)
+plus_one(10)
+plus_two <- plus(2)
+plus_one(10)
+environment(plus_one)
+parent.env(environment(plus_one))
+environment(plus_two)
+parent.env(environment(plus_two))
+environment(plus)
+str(as.list(environment(plus_one)))
+str(as.list(environment(plus_two)))
 ```
 
 It's also possible to modify the environment of a function, using the assignment form of `environment`. This is rarely useful, but we can use it to illustrate how fundamental scoping is to R. One complaint that people sometimes make about R is that the function `f` defined above really should generate an error, because there is no variable `y` defined inside of R.  Well, we could fix that by manually modifying the environment of `f` so it can't find y inside the global environment:
@@ -372,7 +404,7 @@ lapply(es, function(e) get("x", e))
 lapply(es, function(e) get("y", e))
 ```
 
-There are two separate strands of parents when a function is called: the calling environments, and the defining environments. Each calling environment will also have a stack of defining environments. Note that while called function has both a stack of called environemnts and a stack of defining environments, an environment (or a function object) has only a stack of defining environments.
+There are two separate strands of parents when a function is called: the calling environments, and the enclosing environments. Each calling environment will also have a stack of enclosing environments. Note that while called function has both a stack of called environemnts and a stack of enclosing environments, an environment (or a function object) has only a stack of enclosing environments.
 
 Looking up variables in the calling environment rather than in the defining argument is called __dynamic scoping__.  Few languages implement dynamic scoping (emac's lisp is a [notable exception](http://www.gnu.org/software/emacs/emacs-paper.html#SEC15)) because dynamic scoping makes it much harder to reason about how a function operates: not only do you need to know how it was defined, you also need to know in what context it was called.  Dynamic scoping is primarily useful for developing functions that aid interactive data analysis, and is one of the topics discussed in [[controlling evaluation]]
 
