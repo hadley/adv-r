@@ -1,24 +1,36 @@
 # Functional programming
 
-At it's core, R is functional programming language which means it supports "first class functions", functions that can be:
+At it's core, R is functional programming (FP) language which means it supports "first class functions", functions that can be:
 
 * created anonymously,
 * assigned to variables and stored in data structures,
 * returned from functions,
 * passed as arguments to other functions
 
-This chapter will explore these properties, and show how they can be used to remove redundancy and duplication in your code. Each technique is relatively simple by itself, but combined they provide a powerful set of techniques. They are especially useful when you want to solve a large class of problems with a small set of building blocks and tools to connect them together. 
+This chapter will explore the consequences of R's functional nature, introducing a new set of techniques for removing redundancy and duplication in your code. 
 
-We'll start with a motivating example, showing how you can use functional programming techniques to reduce duplication in some typical code for cleaning data and summarising data. That will introduce us to four important topics: anonymous functions, closures, functions that take functions as input, and storing functions in a list.
+Each technique is relatively simple by itself, but combined they provide a powerful set of techniques. They are especially useful when you want to solve a large class of problems with a small set of building blocks and tools to connect them together. 
 
-The final section in the chapter shows how we can apply this idea to numerical integration, building up a flexible family of composite integration tools starting from very simple primitives.
+We'll start with a motivating example, showing how you can use functional programming techniques to reduce duplication in some typical code for cleaning data and summarising data. This example will introduce some of the most important functional programming concepts, which we will then dive in to in more detail:
+
+* __Anonymous functions__, functions that don't have a name
+
+* __Closures__, functions written by other functions
+
+* __Functionals__, functions that that a function as a input
+
+* __Function operators__, functions that both input and output functions
+
+* __Lists of functions__
+
+The final two sections are case studies showing how we can combine multiple techniques to solve real problems with a minimum of duplication, in a way that is easy to modify when our problem changes. The first case study will explore __numerical integration__ showing how we can build a family of composite integration tools starting from very simple primitives. The second case study makes extensive use of function operations to build a mini-language to __guard against incorrect function input__.
 
 ## Motivation
 
-Imagine you've loaded a data file that uses -99 to represent missing values.  
-When you first start writing R code, you might write code like this, dealing with duplication by using copy-and-paste.
+Imagine you've loaded a data file that uses -99 to represent missing values. When you first start writing R code, you might write code like this, dealing with duplication by using copy-and-paste:
 
 ```R
+# Generate a sample dataset
 set.seet(1014)
 df <- data.frame(replicate(6, sample(c(1:10, -99), 10, rep = T)))
 names(df) <- letters[1:6]
@@ -32,11 +44,11 @@ df$e[df$e == -99] <- NA
 df$f[df$g == -99] <- NA
 ```
 
-One problem with using copy-and-paste is that it's easy to make mistakes (can you spot the two in the block above). The root cause is that one idea, that missing values are represent as -99, is duplicated many times. Duplication is bad because it allows for inconsistencies (i.e. bugs), and it mades the code harder to change: if the the representation of missing value changes from -99 to 9999, then we need to make the change in many places, not just one.
+One problem with using copy-and-paste is that it's easy to make mistakes (can you spot the two in the block above?). The root cause is that one idea, that missing values are represent as -99, is duplicated many times. Duplication is bad because it allows for inconsistencies (aka bugs), and it mades the code harder to change: if the the representation of missing value changes from -99 to 9999, then we need to make the change in many places, not just one.
 
-The pragmatic programmers, Dave Thomas and Andy Hunt, popularised the "do not repeat yourself", or DRY, principle. This principle states that "every piece of knowledge must have a single, unambiguous, authoritative representation within a system". Adhering to this principle prevents bugs due to inconsistencies, and makes software that is easier to adapt to changing requirements. The ideas of functional programming are important because they give us new tools to reduce duplication.
+The "do not repeat yourself", or DRY, principle, was popularised by the [pragmatic programmers](http://pragprog.com/about), Dave Thomas and Andy Hunt. This principle states that "every piece of knowledge must have a single, unambiguous, authoritative representation within a system". Adhering to this principle prevents bugs caused by inconsistencies, and makes software that is easier to adapt to changing requirements. The ideas of FP are important because they give us new tools to reduce duplication.
 
-We can start simply by creating a function that fixes missing values in a single vector:
+We can start applying some of the ideas of FP to our example by writing a function that fixes the missing values in a single vector:
 
 ```R
 fix_missing <- function(x) {
@@ -51,9 +63,9 @@ df$e <- fix_missing(df$e)
 df$f <- fix_missing(df$e)
 ```
 
-This reduces the scope for errors, but we've still made one, because we've repeatedly applied our function to each column. A key idea of functional programming is __composition__: we want to combine our function for correcting missing values with a function that does something to each column in a data frame, like `lapply`.  
+This reduces the scope for errors, but we've still made one, because we've repeatedly applied our function to each column. To prevent that error from occuring we need remove the copy-and-paste application of our function to each column. To do this, we need to combine, or __compose__, our function for correcting missing values with a function that does something to each column in a data frame, like `lapply()`.  
 
-`lapply` takes two inputs: a list and a function (since data frames are also lists, `lapply` also works on data frames). It applies the function to each element of the list and returns the resulting list. `lapply(x, f, ...)` is basically equivalent to the following for loop:
+`lapply()` takes three inputs: a list, a function, and other arguments to pass to the function. It applies the function to each element of the list and returns the resulting list (since data frames are also lists, `lapply()` also works on data frames). `lapply(x, f, ...)` is equivalent to the following for loop:
 
 ```R
 out <- vector("list", length(x))
@@ -62,9 +74,9 @@ for (i in seq_along(x)) {
 }
 ```
 
-The real `lapply()` is rather more complicated since it's implemented in C for efficiency, but the essence of the algorithm is the same. `lapply()` is known as a higher-order-function (HOF), as it's a function that takes a function as one of it's arguments. HOFs are an important part of functional programming and are discussed in more detail below.
+The real `lapply()` is rather more complicated since it's implemented in C for efficiency, but the essence of the algorithm is the same. `lapply()` is a higher-order-function (HOF), because it takes a function as one of its arguments. HOFs are an important part of functional programming and we'll learn more about them below.
 
-We can use `lapply()` in our problem with one small trick: rather than simply assigning the results to `df` we assign then to `df[]`, so R's usual subsetting rules take over and we get a data frame instead of a list.
+We can apply `lapply()` to our problem with one small trick: rather than simply assigning the results to `df` we assign then to `df[]`, so R's usual subsetting rules take over and we get a data frame instead of a list.
 
 ```R
 fix_missing <- function(x) {
@@ -80,9 +92,9 @@ As well as being more compact, there are two main advantages of this code over o
 
 * Our code works regardless of the number of columns in the data frame, and there is no way to miss a column because of a copy and paste error.
 
-Again, the key idea here is composition. We take two simple functions, one which does something to each column, and one which replaces -99 with NA, and combine them to replace -99 with NA in every column. One of ideas of functional programming is to write simple functions than can be understood in isolation and then compose them together to solve complex problems.
+The key idea here is composition. We take two simple functions, one which does something to each column, and one which replaces -99 with NA, and compose them to replace -99 with NA in every column. An important technique for effective FP is writing simple functions than can be understood in isolation and then composed together to solve complex problems.
 
-What if different columns use different indicators for missing values?  You might be tempted to copy-and-paste:
+What if different columns use different indicators for missing values? You again might be tempted to copy-and-paste:
 
 ```R
 fix_missing_99 <- function(x) {
@@ -99,7 +111,7 @@ fix_missing_9999 <- function(x) {
 }
 ```
 
-The next functional programming tool we'll talk about helps deal with this sort of duplication: where we have multiple functions that differ only by a parameter.  Closures, functions that return functions, allow us to make many functions from a template:
+But as previously, it's easy to create bug. The next functional programming tool we'll talk about helps deal with this sort of duplication: we have multiple functions that all follow the same basic template. Closures, functions that return functions, allow us to make many functions from a template:
 
 ```R
 missing_fixer <- function(na_value) {
@@ -160,7 +172,7 @@ summary <- function(x) {
 
 All five functions are called with the same arguments (`x` and `na.rm`) which we had to repeat five times. As before, this duplication makes our code fragile: it makes it easier to introduce bugs and harder to adapt to changing requirements. 
 
-We can take advantage of the final functional programming technique, storing functions in lists, to remove this duplication:
+We can take advantage of another functional programming technique, storing functions in lists, to remove this duplication:
 
 ```R
 funs <- c(mean, median, sd, mad, iqr)
@@ -169,7 +181,7 @@ summary <- function(x) {
 }
 ```
 
-The remainder of this chapter will discuss each technique in more detail.  But before we can start on those more complicated techniques, we need to start by revising a simple functional programming tool, anonymous functions.
+The remainder of this chapter will discuss each technique in more detail. But before we can start on those more complicated techniques, we need to start by revising a simple functional programming tool, anonymous functions.
 
 ## Anonymous functions
 
