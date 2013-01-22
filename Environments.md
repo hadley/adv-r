@@ -21,19 +21,19 @@ The job of an environment is to associate, or __bind__, a set of names to values
 
 * Environments have reference semantics: R's usual copy on modify rules do not apply. Whenever you modify an environment, you modify every copy.  
 
-  In the following code chunk, we create a new environment, create a "copy" and then modify the original environment. The copy also changes. If you change `e` to a list (or any other R datastructure) `e` and `f` are independent.
+    In the following code chunk, we create a new environment, create a "copy" and then modify the original environment. The copy also changes. If you change `e` to a list (or any other R datastructure) `e` and `f` are independent.
 
-  ```R
-  e <- new.env()
-  f <- e
+    ```R
+    e <- new.env()
+    f <- e
 
-  e$a <- 10
-  f$a
-  ```
+    e$a <- 10
+    f$a
+    ```
 
 * Environments have parent: if an object is not found in an environment, then R can look in its parent (and so on). There is only one exception: the __empty__ environment does not have a parent.
 
-  We use the family metaphor to refer other environments: the grandparent of a environment would be the parent's parent, and the ancestors include all parent environments all the way up to the empty environment. It's rare to talk about the children of an environment because there are no back links: given an environment we have no way to find its children.
+    We use the family metaphor to refer other environments: the grandparent of a environment would be the parent's parent, and the ancestors include all parent environments all the way up to the empty environment. It's rare to talk about the children of an environment because there are no back links: given an environment we have no way to find its children.
 
 * Every object in an environment must have a name, and the names must be unique.
 
@@ -55,7 +55,7 @@ ls(e)
 
 You can modify environments in the same way you modify lists:
 
-```
+```R
 ls(e)
 e$a <- 1
 ls(e)

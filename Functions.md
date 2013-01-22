@@ -48,7 +48,7 @@ The assignment forms of `body()`, `formals()`, and `environment()` can also be u
 
 There are two other components that are possessed by some functions: the source of the function (which includes comments, unlike the `body()`), and if the function has been byte-code compiled, the byte code. 
 
-### Examples
+### Exercises
 
 * What function allows you to tell if a function is a primitive function or not?
 * What are the three important components of a function?
@@ -720,4 +720,5 @@ a <- b <- c <- d <- 2
 
 ### Exercises
 
-* 
+*
+

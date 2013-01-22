@@ -1,4 +1,10 @@
-pandoc --chapters --listings --latex-engine xelatex -o book.pdf \
+# pandoc --chapters -o book.pdf --latex-engine xelatex \
+#   -V papersize:oneside -V links-as-notes \
+#   Functions.md \
+#   Environments.md && open book.pdf
+
+pandoc --chapters -o book.pdf --latex-engine xelatex \
+  -V papersize:oneside -V links-as-notes -V toc \
   Introduction.md \
   Functions.md \
   Environments.md \
@@ -10,19 +16,20 @@ pandoc --chapters --listings --latex-engine xelatex -o book.pdf \
   S3.md \
   S4.md \
   R5.md \
-  performance.md \
-  profiling.md \
-  c-interface.md \
+  Performance.md \
+  Profiling.md \
+  C-interface.md \
   Rcpp.md \
   Philosophy.md \
   package-basics.md \
-  Development.md \
-  docs-package.md \
-  docs-function.md \
+  Package-development-cycle.md \
+  Documenting-packages.md \
+  Documenting-functions.md \
   Testing.md \
   style.md \
   Namespaces.md \
   git.md \
   Release.md \
   Vocabulary.md \
-  Data-structures.md && open book.pdf
+  Data-structures.md \
+  && open book.pdf
