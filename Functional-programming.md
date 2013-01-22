@@ -175,8 +175,8 @@ All five functions are called with the same arguments (`x` and `na.rm`) which we
 We can take advantage of another functional programming technique, storing functions in lists, to remove this duplication:
 
 ```R
-funs <- c(mean, median, sd, mad, iqr)
 summary <- function(x) {
+  funs <- c(mean, median, sd, mad, iqr)
   lapply(funs, function(f) f(x))
 }
 ```
@@ -185,7 +185,9 @@ The remainder of this chapter will discuss each technique in more detail. But be
 
 ## Anonymous functions
 
-In R, functions are objects in their own right. They aren't automatically bound to a name, unlike many other programming languages. You might have noticed this already, because when you create a function, you use the usual assignment operator to give it a name. It's possible to find the function given it's name using `match.fun()`. You can't do the opposite: not all functions have a name, and some functions have more than one name. Functions that don't have a name are called __anonymous functions__. 
+In R, functions are objects in their own right. They aren't automatically bound to a name, unlike many other programming languages. You might have noticed this already, because when you create a function, you use the usual assignment operator to give it a name. Functions that don't have a name are called __anonymous functions__. 
+
+Given the name of a function, like `"mean"`, it's possible to find the function using `match.fun()`. You can't do the opposite: given the object `f <- mean`, there's no way to find its name. Not all functions have a name, and some functions have more than one name. 
 
 We use anonymous functions when it's not worth the effort of creating a named function:
 
@@ -213,7 +215,7 @@ body(function(x = 4) g(x) + h(x))
 environment(function(x = 4) g(x) + h(x))
 ```
 
-You can call anonymous functions without giving them a name, but the code is a little tricky to read because you must use parentheses in two different ways: to call a function, and to make it clear that we want to call the anonymous function `function(x) 3` not inside our anonymous function call a function called `3` (not a valid function name):
+You can call anonymous functions without giving them a name, but the code is a little tricky to read because you must use parentheses in two different ways: to call a function, and to make it clear that we want to call the anonymous function `function(x) 3`, not inside our anonymous function call a function called `3` (which isn't a valid function name!):
 
 ```R
 (function(x) 3)()
@@ -232,18 +234,22 @@ The syntax extends in a straightforward way if the function has parameters:
 (function(x) x)(x = 4)
 ```
 
+If you're calling an anonymous function in a complicated way, it's a good sign that it needs a name.
+
 One of the most common uses for anonymous functions is to create closures, functions made by other functions. Closures are the topic of the next section.
 
 ### Exercises
 
+* Use `lapply()` and an anonymous function to find the coefficient of variation (the standard deviation divided by the mean) for all columns in the `mtcars` dataset
+
 * 
 
-### Introduction to closures
+## Introduction to closures
 
 "An object is data with functions. A closure is a function with data." 
 --- [John D Cook](http://twitter.com/JohnDCook/status/29670670701)
 
-Anonymous functions are most useful in conjunction with a closure, a function written by another function. Closures are so called because they __enclose__ the environment of the parent function, and can access all variables and parameters in that function. This is useful because it allows us to have two levels of parameters. One level of parameters (the parent) controls how the function works. The other level (the child) does the work. The following example shows how we can use this idea to generate a family of power functions. The parent function (`power()`) creates child functions (`square()` and `cube()`) that do the work.
+One important use of anonymous functions is to create small functions that it's not worth naming. The other important of use of anonymous functions is to create a closure, a function written by another function. Closures are so called because they __enclose__ the environment of the parent function, and can access all variables and parameters in that function. This is useful because it allows us to have two levels of parameters. One level of parameters (the parent) controls how the function works; the other level (the child) does the work. The following example shows how we can use this idea to generate a family of power functions. The parent function (`power()`) creates child functions (`square()` and `cube()`) that do the work.
 
 ```R
 power <- function(exponent) {
@@ -251,15 +257,15 @@ power <- function(exponent) {
 }
 
 square <- power(2)
-square(2) # -> [1] 4
-square(4) # -> [1] 16
+square(2)
+square(4)
 
 cube <- power(3)
-cube(2) # -> [1] 8
-cube(4) # -> [1] 64
+cube(2)
+cube(4)
 ```
 
-In R, almost every function in R is a closure, because all functions remember the environment in which they are created, typically either the global environment, if it's a function that you've written, or a package environment, if it's a function that someone else has written. The only exception are primitive functions, which call directly in to C.
+In R, almost every function is a closure, because all functions remember the environment in which they are created, typically either the global environment, if it's a function that you've written, or a package environment, if it's a function that someone else has written. The only exception are primitive functions, which call directly in to C.
 
 When you print a closure, you don't see anything terribly useful:
 
@@ -268,13 +274,33 @@ square
 cube
 ```
 
-That's because the function itself doesn't change; it's the enclosing environment that's different. The pryr package provides `unenclose()`, which substitutes the variables defined in the enclosing environment into the original functon. This makes it easier to see what's going on:
+That's because the function itself doesn't change; it's the enclosing environment, e.g. `environment(square)`, that's different. One way to see the contents of the environment is to convert it to a list:
+
+```R
+as.list(environment(square))
+as.list(environment(cube))
+```
+
+Another way to see what's going on is to use `pryr::unenclose()`, which substitutes the variables defined in the enclosing environment into the original functon:
 
 ```R
 library(pryr)
 unenclose(square)
 unenclose(cube)
 ```
+
+Note that the parent environment of the closure is the environment created when the parent function is called:
+
+```R
+power <- function(exponent) {
+  print(environment())
+  function(x) x ^ exponent
+}
+zero <- power(0)
+environment(zero)
+```
+
+This environment normally disappears once the function finishes executing, but because we return a function, the environment is captured and attached to the new function. Each time we re-run `power()` a new environment is created, so each function produced by power is independent.
 
 Closures are useful for making function factories, and are one way to manage mutable state in R. 
 
@@ -292,7 +318,7 @@ remove_9999 <- missing_remover(-9999)
 remove_dot <- missing_remover(".")
 ```
 
-We'll see another compelling using function factories when we learn more about higher functions; they are very useful for maximum likelihood problems.
+We'll see another compelling using function factories when we learn more about functionals; they are very useful for maximum likelihood problems.
 
 ### Mutable state
 
@@ -355,88 +381,127 @@ The power of closures is tightly coupled to another important class of functions
 
 * What does the following statistical function do? What would be a better name for it? (The existing name is a bit of a hint)
 
-  ```R
-  bc <- function(lambda) {
-    if (lambda == 0) {
-      function(x) log(x)
-    } else {
-      function(x) (x ^ lambda - 1) / lambda
+    ```R
+    bc <- function(lambda) {
+      if (lambda == 0) {
+        function(x) log(x)
+      } else {
+        function(x) (x ^ lambda - 1) / lambda
+      }
     }
-  }
-  ```
+    ```
 
-* Create a function `pick()`, that takes an index, `i`, as an argument and returns a function an argument `x` that subsets `x` with `i`.
-  
-  ```R
-  lapply(mtcars, pick(5))
-  ```
+* Create a function that creates functions that compute the ith [central moment](http://en.wikipedia.org/wiki/Central_moment) of a numeric vector. You can test it by running the following code:
 
-* What does the `ecdf()` function do? What does it return?
+    ```R
+    m1 <- moment(1)
+    m2 <- moment(2)
+
+    x <- runif(m1, 100)
+    stopifnot(all.equal(m1(x), mean(x)))
+    stopifnot(all.equal(m2(x), var(x) * 99 / 100))
+    ```
+
+* What does `approxfun()` return? What does it return? What does the `ecdf()` function do? What does it return? 
 
 ## Functionals 
 
-Functionals are functions that take one or more functions as arguments, and return a number as an answer. In R, they are commonly used as a way to eliminate for loops.
+"To become significantly more reliable, code must become more transparent. In particular, nested conditions and loops must be viewed with great suspicion. Complicated control flows confuse programmers. Messy code often hides bugs."
+--- [Bjarne Stroustrup](http://www.stroustrup.com/Software-for-infrastructure.pdf)
 
-Eliminating for loops is a good idea not because they're inefficient, but because it eliminate errors and more clearly expresses the intent of your programming.
+Higher-order functions encompass any functions that either take a function as an input or return a function as output. We've seen our first example of a higher-order function, the closures, functions returned by another function. The complement to a closure is a __functional__, a function that takes a function as an input and returns a vector as output. In R, functionals are commonly used as a way to eliminate for loops.
 
-May also implement algorithm more efficiently than you would naively
+For loops have a bad rap in R, with many programmers trying to eliminate their use at all costs. In the [[performance]] chapter we'll explore their speed, which is not as bad as many people believe (although depending on what you're trying to do, there may be more efficient ways). To me, the real downside of for loops is that they're not very expressive: if you use a functional instead, you can more clearly express what you're doing, and as a side-effect you're likely to make fewer errors, maybe even get better performance.
 
-They are particularly useful in conjunction with closures.
-
-```R
-for(x in xs)
-for(i in seq_along(xs))
-for(nm in names(xs))
-```
-
-### The apply family: `lapply`, `vapply` and `mapply`
-
-The three most important HOFs you're likely to use are from the `apply` family.
-The family includes `apply`, `lapply`, `mapply`, `tapply`, `sapply`, `vapply`, and `by`. Each of these functions processes breaks up a data structure in some way, applies the function to each piece and then joins them back together again. The `**ply` functions of the `plyr` package which attempt to unify the base apply functions by cleanly separating based on the type of input they break up and the type of output that they produce.
-
-However, most of those functions are most useful for data analysis, rather than programming, so in this section we'll focus on the three functions that you're most likely to use as an R programming: `lapply`, `vapply` and `Map`.
-
-Each of these functions provides a way to eliminate a certain type of for loop.  `lapply` and `vapply` work the same way apart from the type of output and look like
+We've seen one example of a functional already: `lapply()`.  `lapply()` represents the idea of doing something to each element of a list and storing the results in another list. It's informative to look at a pure-R implementation that uses a for loop:
 
 ```R
-# lapply(x, f, ...) ->
-for(i in seq_along(x)) {
-  output[i] <- f(x[i], ...)
+lapply2 <- function(x, f, ...) {
+  out <- vector("list", length(x))
+  for (i in seq_along(x)) {
+    out[[i]] <- f(x[[i]], ...)
+  }
+  out
 }
 ```
 
-To make it more concrete:
+`lapply()` is just a wrapper around a common for-loop pattern. There are a number of other wrappers for common for-loops, which we'll explore in 
+
+The three most important HOFs you're likely to use are from the `apply` family. The family includes `apply`, `lapply`, `mapply`, `tapply`, `sapply`, `vapply`, and `by`. Each of these functions processes breaks up a data structure in some way, applies the function to each piece and then joins them back together again. The `**ply` functions of the `plyr` package which attempt to unify the base apply functions by cleanly separating based on the type of input they break up and the type of output that they produce. 
+However, most of those functions are most useful for data analysis, rather than programming, so in this section we'll focus on the three functions that you're most likely to use as an R programming: `lapply`, `vapply` and `Map`.
+
+```R
+for(x in xs) {}
+for(i in seq_along(xs)) {}
+for(nm in names(xs)) {}
+```
+
+### `sapply` and `vapply`
+
+`sapply()` and `vapply()` are very similar to `lapply()` except they will simplify their output to produce an atomic vector. `sapply()` will guess the output, while with `vapply()` you have to be explicit. `sapply()` is useful for interactive use because it's a minimum amount of typing, but if you use it inside your functions you will get weird errors if you supply the wrong type of input. `vapply()` is more verbose, but gives more informative errors messages (it will never fail silently), so is better suited for programming with.
+
+```R
+sapply(mtcars, is.numeric)
+vapply(mtcars, is.numeric, logical(1))
+```
+
+A pure R implementation of `sapply` and `vapply` follows:
+
+```R
+sapply2 <- function(x, f, ...) {
+  res <- lapply2(x, f, ...)
+  simplify2array(res)
+}
+
+vapply2 <- function(x, f, f.value, ...) {
+  out <- matrix(rep(f.value, length(x)), nrow = length(x))
+  for (i in seq_along(x)) {
+    res <- f(x, ...)
+    stopifnot(
+      length(res) == length(f.value), 
+      typeof(res) == typeof(f.value)
+    )
+    out[i, ] <- res
+  }
+  out
+}
+```
+
+The real implementations of `vapply()` is somewhat more complicated because it takes more care with error messages, and is implemented in C for efficiency.
+
+### `Map` (and `mapply`)
+
+`Map` is useful when you have multiple sets of inputs that you want to iterate over in parallel. `Map(f, x, y, z)` is equivalent to
+
+```R
+for(i in seq_along(x)) {
+  output[[i]] <- f(x[[i]], y[[i]], z[[i]])
+}
+```
+
+In comparison with `lapply()`, `Map()` iterates over all of its arguments, not just the first one:
 
 ```R
 a <- c(1, 2, 3)
 b <- c("a", "b", "c")
-lapply(a, f, b)
-# list(f(1, b), f(2, b), f(3, b))
+
+str(lapply(FUN = list, a, b))
+str(Map(f = list, a, b))
 ```
 
-`Map` is useful when you have multiple sets of inputs that you want to be called in parallel.
+What if you have arguments that you don't want to be split up? Use an anonymous function!
 
 ```R
-# mapply(x, f, y, z) ->
-for(i in seq_along(x)) {
-  output[i] <- f(x[i], y[i], z[i])
-}
+Map(function(x, y) f(x, y, zs), xs, ys)
 ```
 
-To make it more concrete:
+You may be more familiar with `mapply()` than `Map()`. I prefer `Map()` because:
 
-```R
-Map(f, a, b, SIMPLIFY = FALSE)
-# list(f(1, "a"), f(2, "b"), f(3, "b"))
-```
+* it is equivalent to `mapply` with `simplify = FALSE`, which is almost always what you want. 
 
-What if you have arguments that you don't want to be split up?  Use an anonymous function!
+* `mapply` also has the `MoreArgs` arguments with which you can provide a list of extra arguments that will be supplied as is to each call; however this breaks R's usual lazy evaluation semantics, and is better done with an anonymous function.
 
-```R
-Map(function(x, y) f(x, y, z), xs, ys)
-```
-
-Note: you may be more familiar with `mapply` than Map. I prefer map because it is equivalent to `mapply` with `simplify = FALSE` which is almost always what you want.
+In brief, `mapply()` is much more complicated for little gain.
 
 ### Recursively applying a function
 
@@ -557,6 +622,8 @@ It's certainly possible to write functions that encapsulate these types of loops
 
 ### Exercises
 
+* Implement the `arg_max` function. It should take a function, and a vector of inputs, returning the elements of the input where the function returns the highest number. For example, `arg_max(-10:5, function(x) x ^ 2)` should return -10. `arg_max(-5:5, function(x) x ^ 2)` should return `c(-5, 5)`.  Also implement the matching `arg_min`.
+
 ## Mathematical functionals
 
 <!-- 
@@ -656,6 +723,12 @@ A related use of function factories is to tweak the way that existing functions 
   ```
 
   Can you extend the function to take any number of functions as input? You'll probably need a loop.
+
+* Create a function `pick()`, that takes an index, `i`, as an argument and returns a function an argument `x` that subsets `x` with `i`.
+  
+  ```R
+  lapply(mtcars, pick(5))
+  ```
 
 * Write a function `and` that takes two function as input and returns a single function as an output that ands together the results of the two functions. Write a function `or` that combines the results with `or`.  Add a `not` function and you now have a complete set of boolean operators for predicate functions.
 
