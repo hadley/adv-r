@@ -1,17 +1,17 @@
 # Functional programming
 
-At it's core, R is functional programming (FP) language which means it supports "first class functions", functions that can be:
+At it's core, R is a functional programming (FP) language which means it supports "first class functions", functions that can be:
 
 * created anonymously,
 * assigned to variables and stored in data structures,
 * returned from functions,
 * passed as arguments to other functions
 
-This chapter will explore the consequences of R's functional nature, introducing a new set of techniques for removing redundancy and duplication in your code. 
+This chapter will explore the consequences of R's functional nature and introduce a new set of techniques for removing redundancy and duplication in your code. 
 
 Each technique is relatively simple by itself, but combined they provide a powerful set of techniques. They are especially useful when you want to solve a large class of problems with a small set of building blocks and tools to connect them together. 
 
-We'll start with a motivating example, showing how you can use functional programming techniques to reduce duplication in some typical code for cleaning data and summarising data. This example will introduce some of the most important functional programming concepts, which we will then dive in to in more detail:
+We'll start with a motivating example, showing how you can use functional programming techniques to reduce duplication in some typical code for cleaning data and summarising data. This example will introduce some of the most important functional programming concepts, which we will then dive into in more detail:
 
 * __Anonymous functions__, functions that don't have a name
 
@@ -63,7 +63,7 @@ df$e <- fix_missing(df$e)
 df$f <- fix_missing(df$e)
 ```
 
-This reduces the scope for errors, but we've still made one, because we've repeatedly applied our function to each column. To prevent that error from occuring we need remove the copy-and-paste application of our function to each column. To do this, we need to combine, or __compose__, our function for correcting missing values with a function that does something to each column in a data frame, like `lapply()`.  
+This reduces the scope for errors, but we've still made one, because we've repeatedly applied our function to each column. To prevent that error from occuring we need to remove the copy-and-paste application of our function to each column. To do this, we need to combine, or __compose__, our function for correcting missing values with a function that does something to each column in a data frame, like `lapply()`.  
 
 `lapply()` takes three inputs: a list, a function, and other arguments to pass to the function. It applies the function to each element of the list and returns the resulting list (since data frames are also lists, `lapply()` also works on data frames). `lapply(x, f, ...)` is equivalent to the following for loop:
 
@@ -76,7 +76,7 @@ for (i in seq_along(x)) {
 
 The real `lapply()` is rather more complicated since it's implemented in C for efficiency, but the essence of the algorithm is the same. `lapply()` is a higher-order-function (HOF), because it takes a function as one of its arguments. HOFs are an important part of functional programming and we'll learn more about them below.
 
-We can apply `lapply()` to our problem with one small trick: rather than simply assigning the results to `df` we assign then to `df[]`, so R's usual subsetting rules take over and we get a data frame instead of a list.
+We can apply `lapply()` to our problem with one small trick: rather than simply assigning the results to `df` we assign them to `df[]`, so R's usual subsetting rules take over and we get a data frame instead of a list.
 
 ```R
 fix_missing <- function(x) {
@@ -88,7 +88,7 @@ df[] <- lapply(df, fix_missing)
 
 As well as being more compact, there are two main advantages of this code over our previous code:
 
-* If the representation of missing values changes, we only need to change it in one place, and there is no way for some columns to be treated differently to others.
+* If the representation of missing values changes, we only need to change it in one place, and there is no way for some columns to be treated differently than others.
 
 * Our code works regardless of the number of columns in the data frame, and there is no way to miss a column because of a copy and paste error.
 
