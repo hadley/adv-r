@@ -9,6 +9,8 @@ pandoc --chapters -o book.pdf --latex-engine xelatex \
   Functions.md \
   Environments.md \
   Functional-programming.md \
+  Functionals.md \
+  Function-operators.md
   Evaluation.md \
   Computing-on-the-language.md \
   Exceptions-debugging.md \

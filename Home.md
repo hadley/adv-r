@@ -9,9 +9,11 @@ Making reusable code
 
 * Functional programming
   * [[Functions]]
-  * [[Functional programming]]
   * [[Environments]]
-* * Objected oriented programming
+  * [[Functional programming]]
+  * [[Functionals]]
+  * [[Function operators]]
+* Objected oriented programming
   * [[The S3 object system|S3]]
   * [[The S4 object system|S4]]
   * [[Reference based classes|R5]]
