@@ -546,14 +546,13 @@ The first three functions take a logical predicate, a function that returns eith
   }
   ```
 
-* `Position`: return the position of the first element that matches the
-  predicate (or the last element if `right = TRUE`).
+* `Position`: return the position of the first element that matches the predicate (or the last element if `right = TRUE`).
 
     ```R
-  for(i in seq_along(x)) {
-    if (f(x[[i]])) return(i)
-  }
-  ```
+    for(i in seq_along(x)) {
+      if (f(x[[i]])) return(i)
+    }
+    ```
 
 The following example shows some simple uses:
 
