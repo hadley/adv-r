@@ -1,6 +1,44 @@
-## Function operators
+# Function operators
 
-A related use of function factories is to tweak the way that existing functions behase. Two built-in examples of this are functions `Negate` and `Vectorise`:
+Solving bigger problems often involves develop a specialised language for describing them.  This section shows how you can create domain specific languages in R using function operators: functions that both input and output functions.  We will explore function operators in the context of avoiding a common R programming problem: supplying the wrong type of input to a function.  
+
+We want to develop a flexible way of specifying what a function needs, using a minimum amount of typing.  To do that we'll define some simple building blocks, and then work our way up by developing tools that combine simple pieces to create more complicated structures.
+
+We'll also deal with some issues of creating new languages like conflicts with existing function names.
+
+## Boolean algebra
+
+```R
+and <- function(f1, f2) {
+  function(...) {
+    f1(...) && f2(...)
+  }
+}
+or <- function(f1, f2) {
+  function(...) {
+    f1(...) || f2(...)
+  }
+}
+not <- function(f1) {
+  function(...) {
+    !f1(...)
+  }
+}
+```
+
+### Exercises
+
+* Something with `Negate`
+
+* Extend `and`, `or` and `not` to deal with any number of input functions.
+
+* Implement a corresponding `xor` function. Why can't you give it the most natural name?  What might you call it instead? Should you rename `and`, `or` and `not` to match your new naming scheme?
+
+* Once you have read the [[S3]] chapter, replace `and`, `or` and `not` with appropriate methods of `&`, `|` and `!`.  Does `xor` work?
+
+## Existing examples
+
+Two built-in examples of this are functions `Negate` and `Vectorise`:
 
 * `Negate` takes a function that returns a logical vector, and returns the
   negation of that function. This can be a useful shortcut when the function
