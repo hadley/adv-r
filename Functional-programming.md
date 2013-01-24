@@ -553,6 +553,18 @@ A simpler solution in this case is to use `Map`, as described in the last chapte
 
 It's usually better to use `lapply` because it is more familiar to most R programmers, and it is somewhat simpler and so is slightly faster.
 
+### Moving lists of functions to the global environment
+
+From time to time you may want to create a list of functions that you want to be available to your users without having to an special syntax.  There are a few ways to achieve that, based on the idea that lists and environments share very similar interfaces
+
+* `with(fs, mycode)`
+
+* `attach(fs)` - this makes a copy of the list so that there's no connection between the two, but it is easier to remove afterwards.
+
+* `list2env(fs, environment())` - efficiently copies from a list into the `globalenv()` (or wherever the code is running - using `environment()` means that it will also work just within a function or as top-level code in a package.)
+
+An alternative approach is to work with names of function with `get()` and `assign()` - I prefer the approach of keeping functions in a list as long as possible, because there are a richer set of functions for dealing with lists than there are for dealing with character vectors containing variable names.
+
 ### Exercises
 
 * Write a compose function that takes a list of function and creates a new function that calls them in order from left to right. 
