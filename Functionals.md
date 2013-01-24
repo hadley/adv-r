@@ -410,7 +410,7 @@ add <- function(x, y) {
 
 (We're using R's existing addition operator here, which does much more, but the focus in this section is on how we can take very very simple functions and extend them to do more).
 
-We really should also have some way to deal with missing values. A helper function will make this a bit easier -  if x is missing it returns y, if y is missing it returns x, and if both inputs are missing then it returns another argument to the function: `identity`. (We'll talk a bit later about while we've called it identity later).
+We really should also have some way to deal with missing values. A helper function will make this a bit easier -  if x is missing it returns y, if y is missing it returns x, and if both inputs are missing then it returns another argument to the function: `identity`. (We'll talk a bit later about while we've called it identity later).  This function is probably a bit more general than what we need now, but it will come in handy when you implement other binary operators.
 
 ```R
 rm_na <- function(x, y, identity) {
@@ -447,7 +447,27 @@ The first way we might want to extend this function is to make it possible to ad
 r_add <- function(xs, na.rm = TRUE) {
   Reduce(function(x, y) add(x, y, na.rm = na.rm), xs)
 }
-r_add(1, 4, 10)
+r_add(c(1, 4, 10))
+```
+
+This looks good, but we need to test it for a few special cases:
+
+```R
+r_add(NA, na.rm = TRUE)
+r_add(numeric())
+```
+
+These are incorrect: in the first case we get a missing value even thought we've explicitly asked for them to be ignored, and in the second case we get a null, instead of a length 1 numeric vector (as for every other set of inputs).
+
+The two problems are related: if we give `Reduce()` a length one vector it doesn't have anything to reduce, so it just returns the same value. And if we give it a length 0 input it returns `NULL`.  There are two ways to fix this: we can add `0` to every input vector, or we can use the `init` argument to `Reduce()` which effectively does the same thing:
+
+```R
+r_add <- function(xs, na.rm = TRUE) {
+  Reduce(function(x, y) add(x, y, na.rm = na.rm), c(0, xs))
+}
+r_add(c(1, 4, 10))
+r_add(NA, na.rm = TRUE)
+r_add(numeric())
 ```
 
 (There is of course a function in R that already does that: `sum`)
