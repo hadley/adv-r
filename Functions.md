@@ -575,6 +575,14 @@ R's default precedence rules mean that infix operators are composed from left to
 "a" %-% "b" %-% "c"
 ```
 
+There's one infix function I've created that I use very often. It's inspired by Ruby's `||` logical or operator: it works a little differently to R's because of what objects ruby considers to be true, but it's often used as a way of setting default values.
+
+```R
+"%||%" <- function(a, b) if (!is.null(a)) a else b
+function_that_might_return_null() %||% default value
+```
+
+
 ### Replacement functions
 
 Replacement functions act like they modify their arguments in place, and have the special name `xxx<-`. They typically have two arguments (`x` and `value`), although they can have more, and they must return the modified object. For example, the following function allows you to modify the second element of a vector:

@@ -14,24 +14,29 @@
 
 Higher-order functions encompass any functions that either take a function as an input or return a function as output. We've seen our first example of a higher-order function, the closures, functions returned by another function. The complement to a closure is a __functional__, a function that takes a function as an input and returns a vector as output. 
 
-Most functionals in R fall:
+Here's a simple functional, it takes an input function and calls it with some random input:
 
-* mathematical functionals, like `integrate`, `uniroot`, and `optim`.
+```R
+randomise <- function(f) f(runif(1e3))
+randomise(mean)
+randomise(sum)
+```
 
-* functionals that encapulsate a common pattern of for-loop use, like `lapply`, `vapply` and `by`
+Functionals effectively offer an alternative to for loops for many problems. For loops have a bad rap in R, and many programmers try to eliminate them at all costs. We'll explore their speed in the [[performance]] chapter; but it's not as bad as many people believe. The real downside of for loops is that they're not very expressive: the only convey that you're iterating over something, not the higher-level task you're trying to achieve. Using functionals, allows you to more clearly express express what you're trying to achieve. As a side-effect, because existings functionals are used by many people, they are likely to have fewer errors and be more performant than a one-off for loop that you create. For example, most functionals in base R are written in C for high-performance.
 
-* functionals for manipulating common R data structures, like `apply`, `split`, `tapply` and the plyr package.
+In this chapter, you'll learn about:
 
-* functionals common to many programming languages, like `Map`, `Reduce` and `Filter`
+* Mathematical functionals, like `integrate`, `uniroot`, and `optim`.
 
-In this chapter, you'll learn:
+* Functionals that encapulsate a common pattern of for-loop use, like `lapply`, `vapply` and `Map`.
 
-* mathematical functionals
-* for loops vs. lapply
-* common alternatives to for loops in base R
-* more specialised alternatives to for loops in other packages
-* how to create your own functionals
-* when it's ill-advised to replace a for loop
+* Functionals for manipulating common R data structures, like `apply`, `split`, `tapply` and the plyr package.
+
+* Popular functionals from other programming languages, like `Map`, `Reduce` and `Filter`
+
+* how to convert a loop to a functionals, and when you shouldn't do it.
+
+Focus in this chapter is on expression/clarity of intent.  Once you have clear, correct code you can focus on optimising it use the techniques in the [[Performance]] chapter.
 
 ## Mathematical functionals
 
@@ -65,14 +70,18 @@ There is one function that works with a more general n-dimensional numeric funct
 
 In statistics, optimisation is often used for maximum likelihood estimation. Maximum likelihood estimation is a natural match to closures because the arguments to a likelihood fall into two groups: the data, which is fixed for a given problem, and the parameters, which will vary as we try to find a maximum numerically. This naturally gives rise to an approach like the following:
 
+First, we create a function that computes the negative log likelihood (it's common to use the negative in R since optim defaults to findinging the minimum)
+
 ```R
-# Negative log-likelihood for Poisson distribution
 poisson_nll <- function(x) {
   n <- length(x)
   function(lambda) {
     n * lambda - sum(x) * log(lambda) # + terms not involving lambda
   }
 }
+```
+
+```R
 
 nll1 <- poisson_nll(c(41, 30, 31, 38, 29, 24, 30, 29, 31, 38)) 
 nll2 <- poisson_nll(c(6, 4, 7, 3, 3, 7, 5, 2, 2, 7, 5, 4, 12, 6, 9)) 
@@ -91,10 +100,11 @@ There are better treatments of numerical optimisation elsewhere, but there are a
 
 * Need to give up at some point: either after too many iterations, or when difference (either absolute or relative is small)
 
-## `lapply` vs. for loops
+### Exercises
 
+* Implement the `arg_max` function. It should take a function, and a vector of inputs, returning the elements of the input where the function returns the highest number. For example, `arg_max(-10:5, function(x) x ^ 2)` should return -10. `arg_max(-5:5, function(x) x ^ 2)` should return `c(-5, 5)`.  Also implement the matching `arg_min`.
 
-For loops have a bad rap in R, and many programmers try to eliminate them at all costs. We'll explore their speed in the [[performance]] chapter; but it's not as bad as many people believe. The real downside of for loops is that they're not very expressive: the only convey that you're iterating over something, not the higher-level task you're trying to achieve. Using functionals, allows you to more clearly express express what you're trying to achieve. As a side-effect, because existings functionals are used by many people, they are likely to have fewer errors and be more performant than a one-off for loop that you create. For example, most functionals in base R are written in C for high-performance.
+## For-loop functions: `lapply` and friends
 
 We've seen one functional already, `lapply()`, which applies a function to each element of a list, storing the results in a list. It's informative to look at a pure R implementation:
 
@@ -128,8 +138,6 @@ lapply(names(xs), function(nm) {})
 
 The last two ways are particularly useful because they give you both the position of the object (`i`, `nm`) and its value (`x[[i]]`, `x[[nm]]`).  If you're struggling to solve a problem using one form, you might find it easier with a different way.
 
-## Common alternatives to for loops
-
 The following sections discuss:
 
 * `sapply()` and `vapply()`, variants of `lapply()` that produce vectors, matrices and arrays as output, instead of lists
@@ -137,7 +145,7 @@ The following sections discuss:
 
 The three most important HOFs you're likely to use are from the `apply` family. The family includes `apply`, `lapply`, `mapply`, `tapply`, `sapply`, `vapply`, and `by`.
 
-### `sapply` and `vapply`
+### Vector output: `sapply` and `vapply`
 
 `sapply()` and `vapply()` are very similar to `lapply()` except they will simplify their output to produce an atomic vector. `sapply()` will guess the output, while with `vapply()` you have to be explicit. `sapply()` is useful for interactive use because it's a minimum amount of typing, but if you use it inside your functions you will get weird errors if you supply the wrong type of input. `vapply()` is more verbose, but gives more informative errors messages (it will never fail silently), so is better suited for programming with.
 
@@ -170,10 +178,7 @@ vapply2 <- function(x, f, f.value, ...) {
 
 The real implementations of `vapply()` is somewhat more complicated because it takes more care with error messages, and is implemented in C for efficiency.
 
-* `Filter`: returns a new vector containing only elements where the predicate is `TRUE`.
-
-
-### `Map` (and `mapply`)
+### Multiple inputs: `Map` (and `mapply`)
 
 `Map` is useful when you have multiple sets of inputs that you want to iterate over in parallel. `Map(f, x, y, z)` is equivalent to
 
@@ -207,21 +212,101 @@ You may be more familiar with `mapply()` than `Map()`. I prefer `Map()` because:
 
 In brief, `mapply()` is much more complicated for little gain.
 
-### Matrix operations
+
+### Rolling computations
 
 ```R
-# apply
+out <- numeric(length(x) - n + 1)
+for(i in n:length(x)) {
+  out[i] <- f(x[i:(i + n - 1)], ...)
+}
+```
+
+You might notice that this is pretty similar to what `vapply` does, and in fact we could rewrite it as
+
+```R
+g <- function(i) f(x[i:(i + n - 1)], ...)
+vapply(n:length(x), g)
+```
+
+which is effectively how `zoo::rollapply` implements it. (Albeit with a lot more features and error checking)
+
+```R
+rollapply(x, n, f, ...)
+```
+
+### Parallelisation
+
+No side effects means that functions can be run in any order, and potential on different cores or different computers.
+
+Another advantage of using common functionals is that parallelised versions may be available: `mclapply` and `mcMap`.
+
+
+
+## Data structure 
+
+### Group apply
+
+`tapply()`: apply function to subsets of input vector as defined by grouping variable:
+
+```R
+tapply2 <- function(x, group, f, ...) {
+  ugroup <- unique(group)
+  out <- vector("list", length(ugroup))
+  for (g in seq_along(ugroup)) {
+    out[[g]] <- f(x[group == ugroup[g]])
+  }  
+  out
+}
+tapply2(1:10, rep(1:2, each = 5), mean)
+```
+
+Can also think of it as a combination of split and sapply:
+
+```R
+tapply3 <- function(x, group, f, ...) {
+  pieces <- split(x, group)
+  sapply(pieces, group)
+}
+```
+
+* `tapply(..., simplify = F)` is equivalent to `split()` + `lapply()`
+* there's no equivalent to `split()` + `vapply()`.  Should there be? When would it be useful?
+* `by` is a thin wrapper around 
+
+```R
+split <- function(x, group) {
+  ugroup <- unqiue(group)
+  out <- vector("list", length(ugroup))
+  for (g in seq_along(ugroup)) {
+    out[[g]] <- x[group == ugroup[g]]
+  }  
+  out
+}
+```
+
+### Data frames
+
+Each of these functions processes breaks up a data structure in some way, applies the function to each piece and then joins them back together again. The `**ply` functions of the `plyr` package which attempt to unify the base apply functions by cleanly separating based on the type of input they break up and the type of output that they produce. 
+
+### Matrix and array operations
+
+apply
+```R
 for(i in seq_len(dims(x)[i])) {
   out[i, ,] <- f(x[i, , ])
 }
 simplify2array(out)
+```
 
-# sweep
+sweep
+```R
 for(i in ) {
   x[i , , ] <- f(x[i , , ], y[i])
 }
 
-# outer
+outer
+```
 out <- matrix(nrow = length(x), ncol = length(y))
 for (i in seq_along(x)) {
   for(j in seq_along(y)) {
@@ -230,7 +315,45 @@ for (i in seq_along(x)) {
 }
 ```
 
-### Other functions
+## Functional programming
+
+<!-- 
+  http://www.haskell.org/ghc/docs/latest/html/libraries/base/Prelude.html
+  http://docs.scala-lang.org/overviews/collections/trait-traversable.html#operations_in_class_traversable
+
+  Clojure and python documentation is not so useful
+ -->
+
+The three most important functionals, implemented in almost every other functional programming language are `Map()`, `Reduce()`, and `Filter()`. We've seen `Map()` already, `Reduce()` is a powerful tool for extending two-argument functions, and `Filter()` is a member of an important class of functions that work with predicate functions, functions that return a single boolean.
+
+### `Reduce()`
+
+`Reduce()`: recursively reduces a vector to a single value by first calling `f` with the first two elements, then the result of `f` and the second element and so on. 
+
+```R
+out <- x[[1]]
+for(i in seq(2, length(x)) {
+  out <- f(out, x[[i]])
+}
+```
+
+Reduce is useful for implementing many types of recursive operations: merges, finding smallest values, intersections, unions.
+
+Reduce is an elegant way of turning binary functions into functions that can deal with any number of arguments, but it is generally of limited use in R because it will produce functions that are much slower than equivalent hand-vectorised code.
+
+Can you implement unlist with reduce? + c?
+
+### Predicates
+
+A __predicate__ is a function that returns `TRUE` or `FALSE`. 
+
+Predicate functions are more useful in non-vectorised languages: you don't need them in R, because many useful predictates are already vectorised: `is.na`, comparisons, boolean operators
+
+* `Filter`: returns a new vector containing only elements where the predicate is `TRUE`.
+
+One function that I find very helpful is `compact`.
+
+As well as filter, two other functions are useful when you have logical predicates
 
 * `Find()`: return the first element that matches the predicate (or the last element if `right = TRUE`).
 
@@ -248,88 +371,71 @@ for (i in seq_along(x)) {
     }
     ```
 
-* `tapply()`: apply function to subsets of input vector as defined by grouping variable:
+Other languages like Haskell and clojure provide more functions:
 
-    ```R
-    tapply2 <- function(x, group, f, ...) {
-      ugroup <- unique(group)
-      out <- vector("list", length(ugroup))
-      for (g in seq_along(ugroup)) {
-        out[[g]] <- f(x[group == ugroup[g]])
-      }  
-      out
-    }
-    tapply2(1:10, rep(1:2, each = 5), mean)
-    ```
+```R
+take_while <- function(x, f) {
+  x[1:Position(x, f, nomatch = length(x))]
+}
+drop_while <- function(x, f) {
+  x[1:Position(x, f, nomatch = length(x))]
+}
+break <- function(x, f) {
+  list(take_while(x, f), drop_while(x, f))
+}
+```
 
-    Can also think of it as a combination of split and sapply:
+* STL: `find_if`, `count_if`, `replace_if`, `remove_if`, `none_of`, `any_of`, `stable_partition`
 
-    ```R
-    tapply3 <- function(x, group, f, ...) {
-      pieces <- split(x, group)
-      sapply(pieces, group)
-    }
-    ```
+### Exercises
 
-    * `tapply(..., simplify = F)` is equivalent to `split()` + `lapply()`
-    * there's no equivalent to `split()` + `vapply()`.  Should there be? When would it be useful?
+* Implement `Any` which takes a list and a predicate function, and returns `TRUE` if the predicate function returns `TRUE` for any of the inputs.  Implement a similar `All` function.
 
-    ```R
-    split <- function(x, group) {
-      ugroup <- unqiue(group)
-      out <- vector("list", length(ugroup))
-      for (g in seq_along(ugroup)) {
-        out[[g]] <- x[group == ugroup[g]]
-      }  
-      out
-    }
-    ```
+* Implement a more efficient version of break that avoids finding the location of the true value twice.
 
-* `Reduce()`: recursively reduces a vector to a single value by first calling `f` with the first two elements, then the result of `f` and the second element and so on. 
-
-    ```R
-    out <- x[[1]]
-    for(i in seq(2, length(x)) {
-      out <- f(out, x[[i]])
-    }
-    ```
-
-    Reduce is useful for implementing many types of recursive operations: merges, finding smallest values, intersections, unions.
-
-   
-
-## Important functionals in other packages
-
-Each of these functions processes breaks up a data structure in some way, applies the function to each piece and then joins them back together again. The `**ply` functions of the `plyr` package which attempt to unify the base apply functions by cleanly separating based on the type of input they break up and the type of output that they produce. 
+* Implement the `span` function from Haskell, which given a list `x` and a predicate function `f`, returns the longest sequential run of elements where the predicate is true.
 
 
-* rolling/running computations
-
-    ```R
-    out <- numeric(length(x) - n + 1)
-    for(i in n:length(x)) {
-      out[i] <- f(x[i:(i + n - 1)], ...)
-    }
-    ```
-
-    You might notice that this is pretty similar to what `vapply` does, and in fact we could rewrite it as
-
-    ```R
-    g <- function(i) f(x[i:(i + n - 1)], ...)
-    vapply(n:length(x), g)
-    ```
-
-    which is effectively how `zoo::rollapply` implements it. (Albeit with a lot more features and error checking)
-
-    ```R
-    rollapply(x, n, f, ...)
-    ```
-
-## Loops that can't be replaced by functionals
+## Converting loops to functionals, and when it's not possible
 
 That there are wide class of for loops that can not be simplified to a single existing function call in R, and a wide class that can never be
 
-* Relationships that a defined recursively, like exponential smoothing.
+Good stackoverflow discussions on converting loops to more efficient/expressive code:
+
+* http://stackoverflow.com/a/14520342/16632
+* http://stackoverflow.com/a/2970284/16632
+
+It is not always a good idea to eliminate a for-loop: for loops are verbose and not very expressive, but all R programmers are familiar with them. For example, it's sometimes possible to work around the limitations of `lapply` by using more estoeric language features like `<<-`
+
+```R
+trans <- list(
+  disp = function(x) x * 0.0163871,
+  am = function(x) factor(x, levels = c("auto", "manual"))
+)
+for(var in names(trans)) {
+  mtcars[[var]] <- trans[[var]](mtcars[[var]])
+}
+```
+
+You could rewrite this as
+
+```R
+lapply(names(trans), function(var) {
+  mtcars[[var]] <<- trans[[var]](mtcars[[var]])
+})
+```
+
+From 
+
+```R
+df <- 1:10
+lapply(2:3, function(i) df <- df * i)
+for(i in 2:3) df <- df * i
+```
+
+We've eliminated the obvious for loop, but our code is longer, and we've had to use a language feature that few people are familiar with `<<-`.  And to really understand what `mtcars[[var]] <<-` is doing, you need to have a good mental model of how replacement functions really work.  So we've taken something simple and made more complicated, for effectively no gain.
+
+* Relationships that a defined recursively, like exponential smoothing. 
     
 ```R
 exps <- function(x, alpha) {
@@ -342,7 +448,28 @@ exps <- function(x, alpha) {
     }
   }
 }
+exps(x, 0.5)
 ```
+
+(What's the key feature? Dependening on previously calculated values? Or is it just a cumulative weighted sum?)
+
+```R
+lbapply <- function(x, f, init = x[1], ...) {
+  out <- numeric(length(x))
+  out[1] <- init
+  for(i in seq(2:length(x))) {
+    out[i] <- f(x[i - 1], out[i - 1], ...)
+  }  
+}
+
+f <- function(x, out, alpha) alpha * x + (1 - alpha) * out
+lbapply(x, f, alpha = 0.5)
+
+lbapply(x, function(x, out) x + y, 0)
+```
+
+Closures vs `...`.  `...` usually requires less typing, but there can be confusion about which function arguments belong to.  If you're passing in more than one function, definitely go with closures.
+
 
 Sometimes it's possible to [solve the recurrence relation](http://en.wikipedia.org/wiki/Recurrence_relation#Solving). In this case, it's possible to rewrite in terms of `i`:
 
@@ -382,8 +509,6 @@ while(TRUE) {
 This is a common situation when you're writing simulations: one of the random parameters in your simulation may be how many times it is run.  
 
 In some cases, like above, you may be able to remove the loop by recongnising some special feature of the problem. For example, the above problem is counting how many times a Bernoulli trial with p = 0.1 is run before it is successful: this is a geometric random variable so you could replace the above code with `i <- rgeom(1, 0.1)`.  Similar to solving recurrence relations, this is extremely difficult to do in general, but you'll get big gains if you manage to. In most cases it is difficult to write code like that efficiently in R, and if you are calling the code a lot, you may need to convert it to [[C++|Rcpp]].
-
-## Writing your own functionals
 
 It's certainly possible to write functions that encapsulate these types of loops, but they are not built in to R. Whether or not it's worth building your own function depends on how often you'll be using, and how much more expressive a better function name would be.
 
@@ -541,6 +666,3 @@ The downside of this approach is that these implementations are unlikely to be v
 
 * How does `paste` fit into this structure? What is the primitive function that underlies paste? What are the `sep` and `collapse` arguments equivalent to? Are there are any components that are missing for paste?
 
-### Exercises
-
-* Implement the `arg_max` function. It should take a function, and a vector of inputs, returning the elements of the input where the function returns the highest number. For example, `arg_max(-10:5, function(x) x ^ 2)` should return -10. `arg_max(-5:5, function(x) x ^ 2)` should return `c(-5, 5)`.  Also implement the matching `arg_min`.

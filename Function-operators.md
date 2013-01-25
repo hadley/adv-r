@@ -6,6 +6,8 @@ We want to develop a flexible way of specifying what a function needs, using a m
 
 We'll also deal with some issues of creating new languages like conflicts with existing function names.
 
+Like creating an algebra, in the sense that we define atoms and how to combine them together. Closed.
+
 ## Boolean algebra
 
 ```R

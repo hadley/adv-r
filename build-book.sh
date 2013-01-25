@@ -4,13 +4,13 @@
 #   Environments.md && open book.pdf
 
 pandoc --chapters -o book.pdf --latex-engine xelatex \
-  -V papersize:oneside -V links-as-notes -V toc \
+  -V papersize:oneside -V links-as-notes --toc \
   Introduction.md \
   Functions.md \
   Environments.md \
   Functional-programming.md \
   Functionals.md \
-  Function-operators.md
+  Function-operators.md \
   Evaluation.md \
   Computing-on-the-language.md \
   Exceptions-debugging.md \
