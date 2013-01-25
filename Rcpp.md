@@ -994,13 +994,13 @@ The same C++ code that is used with `sourceCpp` can also be bundled into a packa
 To generate a new Rcpp package that includes a simple hello, world function you can use the `Rcpp.package.skeleton` function as follows:
 
 ```r
-> Rcpp.package.skeleton("NewPackage", attributes = TRUE)
+Rcpp.package.skeleton("NewPackage", attributes = TRUE)
 ```
 
 To generate a package based on C++ files that you've been using with `sourceCpp` you can use the `cpp_files` parameter:
 
 ```r
-> Rcpp.package.skeleton("NewPackage", example_code = FALSE, 
+Rcpp.package.skeleton("NewPackage", example_code = FALSE, 
                         cpp_files = c("convolve.cpp"))
 ```
 
