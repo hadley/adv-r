@@ -306,7 +306,8 @@ for(i in ) {
 }
 
 outer
-```
+
+```R
 out <- matrix(nrow = length(x), ncol = length(y))
 for (i in seq_along(x)) {
   for(j in seq_along(y)) {
