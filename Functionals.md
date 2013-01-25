@@ -304,6 +304,7 @@ sweep
 for(i in ) {
   x[i , , ] <- f(x[i , , ], y[i])
 }
+```
 
 outer
 
