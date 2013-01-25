@@ -646,7 +646,7 @@ LogicalVector is_naC(NumericVector x) {
 
 Another alternative is the similarly named sugar function `is_na`: it takes a vector and returns a logical vector.
 
-```
+```cpp
 // [[Rcpp::export]]
 LogicalVector is_naC2(NumericVector x) {
   return is_na(x);
