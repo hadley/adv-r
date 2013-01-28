@@ -7,10 +7,10 @@
   find_funs("package:base", fun_args, ignore.case("^(fun|f)$"))
 -->
 
+## Introduction
+
 "To become significantly more reliable, code must become more transparent. In particular, nested conditions and loops must be viewed with great suspicion. Complicated control flows confuse programmers. Messy code often hides bugs."
 --- [Bjarne Stroustrup](http://www.stroustrup.com/Software-for-infrastructure.pdf)
-
-## Introduction
 
 Higher-order functions encompass any functions that either take a function as an input or return a function as output. We've seen our first example of a higher-order function, the closures, functions returned by another function. The complement to a closure is a __functional__, a function that takes a function as an input and returns a vector as output. 
 
@@ -22,11 +22,13 @@ randomise(mean)
 randomise(sum)
 ```
 
-Functionals effectively offer an alternative to for loops for many problems. For loops have a bad rap in R, and many programmers try to eliminate them at all costs. We'll explore their speed in the [[performance]] chapter; but it's not as bad as many people believe. The real downside of for loops is that they're not very expressive: the only convey that you're iterating over something, not the higher-level task you're trying to achieve. Using functionals, allows you to more clearly express express what you're trying to achieve. As a side-effect, because existings functionals are used by many people, they are likely to have fewer errors and be more performant than a one-off for loop that you create. For example, most functionals in base R are written in C for high-performance.
+This function is not terribly useful, but it illustrates the basic idea: in R, functions are first class objects and there's no difference between providing a vector or a function as input (except what you do with the input). The chances are that you've already used a functional: `lapply()` is probably the most commonly used functional in R, followed closely by `apply()` and `tapply()`.
+
+Many functionals offer alternatives to for loops. For loops have a bad rap in R, and some programmers try to eliminate them at all costs. The real performance story is a little more complicated than what you might have heard (we'll explore their speed in the [[performance]] chapter); the real downside of for loops is that they're not very expressive.  A for loop conveys that you're iterating over something, but it doesn't communicate the higher-level task you're trying to achieve. Functionals are not as general as for loops, and by being more specific allow you to communicate more clearly. There's not a functional corresponding to every possible use of a for loop, but when there is, you're better off using it. Functionals allow you to take a step up the ladder of abstraction: instead of expressing solutions using looping constructs, you express them at a higher level of specificity.
+
+As well as more clearly communicating intent (e.g. I want to transform each element of this list, or each row of this array), functionals reduce the chances of bugs, and can be more efficient. Both of these features occur be functionals are used by many people, so they will be will tested, and may have been implemented with special tricks. For example, most functionals in base R are written in C for high-performance.
 
 In this chapter, you'll learn about:
-
-* Mathematical functionals, like `integrate`, `uniroot`, and `optim`.
 
 * Functionals that encapulsate a common pattern of for-loop use, like `lapply`, `vapply` and `Map`.
 
@@ -34,77 +36,13 @@ In this chapter, you'll learn about:
 
 * Popular functionals from other programming languages, like `Map`, `Reduce` and `Filter`
 
+* Mathematical functionals, like `integrate`, `uniroot`, and `optim`.
+
 * how to convert a loop to a functionals, and when you shouldn't do it.
 
 Focus in this chapter is on expression/clarity of intent.  Once you have clear, correct code you can focus on optimising it use the techniques in the [[Performance]] chapter.
 
-## Mathematical functionals
-
-<!-- 
-  find_args("package:stats", "^f$")
-  find_args("package:stats", "upper")
--->
-
-Functionals are common in mathematics. 
-
-limit, inverse, definite integral, 
-
-In this section we'll explore some of the built in mathematical HOF functions in R. There are three functions that work with a 1d numeric function:
-
-* `integrate`: integrate it over a given range
-* `uniroot`: find where it hits zero over a given range
-* `optimise`: find location of minima (or maxima)
-
-(You may wonder how these fit in with the theme of removing loops - internally all of these mathematical functions use loops to implement the underlying numeric algorithms: you could implement them all by hand by writing your own loops)
-
-Let's explore how these are used with a simple function:
-
-```R
-integrate(sin, 0, pi)
-uniroot(sin, pi * c(1 / 2, 3 / 2))
-optimise(sin, c(0, 2 * pi))
-optimise(sin, c(0, pi), maximum = TRUE)
-```
-
-There is one function that works with a more general n-dimensional numeric function, `optim`, which finds the location of a minima. 
-
-In statistics, optimisation is often used for maximum likelihood estimation. Maximum likelihood estimation is a natural match to closures because the arguments to a likelihood fall into two groups: the data, which is fixed for a given problem, and the parameters, which will vary as we try to find a maximum numerically. This naturally gives rise to an approach like the following:
-
-First, we create a function that computes the negative log likelihood (it's common to use the negative in R since optim defaults to findinging the minimum)
-
-```R
-poisson_nll <- function(x) {
-  n <- length(x)
-  function(lambda) {
-    n * lambda - sum(x) * log(lambda) # + terms not involving lambda
-  }
-}
-```
-
-```R
-
-nll1 <- poisson_nll(c(41, 30, 31, 38, 29, 24, 30, 29, 31, 38)) 
-nll2 <- poisson_nll(c(6, 4, 7, 3, 3, 7, 5, 2, 2, 7, 5, 4, 12, 6, 9)) 
-
-optimise(nll1, c(0, 100))
-optimise(nll2, c(0, 100))
-```
-
-`optim` is a high-dimension alternative to `optimise`: it takes a numerical vector as input.
-
-`Rvmmin` is a pure R implementation of `optim`.
-
-### Fixed points
-
-There are better treatments of numerical optimisation elsewhere, but there are a couple of important threads that make applying loops here important.
-
-* Need to give up at some point: either after too many iterations, or when difference (either absolute or relative is small)
-
-### Exercises
-
-* Implement the `arg_max` function. It should take a function, and a vector of inputs, returning the elements of the input where the function returns the highest number. For example, `arg_max(-10:5, function(x) x ^ 2)` should return -10. `arg_max(-5:5, function(x) x ^ 2)` should return `c(-5, 5)`.  Also implement the matching `arg_min`.
-
-## For-loop functions: `lapply` and friends
+## For loop functions: `lapply` and friends
 
 We've seen one functional already, `lapply()`, which applies a function to each element of a list, storing the results in a list. It's informative to look at a pure R implementation:
 
@@ -134,6 +72,18 @@ And similarly, there are three ways to use `lapply()` with an object:
 lapply(xs, function(xs) {})
 lapply(seq_along(xs), function(i) {})
 lapply(names(xs), function(nm) {})
+```
+
+There's often a moderate performance improvement of `lapply()` to for loops.  Note, however, that this is a pathological example because the work done inside the loop is minimal; in most cases there is no percievable difference.
+
+```R
+library(microbenchmark)
+options(digits = 3)
+x <- 1:1000
+microbenchmark(
+  lapply = lapply(x, sqrt),
+  loop = {out <- numeric(length(x)); for(i in 1:1000) out[i] <- sqrt(x[i])}
+)
 ```
 
 The last two ways are particularly useful because they give you both the position of the object (`i`, `nm`) and its value (`x[[i]]`, `x[[nm]]`).  If you're struggling to solve a problem using one form, you might find it easier with a different way.
@@ -242,7 +192,6 @@ No side effects means that functions can be run in any order, and potential on d
 Another advantage of using common functionals is that parallelised versions may be available: `mclapply` and `mcMap`.
 
 
-
 ## Data structure 
 
 ### Group apply
@@ -258,6 +207,7 @@ tapply2 <- function(x, group, f, ...) {
   }  
   out
 }
+tapply(1:10, rep(1:2, each = 5), mean, simplify = FALSE)
 tapply2(1:10, rep(1:2, each = 5), mean)
 ```
 
@@ -266,9 +216,12 @@ Can also think of it as a combination of split and sapply:
 ```R
 tapply3 <- function(x, group, f, ...) {
   pieces <- split(x, group)
-  sapply(pieces, group)
+  sapply(pieces, f)
 }
+tapply3(1:10, rep(1:2, each = 5), mean)
 ```
+
+And indeed the real `tapply()` is implemented similarly (although it uses `lapply()` and its own version of simplify.)
 
 * `tapply(..., simplify = F)` is equivalent to `split()` + `lapply()`
 * there's no equivalent to `split()` + `vapply()`.  Should there be? When would it be useful?
@@ -397,6 +350,61 @@ break <- function(x, f) {
 
 * Implement the `span` function from Haskell, which given a list `x` and a predicate function `f`, returns the longest sequential run of elements where the predicate is true.
 
+
+## Mathematical functionals
+
+<!-- 
+  find_funs("package:stats", fun_args, "upper")
+  find_funs("package:stats", fun_args, "^f$")
+-->
+
+Functionals are very common in mathematics: the limit, the maximum, the roots (the set of points where `f(x) = 0`), and the definite integral are all functionals; given a function, they return a single number (or a vector of numbers). At first glance, these functions don't seem to fit in with the theme of eliminating loops, but if you dig deeper you'll see all of them are implemented using an algorithm that involves iteration.
+
+In this section we'll explore some of R's built-in mathematical functionals. There are three functions that work with a 1d numeric function:
+
+* `integrate`: integrate it over a given range
+* `uniroot`: find where it hits zero over a given range
+* `optimise`: find location of minima (or maxima)
+
+Let's explore how these are used with a simple function:
+
+```R
+integrate(sin, 0, pi)
+uniroot(sin, pi * c(1 / 2, 3 / 2))
+optimise(sin, c(0, 2 * pi))
+optimise(sin, c(0, pi), maximum = TRUE)
+```
+
+In statistics, optimisation is often used for maximum likelihood estimation. Maximum likelihood estimation (MLE) is a natural fit for functional programming.  We have a problem and a general technique to solve it.  MLE also works well with closures because the arguments to a likelihood fall into two groups: the data, which is fixed for a given problem, and the parameters, which will vary as we try to find a maximum numerically. This naturally gives rise to an approach like the following.
+
+First, we create a function that computes the negative log likelihood (NLL) for a given dataset.  In in R, it's common to use the negative since `optimise()` defaults to findinging the minimum.
+
+```R
+poisson_nll <- function(x) {
+  n <- length(x)
+  function(lambda) {
+    n * lambda - sum(x) * log(lambda) # + terms not involving lambda
+  }
+}
+```
+
+With the general NLL in hand, we create two specific NLL functions for two datasets, and use `optimise()` to find the best values, given a generous starting range.
+
+```R
+nll1 <- poisson_nll(c(41, 30, 31, 38, 29, 24, 30, 29, 31, 38)) 
+nll2 <- poisson_nll(c(6, 4, 7, 3, 3, 7, 5, 2, 2, 7, 5, 4, 12, 6, 9)) 
+
+optimise(nll1, c(0, 100))
+optimise(nll2, c(0, 100))
+```
+
+Another important mathmatical functional is `optim()`. It is a generalisation of `optim()` to more than one direction. If you're interested in how `optim()` works, you might want to explore the `Rvmmin` package, which provides a pure-R implementation of R. Interestingly `Rvmmin` is no slower than `optim()`, even though it is written in R, not C: for this problem, the bottleneck is evaluating the function multiple times, not controlling the optimisation.
+
+### Exercises
+
+* Implement the `arg_max` function. It should take a function, and a vector of inputs, returning the elements of the input where the function returns the highest number. For example, `arg_max(-10:5, function(x) x ^ 2)` should return -10. `arg_max(-5:5, function(x) x ^ 2)` should return `c(-5, 5)`.  Also implement the matching `arg_min`.
+
+* Read about the fixed point algorithm in http://mitpress.mit.edu/sicp/full-text/book/book-Z-H-12.html#%_sec_1.3.  Complete the exercises using R.
 
 ## Converting loops to functionals, and when it's not possible
 

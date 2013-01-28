@@ -1,7 +1,9 @@
-# pandoc --chapters -o book.pdf --latex-engine xelatex \
-#   -V papersize:oneside -V links-as-notes \
-#   Functions.md \
-#   Environments.md && open book.pdf
+pandoc --chapters -o review.pdf --latex-engine xelatex \
+  -V papersize:oneside -V links-as-notes \
+  Functions.md \
+  Environments.md \
+  Rcpp.md \
+  C-interface.md
 
 pandoc --chapters -o book.pdf --latex-engine xelatex \
   -V papersize:oneside -V links-as-notes --toc \

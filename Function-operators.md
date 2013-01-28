@@ -8,6 +8,22 @@ We'll also deal with some issues of creating new languages like conflicts with e
 
 Like creating an algebra, in the sense that we define atoms and how to combine them together. Closed.
 
+Alternative to adding additional arguments to a function.  Advantage is that you don't limit uses to functionality that you've thought up - as long as the modify the function in the right way, they can add alsorts of extra functioanlity.
+
+Allow you to add extra functionality to an existing function, or to combine two existing function.
+
+* `fail_with`
+* something to convert between different types of loops?
+* logging
+* timing
+* curry
+* memoise
+* 
+
+Python's decorators: http://stackoverflow.com/questions/739654/understanding-python-decorators
+
+`test_that` ?
+
 ## Boolean algebra
 
 ```R
@@ -55,7 +71,7 @@ Two built-in examples of this are functions `Negate` and `Vectorise`:
   (Negate(is.null))(NULL)
   ```
 
-<!-- `Negate` is a general example of the Compose pattern:
+* `Negate` is a general example of the Compose pattern:
 
     Compose <- function(f, g) {
       f <- match.fun(f)
@@ -64,7 +80,7 @@ Two built-in examples of this are functions `Negate` and `Vectorise`:
     }
 
     Compose(sqrt, "+")(1, 8)
- -->
+    Negate <- Curry(Compose, `!`)
 
 * `Vectorize` takes a non-vectorised function and vectorises with respect to
   the arguments given in the `vectorise.args` parameter. This doesn't
