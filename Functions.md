@@ -476,7 +476,7 @@ More technically, an unevaluated argument is called a __promise__, or a thunk. A
 
 You can find more information about a promise using `langr::promise_info`.  This uses some of R's C api to extract information about the promise without evaluating it (which is otherwise very tricky).
 
-Laziness makes is useful in if statements - the second statement will be evaluated only if the first is true. (If it wasn't the statement would return an error because `NULL > 0` is a logical vector of length 0)
+Laziness is useful in if statements - the second statement will be evaluated only if the first is true. (If it wasn't the statement would return an error because `NULL > 0` is a logical vector of length 0)
 
 ```R
 x <- NULL
