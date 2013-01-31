@@ -77,11 +77,14 @@ The following sections discuss:
 
 * patterns of looping, for both for loops and `lapply()`.  The same ideas also apply to pretty much every for-loop-functional in R.
 
-* `sapply()` and `vapply()`, variants of `lapply()` that produce vectors, matrices and arrays as output, instead of lists
-* `Map()` and `mapply()` which iterate over multiple input data structures in parallel
+* `sapply()` and `vapply()`, variants of `lapply()` that produce 
+vectors, matrices and arrays as __output__, instead of lists.
 
-The three most important HOFs you're likely to use are from the `apply` family. The family includes `apply`, `lapply`, `mapply`, `tapply`, `sapply`, `vapply`, and `by`.
+* `Map()` and `mapply()` which iterate over multiple __input__ data structures in parallel.
 
+* Parallel versions of `lapply()` and `Map()`
+
+* Rolling computations, showing how a new problem can be solved with for loops, or by building on top of `lapply()`.
 
 ### Looping patterns
 
@@ -122,14 +125,30 @@ Typically you use the first form because `lapply()` takes care of saving the out
 
 ### Vector output: `sapply` and `vapply`
 
-`sapply()` and `vapply()` are very similar to `lapply()` except they will simplify their output to produce an atomic vector. `sapply()` will guess the output, while with `vapply()` you have to be explicit. `sapply()` is useful for interactive use because it's a minimum amount of typing, but if you use it inside your functions you will get weird errors if you supply the wrong type of input. `vapply()` is more verbose, but gives more informative errors messages (it will never fail silently), so is better suited for programming with.
+`sapply()` and `vapply()` are very similar to `lapply()` except they will simplify their output to produce an atomic vector. `sapply()` guesses, while you have to be specific with `vapply()`. `sapply()` is useful for interactive use because it saves typing, but if you use it inside your functions you will get weird errors if you supply the wrong type of input. `vapply()` is more verbose, but gives more informative errors messages and never fails silently, so is better suited for programming with.
+
+The following example illustrates these differences.  When given a data frame `sapply()` and `vapply()` give the same results, but if you pass in an empty list, `sapply()` has no basis to guess the correct type of output.
 
 ```R
 sapply(mtcars, is.numeric)
 vapply(mtcars, is.numeric, logical(1))
+sapply(list(), is.numeric)
+vapply(list(), is.numeric, logical(1))
 ```
 
-A pure R implementation of `sapply` and `vapply` follows:
+Similarly, if the function returns different types or lengths of results, `sapply()` will silently coerce, while `vapply()` will throw an error. `sapply()` is fine for interactive use because you'll normally notice if something went wrong, but it's dangerous when writing functions.  The following example illustrates a possible problem when extracting the class of columns in data frame: if you falsely assume that class only has one value and use `sapply()` you won't find out about the problem until some future function call gets a list instead of a character vector.
+
+```R
+df <- data.frame(x = 1:10, y = letters[1:10])
+sapply(df, class)
+vapply(df, class, character(1))
+
+df2 <- data.frame(x = 1:10, y = Sys.time() + 1:10)
+sapply(df2, class)
+vapply(df2, class, character(1))
+```
+
+`sapply()` is a thin wrapper around `lapply()`, transforming a list into a vector in the final step; `vapply()` reimplements `lapply()` but assigns results into a vector (or matrix) of the appropriate type instead of into a list. The following code shows pure R implementation of the essence of `sapply()` and `vapply()`; the real functions have better error handling and preserve names, among other things. 
 
 ```R
 sapply2 <- function(x, f, ...) {
@@ -140,7 +159,7 @@ sapply2 <- function(x, f, ...) {
 vapply2 <- function(x, f, f.value, ...) {
   out <- matrix(rep(f.value, length(x)), nrow = length(x))
   for (i in seq_along(x)) {
-    res <- f(x, ...)
+    res <- f(x[i], ...)
     stopifnot(
       length(res) == length(f.value), 
       typeof(res) == typeof(f.value)
@@ -149,21 +168,14 @@ vapply2 <- function(x, f, f.value, ...) {
   }
   out
 }
+vapply2(1:10, f, logical(1))
 ```
 
-The real implementations of `vapply()` is somewhat more complicated because it takes more care with error messages, and is implemented in C for efficiency.
+`vapply()` and `sapply()` are like `lapply()`, but with different inputs; the following section discusses `Map()`, which is like `lapply()` but with different inputs. 
 
 ### Multiple inputs: `Map` (and `mapply`)
 
-`Map` is useful when you have multiple sets of inputs that you want to iterate over in parallel. `Map(f, x, y, z)` is equivalent to
-
-```R
-for(i in seq_along(x)) {
-  output[[i]] <- f(x[[i]], y[[i]], z[[i]])
-}
-```
-
-In comparison with `lapply()`, `Map()` iterates over all of its arguments, not just the first one:
+With `lapply()`, only one argument to the function varies; the others are fixed. With `Map`, all arguments vary:
 
 ```R
 a <- c(1, 2, 3)
@@ -173,7 +185,15 @@ str(lapply(FUN = list, a, b))
 str(Map(f = list, a, b))
 ```
 
-What if you have arguments that you don't want to be split up? Use an anonymous function!
+`Map()` iterates over all of its arguments, not just the first one, so that `Map(f, x, y, z)` is equivalent to:
+
+```R
+for(i in seq_along(x)) {
+  output[[i]] <- f(x[[i]], y[[i]], z[[i]])
+}
+```
+
+What if you have arguments that need to be fixed, not varying? Use an anonymous function!
 
 ```R
 Map(function(x, y) f(x, y, zs), xs, ys)
@@ -183,41 +203,103 @@ You may be more familiar with `mapply()` than `Map()`. I prefer `Map()` because:
 
 * it is equivalent to `mapply` with `simplify = FALSE`, which is almost always what you want. 
 
-* `mapply` also has the `MoreArgs` arguments with which you can provide a list of extra arguments that will be supplied as is to each call; however this breaks R's usual lazy evaluation semantics, and is better done with an anonymous function.
+* Instead of using an anonymous function to provide constant inputs, `mapply` has the `MoreArgs` argument which takes a list of extra arguments that will be supplied, as is, to each call. This breaks R's usual lazy evaluation semantics, and is inconsistent with other functions.
 
 In brief, `mapply()` is much more complicated for little gain.
 
-
 ### Rolling computations
 
+What if you need a for-loop replacement that doesn't exist in base R? You can create your own by recognising common looping structures and implementing your own wrapper.
+
+For example, you might be interested in smoothing your data using a rolling (or running) mean function:
+
 ```R
-out <- numeric(length(x) - n + 1)
-for(i in n:length(x)) {
-  out[i] <- f(x[i:(i + n - 1)], ...)
+rollmean <- function(x, n) {
+  out <- rep(NA, length(x))
+
+  offset <- trunc(n / 2)
+  for (i in (offset + 1):(length(x) - n + offset - 1)) {
+    out[i] <- mean(x[(i - offset):(i + offset - 1)])
+  }
+  out
 }
+x <- seq(1, 3, length = 1e2) + runif(1e2)
+plot(x)
+lines(rollmean(x, 5))
+lines(rollmean(x, 10), col = "red")
+```
+
+But if your noise was more variable (i.e. it had a longer-tail) you might worry that your rolling mean was too sensitive to the occassional outlier and instead implement a rolling median.  To modify `rollmean()` to `rollmedian()` all you need to do is replace `mean` with `median` inside the loop, but instead of copying and pasting to create a new function, you might think about abstracting out the notion of computing a rolling summary.
+
+```R
+x <- seq(1, 3, length = 1e2) + rt(1e2, df = 2) / 3
+plot(x)
+lines(rollmean(x, 5))
+
+rollapply <- function(x, n, f, ...) {
+  out <- rep(NA, length(x))
+
+  offset <- trunc(n / 2)
+  for (i in (offset + 1):(length(x) - n + offset - 1)) {
+    out[i] <- f(x[(i - offset):(i + offset - 1)], ...)
+  }
+  out
+}
+lines(rollapply(x, 5, median), col = "red")
 ```
 
 You might notice that this is pretty similar to what `vapply` does, and in fact we could rewrite it as
 
-```R
-g <- function(i) f(x[i:(i + n - 1)], ...)
-vapply(n:length(x), g)
-```
-
-which is effectively how `zoo::rollapply` implements it. (Albeit with a lot more features and error checking)
-
-```R
-rollapply(x, n, f, ...)
-```
+which is effectively how `zoo::rollapply` implements it, albeit with many more features and much more error checking.
 
 ### Parallelisation
 
-No side effects means that functions can be run in any order, and potential on different cores or different computers.
+One thing that's interesting about our defintions of `lapply()` and and variants is that because each iteration is isolated from all others, it doesn't matter in which order they are computed. Even though `lapply3()`, defined below, scrambles the order in which computation occurs, the results are always the same:
 
-Another advantage of using common functionals is that parallelised versions may be available: `mclapply` and `mcMap`.
+```R
+lapply3 <- function(x, f, ...) {
+  out <- vector("list", length(x))
+  for (i in sample(seq_along(x))) {
+    out[[i]] <- f(x[[i]], ...)
+  }
+  out
+}
+lapply3(1:10, sqrt)
+lapply3(1:10, sqrt)
+lapply3(1:10, sqrt)
+```
 
+This has a very important consequence: since we can compute each element in any order, it's easy to dispatch the tasks to different cores, and compute in parallel.  This is what `mclapply()` (and `mcMap`) in the parallel package do:
+
+```R
+library(parallel)
+mclapply(1:10, sqrt, mc.cores = 4)
+```
+
+In this case `mclapply()` is actually slower than `lapply()`, becuase the cost of the individual computations is very low, and some additional work is needed to send the computation to the different cores and then collect the results together. If we take a more realistic example, generating bootstrap replicates of a linear model, we see a considerable advantage to parallel computation:
+
+```R
+boot_df <- function(x) x[sample(nrow(x), rep = T), ]
+rsquared <- function(mod) summary(mod)$r.square
+boot_lm <- function(i) {
+  rsquared(lm(mpg ~ wt + disp, data = boot_df(mtcars)))
+}
+
+system.time(lapply(1:100, boot_lm))
+system.time(mclapply(1:100, boot_lm, mc.cores = 2))
+```
+
+### Exercises
+
+* Implement a combination of `Map()` and `vapply()` to create an `lapply()` variant that iterates in parallel over all of its inputs and stores its outputs in a vector (or a matrix).
+
+* What does `replicate()` do? What sort of for loop does it eliminate? Why do it's arguments differ from `lapply()` and friends?
+
+* Implement `mcsapply()`, a multicore version of `sapply()`
 
 ## Data structure 
+
+
 
 ### Group apply
 
