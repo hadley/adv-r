@@ -12,7 +12,7 @@
 "To become significantly more reliable, code must become more transparent. In particular, nested conditions and loops must be viewed with great suspicion. Complicated control flows confuse programmers. Messy code often hides bugs."
 --- [Bjarne Stroustrup](http://www.stroustrup.com/Software-for-infrastructure.pdf)
 
-Higher-order functions encompass any functions that either take a function as an input or return a function as output. We've seen our first example of a higher-order function, the closures, functions returned by another function. The complement to a closure is a __functional__, a function that takes a function as an input and returns a vector as output. 
+Higher-order functions encompass any functions that either take a function as an input or return a function as output. We've seen our first example of a higher-order function, closures, functions returned by another function. The complement to a closure is a __functional__, a function that takes a function as an input and returns a vector as output. 
 
 Here's a simple functional, it takes an input function and calls it with some random input:
 
@@ -22,13 +22,13 @@ randomise(mean)
 randomise(sum)
 ```
 
-This function is not terribly useful, but it illustrates the basic idea: in R, functions are first class objects and there's no difference between providing a vector or a function as input (except what you do with the input). The chances are that you've already used a functional: `lapply()` is probably the most commonly used functional in R, followed closely by `apply()` and `tapply()`.
+This function is not terribly useful, but it illustrates the basic idea: in R, functions are first class objects and there's no difference between calling a function with a vector or function as input. The chances are that you've already used a functional: `lapply()` is probably the most commonly used functional in R, followed closely by `apply()` and `tapply()`.
 
-Many functionals offer alternatives to for loops. For loops have a bad rap in R, and some programmers try to eliminate them at all costs. The real performance story is a little more complicated than what you might have heard (we'll explore their speed in the [[performance]] chapter); the real downside of for loops is that they're not very expressive.  A for loop conveys that you're iterating over something, but it doesn't communicate the higher-level task you're trying to achieve. Functionals are not as general as for loops, and by being more specific allow you to communicate more clearly. There's not a functional corresponding to every possible use of a for loop, but when there is, you're better off using it. Functionals allow you to take a step up the ladder of abstraction: instead of expressing solutions using looping constructs, you express them at a higher level of specificity.
+Many functionals (like `lapply()`) offer alternatives to for loops. For loops have a bad rap in R, and some programmers try to eliminate them at all costs. The real performance story is a little more complicated than what you might have heard (we'll explore their speed in the [[performance]] chapter); the real downside of for loops is that they're not very expressive. A for loop conveys that you're iterating over something, but it doesn't communicate the higher-level task you're trying to achieve. Functionals are not as general as for loops, but by being more specific they allow you to communicate more clearly. Functionals allow you to take a step up the ladder of abstraction: instead of expressing solutions using looping constructs, you express them at a higher level of specificity.
 
-As well as more clearly communicating intent (e.g. I want to transform each element of this list, or each row of this array), functionals reduce the chances of bugs, and can be more efficient. Both of these features occur be functionals are used by many people, so they will be will tested, and may have been implemented with special tricks. For example, most functionals in base R are written in C for high-performance.
+As well as more clearly communicating intent (e.g. I want to transform each element of this list, or each row of this array), functionals reduce the chances of bugs, and can be more efficient. Both of these features occur because functionals are used by many people, so they will be well tested, and may have been implemented with special tricks. For example, many functionals in base R are written in C, and often use a few tricks to get extra performance.
 
-In this chapter, you'll learn about:
+Thinking about functionals as replacements for loops is not the only way to think about them. They are also useful tools for encapsulating common data manipulation tasks, the split-apply-combine pattern; for thinking "functionally"; and for working with mathematical functions. In this chapter, you'll learn about:
 
 * Functionals that encapulsate a common pattern of for-loop use, like `lapply`, `vapply` and `Map`.
 
@@ -40,11 +40,11 @@ In this chapter, you'll learn about:
 
 * how to convert a loop to a functionals, and when you shouldn't do it.
 
-Focus in this chapter is on expression/clarity of intent.  Once you have clear, correct code you can focus on optimising it use the techniques in the [[Performance]] chapter.
+The focus in this chapter is on clear communication with your code, and developing tools to solve wide classes of problems. Once you do have clear, correct code you can focus on optimising it use the techniques in the [[performance]] chapter.
 
-## For loop functions: `lapply` and friends
+## For loop functionals: `lapply()` and friends
 
-We've seen one functional already, `lapply()`, which applies a function to each element of a list, storing the results in a list. It's informative to look at a pure R implementation:
+You're probably already familiar with `lapply()`, which applies a function to each element of a list, storing the results in a list. It's informative to look at a pure R implementation:
 
 ```R
 lapply2 <- function(x, f, ...) {
@@ -56,25 +56,9 @@ lapply2 <- function(x, f, ...) {
 }
 ```
 
-`lapply()` is just a wrapper around a common for loop pattern. The art of using functionals is to recognise what common looping patterns are implemented in existing base functionals, and then use them instead of loops. Once you've mastered the existing functionals, the next step is to start writing your own: if you discover you're duplicating the same looping pattern in many places, you should extract it out into its own function.  Once we've talked about the most important R functionals, we'll introduce some other loop patterns and start writing our own.
+`lapply()` is just a wrapper around a common for loop pattern. The art of using functionals is to recognise what common looping patterns are implemented in existing base functionals, and then use them instead of loops. Once you've mastered the existing functionals, the next step is to start writing your own: if you discover you're duplicating the same looping pattern in many places, you should extract it out into its own function. Once we've talked about the most important R functionals, we'll introduce some other loop patterns and start writing our own.
 
-When using functionals that encapsulate for loops, it's useful to remember that there's usually three ways to loop over an object:
-
-```R
-for(x in xs) {}
-for(i in seq_along(xs)) {}
-for(nm in names(xs)) {}
-```
-
-And similarly, there are three ways to use `lapply()` with an object:
-
-```R
-lapply(xs, function(xs) {})
-lapply(seq_along(xs), function(i) {})
-lapply(names(xs), function(nm) {})
-```
-
-There's often a moderate performance improvement of `lapply()` to for loops.  Note, however, that this is a pathological example because the work done inside the loop is minimal; in most cases there is no percievable difference.
+<!-- There's often a moderate performance improvement of `lapply()` to for loops.
 
 ```R
 library(microbenchmark)
@@ -86,14 +70,55 @@ microbenchmark(
 )
 ```
 
-The last two ways are particularly useful because they give you both the position of the object (`i`, `nm`) and its value (`x[[i]]`, `x[[nm]]`).  If you're struggling to solve a problem using one form, you might find it easier with a different way.
+Note, however, that this is a pathological example because the work done inside the loop is minimal; in most cases there is no percievable difference.
+ -->
 
 The following sections discuss:
+
+* patterns of looping, for both for loops and `lapply()`.  The same ideas also apply to pretty much every for-loop-functional in R.
 
 * `sapply()` and `vapply()`, variants of `lapply()` that produce vectors, matrices and arrays as output, instead of lists
 * `Map()` and `mapply()` which iterate over multiple input data structures in parallel
 
 The three most important HOFs you're likely to use are from the `apply` family. The family includes `apply`, `lapply`, `mapply`, `tapply`, `sapply`, `vapply`, and `by`.
+
+
+### Looping patterns
+
+When using functionals that encapsulate for loops, it's useful to remember that there's usually three ways to loop over an vector: 
+
+1. loop over the elements of the vector: `for(x in xs)`
+2. loop over the numeric indices of the vector: `for(i in seq_along(xs))`
+3. loop over the names of the vector: `for(nm in names(xs)) {}`
+
+If you're saving the results from a for loop, you usually can't use the first form because it makes very inefficient code: if you're extending an existing data structure, the existing data gets copied every time you extend it:
+
+```R
+xs <- runif(1e3)
+res <- c()
+for(x in xs) {
+  res <- c(res, sqrt(x))
+}
+```
+
+It's much better to create enough space for the output and then fill it in:
+
+```R
+res <- numeric(length(xs))
+for(i in seq_along(xs)) {
+  res[i] <- sqrt(xs[i])
+}
+```
+
+Corresponding to the three ways to use a for loop there are three ways to use `lapply()` with an object:
+
+```R
+lapply(xs, function(x) {})
+lapply(seq_along(xs), function(i) {})
+lapply(names(xs), function(nm) {})
+```
+
+Typically you use the first form because `lapply()` takes care of saving the output for your. However, if you need to know the position or the name of the element you're working with, you'll need to use the second or third form; they give you both the position of the object (`i`, `nm`) and its value (`x[[i]]`, `x[[nm]]`). If you're struggling to solve a problem using one form, you might find it easier with a different way.
 
 ### Vector output: `sapply` and `vapply`
 
