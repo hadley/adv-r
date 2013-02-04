@@ -276,7 +276,7 @@ library(parallel)
 mclapply(1:10, sqrt, mc.cores = 4)
 ```
 
-In this case `mclapply()` is actually slower than `lapply()`, becuase the cost of the individual computations is very low, and some additional work is needed to send the computation to the different cores and then collect the results together. If we take a more realistic example, generating bootstrap replicates of a linear model, we see a considerable advantage to parallel computation:
+In this case `mclapply()` is actually slower than `lapply()`, becuase the cost of the individual computations is low, and some additional work is needed to send the computation to the different cores and then collect the results together. If we take a more realistic example, generating bootstrap replicates of a linear model, we see the advantage of parallel computation:
 
 ```R
 boot_df <- function(x) x[sample(nrow(x), rep = T), ]
@@ -293,89 +293,135 @@ system.time(mclapply(1:100, boot_lm, mc.cores = 2))
 
 * Implement a combination of `Map()` and `vapply()` to create an `lapply()` variant that iterates in parallel over all of its inputs and stores its outputs in a vector (or a matrix).
 
-* What does `replicate()` do? What sort of for loop does it eliminate? Why do it's arguments differ from `lapply()` and friends?
+* What does `replicate()` do? What sort of for loop does it eliminate? Why do its arguments differ from `lapply()` and friends?
 
 * Implement `mcsapply()`, a multicore version of `sapply()`
 
 ## Data structure 
 
+As well as functionals that exist to eliminate common looping constructs, anotherfamily of functionals works to eliminate loops for common data manipulation tasks.
 
+In this section, we'll give a brief overview of the available options, not spending too much time on each one. The focus is to show you some of the options that are available, hint at how they can help you, and point you in the right direction to learn more:
 
-### Group apply
+* base matrix functions `apply()`, `sweep()` and `outer()`
 
-`tapply()`: apply function to subsets of input vector as defined by grouping variable:
+* the `tapply()` function for summarising a vector divided into groups by another vector
 
-```R
-tapply2 <- function(x, group, f, ...) {
-  ugroup <- unique(group)
-  out <- vector("list", length(ugroup))
-  for (g in seq_along(ugroup)) {
-    out[[g]] <- f(x[group == ugroup[g]])
-  }  
-  out
-}
-tapply(1:10, rep(1:2, each = 5), mean, simplify = FALSE)
-tapply2(1:10, rep(1:2, each = 5), mean)
-```
-
-Can also think of it as a combination of split and sapply:
-
-```R
-tapply3 <- function(x, group, f, ...) {
-  pieces <- split(x, group)
-  sapply(pieces, f)
-}
-tapply3(1:10, rep(1:2, each = 5), mean)
-```
-
-And indeed the real `tapply()` is implemented similarly (although it uses `lapply()` and its own version of simplify.)
-
-* `tapply(..., simplify = F)` is equivalent to `split()` + `lapply()`
-* there's no equivalent to `split()` + `vapply()`.  Should there be? When would it be useful?
-* `by` is a thin wrapper around 
-
-```R
-split <- function(x, group) {
-  ugroup <- unqiue(group)
-  out <- vector("list", length(ugroup))
-  for (g in seq_along(ugroup)) {
-    out[[g]] <- x[group == ugroup[g]]
-  }  
-  out
-}
-```
-
-### Data frames
-
-Each of these functions processes breaks up a data structure in some way, applies the function to each piece and then joins them back together again. The `**ply` functions of the `plyr` package which attempt to unify the base apply functions by cleanly separating based on the type of input they break up and the type of output that they produce. 
+* the `plyr` package, which generalises the ideas of `tapply()` to work with inputs of data frames, lists and arrays, and outputs of data frames, lists, arrays and nothing
 
 ### Matrix and array operations
 
-apply
-```R
-for(i in seq_len(dims(x)[i])) {
-  out[i, ,] <- f(x[i, , ])
-}
-simplify2array(out)
-```
+So far, all the functionals we've seen work with 1d input structures. The three functionals in this section provide useful tools for working with high-dimensional data strucures. 
 
-sweep
-```R
-for(i in ) {
-  x[i , , ] <- f(x[i , , ], y[i])
-}
-```
+`apply()` is like a variant of `sapply()` that works with matrices and arrays, but it's easier to think of it as an operation than summarises a matrix or array, collapsing a row or column to a single number.  It has four arguments: 
 
-outer
+* `X`, the matrix or array to summarise
+* `MARGIN`, an integer vector giving the dimensions to summarise over, 1 = rows, 2 = columns, etc
+* `FUN`, a summary function
+* `...` other arguments passed on to `FUN`
+
+A typical example of `apply()` looks like this
 
 ```R
-out <- matrix(nrow = length(x), ncol = length(y))
-for (i in seq_along(x)) {
-  for(j in seq_along(y)) {
-    out[i, j] <- f(x, y)
-  }
-}
+a <- matrix(1:20, nrow = 5)
+apply(a, 1, mean)
+apply(a, 2, mean)
 ```
+
+There are a few caveats apply to using `apply()`: it does not have a simplify argument, so you can never be completely sure what type of output you will get. This generally means that `apply()` is not safe to program with, unless you very carefully check the inputs.  `apply()` is also not idempotent in the sense that if the summary function is the identity operator, the output is not always the same as the input:
+
+```R
+a1 <- apply(a, 1, identity)
+identical(a, a1)
+identical(a, t(a1))
+```
+
+`sweep()` is a function that allows you to "sweep" out the values of a summary statistic. It is most often useful in conjunction with `apply()` and it often used to standardise arrays in some way.
+
+```R
+x <- matrix(runif(20), nrow = 4)
+x1 <- sweep(x, 1, apply(x, 1, min))
+x2 <- sweep(x1, 1, apply(x1, 1, max), "/")
+```
+
+The final matrix functional is `outer()`. It's a little different in that it takes multiple vector inputs and creates a matrix or array output where the input function is run over every combination of the inputs:
+
+```R
+# Create a times table
+outer(1:10, 1:10, "*")
+```
+
+Good places to learn more about `apply()` are:
+
+* http://petewerner.blogspot.com/2012/12/using-apply-sapply-lapply-in-r.html
+* 
+
+### Group apply
+
+In some sense, `tapply()` is a generalisation to `apply()` that allows for "ragged" arrays, where each row can have different numbers of rows. This often comes about when you're trying to summarise a data set. For example, imagine you've collected some pulse rate from a medical trial, and you want to compare the two groups:
+
+```R
+pulse <- round(rnorm(22, 70, 10 / 3)) + rep(c(0, 5), c(10, 12))
+group <- rep(c("A", "B"), c(10, 12))
+
+tapply(pulse, group, length)
+tapply(pulse, group, mean)
+```
+
+It's easiest to understand how `tapply()` works by first creating a "ragged" data structure from the inputs. This is the job of the `split()` function, which takes two inputs, and returns a list, where all the elements in the first vector with equal entries in the second vector get put in the same element of the list:
+
+```R
+split(pulse, group)
+```
+
+Then it's obvious that `tapply()` is just the combination of `split()` and `sapply()`:
+
+```R
+tapply2 <- function(x, group, f, ..., simplify = TRUE) {
+  pieces <- split(x, group)
+  sapply(pieces, f, simplify = simplify)
+}
+tapply2(pulse, group, length)
+tapply2(pulse, group, mean)
+```
+
+This is a common pattern: if you have a good foundational set of functionals, you can solve many problems by combining then with new tools.
+
+### The plyr package
+
+One challenge with using the functionals provided by the base package is that they have grown organically over time, and have been written by multiple authors.  This means that they are not very consistent:
+
+* The simplify argument is called `simplify` in `tapply()` and `sapply()`, but `SIMPLIFY` for `mapply()`, and `apply()` doesn't have any way to turn off simplification.
+
+* `vapply()` provides a variant of `sapply()` where you describe what the output should be, but there are not corresponding variants for `tapply()`, or `apply()`.
+
+This makes learning these operators challenging, as you have to memorise all of the variations. Additionally, if you think about the combination of input and output types, base R only provides a partial set of functions:
+
+           | list   | data frame | array
+------------------------------------------
+list       | lapply |            | sapply 
+data frame | by     |            |
+array      |        |            | apply
+
+This was one of the driving forces behind the creation of the plyr package, which provides consistently named functions with consistently named arguments, that implement all combinations of input and output data structures:
+
+           | list   | data frame | array
+-----------------------------------------
+list       | llply  | ldply      | laply
+data frame | dlply  | ddply      | daply
+array      | alply  | adply      | aaply
+
+Each of these functions processes breaks up a data structure in some way, applies a function to each piece and then joins the results back together. 
+
+You can read more about these plyr function in [The Split-Apply-Combine Strategy for Data Analysis](http://www.jstatsoft.org/v40/i01/), an open-access article published in the Journal of Statistical Software.
+
+### Exercises
+
+* There's no equivalent to `split()` + `vapply()`. Should there be? When would it be useful? Implement it yourself.
+
+* Implement a pure R version of `split()`. (Hint: use unique and subseting)
+
+* What other types of input and output are missing? Brainstorm before you look up in the answers in the [plyr paper](http://www.jstatsoft.org/v40/i01/)
 
 ## Functional programming
 
@@ -515,14 +561,7 @@ Another important mathmatical functional is `optim()`. It is a generalisation of
 
 ## Converting loops to functionals, and when it's not possible
 
-That there are wide class of for loops that can not be simplified to a single existing function call in R, and a wide class that can never be
-
-Good stackoverflow discussions on converting loops to more efficient/expressive code:
-
-* http://stackoverflow.com/a/14520342/16632
-* http://stackoverflow.com/a/2970284/16632
-
-It is not always a good idea to eliminate a for-loop: for loops are verbose and not very expressive, but all R programmers are familiar with them. For example, it's sometimes possible to work around the limitations of `lapply` by using more estoeric language features like `<<-`
+That there are wide class of for loops that can not be simplified to a single existing function call in R.  It is not always a good idea to eliminate a for-loop: for loops are verbose and not very expressive, but all R programmers are familiar with them. For example, it's sometimes possible to work around the limitations of `lapply` by using more estoeric language features like `<<-`
 
 ```R
 trans <- list(
@@ -542,15 +581,14 @@ lapply(names(trans), function(var) {
 })
 ```
 
-From 
-
-```R
-df <- 1:10
-lapply(2:3, function(i) df <- df * i)
-for(i in 2:3) df <- df * i
-```
-
 We've eliminated the obvious for loop, but our code is longer, and we've had to use a language feature that few people are familiar with `<<-`.  And to really understand what `mtcars[[var]] <<-` is doing, you need to have a good mental model of how replacement functions really work.  So we've taken something simple and made more complicated, for effectively no gain.
+
+There is 
+Good stackoverflow discussions on converting loops to more efficient/expressive code:
+
+* http://stackoverflow.com/a/14520342/16632
+* http://stackoverflow.com/a/2970284/16632
+
 
 * Relationships that a defined recursively, like exponential smoothing. 
     
