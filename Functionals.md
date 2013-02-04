@@ -397,19 +397,19 @@ One challenge with using the functionals provided by the base package is that th
 
 This makes learning these operators challenging, as you have to memorise all of the variations. Additionally, if you think about the combination of input and output types, base R only provides a partial set of functions:
 
-           | list   | data frame | array
-------------------------------------------
-list       | lapply |            | sapply 
-data frame | by     |            |
-array      |        |            | apply
+|            | list   | data frame | array  |
+|------------|--------|------------|--------|
+| list       | lapply |            | sapply |
+| data frame | by     |            |        |
+| array      |        |            | apply  |
 
 This was one of the driving forces behind the creation of the plyr package, which provides consistently named functions with consistently named arguments, that implement all combinations of input and output data structures:
 
-           | list   | data frame | array
------------------------------------------
-list       | llply  | ldply      | laply
-data frame | dlply  | ddply      | daply
-array      | alply  | adply      | aaply
+|            | list   | data frame | array | 
+|------------|--------|------------|-------|
+| list       | llply  | ldply      | laply |
+| data frame | dlply  | ddply      | daply |
+| array      | alply  | adply      | aaply |
 
 Each of these functions processes breaks up a data structure in some way, applies a function to each piece and then joins the results back together. 
 

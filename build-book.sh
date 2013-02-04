@@ -1,9 +1,8 @@
-pandoc --chapters -o review.pdf --latex-engine xelatex \
+pandoc --chapters -o fp.pdf --latex-engine xelatex \
+  -f markdown+pipe_tables \
   -V papersize:oneside -V links-as-notes \
-  Functions.md \
-  Environments.md \
-  Rcpp.md \
-  C-interface.md
+  Functional-programming.md \
+  Functionals.md
 
 pandoc --chapters -o book.pdf --latex-engine xelatex \
   -V papersize:oneside -V links-as-notes --toc \
