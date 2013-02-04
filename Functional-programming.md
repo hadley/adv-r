@@ -17,13 +17,11 @@ We'll start with a motivating example, showing how you can use functional progra
 
 * __Closures__, functions written by other functions
 
-* __Functionals__, functions that that a function as a input
+* __Lists of functions__, storing functions in a list
 
-* __Function operators__, functions that both input and output functions
+The chapter conclues with a case study exploring __numerical integration__ showing how we can build a family of composite integration tools starting from very simple primitives. 
 
-* __Lists of functions__
-
-The final two sections are case studies showing how we can combine multiple techniques to solve real problems with a minimum of duplication, in a way that is easy to modify when our problem changes. The first case study will explore __numerical integration__ showing how we can build a family of composite integration tools starting from very simple primitives. The second case study makes extensive use of function operations to build a mini-language to __guard against incorrect function input__.
+The exposition of functional programming continues in the following two chapters: [[functionals]] and [[functional operators]].
 
 ## Motivation
 
@@ -74,7 +72,7 @@ for (i in seq_along(x)) {
 }
 ```
 
-The real `lapply()` is rather more complicated since it's implemented in C for efficiency, but the essence of the algorithm is the same. `lapply()` is a higher-order-function (HOF), because it takes a function as one of its arguments. HOFs are an important part of functional programming and we'll learn more about them below.
+The real `lapply()` is rather more complicated since it's implemented in C for efficiency, but the essence of the algorithm is the same. `lapply()` is a __functional__, because it takes a function as one of its arguments. Functionals are an important part of functional programming and we'll learn more about them in the [[functionals]] chapter.
 
 We can apply `lapply()` to our problem with one small trick: rather than simply assigning the results to `df` we assign them to `df[]`, so R's usual subsetting rules take over and we get a data frame instead of a list.
 
@@ -242,7 +240,7 @@ One of the most common uses for anonymous functions is to create closures, funct
 
 * Use `lapply()` and an anonymous function to find the coefficient of variation (the standard deviation divided by the mean) for all columns in the `mtcars` dataset
 
-* 
+* A good rule of thumb is that an anonymous function should fit on one line and shouldn't need to use `{}`.  Review your code: where could you have used an anonymous function instead of a named function? Where should you have used a named function instead of an anonymous function?
 
 ## Introduction to closures
 
@@ -477,47 +475,13 @@ But this leads to a lot of duplication - each function is almost identical apart
 
 We could also take a more general approach. A useful function here is `Curry` (named after the famous computer scientist Haskell Curry, not the food), which implements "partial function application". What the curry function does is create a new function that passes on the arguments you specify. A example will make this more clear:
 
+    library(pryr)
     add <- function(x, y) x + y
     addOne <- function(x) add(x, 1)
+    # Or:
     addOne <- Curry(add, y = 1)
 
-One way to implement `Curry` is as follows:
-
-    Curry <- function(FUN,...) { 
-      .orig <- list(...)
-      function(...) {
-        do.call(FUN, c(.orig, list(...)))
-      }
-    }
-
-(You should be able to figure out how this works.  See the exercises.)
-
-But implementing it like this prevents arguments from being lazily evaluated, so it has a somewhat more complicated implementation, basically working by building up an anonymous function by hand. You should be able to work out how this works after you've read the [[computing on the language]] chapter.  `curry` is implemented in the `pryr` package.
-
-    Curry <- function(FUN, ...) {
-      args <- match.call(expand.dots = FALSE)$...
-      args$... <- as.name("...")
-      
-      env <- new.env(parent = parent.frame())
-      
-      if (is.name(FUN)) {
-        fname <- FUN
-      } else if (is.character(FUN)) {
-        fname <- as.name(FUN)
-      } else if (is.function(FUN)){
-        fname <- as.name("FUN")
-        env$FUN <- FUN
-      } else {
-        stop("FUN not function or name of function")
-      }
-      curry_call <- as.call(c(list(fname), args))
-
-      f <- eval(call("function", as.pairlist(alist(... = )), curry_call))
-      environment(f) <- env
-      f
-    }
-
-But back to our problem. With the `Curry` function we can reduce the code a bit:
+With the `Curry` function we can reduce the code a bit:
 
     funs2 <- list(
       sum = Curry(sum, na.rm = TRUE),
@@ -529,7 +493,7 @@ But if we look closely that will reveal we're just applying the same function to
 
     funs2 <- lapply(funs, Curry, na.rm = TRUE)
 
-Let's think about a similar, but subtly different case. Let's take a vector of numbers and generate a list of functions corresponding to trimmed means with that amount of trimming.  The following code doesn't work because we want the first argument of `Curry` to be fixed to mean.  We could try specifying the argument name because fixed matching overrides positional, but that doesn't work because the name of the function to call in `lapply` is also `FUN`.  And there's no way to specify we want to call the `trim` argument.
+Let's think about a similar, but subtly different case. Let's take a vector of numbers and generate a list of functions corresponding to trimmed means with that amount of trimming. The following code doesn't work because we want the first argument of `Curry` to be fixed to mean.  We could try specifying the argument name because fixed matching overrides positional, but that doesn't work because the name of the function to call in `lapply` is also `FUN`.  And there's no way to specify we want to call the `trim` argument.
 
     trims <- seq(0, 0.9, length = 5) 
     lapply(trims, Curry, "mean")
@@ -551,7 +515,6 @@ A simpler solution in this case is to use `Map`, as described in the last chapte
     names(funs3) <- trims
     lapply(funs3, call_fun, c(1:100, (1:50) * 100))
 
-It's usually better to use `lapply` because it is more familiar to most R programmers, and it is somewhat simpler and so is slightly faster.
 
 ### Moving lists of functions to the global environment
 

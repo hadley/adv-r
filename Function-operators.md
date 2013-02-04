@@ -139,3 +139,42 @@ Two built-in examples of this are functions `Negate` and `Vectorise`:
     }
   }
   ```
+
+
+## Curry
+
+One way to implement `Curry` is as follows:
+
+    Curry <- function(FUN,...) { 
+      .orig <- list(...)
+      function(...) {
+        do.call(FUN, c(.orig, list(...)))
+      }
+    }
+
+(You should be able to figure out how this works.  See the exercises.)
+
+But implementing it like this prevents arguments from being lazily evaluated, so it has a somewhat more complicated implementation, basically working by building up an anonymous function by hand. You should be able to work out how this works after you've read the [[computing on the language]] chapter.  `curry` is implemented in the `pryr` package.
+
+    Curry <- function(FUN, ...) {
+      args <- match.call(expand.dots = FALSE)$...
+      args$... <- as.name("...")
+      
+      env <- new.env(parent = parent.frame())
+      
+      if (is.name(FUN)) {
+        fname <- FUN
+      } else if (is.character(FUN)) {
+        fname <- as.name(FUN)
+      } else if (is.function(FUN)){
+        fname <- as.name("FUN")
+        env$FUN <- FUN
+      } else {
+        stop("FUN not function or name of function")
+      }
+      curry_call <- as.call(c(list(fname), args))
+
+      f <- eval(call("function", as.pairlist(alist(... = )), curry_call))
+      environment(f) <- env
+      f
+    }
