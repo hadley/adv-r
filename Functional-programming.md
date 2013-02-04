@@ -1,15 +1,15 @@
 # Functional programming
 
-At it's core, R is a functional programming (FP) language which means it supports "first class functions", functions that can be:
+At it's core, R is a functional programming (FP) language which means it focusses on the creation and execution of function. In R, functions can be:
 
 * created anonymously,
 * assigned to variables and stored in data structures,
 * returned from functions,
 * passed as arguments to other functions
 
-This chapter will explore the consequences of R's functional nature and introduce a new set of techniques for removing redundancy and duplication in your code. 
+Together this set of four properties means that R supports "first class functions": functions are a first class feature of the language in the same way the vectors are. 
 
-Each technique is relatively simple by itself, but combined they provide a powerful set of techniques. They are especially useful when you want to solve a large class of problems with a small set of building blocks and tools to connect them together. 
+This chapter will explore the consequences of R's functional nature and introduce a new set of techniques for removing redundancy and duplication in your code. 
 
 We'll start with a motivating example, showing how you can use functional programming techniques to reduce duplication in some typical code for cleaning data and summarising data. This example will introduce some of the most important functional programming concepts, which we will then dive into in more detail:
 
@@ -61,9 +61,9 @@ df$e <- fix_missing(df$e)
 df$f <- fix_missing(df$e)
 ```
 
-This reduces the scope for errors, but we've still made one, because we've repeatedly applied our function to each column. To prevent that error from occuring we need to remove the copy-and-paste application of our function to each column. To do this, we need to combine, or __compose__, our function for correcting missing values with a function that does something to each column in a data frame, like `lapply()`.  
+This reduces the scope for errors, but doesn't eliminate them.  We've still made an error, because we've repeatedly applied our function to each column. To prevent that error from occuring we need to remove the copy-and-paste application of our function to each column. To do this, we need to combine, or __compose__, our function for correcting missing values with a function that does something to each column in a data frame, like `lapply()`.  
 
-`lapply()` takes three inputs: a list, a function, and other arguments to pass to the function. It applies the function to each element of the list and returns the resulting list (since data frames are also lists, `lapply()` also works on data frames). `lapply(x, f, ...)` is equivalent to the following for loop:
+`lapply()` takes three inputs: a list, a function, and other arguments to pass to the function. It applies the function to each element of the list and returns the as a new list (since data frames are also lists, `lapply()` also works on data frames). `lapply(x, f, ...)` is equivalent to the following for loop:
 
 ```R
 out <- vector("list", length(x))
@@ -91,6 +91,8 @@ As well as being more compact, there are two main advantages of this code over o
 * Our code works regardless of the number of columns in the data frame, and there is no way to miss a column because of a copy and paste error.
 
 The key idea here is composition. We take two simple functions, one which does something to each column, and one which replaces -99 with NA, and compose them to replace -99 with NA in every column. An important technique for effective FP is writing simple functions than can be understood in isolation and then composed together to solve complex problems.
+
+<!-- Why not add a second argument to fix_missing ?? -->
 
 What if different columns use different indicators for missing values? You again might be tempted to copy-and-paste:
 
@@ -175,7 +177,7 @@ We can take advantage of another functional programming technique, storing funct
 ```R
 summary <- function(x) {
   funs <- c(mean, median, sd, mad, iqr)
-  lapply(funs, function(f) f(x))
+  lapply(funs, function(f) f(x, na.rm = TRUE))
 }
 ```
 
