@@ -19,74 +19,71 @@ In this chapter, we'll explore four classes of function operators:
 * leave the function unchanged, but add additional useful behaviour
 * combine multiple functions togeher:
 
+The focus is on giving you some ideas for what you can use function operators for, and for alternative means of describing tasks in R: as combinations of functions, not combinations of arguments. 
+
+Most function operators follow a similar pattern:
+
+```R
+funop <- function(f, otherargs) {
+  function(...) {
+    # do something
+    f(...)
+  }
+}
+```
+
+The disadvantage of this technique is that when you print the function you won't get informative arguments.  One way around this is to write a function that replaces `...` with the concrete arguments from a specified function using computing on the language.
 
 ## `match.fun`
 
-It's often useful to be able to pass in either the name of a function, or a function. `match.fun()`.
+It's often useful to be able to pass in either the name of a function, or a function. `match.fun()`.  Also useful because it forces the evaluation of the argument: this is good because it raises an error right away (not later when the function is called), and makes it possible to use with `lapply`.
 
 Caveat: http://stackoverflow.com/questions/14183766
 
-Also need the opposite: to get the name of the function.
-
-
-## Output modifications
-
-* negate the result of a predicate function (`base::Negate`)
-* return a default value if the function throws an error (`fail_with`)
-* convert a function that prints output to a function that returns output
+Also need the opposite: to get the name of the function.  There are two basic cases: the user has supplied the name of the function, or they've supplied the function itself.  We cover this in more detail on computing in the language. But unfortunately it's difficult to 
 
 ```R
-capture_it <- function(f) {
-  function(...) {
-    capture.output(f(...))
+fname <- function(f) {
+  if (is.character(f)) {
+    fname <- f
+    f <- match.fun(f)
+  } else if (is.function(f)) {
+    fname <- as.character(match.call()$f)
   }
+  list(f, fname)
 }
-str_out <- capture_it(str)
-str(1:10)
-str_out(1:10)
 
-failwith <- function(default = NULL, f, quiet = FALSE) {
-  f <- match.fun(f)
-  function(...) {
-    out <- default
-    try(f(...), silent = quiet)
-    out
+f <- function(f) {
+  fname(f)
+}
+f("mean")
+f(mean)
+
+fname <- function(call) {
+  f <- eval(call, parent.frame())
+  if (is.character(f)) {
+    fname <- f
+    f <- match.fun(f)
+  } else if (is.function(f)) {
+    fname <- if (is.symbol(call)) as.character(call) else "<anonymous>"
   }
+  list(f, fname)
 }
-log("a")
-failwith(NA, log)("a")
-failwith(NA, log, quiet = TRUE)("a")
-```
-
-### Negate
-
-`Negate` takes a function that returns a logical vector, and returns the negation of that function. This can be a useful shortcut when the function you have returns the opposite of what you need.
-
-```R
-Negate <- function(f) {
-  f <- match.fun(f)
-  function(...) !f(...)
+f <- function(f) {
+  fname(substitute(f))
 }
-
-(Negate(is.null))(NULL)
+f("mean")
+f(mean)
+f(function(x) mean(x))
 ```
-
-One function I find handy based on this is `compact`: it removes all non-null elements from a list:
-
-```R
-compact <- function(x) Filter(Negate(is.null), x)
-```
-
-### Exercises
-
-* The `evaluate` package makes it easy to capture all the outputs (results, text, messages, warnings, errors and plots) from an expression. 
 
 ## Add additional behaviour
 
 * log to disk everytime a function is run
 * automatically print how long it took to run: timing
-* save time by caching previous function results (`memoise::memoise`)
 * add a delay to avoid swamping a server
+* print to console every n invocations (useful if you want to check on a long running process)
+* save time by caching previous function results (`memoise::memoise`)
 
 ```R
 time_it <- function(f) {
@@ -99,13 +96,13 @@ time_it <- function(f) {
     out
   }
 }
-delay_it <- function(f, delay) {
+delay_by <- function(delay, f) {
   function(...) {
     Sys.sleep(delay)
     f(...)
   }
 }
-log_it <- function(f, path, message) {
+log_to <- function(path, message, f) {
   stopifnot(file.exists(path))
 
   function(...) {
@@ -114,26 +111,57 @@ log_it <- function(f, path, message) {
     f(...)
   }
 }
+dot_every <- function(n, f) {
+  i <- 1
+  function(...) {
+    if (i %% n == 0) cat(".")
+    i <<- i + 1
+    f(...)
+  }
+}
 ```
 
-### Exercises
+Notice that I've made the function the last argument.  That's because we're more likely to vary the function for a given problem than the other parameters so it makes them a little easier to use with `lapply` (if we have a list of functions), and it reads a little better when we compose multiple function operators. For example, if we had a long list of urls we wanted to download, without hammering the server too hard, and printing a dot every 10 urls, we can write:
 
-* Create a function called `timer` that takes a function as input and returns as function as output. The new function should perform exactly the same as the old function, except that it should also print out how long it took to run.
+```R
+download <- dot_every(10, delay_by(1, download.file))
+```
+
+But if the function was the first argument, we'd write
+
+```R
+download <- dot_every(delay_by(download.file, 1), 10)
+```
+
+which I think is a little harder to follow because the argument to `dot_every` is far away from the function call.
+
+Or taken one of the examples from the functional programming chapter:
+
+```R
+timers <- lapply(compute_mean, time_it)
+lapply(timers, call_fun, x)
+````
+
+### Exercises
 
 * What does the following function do? What would be a good name for it?
 
   ```R
   f <- function(g) {
-    stopifnot(is.function(g))
+    g <- match.fun(g)
     result <- NULL
     function(...) {
       if (is.null(result)) {
-        result <- g(...)
+        result <<- g(...)
       }
       result
     }
   }
+  runif2 <- f(runif)
+  runif2(10)
   ```
+
+
 
 ## Input modification
 
@@ -141,6 +169,15 @@ log_it <- function(f, path, message) {
 * convert a function that works with a data frame to a function that works with a matrix (`plyr::colwise`)
 * convert a function of multiple parameters to a function of a single list parameter (`plyr::splat`)
 * vectorise a scalar function (`base::Vectorise`)
+
+```R
+splat <- function (f) {
+  f <- match.fun(f)
+  function(args) {
+    do.call(f, args)
+  }
+}
+```
 
 ### Partial function evaluation
 
@@ -191,6 +228,62 @@ sample2(1:10, 2:5)
 ```
 
 In this example we have used `SIMPLIFY = FALSE` to ensure that our newly vectorised function always returns a list. This is usually a good idea. `Vectorize` does not work with primitive functions.
+
+
+## Output modifications
+
+* negate the result of a predicate function (`base::Negate`)
+* return a default value if the function throws an error (`fail_with`)
+* convert a function that prints output to a function that returns output
+
+```R
+Negate <- function(f) {
+  f <- match.fun(f)
+  function(...) !f(...)
+}
+
+capture_it <- function(f) {
+  function(...) {
+    capture.output(f(...))
+  }
+}
+str_out <- capture_it(str)
+str(1:10)
+str_out(1:10)
+
+failwith <- function(default = NULL, f, quiet = FALSE) {
+  f <- match.fun(f)
+  function(...) {
+    out <- default
+    try(f(...), silent = quiet)
+    out
+  }
+}
+log("a")
+failwith(NA, log)("a")
+failwith(NA, log, quiet = TRUE)("a")
+```
+
+`Negate` takes a function that returns a logical vector, and returns the negation of that function. This can be a useful shortcut when the function you have returns the opposite of what you need.
+
+```R
+Negate <- function(f) {
+  f <- match.fun(f)
+  function(...) !f(...)
+}
+
+(Negate(is.null))(NULL)
+```
+
+One function I find handy based on this is `compact`: it removes all non-null elements from a list:
+
+```R
+compact <- function(x) Filter(Negate(is.null), x)
+```
+
+### Exercises
+
+* The `evaluate` package makes it easy to capture all the outputs (results, text, messages, warnings, errors and plots) from an expression.
 
 
 ## Combine multiple functions
@@ -259,6 +352,53 @@ not <- function(f1) {
   }
 }
 ```
+
+```R
+has_length <- function(n) {
+  function(x) length(x) == n
+}
+or(and(is.character, has_length(4)), is.null)
+```
+
+It would be cool if we could rewrite to be:
+
+```R
+(is.character & has_length(4)) | is.null
+```
+
+but due to limitations of S3 it's not possible.  The closest we could get is:
+
+```R
+"%|%" <- function(e1, e2) function(...) e1(...) || e2(...)
+"%&%" <- function(e1, e2) function(...) e1(...) && e2(...)
+
+(is.character %&% has_length(4)) %|% is.null
+```
+
+Another approach would be do something like:
+
+```R
+Function <- function(x) structure(x, class = "function")
+Ops.function <- function(e1, e2) {
+  f <- function(y) {
+    if (is.function(e1)) e1 <- e1(y)
+    if (is.function(e2)) e2 <- e2(y)
+    match.fun(.Generic)(e1, e2)
+  }
+  Function(f)
+}
+length <- Function(length)
+length > 5
+length * length + 3 > 5
+
+is.character <- Function(is.character)
+is.numeric <- Function(is.numeric)
+is.null <- Function(is.null)
+
+is.null | (is.character & length > 5)
+```
+
+It's not terribly useful for
 
 ### Exercises
 
