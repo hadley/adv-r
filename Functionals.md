@@ -354,7 +354,8 @@ outer(1:10, 1:10, "*")
 Good places to learn more about `apply()` are:
 
 * http://petewerner.blogspot.com/2012/12/using-apply-sapply-lapply-in-r.html
-* 
+* http://rforpublichealth.blogspot.no/2012/09/the-infamous-apply-function.html?m=1
+* http://stackoverflow.com/questions/3505701
 
 ### Group apply
 

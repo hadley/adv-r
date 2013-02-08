@@ -404,6 +404,12 @@ The power of closures is tightly coupled to another important class of functions
 
 * What does `approxfun()` return? What does it return? What does the `ecdf()` function do? What does it return? 
 
+* Create a function `pick()`, that takes an index, `i`, as an argument and returns a function an argument `x` that subsets `x` with `i`.
+  
+  ```R
+  lapply(mtcars, pick(5))
+  ```
+
 ## Lists of functions
 
 In R, functions can be stored in lists. Together with closures and higher-order functions, this gives us a set of powerful tools for reducing duplication in code.
