@@ -44,7 +44,7 @@ One of the most helpful attitudes is a scientific mindset: if you don't understa
 
 ## Themes
 
-* Interactive data analysis vs. programming.  At the heart of R is a tension between interactive data analysis and programming. If you recognise and understand this tension, you'll understand why some functions drive you crazy when you're programming. For interactive use, you want functions that require as little typing as possible, and sometimes use a little magic to simplify your life. It's not a problem if they fail silently because you'll notice immediately.  For programming, you want to trade your time now for users time in the future. You're willing to spend a little more time to be explicit and verbose and spell out exactly what you want if it's going to save time in the future or produce more informative error messages.s
+* Interactive data analysis vs. programming.  At the heart of R is a tension between interactive data analysis and programming. If you recognise and understand this tension, you'll understand why some functions drive you crazy when you're programming. For interactive use, you want functions that require as little typing as possible, and sometimes use a little magic to simplify your life. It's not a problem if they fail silently because you'll notice immediately.  For programming, you want to trade your time now for users time in the future. You're willing to spend a little more time to be explicit and verbose and spell out exactly what you want if it's going to save time in the future or produce more informative error messages.
 
 ## What you will get out of this book
 
