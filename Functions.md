@@ -746,6 +746,10 @@ And this is what makes it possible to assign one value to multiple variables:
 a <- b <- c <- d <- 2
 ```
 
+## Deferred execution
+
+**Caution**: Unfortunately the default in `on.exit()` is `add = FALSE`, so that every time you run it, it overrights existing exit expressions.  Because of the way `on.exit()` is implemented, it's not possible to create a variant with `add = TRUE`, so you must be careful when using it.
+
 ### Exercises
 
 *

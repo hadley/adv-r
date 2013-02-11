@@ -1,81 +1,26 @@
 # Function operators
 
-The final functional programming technique we will discuss in this book is function operators: functions that take (at least) one function as input and return a function as output. Function operators allow you to add extra functionality to an existing function, or combine multiple existing functions. They have two main uses:
+The final functional programming technique we will discuss in this book is function operators: functions that take (at least) one function as input and return a function as output. Function operators allow you to add extra functionality to an existing function, or combine multiple existing functions. 
 
-* developing specialised languages for solving wide classes of problems
+At a low level, they make it possible to eliminate function parameters by encapsulating common variations as function transformations. Functionals abstract away common looping operations. Function operators abstract over common anonymous functions operations. Like functionals, there's nothing you can't do without them; but they can make your code more readable and expressive by communicating higher level intent. The advantage is that you don't limit uses to functionality that you've thought up - as long as the modify the function in the right way, they can add all sorts of extra functioanlity. And you don't need a different argument for every possible option; end up with smaller, simpler pieces that you combine together. 
 
-* eliminating function parameters by encapsulating common variations as function transformations. The advantage is that you don't limit uses to functionality that you've thought up - as long as the modify the function in the right way, they can add all sorts of extra functioanlity. And you don't need a different argument for every possible option; end up with smaller, simpler pieces that you combine together. 
+<!-- If you're familiar with Python, decorates are function operators. : http://stackoverflow.com/questions/739654/understanding-python-decorators
+ -->
 
-Functionals abstract away common looping operations. Function operators abstract over common anonymous functions operations. Like functionals, there's nothing you can't do without them; but they can make your code more readable and expressive by communicating higher level intent.
+In this chapter, we'll explore four classes of function operators (FOs). Function operators can:
 
-If you're familiar with Python, decorates are function operators. : http://stackoverflow.com/questions/739654/understanding-python-decorators
+* add additional useful behaviour, leaving the function otherwise unchanged. For example, automatically logging whenever the function is run, ensuring a function is run only once, or delaying the operation of a function.
 
-Like creating an algebra, in the sense that we define atoms and how to combine them together. Closed.
+* change the input to the function, for example, partially evaluating the function, converting a function that takes mutliple arguments to a function that takes a list, or automatically vectorising.
 
-In this chapter, we'll explore four classes of function operators:
+* change the output of the function, for example, to return a value if the function throws an error, or to negate the result of a logical predictate
 
-* change the output of the function: 
-* change the input to the function:
-* leave the function unchanged, but add additional useful behaviour
-* combine multiple functions togeher:
+* combine multiple functions togeher, for example, combining the results of predicate functions with boolean operators, or composing multiple function calls.
 
 The focus is on giving you some ideas for what you can use function operators for, and for alternative means of describing tasks in R: as combinations of functions, not combinations of arguments. 
 
-Most function operators follow a similar pattern:
+At a higher level function operators allow you to define specialised languages for solving wide classes of problems. The building blocks are simple functions, which you combine together with function operators to solve more complicated problems. The final section of the chapter concludes with a case study that develops a flexible way of describing what arguments to a function should look like.
 
-```R
-funop <- function(f, otherargs) {
-  function(...) {
-    # do something
-    f(...)
-  }
-}
-```
-
-The disadvantage of this technique is that when you print the function you won't get informative arguments.  One way around this is to write a function that replaces `...` with the concrete arguments from a specified function using computing on the language.
-
-## `match.fun`
-
-It's often useful to be able to pass in either the name of a function, or a function. `match.fun()`.  Also useful because it forces the evaluation of the argument: this is good because it raises an error right away (not later when the function is called), and makes it possible to use with `lapply`.
-
-Caveat: http://stackoverflow.com/questions/14183766
-
-Also need the opposite: to get the name of the function.  There are two basic cases: the user has supplied the name of the function, or they've supplied the function itself.  We cover this in more detail on computing in the language. But unfortunately it's difficult to 
-
-```R
-fname <- function(f) {
-  if (is.character(f)) {
-    fname <- f
-    f <- match.fun(f)
-  } else if (is.function(f)) {
-    fname <- as.character(match.call()$f)
-  }
-  list(f, fname)
-}
-
-f <- function(f) {
-  fname(f)
-}
-f("mean")
-f(mean)
-
-fname <- function(call) {
-  f <- eval(call, parent.frame())
-  if (is.character(f)) {
-    fname <- f
-    f <- match.fun(f)
-  } else if (is.function(f)) {
-    fname <- if (is.symbol(call)) as.character(call) else "<anonymous>"
-  }
-  list(f, fname)
-}
-f <- function(f) {
-  fname(substitute(f))
-}
-f("mean")
-f(mean)
-f(function(x) mean(x))
-```
 
 ## Add additional behaviour
 
@@ -85,17 +30,20 @@ f(function(x) mean(x))
 * print to console every n invocations (useful if you want to check on a long running process)
 * save time by caching previous function results (`memoise::memoise`)
 
-```R
-time_it <- function(f) {
-  function(...) {
-    start <- proc.time()
-    res <- f(...)
-    end <- proc.time()
+Motivating example downloading files with `download.file`
 
-    print(end - start)
-    out
-  }
+```R
+i <- 1
+for(url in urls) {
+  i <- i + 1
+  if (i %% 10 == 0) cat(".")
+  Sys.delay(1)
+  download.file(url) 
 }
+lapply(urls, dot_every(10, delay_by(1, download.file)))
+```
+
+```R
 delay_by <- function(delay, f) {
   function(...) {
     Sys.sleep(delay)
@@ -125,7 +73,6 @@ Notice that I've made the function the last argument.  That's because we're more
 
 ```R
 download <- dot_every(10, delay_by(1, download.file))
-download <- chain(dot_every(10), delay_by(1), download.file)
 ```
 
 But if the function was the first argument, we'd write
@@ -136,12 +83,76 @@ download <- dot_every(delay_by(download.file, 1), 10)
 
 which I think is a little harder to follow because the argument to `dot_every` is far away from the function call.  That's sometimes called the [Dagwood sandwhich](http://en.wikipedia.org/wiki/Dagwood_sandwich) problem: you have too much filling (too many long arguments) between your slices of bread (parentheses).
 
+Another thing you might worry about when downloading mutliple file is downloading the same file multiple times: that's a waste of time. You could work around it by calling `unique` on the list of input urls, or manually managing a data structure that mapped the url to the result.  An alternative approach is to use memoisation: a way of modifying a function to automatically cache its results.
+
+```R
+library(memoise)
+slow_function <- function(x) {
+  Sys.sleep(1)
+  10
+}
+system.time(slow_function())
+system.time(slow_function())
+fast_function <- memoise(slow_function)
+system.time(fast_function())
+system.time(fast_function())
+```
+
+A slightly more realistic use case is implementing the Fibonacci series (a topic we'll come back to [[software systems]]).  The Fibonacci series is defined recursively: the first two values are 1 and 1, then f(n) = f(n - 1) + f(n - 2).  A naive version implemented in R is very slow because (e.g.) `fib(10)` computes `fib(9)` and `fib(8)`, and `fib(9)` computes `fib(8)` and `fib(7)` so the value for each location gets computed many many times.  Memoising `fib()` makes the implementation much faster because each only needs to be computed once.
+
+```R
+fib <- function(n) {
+  if (n < 2) return(1)
+  fib(n - 2) + fib(n - 1)
+}
+system.time(fib(23))
+system.time(fib(24))
+
+fib2 <- memoise(function(n) {
+  if (n < 2) return(1)
+  fib2(n - 2) + fib2(n - 1)
+})
+system.time(fib2(23))
+system.time(fib2(24))
+```
+
+```R
+download <- dot_every(10, memoise(delay_by(1, download.file)))
+```
+
+Note that there are some function that you probably don't want to memoise. The example below shows that a memoised random number generator is no longer random:
+
+```R
+runifm <- memoise(runif)
+runif(10)
+runif(10)
+```
+
 Or taken one of the examples from the functional programming chapter:
 
 ```R
 timers <- lapply(compute_mean, time_it)
 lapply(timers, call_fun, x)
 ````
+
+```R
+time_it <- function(f) {
+  function(...) {
+    start <- proc.time()
+    res <- f(...)
+    end <- proc.time()
+
+    print(end - start)
+    out
+  }
+}
+maybe <- function(f) {
+  function(x, ...) {
+    if (is.null(x)) return(NULL)
+    f(x, ...)
+  }
+}
+```R
 
 ### Exercises
 
@@ -162,7 +173,15 @@ lapply(timers, call_fun, x)
   runif2(10)
   ```
 
+* Modify `delay_by` so that instead of delaying by a fixed amount of time, it ensures that a certain amount of time has elapsed since the function was last called. That is, if you called `f(); Sys.sleep(2); f()` there shouldn't be an extra delay.
 
+* There are three places we could have added a memoise call: why did we choose the one we did?
+
+  ```R
+  download <- memoise(dot_every(10, delay_by(1, download.file)))
+  download <- dot_every(10, memoise(delay_by(1, download.file)))
+  download <- dot_every(10, delay_by(1, memoise(download.file)))
+  ```
 
 ## Input modification
 
@@ -188,13 +207,12 @@ A common task is making a variant of a function that has certain arguments "fill
 
 ```R
 x <- function(a) y(a, b = 1)
-x <- curry(y, b = 1)
+x <- partial_eval(y, b = 1)
 
 compact <- function(x) Filter(Negate(is.null), x)
 compact <- curry(Filter, Negate(is.null))
 ```
 
-This type of programming is called point-free (sometimes derogatorily known as pointless) because it you don't explicitly refer to variables (which are called points in some areas of computer science.)
 
 One way to implement `curry` is as follows:
 
@@ -291,6 +309,79 @@ compact <- function(x) Filter(Negate(is.null), x)
 
 * combine two functions together (`pryr::compose`)
 * combine the results of two vectorised functions into a matrix (`plyr::each`) 
+* combining logical predicates with boolean operators (the topic of the following section)
+
+This type of programming is called point-free (sometimes derogatorily known as pointless) because it you don't explicitly refer to variables (which are called points in some areas of computer science.)  Another way of looking at it is that because we're using only functions and not parameters we use verbs and not nouns, so code in this style tends to focus on what's being done, not what it's being done to.
+
+## Common patterns
+
+Most function operators follow a similar pattern:
+
+```R
+funop <- function(f, otherargs) {
+  f <- match.fun(f)
+  function(...) {
+    # do something
+    res <- f(...)
+    # do something else
+    res
+  }
+}
+```
+
+### Anonymous functions vs. computing on the language
+
+The disadvantage of this technique is that when you print the function you won't get informative arguments.  One way around this is to write a function that replaces `...` with the concrete arguments from a specified function by [[computing on the language]].
+
+```R
+undot <- function(closure, f) {
+  # Can't find out arguments to primitive function, so give up.
+  if (is.primitive(f)) return(closure)
+
+  body(closure) <- replace_dots(body(closure), formals(f))
+  formals(closure) <- formals(f)
+
+  closure
+}
+
+replace_dots <- function(expr, replacement) {
+  if (!is.recursive(x)) return(x)
+  if (!is.call(x)) {
+    stop("Unknown language class: ", paste(class(x), collapse = "/"),
+      call. = FALSE)
+  }
+
+  pieces <- lapply(y, modify_lang, replacement = replacement)
+  as.call(pieces)
+}
+```
+
+### `match.fun`
+
+It's often useful to be able to pass in either the name of a function, or a function. `match.fun()`.  Also useful because it forces the evaluation of the argument: this is good because it raises an error right away (not later when the function is called), and makes it possible to use with `lapply`.
+
+Caveat: http://stackoverflow.com/questions/14183766
+
+Also need the opposite: to get the name of the function.  There are two basic cases: the user has supplied the name of the function, or they've supplied the function itself.  We cover this in more detail on computing in the language. But unfortunately it's difficult to 
+
+```R
+fname <- function(call) {
+  f <- eval(call, parent.frame())
+  if (is.character(f)) {
+    fname <- f
+    f <- match.fun(f)
+  } else if (is.function(f)) {
+    fname <- if (is.symbol(call)) as.character(call) else "<anonymous>"
+  }
+  list(f, fname)
+}
+f <- function(f) {
+  fname(substitute(f))
+}
+f("mean")
+f(mean)
+f(function(x) mean(x))
+```
 
 
 ### Function composition
