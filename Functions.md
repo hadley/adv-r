@@ -164,6 +164,7 @@ o <- function() {
   n <- 10
   n(n)
 }
+o()
 rm(n, o)
 ```
 
