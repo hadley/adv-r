@@ -152,7 +152,7 @@ maybe <- function(f) {
     f(x, ...)
   }
 }
-```R
+```
 
 ### Exercises
 
