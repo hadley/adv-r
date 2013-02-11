@@ -441,8 +441,8 @@ add <- function(x) {
   function(y) x + y
 }
 adders2 <- lapply(1:10, add)
-adders[[1]](10)
-adders[[10]](10)
+adders2[[1]](10)
+adders2[[10]](10)
 ```
 
 This code is exactly equivalent to
