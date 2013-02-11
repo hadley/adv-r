@@ -133,7 +133,7 @@ Or taken one of the examples from the functional programming chapter:
 ```R
 timers <- lapply(compute_mean, time_it)
 lapply(timers, call_fun, x)
-````
+```
 
 ```R
 time_it <- function(f) {
