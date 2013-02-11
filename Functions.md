@@ -152,6 +152,7 @@ m <- function() {
   l <- function(x) x * 2
   l(10)
 }
+m()
 rm(l, m)
 ```
 
