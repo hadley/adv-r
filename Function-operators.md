@@ -1,36 +1,70 @@
 # Function operators
 
-The final functional programming technique we will discuss in this book is function operators: functions that take (at least) one function as input and return a function as output. Function operators allow you to add extra functionality to an existing function, or combine multiple existing functions. 
+The final functional programming technique we will discuss is function operators: functions that take (at least) one function as input and return a function as output. Function operators are similar to functionals, but where functionals abstract away common uses of loops, function operators instead abstract over common uses of anonymous functions. Function operators allow you to add extra functionality to existing functions, or combine multiple existing functions to make new tools. 
 
-At a low level, they make it possible to eliminate function parameters by encapsulating common variations as function transformations. Functionals abstract away common looping operations. Function operators abstract over common anonymous functions operations. Like functionals, there's nothing you can't do without them; but they can make your code more readable and expressive by communicating higher level intent. The advantage is that you don't limit uses to functionality that you've thought up - as long as the modify the function in the right way, they can add all sorts of extra functioanlity. And you don't need a different argument for every possible option; end up with smaller, simpler pieces that you combine together. 
+Here's an example of a simple function operator that makes a function chatty, showing its input and output (albeit in a very naive way). It's useful because it gives a window into functionals, and we can use it to see how `lapply()` and `mclapply()` execute code differently.
+
+```R
+show_results <- function(f) {
+  function(x) {
+    res <- f(x)
+    cat(format(x), " -> ", format(res, digits = 3), "\n", sep = "")
+    res
+  }
+}
+s <- c(0.4, 0.3, 0.2, 0.1))
+x2 <- lapply(s, show_results(Sys.sleep))
+x2 <- mclapply(s, show_results(Sys.sleep))
+```
+
+Function operators can make it possible to eliminate parameters by encapsulating common variations as function transformations. Like functionals, there's nothing you can't do without them; but they can make your code more readable and expressive. One advantage of using FOs instead of additional arguments is that your functions become more extensible: your users are not limited to functionality that you've thought up - as long as they modify the function in the right way, they can add functionality that you've never dreamed of. This in turn leads to small, simpler functions that are easier to understand and learn. 
+
+In the last chapter, we saw that most built-in functionals in R have very few arguments (some have only one!), and we used anonymous functions to modify how they worked. In this chapter, we'll start to build up tools that replace standard anonymous functions with specialised equivalents that allow us to communicate our intent more clearly. For example, in the last chapter we saw how to use `Map` with some fixed arguments:
+
+```R
+Map(function(x, y) f(x, y, zs), xs, ys)
+```
+
+Later in this chapter, we'll learn about partial application, and the `partial()` function that implements it. Partial application allows us modify our original function directly, leading to the following code that is both more succint and more clear (assuming your vocabulary includes `partial()`).
+
+```R
+Map(partial(f, zs = zs), xs, yz)
+```
 
 <!-- If you're familiar with Python, decorates are function operators. : http://stackoverflow.com/questions/739654/understanding-python-decorators
  -->
 
 In this chapter, we'll explore four classes of function operators (FOs). Function operators can:
 
-* add additional useful behaviour, leaving the function otherwise unchanged. For example, automatically logging whenever the function is run, ensuring a function is run only once, or delaying the operation of a function.
+* __add behaviour__, leaving the function otherwise unchanged, like automatically logging when the function is run, ensuring a function is run only once, or delaying the operation of a function.
 
-* change the input to the function, for example, partially evaluating the function, converting a function that takes mutliple arguments to a function that takes a list, or automatically vectorising.
+* __change input__, like partially evaluating the function, converting a function that takes multiple arguments to a function that takes a list, or automatically vectorising a functional.
 
-* change the output of the function, for example, to return a value if the function throws an error, or to negate the result of a logical predictate
+* __change output__, for example, to return a value if the function throws an error, or to negate the result of a logical predictate
 
-* combine multiple functions togeher, for example, combining the results of predicate functions with boolean operators, or composing multiple function calls.
+* __combine functions__, for example, combining the results of predicate functions with boolean operators, or composing multiple function calls.
 
-The focus is on giving you some ideas for what you can use function operators for, and for alternative means of describing tasks in R: as combinations of functions, not combinations of arguments. 
+For each class, we'll show you useful function operators, and show you how you can use them as alternative means of describing tasks in R: as combinations of multiple functions instead of combinations of arguments to a single function. 
 
-At a higher level function operators allow you to define specialised languages for solving wide classes of problems. The building blocks are simple functions, which you combine together with function operators to solve more complicated problems. The final section of the chapter concludes with a case study that develops a flexible way of describing what arguments to a function should look like.
-
+At a higher level, function operators allow you to define specialised languages for solving wide classes of problems. The building blocks are simple functions, which you combine together with function operators to solve more complicated problems. The final section of the chapter shows how you can do this to build a language that specifies what arguments to a function should look like.
 
 ## Add additional behaviour
 
+The first class of FOs are those that leave the inputs and outputs of a function unchanged, but add some extra behaviour. In this section, we'll see functions that:
+
 * log to disk everytime a function is run
-* automatically print how long it took to run: timing
+* automatically print how long it took to run
 * add a delay to avoid swamping a server
 * print to console every n invocations (useful if you want to check on a long running process)
-* save time by caching previous function results (`memoise::memoise`)
+* save time by caching previous function results
 
-Motivating example downloading files with `download.file`
+To make this concrete, imagine we want to download a long vector of urls with `download.file()`. That's pretty simple with `lapply()`:
+
+```R
+lapply(urls, download.file, quiet = TRUE)
+```
+
+But because it's such a long list we want to print some output so that we know it's working (we'll print a `.` every ten urls), and we also want to avoid hammering the server, so we add a small delay to the function between each call. That leads to a rather more complicated for loop, since we can no longer use `lapply()` because we need an external counter:
 
 ```R
 i <- 1
@@ -38,52 +72,101 @@ for(url in urls) {
   i <- i + 1
   if (i %% 10 == 0) cat(".")
   Sys.delay(1)
-  download.file(url) 
+  download.file(url, quiet = TRUE) 
 }
-lapply(urls, dot_every(10, delay_by(1, download.file)))
 ```
+
+Reading this code is quite hard because we are using low-level functions, and it's not obvious (without some thought), what we're trying to do. In the remainder of this chapter we'll create FO that encapsulate each of the modifications, allowing us to instead do:
 
 ```R
-delay_by <- function(delay, f) {
-  function(...) {
-    Sys.sleep(delay)
-    f(...)
-  }
-}
-log_to <- function(path, message, f) {
-  stopifnot(file.exists(path))
-
-  function(...) {
-    cat(Sys.time(), ": ", message, sep = "", file = path, 
-      append = TRUE)
-    f(...)
-  }
-}
-dot_every <- function(n, f) {
-  i <- 1
-  function(...) {
-    if (i %% n == 0) cat(".")
-    i <<- i + 1
-    f(...)
-  }
-}
+lapply(urls, dot_every(10, delay_by(1, download.file)), quiet = TRUE)
 ```
 
-Notice that I've made the function the last argument.  That's because we're more likely to vary the function for a given problem than the other parameters so it makes them a little easier to use with `lapply` (if we have a list of functions), and it reads a little better when we compose multiple function operators. For example, if we had a long list of urls we wanted to download, without hammering the server too hard, and printing a dot every 10 urls, we can write:
+### Useful behavioural FOs
+
+Implementing the function are straightforward. `dot_every` is the most complicated because it needs to modify state in the parent environment using `<<-`.
+
+* Delay a function by `delay` seconds before executing:
+
+    ```R
+    delay_by <- function(delay, f) {
+      function(...) {
+        Sys.sleep(delay)
+        f(...)
+      }
+    }
+    ```
+
+* Print a dot to the console every `n` invocations of the function:
+ 
+    ```R
+    dot_every <- function(n, f) {
+      i <- 1
+      function(...) {
+        if (i %% n == 0) cat(".")
+        i <<- i + 1
+        f(...)
+      }
+    }
+    ```
+
+* Log a time stamp and message to a file everytime a function is run:
+
+    ```R
+    log_to <- function(path, message, f) {
+      stopifnot(file.exists(path))
+
+      function(...) {
+        cat(Sys.time(), ": ", message, sep = "", file = path, 
+          append = TRUE)
+        f(...)
+      }
+    }
+    ```
+
+* Print how long it took a function to execute:
+
+    ```R
+    time_it <- function(f) {
+      function(...) {
+        start <- proc.time()
+        res <- f(...)
+        end <- proc.time()
+
+        print(end - start)
+        out
+      }
+    }
+    ```
+
+* Ensure that if the first input is `NULL` the output is `NULL` (the name is inspired by Haskell's maybe monad which fills a similar role in Haskell, making it possible for functions to work with a default empty value).
+
+    ```R
+    maybe <- function(f) {
+      function(x, ...) {
+        if (is.null(x)) return(NULL)
+        f(x, ...)
+      }
+    }
+    ```
+
+Notice that I've made the function the last argument to each FO, this make it reads a little better when we compose multiple function operators. If the function was the first argument, then instead of:
 
 ```R
 download <- dot_every(10, delay_by(1, download.file))
 ```
 
-But if the function was the first argument, we'd write
+we'd have
 
 ```R
 download <- dot_every(delay_by(download.file, 1), 10)
 ```
 
-which I think is a little harder to follow because the argument to `dot_every` is far away from the function call.  That's sometimes called the [Dagwood sandwhich](http://en.wikipedia.org/wiki/Dagwood_sandwich) problem: you have too much filling (too many long arguments) between your slices of bread (parentheses).
+which I think is a little harder to follow because the argument to `dot_every()` is far away from the function call.  That's sometimes called the [Dagwood sandwhich](http://en.wikipedia.org/wiki/Dagwood_sandwich) problem: you have too much filling (too many long arguments) between your slices of bread (parentheses).
 
-Another thing you might worry about when downloading mutliple file is downloading the same file multiple times: that's a waste of time. You could work around it by calling `unique` on the list of input urls, or manually managing a data structure that mapped the url to the result.  An alternative approach is to use memoisation: a way of modifying a function to automatically cache its results.
+### Memoisation
+
+Another thing you might worry about when downloading multiple file is downloading the same file multiple times: that's a waste of time. You could work around it by calling `unique` on the list of input urls, or manually managing a data structure that mapped the url to the result. An alternative approach is to use memoisation: a way of modifying a function to automatically cache its results.
 
 ```R
 library(memoise)
@@ -98,7 +181,9 @@ system.time(fast_function())
 system.time(fast_function())
 ```
 
-A slightly more realistic use case is implementing the Fibonacci series (a topic we'll come back to [[software systems]]).  The Fibonacci series is defined recursively: the first two values are 1 and 1, then f(n) = f(n - 1) + f(n - 2).  A naive version implemented in R is very slow because (e.g.) `fib(10)` computes `fib(9)` and `fib(8)`, and `fib(9)` computes `fib(8)` and `fib(7)` so the value for each location gets computed many many times.  Memoising `fib()` makes the implementation much faster because each only needs to be computed once.
+Memoisation is an example of a classic tradeoff in computer science: we are trading space for speed.  A memoised function uses a lot more memory (because it stores all of the previous inputs and outputs), but is much much faster.
+
+A slightly more realistic use case is implementing the Fibonacci series (a topic we'll come back to [[software systems]]).  The Fibonacci series is defined recursively: the first two values are 1 and 1, then f(n) = f(n - 1) + f(n - 2).  A naive version implemented in R is very slow because (e.g.) `fib(10)` computes `fib(9)` and `fib(8)`, and `fib(9)` computes `fib(8)` and `fib(7)`, and so on, so that the value for each location gets computed many many times.  Memoising `fib()` makes the implementation much faster because each value only needs to be computed once.
 
 ```R
 fib <- function(n) {
@@ -116,11 +201,7 @@ system.time(fib2(23))
 system.time(fib2(24))
 ```
 
-```R
-download <- dot_every(10, memoise(delay_by(1, download.file)))
-```
-
-Note that there are some function that you probably don't want to memoise. The example below shows that a memoised random number generator is no longer random:
+It doesn't make sense to memoise all functions. The example below shows that a memoised random number generator is no longer random:
 
 ```R
 runifm <- memoise(runif)
@@ -128,30 +209,10 @@ runif(10)
 runif(10)
 ```
 
-Or taken one of the examples from the functional programming chapter:
+Once we understand `memoise()`, it's straightforward to apply it to our modified `download.file()`:
 
 ```R
-timers <- lapply(compute_mean, time_it)
-lapply(timers, call_fun, x)
-```
-
-```R
-time_it <- function(f) {
-  function(...) {
-    start <- proc.time()
-    res <- f(...)
-    end <- proc.time()
-
-    print(end - start)
-    out
-  }
-}
-maybe <- function(f) {
-  function(x, ...) {
-    if (is.null(x)) return(NULL)
-    f(x, ...)
-  }
-}
+download <- dot_every(10, memoise(delay_by(1, download.file)))
 ```
 
 ### Exercises
@@ -254,6 +315,7 @@ In this example we have used `SIMPLIFY = FALSE` to ensure that our newly vectori
 * negate the result of a predicate function (`base::Negate`)
 * return a default value if the function throws an error (`fail_with`)
 * convert a function that prints output to a function that returns output
+* return the time it took to run the function instead of the result
 
 ```R
 Negate <- function(f) {
@@ -281,6 +343,13 @@ failwith <- function(default = NULL, f, quiet = FALSE) {
 log("a")
 failwith(NA, log)("a")
 failwith(NA, log, quiet = TRUE)("a")
+```
+
+Or taken one of the examples from the functional programming chapter:
+
+```R
+timers <- lapply(compute_mean, time_it)
+lapply(timers, call_fun, x)
 ```
 
 `Negate` takes a function that returns a logical vector, and returns the negation of that function. This can be a useful shortcut when the function you have returns the opposite of what you need.

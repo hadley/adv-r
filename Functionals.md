@@ -12,7 +12,7 @@
 "To become significantly more reliable, code must become more transparent. In particular, nested conditions and loops must be viewed with great suspicion. Complicated control flows confuse programmers. Messy code often hides bugs."
 --- [Bjarne Stroustrup](http://www.stroustrup.com/Software-for-infrastructure.pdf)
 
-Higher-order functions encompass any functions that either take a function as an input or return a function as output. We've seen our first example of a higher-order function, closures, functions returned by another function. The complement to a closure is a __functional__, a function that takes a function as an input and returns a vector as output. 
+Higher-order functions encompass any functions that either take a function as an input or return a function as output. We've already seen closures, functions returned by another function. The complement to a closure is a __functional__, a function that takes a function as an input and returns a vector as output. 
 
 Here's a simple functional, it takes an input function and calls it with some random input:
 
