@@ -38,13 +38,13 @@ In this chapter, we'll explore four classes of function operators (FOs). Functio
 
 * __add behaviour__, leaving the function otherwise unchanged, like automatically logging when the function is run, ensuring a function is run only once, or delaying the operation of a function.
 
-* __change input__, like partially evaluating the function, converting a function that takes multiple arguments to a function that takes a list, or automatically vectorising a functional.
-
 * __change output__, for example, to return a value if the function throws an error, or to negate the result of a logical predictate
+
+* __change input__, like partially evaluating the function, converting a function that takes multiple arguments to a function that takes a list, or automatically vectorising a functional.
 
 * __combine functions__, for example, combining the results of predicate functions with boolean operators, or composing multiple function calls.
 
-For each class, we'll show you useful function operators, and show you how you can use them as alternative means of describing tasks in R: as combinations of multiple functions instead of combinations of arguments to a single function. 
+For each class, we'll show you useful function operators, and show you how you can use them as alternative means of describing tasks in R: as combinations of multiple functions instead of combinations of arguments to a single function. The goal is not to provide an exhaustive list of every possible functional operator that you could come up with, but to show a selection and demonstrate how well they work together and in concert with functionals. You will need to think about and experiment with what function operators help you solve recurring problems with your work. The examples in this chapter come from five years of creating function operators in different packages, and from reading about useful operators in other languages.
 
 At a higher level, function operators allow you to define specialised languages for solving wide classes of problems. The building blocks are simple functions, which you combine together with function operators to solve more complicated problems. The final section of the chapter shows how you can do this to build a language that specifies what arguments to a function should look like.
 
@@ -120,21 +120,6 @@ Implementing the function are straightforward. `dot_every` is the most complicat
         cat(Sys.time(), ": ", message, sep = "", file = path, 
           append = TRUE)
         f(...)
-      }
-    }
-    ```
-
-* Print how long it took a function to execute:
-
-    ```R
-    time_it <- function(f) {
-      function(...) {
-        start <- proc.time()
-        res <- f(...)
-        end <- proc.time()
-
-        print(end - start)
-        out
       }
     }
     ```
@@ -215,13 +200,66 @@ Once we understand `memoise()`, it's straightforward to apply it to our modified
 download <- dot_every(10, memoise(delay_by(1, download.file)))
 ```
 
+### Capturing function invocations
+
+```R
+ignore <- function(...) NULL
+tee <- function(f, on_input = ignore, on_output = ignore) {
+  function(...) {
+    on_input(list(...))
+    res <- f(...)
+    on_output(res)
+    res
+  }
+}
+```
+
+```R
+f <- function(x) sin(x ^ 2)
+uniroot(f, c(pi/2, pi))
+
+uniroot(tee(f, on_output = print), c(pi/2, pi))
+uniroot(tee(f, on_input = print), c(pi/2, pi))
+```
+
+But that just prints out the results as they happen, which is not terribly useful. Instead we might want to capture the sequence of the calls. To do that we create a function called `remember()` that remembers every argument it was called with, and retrieves them when coerced into a list. (The small amount of S3 magic that makes this possible is explained in the [[S3]] chapter).
+
+```R
+remember <- function() {
+  memory <- list()
+  f <- function(...) {
+    # Should use doubling strategy for efficiency
+    memory <<- append(memory, list(...))
+    invisible()
+  }
+  
+  structure(f, class = "remember")
+}
+as.list.remember <- function(x, ...) {
+  environment(x)$memory
+}
+print.remember <- function(x, ...) {
+  cat("Remembering...\n")
+  str(as.list(x))
+}
+```
+
+Now we can see exactly what uniroot does:
+
+```R
+locs <- remember()
+vals <- remember()
+uniroot(tee(f, locs, vals), c(pi/2, pi))
+plot(sapply(locs, "[[", 1))
+plot(sapply(locs, "[[", 1), sapply(vals, "[[", 1))
+```
+
 ### Exercises
 
 * What does the following function do? What would be a good name for it?
 
   ```R
   f <- function(g) {
-    g <- match.fun(g)
     result <- NULL
     function(...) {
       if (is.null(result)) {
@@ -234,7 +272,7 @@ download <- dot_every(10, memoise(delay_by(1, download.file)))
   runif2(10)
   ```
 
-* Modify `delay_by` so that instead of delaying by a fixed amount of time, it ensures that a certain amount of time has elapsed since the function was last called. That is, if you called `f(); Sys.sleep(2); f()` there shouldn't be an extra delay.
+* Modify `delay_by` so that instead of delaying by a fixed amount of time, it ensures that a certain amount of time has elapsed since the function was last called. That is, if you called `g <- delay_by(1, f); g(); Sys.sleep(2); g()` there shouldn't be an extra delay.
 
 * There are three places we could have added a memoise call: why did we choose the one we did?
 
@@ -244,27 +282,120 @@ download <- dot_every(10, memoise(delay_by(1, download.file)))
   download <- dot_every(10, delay_by(1, memoise(download.file)))
   ```
 
-## Input modification
+## Output modifications
 
-* modify an existing function by changing the default arguments (`pryr::curry`)
-* convert a function that works with a data frame to a function that works with a matrix (`plyr::colwise`)
-* convert a function of multiple parameters to a function of a single list parameter (`plyr::splat`)
-* vectorise a scalar function (`base::Vectorise`)
+The next step up in complexity is to modify the output of a function. This could be quite simple, modifying the output of a function in a deterministic way, or it could fundamentally change the operation of the function, returning something completely different to its usual output.
+
+### Minor modifications
+
+`base::Negate` and `plyr::failwith` offer two minor, but useful modifications of a function that are particularly handy in conjunction with functionals.
+
+`Negate` takes a function that returns a logical vector (a predicate function), and returns the negation of that function. This can be a useful shortcut when the function you have returns the opposite of what you need.  Its essence is very simple:
 
 ```R
-splat <- function (f) {
-  f <- match.fun(f)
-  function(args) {
-    do.call(f, args)
-  }
+Negate <- function(f) {
+  function(...) !f(...)
 }
+
+(Negate(is.null))(NULL)
 ```
 
-### Partial function evaluation
+One function I find handy based on this is `compact`: it removes all non-null elements from a list:
 
-<!-- Should Curry be renamed to partial -->
+```R
+compact <- function(x) Filter(Negate(is.null), x)
+```
 
-A common task is making a variant of a function that has certain arguments "filled in" already.  Instead of doing:
+`plyr::failwith()` turns a function that throws an error with incorrect input into a function that returns a default value when there's an error.  Again, the essence of `failwith()` is simple, just a wrapper around `try()` (if you're not familiar with `try()` it's discussed in more detail in the [[exceptions and debugging|Exceptions-debugging]] chapter):
+
+```R
+failwith <- function(default = NULL, f, quiet = FALSE) {
+  function(...) {
+    out <- default
+    try(out <- f(...), silent = quiet)
+    out
+  }
+}
+log("a")
+failwith(NA, log)("a")
+failwith(NA, log, quiet = TRUE)("a")
+```
+
+`failwith()` is very useful in conjunction with functionals: instead of the failure propagating and terminating the higher-level loop, you can complete the iteration and then find out what went wrong.  For example, imagine your fitting a set of generalised linear models to a list of data frames. Sometimes glms fail because of optimisation problems. You still want to try to fit all the models, and then after that's complete, look at the data sets that failed to fit:
+
+```R
+# If any model fails, all models fail to fit:
+models <- lapply(datasets, glm, formula = y ~ x1 + x2 * x3)
+# If a model fails, it will get a NULL value 
+models <- lapply(datasets, failwith(NULL, glm), 
+  formula = y ~ x1 + x2 * x3)
+
+ok_models <- compact(models)
+failed_data <- datasets[where(models, is.null)]
+```
+
+I think this is a great example of the power of combining functionals and function operators: it makes it easy to succinctly express what you want for a very common data analysis problem.
+
+### Changing what a function does
+
+Other output function operators can have a more profound affect on the operation of the function. Instead of returning the original return value, we can return some other effect of the function evaluation. For example:
+
+* Return text that the function `print()`ed:
+
+    ```R
+    capture_it <- function(f) {
+      function(...) {
+        capture.output(f(...))
+      }
+    }
+    str_out <- capture_it(str)
+    str(1:10)
+    str_out(1:10)
+    ```
+
+* Return how long a function took to run:
+  
+  ```R
+  time_it <- function(f) {
+    function(...) {
+      system.time(f(...))
+    }
+  }
+  ```
+
+If timing functions is something we want to do a lot, we can add another layer of abstraction: a closure that automatically times how long a function takes. We then create a list of timed functions and call the timers with our specified `x`.
+
+```
+compute_mean <- list(
+  base = function(x) mean(x),
+  sum = function(x) sum(x) / length(x)
+)
+x <- runif(1e6)
+
+# Instead of using an anonymous function to time
+lapply(compute_mean, function(f) system.time(f(x)))
+
+# We can compose function operators
+lapply(compute_mean, time_it(call_fun), x)
+```
+
+In this case, there's not a huge benefit to the functional operator style, because the composition is simple, and we're applying the same operator to each function. Generally, using function operators are more useful when you are using multiple operators and the gap between creating them and using them is large.
+
+### Exercises
+
+* Create a `negative` function that flips the sign of the output from the function it's applied to.
+
+* The `evaluate` package makes it easy to capture all the outputs (results, text, messages, warnings, errors and plots) from an expression.
+
+* In the final example, use `fapply()` instead of `lapply()`.
+
+## Input modification
+
+Somewhat more complicated than modifying the outputs of a function is modifying the inputs, again this can slightly modify how a function works (for example, prefilling some of the arguments), or fundamental change the inputs.
+
+### Prefilling function arguments: partial function evaluation
+
+A common task is making a variant of a function that has certain arguments "filled in" already. Instead of doing:
 
 ```R
 x <- function(a) y(a, b = 1)
@@ -273,7 +404,6 @@ x <- partial_eval(y, b = 1)
 compact <- function(x) Filter(Negate(is.null), x)
 compact <- curry(Filter, Negate(is.null))
 ```
-
 
 One way to implement `curry` is as follows:
 
@@ -295,7 +425,24 @@ Map(function(x, y) f(x, y, zs), xs, ys)
 Map(Curry(f, zs = zs), xs, ys)
 ```
 
-### Vectorise
+### Changing input types
+
+* scalar -> vector (`base::Vectorise`)
+* multiple arguments -> single list argument (`plyr::splat`)
+
+Another example of this pattern is `plyr::colwise`, which converts a function that works on a vector to a function that works column-wise on a data.frame.
+
+
+```R
+splat <- function (f) {
+  f <- match.fun(f)
+  function(args) {
+    do.call(f, args)
+  }
+}
+```
+
+#### Vectorise
 
 `Vectorize` takes a non-vectorised function and vectorises with respect to the arguments given in the `vectorise.args` parameter. This doesn't give you any magical performance improvements, but it is useful if you want a quick and dirty way of making a vectorised function.
 
@@ -307,72 +454,13 @@ sample2(1:10, rep(5, 4))
 sample2(1:10, 2:5)
 ```
 
-In this example we have used `SIMPLIFY = FALSE` to ensure that our newly vectorised function always returns a list. This is usually a good idea. `Vectorize` does not work with primitive functions.
+In this example we have used `SIMPLIFY = FALSE` to ensure that our newly vectorised function always returns a list. This is usually a good idea. 
 
-
-## Output modifications
-
-* negate the result of a predicate function (`base::Negate`)
-* return a default value if the function throws an error (`fail_with`)
-* convert a function that prints output to a function that returns output
-* return the time it took to run the function instead of the result
-
-```R
-Negate <- function(f) {
-  f <- match.fun(f)
-  function(...) !f(...)
-}
-
-capture_it <- function(f) {
-  function(...) {
-    capture.output(f(...))
-  }
-}
-str_out <- capture_it(str)
-str(1:10)
-str_out(1:10)
-
-failwith <- function(default = NULL, f, quiet = FALSE) {
-  f <- match.fun(f)
-  function(...) {
-    out <- default
-    try(f(...), silent = quiet)
-    out
-  }
-}
-log("a")
-failwith(NA, log)("a")
-failwith(NA, log, quiet = TRUE)("a")
-```
-
-Or taken one of the examples from the functional programming chapter:
-
-```R
-timers <- lapply(compute_mean, time_it)
-lapply(timers, call_fun, x)
-```
-
-`Negate` takes a function that returns a logical vector, and returns the negation of that function. This can be a useful shortcut when the function you have returns the opposite of what you need.
-
-```R
-Negate <- function(f) {
-  f <- match.fun(f)
-  function(...) !f(...)
-}
-
-(Negate(is.null))(NULL)
-```
-
-One function I find handy based on this is `compact`: it removes all non-null elements from a list:
-
-```R
-compact <- function(x) Filter(Negate(is.null), x)
-```
+Finally, note that `Vectorize` does not work with primitive functions.
 
 ### Exercises
 
-* The `evaluate` package makes it easy to capture all the outputs (results, text, messages, warnings, errors and plots) from an expression.
-
+* Read the source code for `plyr::colwise()`: how does code work? Could you reimplement some of it using `partial_eval()`?
 
 ## Combine multiple functions
 

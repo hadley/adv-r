@@ -56,7 +56,9 @@ lapply2 <- function(x, f, ...) {
 }
 ```
 
-`lapply()` is just a wrapper around a common for loop pattern. The art of using functionals is to recognise what common looping patterns are implemented in existing base functionals, and then use them instead of loops. Once you've mastered the existing functionals, the next step is to start writing your own: if you discover you're duplicating the same looping pattern in many places, you should extract it out into its own function. Once we've talked about the most important R functionals, we'll introduce some other loop patterns and start writing our own.
+`lapply()` is just a wrapper around a common for loop pattern. The art of using functionals is to recognise what common looping patterns are implemented in existing base functionals, and then use them instead of loops. 
+
+Once you've mastered the existing functionals, the next step is to start writing your own: if you discover you're duplicating the same looping pattern in many places, you should extract it out into its own function. Once we've talked about the most important R functionals, we'll introduce some other loop patterns and start writing our own.
 
 <!-- There's often a moderate performance improvement of `lapply()` to for loops.
 
@@ -122,6 +124,47 @@ lapply(names(xs), function(nm) {})
 ```
 
 Typically you use the first form because `lapply()` takes care of saving the output for your. However, if you need to know the position or the name of the element you're working with, you'll need to use the second or third form; they give you both the position of the object (`i`, `nm`) and its value (`x[[i]]`, `x[[nm]]`). If you're struggling to solve a problem using one form, you might find it easier with a different way.
+
+It's also useful to remember that while `lapply` usually varies the first argument of the function, if one of the additional arguments matches the name of the first argument then R's usually matching rules with take over so effectively the second argument is varied over:
+
+```R
+# These two calls do the same thing:
+lm(mpg ~ disp + wt, data = mtcars)
+lm(mtcars, formula = mpg ~ disp + wt)
+
+# So if we want to fit a list of different formulas to the same 
+# dataset, we do:
+formulas <- list(mpg ~ disp, mpg ~ wt, mpg ~ disp + wt)
+models1 <- lapply(formulas, lm, data = mtcars)
+
+# If we want to fit the same formula to different datasets
+bootstraps <- lapply(1:10, function(i) {
+  rows <- sample(1:nrow(mtcars), rep = TRUE)
+  mtcars[rows, ]
+})
+models2 <- lapply(bootstraps, lm, formula = mpg ~ disp + wt)
+```
+
+Finally if you're working with a list of functions, remember to use `call_fun`:
+
+```R
+call_fun <- function(f, ...) f(...)
+f <- list(sum, mean, median, sd)
+lapply(f, call_fun, x = runif(1e3))
+```
+
+Or you create a variant of `fapply()` specifically for working with lists of functions:
+
+```R
+fapply <- function(fs, ...) {
+  out <- vector("list", length(fs))
+  for (i in seq_along(fs)) {
+    out[[i]] <- fs[[i]](...)
+  }
+  out
+}
+fapply(f, x = runif(1e3))
+```
 
 ### Vector output: `sapply` and `vapply`
 
@@ -493,6 +536,23 @@ break <- function(x, f) {
   list(take_while(x, f), drop_while(x, f))
 }
 ```
+
+Another useful function is the ability to apply a non-vectorised predicate to a vectorised predicate:
+
+```R
+where <- function(x, f) {
+  vapply(x, f, logical(1))
+}
+where(mtcars, is.character)
+```
+
+Once we have that function, `Filter` is particularly easy to implement:
+
+```R
+Filter <- function(f, x) x[where(x, f)]
+```
+
+But `where` makes for a better low level function because there are many ways to combine logical vectors.
 
 * STL: `find_if`, `count_if`, `replace_if`, `remove_if`, `none_of`, `any_of`, `stable_partition`
 

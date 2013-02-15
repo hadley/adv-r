@@ -448,15 +448,6 @@ We can time every function on the list with `lapply` or `Map` along with a simpl
     lapply(compute_mean, function(f) system.time(f(x)))
     Map(function(f) system.time(f(x)), compute_mean)
     
-If timing functions is something we want to do a lot, we can add another layer of abstraction: a closure that automatically times how long a function takes. We then create a list of timed functions and call the timers with our specified `x`.
-
-    timer <- function(f) {
-      force(f)
-      function(...) system.time(f(...))
-    }
-    timers <- lapply(compute_mean, timer)
-    lapply(timers, call_fun, x)
-
 Another useful example is when we want to summarise an object in multiple ways.  We could store each summary function in a list, and run each function with `lapply` and `call_fun`:
 
     funs <- list(

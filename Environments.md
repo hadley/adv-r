@@ -436,7 +436,7 @@ df <- (function() {
 })()
 ```
 
-(If you're familiar with javascript you've probably seen this pattern before: it's used extensively by most javascript libraries to avoid polluting the global namespace.)
+(If you're familiar with javascript you've probably seen this pattern before: it's the immediately invoked function expression used extensively by most javascript libraries to avoid polluting the global namespace.)
 
 `local` has relatively limited uses (typically because most of the time scoping is best accomplished using R's regular function based rules) but it can be particularly useful in conjunction with `<<-`. You can use this if you want to make a private variable that's shared between two functions:
 
