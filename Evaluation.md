@@ -282,9 +282,10 @@ But it's because of how the arguments are evaluated - default arguments are eval
 
 ```R
 local4 <- function(expr, envir = new.env()) {
-  envir <- eval(quote(envir), parent.frame())
+  envir <- eval(substitute(envir), parent.frame())
   eval(substitute(expr), envir)
 }
+local4(9+9)
 ```
 
 But a better implementation might be
