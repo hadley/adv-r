@@ -389,7 +389,7 @@ i(b = 2)
 i(1, 2)
 ```
 
-However, I generally recommend against using missing because it makes it difficult to call programmatically from other functions (without using complicated workarounds). Generally, it's better to set a default value of `NULL` and then check with `is.null()`.
+However, I generally recommend against using `missing` because it makes it difficult to call programmatically from other functions (without using complicated workarounds). Generally, it's better to set a default value of `NULL` and then check with `is.null()`.
 
 ```R
 j <- function(a = NULL, b = NULL) {
@@ -522,7 +522,7 @@ There is a special argument called `...`.  This argument will match any argument
 
 To capture `...` in a form that is easier to work with, you can use `list(...)`. (See [[Computing on the language]] for other ways to capture ...)
 
-Using `...` comes with a cost - any misspelled arguments will be silently ignored.  It's often better to be explicit instead of explicit, so you might instead ask users to supply a list of additional arguments.  And this is certainly easier if you're trying to use `...` with multiple additional functions.
+Using `...` comes with a cost - any misspelled arguments will be silently ignored.  It's often better to be explicit rather than implicit, so you might instead ask users to supply a list of additional arguments.  And this is certainly easier if you're trying to use `...` with multiple additional functions.
 
 
 ## Special calls
@@ -748,7 +748,7 @@ a <- b <- c <- d <- 2
 
 ## Deferred execution
 
-**Caution**: Unfortunately the default in `on.exit()` is `add = FALSE`, so that every time you run it, it overrights existing exit expressions.  Because of the way `on.exit()` is implemented, it's not possible to create a variant with `add = TRUE`, so you must be careful when using it.
+**Caution**: Unfortunately the default in `on.exit()` is `add = FALSE`, so that every time you run it, it overwrites existing exit expressions.  Because of the way `on.exit()` is implemented, it's not possible to create a variant with `add = TRUE`, so you must be careful when using it.
 
 ### Exercises
 
