@@ -12,7 +12,7 @@ show_results <- function(f) {
     res
   }
 }
-s <- c(0.4, 0.3, 0.2, 0.1))
+s <- c(0.4, 0.3, 0.2, 0.1)
 x2 <- lapply(s, show_results(Sys.sleep))
 x2 <- mclapply(s, show_results(Sys.sleep))
 ```
