@@ -2,7 +2,7 @@
 
 The final functional programming technique we will discuss is function operators: functions that take (at least) one function as input and return a function as output. Function operators are similar to functionals, but where functionals abstract away common uses of loops, function operators instead abstract over common uses of anonymous functions. Function operators allow you to add extra functionality to existing functions, or combine multiple existing functions to make new tools. 
 
-Here's an example of a simple function operator that makes a function chatty, showing its input and output (albeit in a very naive way). It's useful because it gives a window into functionals, and we can use it to see how `lapply()` and `mclapply()` execute code differently.
+Here's an example of a simple function operator that makes a function chatty, showing its input and output (albeit in a very naive way). It's useful because it gives a window into functionals, and we can use it to see how `lapply()` and `mclapply()` execute code differently. (We'll explore this theme in more detail below with the fully-featured `tee` function)
 
 ```R
 show_results <- function(f) {
@@ -202,6 +202,10 @@ download <- dot_every(10, memoise(delay_by(1, download.file)))
 
 ### Capturing function invocations
 
+One challenge with functionals is that it can hard to be see what's going on - it's not easy to pry open the internals like it is with a for loop.  However, we can build a function operators to help us.  The `tee` function below has three arguments, all functions: `f`, the original function; `on_input`, a function that's called with the inputs to `f`, and `on_output` a function that's called with the output from `f`.
+
+(The name is inspired by the tee shell command which is used to split streams of file operations up so that you can see what's happening or save intermediate results to a file - it's named after the `t` pipe in plumbing)
+
 ```R
 ignore <- function(...) NULL
 tee <- function(f, on_input = ignore, on_output = ignore) {
@@ -214,12 +218,14 @@ tee <- function(f, on_input = ignore, on_output = ignore) {
 }
 ```
 
-```R
-f <- function(x) sin(x ^ 2)
-uniroot(f, c(pi/2, pi))
+We can use `tee` to look into how `uniroot` finds where `x` and `cos(x)` intersect:
 
-uniroot(tee(f, on_output = print), c(pi/2, pi))
-uniroot(tee(f, on_input = print), c(pi/2, pi))
+```R
+f <- function(x) cos(x) - x
+uniroot(f, c(-5, 5))
+
+uniroot(tee(f, on_output = print), c(-5, 5))
+uniroot(tee(f, on_input = print), c(-5, 5))
 ```
 
 But that just prints out the results as they happen, which is not terribly useful. Instead we might want to capture the sequence of the calls. To do that we create a function called `remember()` that remembers every argument it was called with, and retrieves them when coerced into a list. (The small amount of S3 magic that makes this possible is explained in the [[S3]] chapter).
@@ -249,9 +255,11 @@ Now we can see exactly what uniroot does:
 ```R
 locs <- remember()
 vals <- remember()
-uniroot(tee(f, locs, vals), c(pi/2, pi))
-plot(sapply(locs, "[[", 1))
-plot(sapply(locs, "[[", 1), sapply(vals, "[[", 1))
+uniroot(tee(f, locs, vals), c(-5, 5))
+x <- sapply(locs, "[[", 1)
+y <- sapply(vals, "[[", 1)
+plot(x, type = "b"); abline(h = 0.739, col = "grey50")
+plot(y, type = "b"); abline(h = 0, col = "grey50")
 ```
 
 ### Exercises
@@ -338,7 +346,7 @@ I think this is a great example of the power of combining functionals and functi
 
 ### Changing what a function does
 
-Other output function operators can have a more profound affect on the operation of the function. Instead of returning the original return value, we can return some other effect of the function evaluation. For example:
+Other output function operators can have a more profound affect on the operation of the function. Instead of returning the original return value, we can return some other effect of the function evaluation. Here's two examples:
 
 * Return text that the function `print()`ed:
 
@@ -363,7 +371,7 @@ Other output function operators can have a more profound affect on the operation
   }
   ```
 
-If timing functions is something we want to do a lot, we can add another layer of abstraction: a closure that automatically times how long a function takes. We then create a list of timed functions and call the timers with our specified `x`.
+`time_it()` allows us to rewrite some of the code from the functionals chapter:
 
 ```
 compute_mean <- list(
@@ -393,82 +401,128 @@ In this case, there's not a huge benefit to the functional operator style, becau
 
 Somewhat more complicated than modifying the outputs of a function is modifying the inputs, again this can slightly modify how a function works (for example, prefilling some of the arguments), or fundamental change the inputs.
 
-### Prefilling function arguments: partial function evaluation
+### Prefilling function arguments: partial function application
 
-A common task is making a variant of a function that has certain arguments "filled in" already. Instead of doing:
+A common task is making a variant of a function that has certain arguments "filled in" already. This is called "partial functiona application", and is implemented by `pryr::partial`. (As usual once you have read the computing on the language chapter, I encourage you to read the source code for `partial` and puzzle out how it works - it's only 4 lines of code, but it's somewhat subtle)
+
+It allows us to replace
 
 ```R
-x <- function(a) y(a, b = 1)
-x <- partial_eval(y, b = 1)
-
+f <- function(a) g(a, b = 1)
 compact <- function(x) Filter(Negate(is.null), x)
-compact <- curry(Filter, Negate(is.null))
-```
-
-One way to implement `curry` is as follows:
-
-```R
-curry <- function(FUN, ...) { 
-  .orig <- list(...)
-  function(...) {
-    do.call(FUN, c(.orig, list(...)))
-  }
-}
-```
-
-But implementing it like this prevents arguments from being lazily evaluated, so `pryr::curry()` has a more complicated implementation that works by creating the same anonymous function that you'd created by hand, using techniques from the [[computing on the language]] chapter.
-
-Alternative to providing `...` to user supplied functions.
-
-```R
 Map(function(x, y) f(x, y, zs), xs, ys)
+```
+
+with
+
+```
+f <- partial(g, b = 1)
+compact <- curry(Filter, Negate(is.null))
 Map(Curry(f, zs = zs), xs, ys)
 ```
 
+It is a useful replacement for `...` if you have multiple functions which might need additional arguments.
+
+If you're interested in this idea, you might want to look at the alternative approach in https://github.com/crowding/ptools/blob/master/R/dots.R.
+
 ### Changing input types
 
-* scalar -> vector (`base::Vectorise`)
-* multiple arguments -> single list argument (`plyr::splat`)
+There are a few existing functions that fundamentally change the input type of a function:
 
-Another example of this pattern is `plyr::colwise`, which converts a function that works on a vector to a function that works column-wise on a data.frame.
+* `base::Vectorise` converts a scalar function to a vector function. `Vectorize` takes a non-vectorised function and vectorises with respect to the arguments given in the `vectorise.args` parameter. This doesn't give you any magical performance improvements, but it is useful if you want a quick and dirty way of making a vectorised function.
+
+    An mildly useful extension of `sample` would be to vectorize it with respect to size: this would allow you to generate multiple samples in one call.
+
+    ```R
+    sample2 <- Vectorize(sample, "size", SIMPLIFY = FALSE)
+    sample2(1:10, rep(5, 4))
+    sample2(1:10, 2:5)
+    ```
+
+    In this example we have used `SIMPLIFY = FALSE` to ensure that our newly vectorised function always returns a list. This is usually a good idea. 
 
 
-```R
-splat <- function (f) {
-  f <- match.fun(f)
-  function(args) {
-    do.call(f, args)
-  }
-}
-```
+*  `plyr::splat` converts a function that takes multiple arguments to a function that takes a single list of arguments
 
-#### Vectorise
+    ```R
+    splat <- function (f) {
+      function(args) {
+        do.call(f, args)
+      }
+    }
+    unsplat <- function(f) {
+      function(...) {
+        f(list(...))
+      }
+    }
+    ```
 
-`Vectorize` takes a non-vectorised function and vectorises with respect to the arguments given in the `vectorise.args` parameter. This doesn't give you any magical performance improvements, but it is useful if you want a quick and dirty way of making a vectorised function.
-
-An mildly useful extension of `sample` would be to vectorize it with respect to size: this would allow you to generate multiple samples in one call.
-
-```R
-sample2 <- Vectorize(sample, "size", SIMPLIFY = FALSE)
-sample2(1:10, rep(5, 4))
-sample2(1:10, 2:5)
-```
-
-In this example we have used `SIMPLIFY = FALSE` to ensure that our newly vectorised function always returns a list. This is usually a good idea. 
-
-Finally, note that `Vectorize` does not work with primitive functions.
+* `plyr::colwise` converts a vector function to one that works with data frames.
 
 ### Exercises
 
-* Read the source code for `plyr::colwise()`: how does code work? Could you reimplement some of it using `partial_eval()`?
+* Read the source code for `plyr::colwise()`: how does code work?  It performs three main tasks. What are they? And how could you make `colwise` simpler by implementing each separate task as a function operator? (Hint: think about `partial`)
+
+* Look at all the examples of using an anonymous function to partially apply a function. Replace the anonymous function with `partial`. What do you think of the result?
 
 ## Combine multiple functions
 
-* combine two functions together (`pryr::compose`)
+Instead of operating on single functions, function operators can also take multiple functions as input. 
+
+A simple version of compose looks like this:
+
+```R
+compose <- function(f, g) {
+  function(...) f(g(...))
+}
+```
+
+(`pryr::compose` provides a fuller-featured alternative that can accept multiple functions).
+
+Mathematically, function composition is often denoted with an infix operator, o.  Haskell, a popular functional programming language, uses `.` in a similar manner.  In R, we can create our own infix function that works similarly:
+
+```R
+"%.%" <- compose
+```
+
+This, for example, allows us to natural express the standard deviation as the root mean squared deviation.
+
+```R
+square <- function(x) x ^ 2
+deviation <- function(x, y) x - mean(x)
+
+sd <- sqrt %.% mean %.% square %.% deviation
+sd(1:10)
+```
+
+`compose` is particularly useful in conjunction with `partial` because there is no other way to supply additional arguments to the functions being composed.
+
+One nice feature of `compose` + `partial` is that it keeps the arguments to each function near the function name. This is important because code gets progressively harder to understand the bigger chunk that you have to hold in your head at a time. If you can understand a line in isolation it's easy.
+
+```R
+download <- dot_every(10, memoise(delay_by(1, download.file)))download <- compose(
+  partial(dot_every, 10),
+  memoise, 
+  partial(delay_by, 1), 
+  download.file
+)
+
+download <- partial(dot_every, 10) %.% 
+  memoise %.% 
+  partial(delay_by, 1) %.% 
+  download.file
+```
+
+This type of programming is called point-free (sometimes derogatorily known as pointless) because it you don't explicitly refer to variables (which are called points in some areas of computer science.)  Another way of looking at it is that because we're using only functions and not parameters we use verbs and not nouns, so code in this style tends to focus on what's being done, not what it's being done to.
+
 * combine the results of two vectorised functions into a matrix (`plyr::each`) 
 * combining logical predicates with boolean operators (the topic of the following section)
 
-This type of programming is called point-free (sometimes derogatorily known as pointless) because it you don't explicitly refer to variables (which are called points in some areas of computer science.)  Another way of looking at it is that because we're using only functions and not parameters we use verbs and not nouns, so code in this style tends to focus on what's being done, not what it's being done to.
+Rather than exploring these ideas in much depth here, we'll explore them in the following chapter which uses them to build 
+
+### Exercises
+
+* Implement your own version of `compose` using `Reduce` and `%.%`. For bonus points, do it without calling `function`.
 
 ## Common patterns
 
@@ -476,15 +530,16 @@ Most function operators follow a similar pattern:
 
 ```R
 funop <- function(f, otherargs) {
-  f <- match.fun(f)
   function(...) {
-    # do something
+    # maybe do something
     res <- f(...)
-    # do something else
+    # maybe do something else
     res
   }
 }
 ```
+
+There's a subtle problem in the implementation of function operators as shown in this chapter (although the actual source code fixes this).  They do not work well with `lapply` because they lazily evaluate f, so if you're using them with a list of functions, they will all use the same (the last) function.
 
 ### Anonymous functions vs. computing on the language
 
@@ -556,7 +611,7 @@ compose(sqrt, "+")(1, 8)
 Then we could implement `Negate` as
 
 ```R
-Negate <- curry(compose, `!`)
+Negate <- partial(compose, `!`)
 ```
 
 ### Exercises

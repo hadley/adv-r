@@ -362,6 +362,10 @@ write.csv <- function(x, file = "", sep = ",", qmethod = "double", ...) {
 
 This makes the function much much easier to understand - it's just calling `write.table` with different defaults.  This also fixes a subtle bug in the original `write.csv` - `write.csv(mtcars, row = FALSE)` does not turn off rownames, but `write.csv(mtcars, row.names = FALSE)` does. Generally, you always want to use the simplest tool that will solve a problem - that makes it more likely that others will understand your code.
 
+### Exercises
+
+* Read the source code for `pryr::partial` and refer to XXX for uses. How does it work?
+
 ## Creating a function
 
 Building up a function by hand is also useful when you can't use a closure because you don't know in advance what the arguments will be. We'll use `pryr::make_function` to build up a function from its components pieces: an argument list, a quoted body (the code to run) and the environment in which it is defined (which defaults to the current environment):
