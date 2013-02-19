@@ -81,7 +81,7 @@ str(as.list(e, all.names = TRUE))
 You can extract elements of an environment using `$` or `'[[`, or `get`. `$` and `'[[` will only look in that environment, but `get` uses the regular scoping rules and will also look in the parent, if needed. `$` and `'[[` will return `NULL` if the name is not found, while `get` returns an error.
 
 ```R
-b <- 2
+e$b <- 2
 e$b
 e[["b"]]
 get("b", e)
