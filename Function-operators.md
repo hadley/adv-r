@@ -46,8 +46,6 @@ In this chapter, we'll explore four classes of function operators (FOs). Functio
 
 For each class, we'll show you useful function operators, and show you how you can use them as alternative means of describing tasks in R: as combinations of multiple functions instead of combinations of arguments to a single function. The goal is not to provide an exhaustive list of every possible functional operator that you could come up with, but to show a selection and demonstrate how well they work together and in concert with functionals. You will need to think about and experiment with what function operators help you solve recurring problems with your work. The examples in this chapter come from five years of creating function operators in different packages, and from reading about useful operators in other languages.
 
-At a higher level, function operators allow you to define specialised languages for solving wide classes of problems. The building blocks are simple functions, which you combine together with function operators to solve more complicated problems. The final section of the chapter shows how you can do this to build a language that specifies what arguments to a function should look like.
-
 ## Add additional behaviour
 
 The first class of FOs are those that leave the inputs and outputs of a function unchanged, but add some extra behaviour. In this section, we'll see functions that:
@@ -467,7 +465,23 @@ There are a few existing functions that fundamentally change the input type of a
 
 ## Combine multiple functions
 
-Instead of operating on single functions, function operators can also take multiple functions as input. 
+Instead of operating on single functions, function operators can take multiple functions as input. One simple example of this is `plyr::each()` which takes a list of vectorised functions and returns a single function that applies each in turn to the input:
+
+```R
+library(plyr)
+summaries <- each(mean, sd, median)
+summaries(1:10)
+```
+
+### Function composition
+
+Another important way of combining functions is composition: `f(g(x))`, sometimes written `(f o g)(x)`.  Composition takes a list of functions and applies them sequentially to the input.  It's a replacement for this common anonymous function pattern:
+
+```R
+sapply(mtcars, function(x) length(unique(x)))
+```
+
+where you chain together multiple functions to get the result you want.
 
 A simple version of compose looks like this:
 
@@ -479,28 +493,49 @@ compose <- function(f, g) {
 
 (`pryr::compose` provides a fuller-featured alternative that can accept multiple functions).
 
+This allows us to write:
+
+```R
+sapply(mtcars, compose(length, unique))
+```
+
 Mathematically, function composition is often denoted with an infix operator, o.  Haskell, a popular functional programming language, uses `.` in a similar manner.  In R, we can create our own infix function that works similarly:
 
 ```R
 "%.%" <- compose
+sapply(mtcars, length %.% unique)
+
+sqrt(1 + 8)
+compose(sqrt, "+")(1, 8)
+(sqrt %.% `+`)(1, 8)
 ```
 
-This, for example, allows us to natural express the standard deviation as the root mean squared deviation.
+Compose also allows for a very succinct implement of `Negate`: it composes another function with `!`.
+
+```R
+Negate <- partial(compose, `!`)
+```
+
+We could also implement the standard deviation by breaking it down into a separate set of function compositions:
 
 ```R
 square <- function(x) x ^ 2
-deviation <- function(x, y) x - mean(x)
+deviation <- function(x) x - mean(x)
 
 sd <- sqrt %.% mean %.% square %.% deviation
 sd(1:10)
 ```
 
-`compose` is particularly useful in conjunction with `partial` because there is no other way to supply additional arguments to the functions being composed.
+This type of programming is called tacit or point free programming.  (The term point free comes from use the of the word point to refer values in topology; this style is also derogatorily known as pointless). In this style of programming you don't explicitly refer to variables, focussing on the high-level composition of functions, rather than the low level flow of data. Since we're using only functions and not parameters, we use verbs and not nouns, so this style leads to code that focusses on what's being done, not what it's being done to. This is the style is common in Haskell, and typical style in stack based programming languages like Forth and Factor.
 
-One nice feature of `compose` + `partial` is that it keeps the arguments to each function near the function name. This is important because code gets progressively harder to understand the bigger chunk that you have to hold in your head at a time. If you can understand a line in isolation it's easy.
+`compose()` is particularly useful in conjunction with `partial()`, because `partial()` allows you to supply additional arguments to the functions being composed.  One nice side effect of this style of programming is that it keeps the arguments to each function near the function name. This is important because code gets progressively harder to understand the bigger chunk that you have to hold in your head at a time.
+
+Below I take the example from the first section of the chapter and modify it to use the two styles of function composition defined above.  They are both longer than the original code but perhaps easier to understand.  Note that we still have to read them from right to left: the first function called is the last one written.
 
 ```R
-download <- dot_every(10, memoise(delay_by(1, download.file)))download <- compose(
+download <- dot_every(10, memoise(delay_by(1, download.file)))
+
+download <- compose(
   partial(dot_every, 10),
   memoise, 
   partial(delay_by, 1), 
@@ -513,176 +548,17 @@ download <- partial(dot_every, 10) %.%
   download.file
 ```
 
-This type of programming is called point-free (sometimes derogatorily known as pointless) because it you don't explicitly refer to variables (which are called points in some areas of computer science.)  Another way of looking at it is that because we're using only functions and not parameters we use verbs and not nouns, so code in this style tends to focus on what's being done, not what it's being done to.
+You'll see one more example of combining function operators in the final section of the paper: the combination of logical predicates with boolean operators.
 
-* combine the results of two vectorised functions into a matrix (`plyr::each`) 
-* combining logical predicates with boolean operators (the topic of the following section)
+### Logical predicates and boolean algebra
 
-Rather than exploring these ideas in much depth here, we'll explore them in the following chapter which uses them to build 
-
-### Exercises
-
-* Implement your own version of `compose` using `Reduce` and `%.%`. For bonus points, do it without calling `function`.
-
-## Common patterns
-
-Most function operators follow a similar pattern:
+When use `Filter()` and other functionals that work with logical predicates, you often find yourself using anonymous functions to combine multiple conditions:
 
 ```R
-funop <- function(f, otherargs) {
-  function(...) {
-    # maybe do something
-    res <- f(...)
-    # maybe do something else
-    res
-  }
-}
+Filter(iris, function(x) is.character(x) || is.factor(x))
 ```
 
-There's a subtle problem in the implementation of function operators as shown in this chapter (although the actual source code fixes this).  They do not work well with `lapply` because they lazily evaluate f, so if you're using them with a list of functions, they will all use the same (the last) function.
-
-### Anonymous functions vs. computing on the language
-
-The disadvantage of this technique is that when you print the function you won't get informative arguments.  One way around this is to write a function that replaces `...` with the concrete arguments from a specified function by [[computing on the language]].
-
-```R
-undot <- function(closure, f) {
-  # Can't find out arguments to primitive function, so give up.
-  if (is.primitive(f)) return(closure)
-
-  body(closure) <- replace_dots(body(closure), formals(f))
-  formals(closure) <- formals(f)
-
-  closure
-}
-
-replace_dots <- function(expr, replacement) {
-  if (!is.recursive(x)) return(x)
-  if (!is.call(x)) {
-    stop("Unknown language class: ", paste(class(x), collapse = "/"),
-      call. = FALSE)
-  }
-
-  pieces <- lapply(y, modify_lang, replacement = replacement)
-  as.call(pieces)
-}
-```
-
-### `match.fun`
-
-It's often useful to be able to pass in either the name of a function, or a function. `match.fun()`.  Also useful because it forces the evaluation of the argument: this is good because it raises an error right away (not later when the function is called), and makes it possible to use with `lapply`.
-
-Caveat: http://stackoverflow.com/questions/14183766
-
-Also need the opposite: to get the name of the function.  There are two basic cases: the user has supplied the name of the function, or they've supplied the function itself.  We cover this in more detail on computing in the language. But unfortunately it's difficult to 
-
-```R
-fname <- function(call) {
-  f <- eval(call, parent.frame())
-  if (is.character(f)) {
-    fname <- f
-    f <- match.fun(f)
-  } else if (is.function(f)) {
-    fname <- if (is.symbol(call)) as.character(call) else "<anonymous>"
-  }
-  list(f, fname)
-}
-f <- function(f) {
-  fname(substitute(f))
-}
-f("mean")
-f(mean)
-f(function(x) mean(x))
-```
-
-
-### Function composition
-
-```R
-"%.%" <- compose <- function(f, g) {
-  f <- match.fun(f)
-  g <- match.fun(g)
-  function(...) f(g(...))
-}
-compose(sqrt, "+")(1, 8)
-(sqrt %.% `+`)(1, 8)
-```
-
-Then we could implement `Negate` as
-
-```R
-Negate <- partial(compose, `!`)
-```
-
-### Exercises
-
-* What does the following function do? What would be a good name for it?
-
-  ```R
-  g <- function(f1, f2) {
-    function(...) f1(...) || f2(...)
-  } 
-  Filter(g(is.character, is.factor), mtcars)
-  ```
-
-  Can you extend the function to take any number of functions as input? You'll probably need a loop.
-
-* Write a function `and` that takes two function as input and returns a single function as an output that ands together the results of the two functions. Write a function `or` that combines the results with `or`.  Add a `not` function and you now have a complete set of boolean operators for predicate functions.
-
-## Case study: checking function inputs and boolean algebra
-
-We will explore function operators in the context of avoiding a common R programming problem: supplying the wrong type of input to a function.  We want to develop a flexible way of specifying what a function needs, using a minimum amount of typing. To do that we'll define some simple building blocks and tools to combine them. Finally, we'll see how we can use S3 methods for operators (like `+`, `|`, etc.) to make the description even less invasive.
-
-The goal is to be able to succinctly express conditions about function inputs to make functions safer without imposing additional constraints.  Of course it's possible to do that already using `stopifnot()`:
-
-```R
-f <- function(x, y) {
-  stopifnot(length(x) == 1 && is.character(x))
-  stopifnot(is.null(y) || 
-    (is.data.frame(y) && ncol(y) > 0 && nrow(y) > 0))
-}
-```
-
-What we want to be able to express the same idea more evocatively.
-
-```R
-f <- function(x, y) {
-  assert(x, and(eq(length, 1), is.character))
-  assert(y, or(is.null, 
-    and(is.data.frame, and(gt(nrow, 0), gt(ncol, 0)))))
-}
-f <- function(x, y) {
-  assert(x, length %==% 1 %&% is.character)
-  assert(y, is.null %|% 
-    (is.data.frame %&% (nrow %>% 0) %&% (ncol %>% 0)))
-}
-f <- function(x, y) {
-  assert(x, (length) == 1 && (is.character))
-  assert(y, (is.null) || ((is.data.frame) & !empty))
-}
-
-is.string <- (length) == 0 && (is.character)
-f <- function(x, y) {
-  assert(x, (is.string))
-  assert(y, (is.null) || ((is.data.frame) & !(empty)))
-}
-```
-
-We'll start by implementation the `assert()` function. It should take two arguments, an object and a function.
-
-```
-assert <- function(x, predicate) {
-  if (predicate(x)) return()
-
-  x_str <- deparse(match.call()$x)
-  p_str <- strwrap(deparse(match.call()$predicate), exdent = 2)
-  stop(x_str, " does not satisfy condition:\n", p_str, call. = FALSE)
-}
-x <- 1:10
-assert(x, is.numeric)
-assert(x, is.character)
-```
-
+As an alternative, we could define some function operators that combine logical predicates:
 
 ```R
 and <- function(f1, f2) {
@@ -702,68 +578,62 @@ not <- function(f1) {
 }
 ```
 
-```R
-has_length <- function(n) {
-  function(x) length(x) == n
-}
-or(and(is.character, has_length(4)), is.null)
-```
-
-It would be cool if we could rewrite to be:
+which would allow us to write:
 
 ```R
-(is.character & has_length(4)) | is.null
+Filter(iris, or(is.character, is.factor))
 ```
-
-but due to limitations of S3 it's not possible.  The closest we could get is:
-
-```R
-"%|%" <- function(e1, e2) function(...) e1(...) || e2(...)
-"%&%" <- function(e1, e2) function(...) e1(...) && e2(...)
-
-(is.character %&% has_length(4)) %|% is.null
-```
-
-Another approach would be do something like:
-
-```R
-Function <- function(x) structure(x, class = "function")
-Ops.function <- function(e1, e2) {
-  f <- function(y) {
-    if (is.function(e1)) e1 <- e1(y)
-    if (is.function(e2)) e2 <- e2(y)
-    match.fun(.Generic)(e1, e2)
-  }
-  Function(f)
-}
-length <- Function(length)
-length > 5
-length * length + 3 > 5
-
-is.character <- Function(is.character)
-is.numeric <- Function(is.numeric)
-is.null <- Function(is.null)
-
-is.null | (is.character & length > 5)
-```
-
-If you wanted to make the syntax less invasive (so you didn't have to manually cast `functions` to `Functions`) you could maybe override the parenthesis:
-
-```R
-"(" <- function(x) if (is.function(x)) Function(x) else x 
-(is.null) | ((is.character) & (length) > 5)
-```
-
-If we wanted to eliminate the use of `()` we could extract all variables from the expression, look at the variables that are functions and then wrap them automatically, put them in a new environment and then call in that environment.
 
 ### Exercises
 
-* Something with `Negate`
+* Implement your own version of `compose` using `Reduce` and `%.%`. For bonus points, do it without calling `function`.
 
-* Extend `and`, `or` and `not` to deal with any number of input functions. Can you keep them lazy?
+* Extend `and()` and `or()` to deal with any number of input functions. Can you do it with `Reduce()`? Can you keep them lazy?
 
-* Implement a corresponding `xor` function. Why can't you give it the most natural name?  What might you call it instead? Should you rename `and`, `or` and `not` to match your new naming scheme?
+* Implement the `xor()` binary operator for predicates. Implement it using the existing `xor()` function. Implement it as a combination of `and()` and `or()`. What are the advantages and disadvantages of each approach?
 
-* Once you have read the [[S3]] chapter, replace `and`, `or` and `not` with appropriate methods of `&`, `|` and `!`.  Does `xor` work?
+* Here we've implemented boolean algebra for functions that return a logical function. Implement elementary algebra (`plus()`, `minus()`, `multiply()`, `divide()`, `exponentiate()`) for functions that return numeric vectors. 
 
+## Common pattern and a subtle bug
 
+Most function operators follow a similar pattern:
+
+```R
+funop <- function(f, otherargs) {
+  function(...) {
+    # maybe do something
+    res <- f(...)
+    # maybe do something else
+    res
+  }
+}
+```
+
+There's a subtle problem in the implementation of function operators as shown in this chapter (although the actual source code fixes this).  They do not work well with `lapply` because they lazily evaluate f, so if you're using them with a list of functions, they will all use the same (the last) function:  
+
+```R
+maybe <- function(f) {
+  function(x, ...) {
+    if (is.null(x)) return(NULL)
+    f(x, ...)
+  }
+}
+fs <- list(sum = sum, mean = mean, min = min)
+maybes <- lapply(fs, maybe)
+maybes$sum(1:10)
+```
+
+We can kill two birds with one stone and also make it possible to pass in either the name of a function, or a function. `match.fun()`.
+
+```R
+maybe <- function(f) {
+  f <- match.fun(f)
+  function(x, ...) {
+    if (is.null(x)) return(NULL)
+    f(x, ...)
+  }
+}
+fs <- c(sum = "sum", mean = "mean", min = "min")
+maybes <- lapply(fs, maybe)
+maybes$sum(1:10)
+```
