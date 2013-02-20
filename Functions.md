@@ -33,7 +33,7 @@ body(f)
 environment(f)
 ```
 
-There is an exeception to this rule: primitive functions, like `sum`:
+There is an exception to this rule: primitive functions, like `sum`:
 
 ```R
 sum
