@@ -231,7 +231,7 @@ If you want to distribute your package to another R user (i.e. someone who doesn
   functions with `save`, but with a little extra metadata to make things as
   fast as possible.
 
-* If you had an code in the `src/` directory there will now be a `libs/`
+* If you had any code in the `src/` directory there will now be a `libs/`
   directory that contains the results of compiling that code for 32 bit
   (`i386/`) and 64 bit (`x64`)
 
