@@ -2,7 +2,7 @@
 
 Package level documentation exists to help the user understand how to use the package as a whole. Function level documentation is useful once you know exactly what you want to do, and you've discovered the appropriate function: once you've done all that, function-level documentation helps you use the function appropriately. Package-level documentation gets you to point where you can do that: it explains what the package does as a whole, breaks the functions down into useful categories, and shows you how to combine the functions (and maybe functions from other packages) to solve problems.
 
-There are XXX components to package level documentation.  None of them are compulsory, but you more you make, the easier it will be for others to use your package.
+There are XXX components to package level documentation.  None of them are compulsory, but the more you make, the easier it will be for others to use your package.
 
 * `README`, `NEWS`, `CITATION` are specially formatted plain-text
   documentation that provide a brief overview of your package, what's changed
