@@ -12,10 +12,10 @@ Functional programming
   * [[Function operators]]
 
 Objected oriented programming
+  * [[Software systems|SoftwareSystems]]
   * [[The S3 object system|S3]]
   * [[The S4 object system|S4]]
   * [[Reference based classes|R5]]
-  * [[Software systems|SoftwareSystems]]
 
 Advanced programming techniques
   * [[Controlling evaluation|Evaluation]]
