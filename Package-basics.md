@@ -214,7 +214,7 @@ There are a number of other less commonly used fields like `BugReports`, `KeepSo
 
 So far we've just described the structure of a source package: the development version of a package that lives on your computer. There are also two other type of package: bundled packages and binary packages.
 
-A package __bundle__ is a compressed version of a package is a single file. By convention, package bundles in R use the extension `.tar.gz`. This is linux convention indicating multiple files have been collapsed into a single file (`.tar`) and then compressed using gzip (`.gz`). The package bundle is useful if you want to manually distribute your package to another R package developer. It is not OS specific. You can use `devtools::build()` to make a package bundle.
+A package __bundle__ is a compressed version of a package in a single file. By convention, package bundles in R use the extension `.tar.gz`. This is linux convention indicating multiple files have been collapsed into a single file (`.tar`) and then compressed using gzip (`.gz`). The package bundle is useful if you want to manually distribute your package to another R package developer. It is not OS specific. You can use `devtools::build()` to make a package bundle.
 
 If you want to distribute your package to another R user (i.e. someone who doesn't necessarily have the development tools installed) you need to make a __binary__ package. Like a package bundle, a binary package is a single file, but if you uncompress it, you'll see that the internal structure is a little different to a source package: 
 
