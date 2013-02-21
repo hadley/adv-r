@@ -25,7 +25,6 @@ Advanced programming techniques
 Performant code
   * [[Profiling and benchmarking|profiling]]
   * [[General performance tips and tricks|performance]]
-  * [[R's C interface|c-interface]]
   * [[High performance functions with Rcpp|Rcpp]]
 
 ### Package development
@@ -46,3 +45,4 @@ Performant code
 * [[Data structures]]
 * [[Subsetting]]
 * [[Vocabulary]]
+* [[R's C interface|c-interface]]

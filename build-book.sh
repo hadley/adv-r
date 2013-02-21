@@ -21,7 +21,6 @@ pandoc --chapters -o book.pdf --latex-engine xelatex \
   R5.md \
   Performance.md \
   Profiling.md \
-  C-interface.md \
   Rcpp.md \
   Philosophy.md \
   package-basics.md \
@@ -35,4 +34,5 @@ pandoc --chapters -o book.pdf --latex-engine xelatex \
   Release.md \
   Vocabulary.md \
   Data-structures.md \
+  C-interface.md \
   && open book.pdf
