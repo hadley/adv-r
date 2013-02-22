@@ -1,17 +1,13 @@
 # Functional programming
 
-At it's core, R is a functional programming (FP) language which means it focusses on the creation and execution of function. In R, functions can be:
+At it's core, R is a functional programming (FP) language which means it focusses on the creation and execution of functions. R possesses what's know as first class functions, functions that can be:
 
-* created anonymously,
-* assigned to variables and stored in data structures,
+* created without a name,
+* assigned to variables and stored in list,
 * returned from functions,
 * passed as arguments to other functions
 
-Together this set of four properties means that R supports "first class functions": functions are a first class feature of the language in the same way the vectors are. 
-
-This chapter will explore the consequences of R's functional nature and introduce a new set of techniques for removing redundancy and duplication in your code. 
-
-We'll start with a motivating example, showing how you can use functional programming techniques to reduce duplication in some typical code for cleaning data and summarising data. This example will introduce some of the most important functional programming concepts, which we will then dive into in more detail:
+This means that you can do anything with functions that you can do with vectors: you can create them inside other functions, pass them as arguments to functions, return them as results from functions and store multiple functions in a list. This chapter, along with [[functionals]] and [[function operators]], will explore the consequences of R's functional nature and introduce a new set of techniques for removing redundancy and duplication in your code. We'll start with a motivating example, showing how you can use functional programming techniques to reduce duplication in some typical code for cleaning data and summarising data. This example will introduce some of the key building blocks of functional programming, which we will then dive into in more detail:
 
 * __Anonymous functions__, functions that don't have a name
 
@@ -19,21 +15,31 @@ We'll start with a motivating example, showing how you can use functional progra
 
 * __Lists of functions__, storing functions in a list
 
-The chapter conclues with a case study exploring __numerical integration__ showing how we can build a family of composite integration tools starting from very simple primitives. 
+The chapter concludes with a case study exploring __numerical integration__ showing how we can build a family of composite integration tools starting from very simple primitives.  This will a recurring theme: if we start with small building blocks that we can easily understand, when we combine them into more complex structures, we can still feel confident that they are correct.
 
 The exposition of functional programming continues in the following two chapters: [[functionals]] and [[functional operators]].
 
+### Other language
+
+FP programming techniques are the core technique in FP languages, like Haskell, OCaml and F#. They are also well supported in multi-paradigm systems like Lisp, Scheme, Clojure and Scala. You can use FP techniques in modern scripting languages, like python, ruby and javascript, but they tend not to be the dominant technique employed by most programmers. Java and C# provide few functional tools, and while it's possible to do FP in those languages, it tends to be a somewhat awkward fit. Similarly, for functional programming in C. Googling for "functional programming in X" will find you a tutorial in any language, but it may be syntactically awkward or used so rarely that other programmers will not understand your code.
+
+Recently FP has experienced a surge in interest because it provides a complementary set of techniques to object oriented programming, which has been the dominant style for the last several decades. Since FP functions tend to not modify their inputs, it makes programs that are easier to reason about using only local information, and are often easier to parallelise. The traditional weaknesses of FP languages, poorer performance and sometimes unpredictable memory usage, have largely been eliminated in recent years.
+
 ## Motivation
 
-Imagine you've loaded a data file that uses -99 to represent missing values. When you first start writing R code, you might write code like this, dealing with duplication by using copy-and-paste:
+Imagine you've loaded a data file that uses -99 to represent missing values, like the following sample dataset.
 
 ```R
 # Generate a sample dataset
 set.seet(1014)
 df <- data.frame(replicate(6, sample(c(1:10, -99), 10, rep = T)))
 names(df) <- letters[1:6]
+head(df)
+```
 
-# Fix missing values
+When you first start writing R code, you might write code like the following, dealing with the duplicated processing of each column with copy-and-paste:
+
+```R
 df$a[df$a == -99] <- NA
 df$b[df$b == -99] <- NA
 df$c[df$c == -98] <- NA
@@ -42,7 +48,7 @@ df$e[df$e == -99] <- NA
 df$f[df$g == -99] <- NA
 ```
 
-One problem with using copy-and-paste is that it's easy to make mistakes (can you spot the two in the block above?). The root cause is that one idea, that missing values are represent as -99, is duplicated many times. Duplication is bad because it allows for inconsistencies (aka bugs), and it mades the code harder to change: if the the representation of missing value changes from -99 to 9999, then we need to make the change in many places, not just one.
+One problem with copy-and-paste is that it's easy to make mistakes: can you spot two in the block above? The problem is that one idea, that missing values are represent as -99, is repeated many times. Repitition is bad because it allows for inconsistencies (aka bugs), and it makes the code harder to change. For example, if the representation of missing values changes from -99 to 9999, then we need to make the change in many places, not just one.
 
 The "do not repeat yourself", or DRY, principle, was popularised by the [pragmatic programmers](http://pragprog.com/about), Dave Thomas and Andy Hunt. This principle states that "every piece of knowledge must have a single, unambiguous, authoritative representation within a system". Adhering to this principle prevents bugs caused by inconsistencies, and makes software that is easier to adapt to changing requirements. The ideas of FP are important because they give us new tools to reduce duplication.
 
@@ -61,9 +67,9 @@ df$e <- fix_missing(df$e)
 df$f <- fix_missing(df$e)
 ```
 
-This reduces the scope for errors, but doesn't eliminate them.  We've still made an error, because we've repeatedly applied our function to each column. To prevent that error from occuring we need to remove the copy-and-paste application of our function to each column. To do this, we need to combine, or __compose__, our function for correcting missing values with a function that does something to each column in a data frame, like `lapply()`.  
+This reduces the scope for errors, but doesn't eliminate them.  We've still made an error, because we've repeatedly applied our function to each column. To prevent that error from occuring we need to remove the copy-and-paste application of our function to each column. To do this, we need to combine, or compose, our function for correcting missing values with a function that does something to each column in a data frame, like `lapply()`.  
 
-`lapply()` takes three inputs: a list, a function, and other arguments to pass to the function. It applies the function to each element of the list and returns the as a new list (since data frames are also lists, `lapply()` also works on data frames). `lapply(x, f, ...)` is equivalent to the following for loop:
+`lapply()` takes three inputs: `x`, a list; `f`, a function; and ``...`, other arguments to pass to `f`. It applies the function to each element of the list and returns a new list. Since data frames are also lists, `lapply()` also works on data frames. `lapply(x, f, ...)` is equivalent to the following for loop:
 
 ```R
 out <- vector("list", length(x))
@@ -72,9 +78,9 @@ for (i in seq_along(x)) {
 }
 ```
 
-The real `lapply()` is rather more complicated since it's implemented in C for efficiency, but the essence of the algorithm is the same. `lapply()` is a __functional__, because it takes a function as one of its arguments. Functionals are an important part of functional programming and we'll learn more about them in the [[functionals]] chapter.
+The real `lapply()` is rather more complicated since it's implemented in C for efficiency, but the essence of the algorithm is the same. `lapply()` is called a __functional__, because it takes a function as an arguments. Functionals are an important part of functional programming and we'll learn more about them in the [[functionals]] chapter.
 
-We can apply `lapply()` to our problem with one small trick: rather than simply assigning the results to `df` we assign them to `df[]`, so R's usual subsetting rules take over and we get a data frame instead of a list.
+We can use `lapply()` with one small trick: rather than simply assigning the results to `df` we assign them to `df[]`, so R's usual subsetting rules take over and we get a data frame instead of a list. (If this comes as a surprise, you might want to read over the [[subsetting]] appendix)
 
 ```R
 fix_missing <- function(x) {
@@ -84,17 +90,23 @@ fix_missing <- function(x) {
 df[] <- lapply(df, fix_missing)
 ```
 
-As well as being more compact, there are two main advantages of this code over our previous code:
+As well as being more compact, there are four main advantages of this code over our previous code:
 
-* If the representation of missing values changes, we only need to change it in one place, and there is no way for some columns to be treated differently than others.
+* If the representation of missing values changes, we only need to change it in one place.
+
+* There is no way for some columns to be treated differently than others.
 
 * Our code works regardless of the number of columns in the data frame, and there is no way to miss a column because of a copy and paste error.
 
-The key idea here is composition. We take two simple functions, one which does something to each column, and one which replaces -99 with NA, and compose them to replace -99 with NA in every column. An important technique for effective FP is writing simple functions than can be understood in isolation and then composed together to solve complex problems.
+* It is easy to generalise this technique to a subset of our columns:
 
-<!-- Why not add a second argument to fix_missing ?? -->
+    ```R
+    df[1:5] <- lapply(df[1:5], fix_missing)
+    ```
 
-What if different columns use different indicators for missing values? You again might be tempted to copy-and-paste:
+The key idea here is composition. We take two simple functions, one which does something to each column, and one which fixes missing values, and combine them together to fix missing values in every column. Writing simple functions than can be understood in isolation and then composed together to solve complex problems is an important technique for effective FP.
+
+What if different columns used different indicators for missing values? You again might be tempted to copy-and-paste:
 
 ```R
 fix_missing_99 <- function(x) {
@@ -111,7 +123,7 @@ fix_missing_9999 <- function(x) {
 }
 ```
 
-But as previously, it's easy to create bug. The next functional programming tool we'll talk about helps deal with this sort of duplication: we have multiple functions that all follow the same basic template. Closures, functions that return functions, allow us to make many functions from a template:
+But as before, it's easy to create bugs. The next functional programming tool we'll talk about helps deal with this sort of duplication: when we have multiple functions that all follow the same basic template. Closures, functions that return functions, allow us to make many functions from a template:
 
 ```R
 missing_fixer <- function(na_value) {
@@ -125,7 +137,18 @@ fix_missing_999 <- missing_fixer(-999)
 fix_missing_9999 <- missing_fixer(-9999)
 ```
 
-Let's now consider a new problem: once we've cleaned up our data, we might want to compute the same set of numerical summaries for each variable.  We could write code like this:
+(In this case, you could argue that we should just add another argument:
+
+```R
+fix_missing <- function(x, na.value) {
+  x[x == na.value] <- NA
+  x
+} 
+```
+
+That's a reasonable solution here, but it doesn't work so well in every situation. We'll see more compelling uses for closures later in the chapter.)
+
+Let's now consider a new problem: once we've cleaned up our data, we might want to compute the same set of numerical summaries for each variable. We could write code like this:
 
 ```R
 mean(df$a)
@@ -139,12 +162,6 @@ median(df$b)
 sd(df$b)
 mad(df$b)
 IQR(df$b)
-
-mean(df$c)
-median(df$c)
-sd(df$c)
-mad(df$c)
-IQR(df$c)
 ```
 
 But we'd be better off identifying the sources of duplication and then removing them. Take a minute or two to think about how you might tackle this problem before reading on.
@@ -181,13 +198,13 @@ summary <- function(x) {
 }
 ```
 
-The remainder of this chapter will discuss each technique in more detail. But before we can start on those more complicated techniques, we need to start by revising a simple functional programming tool, anonymous functions.
+The remainder of this chapter will discuss these techniques in more detail. But before we can start on those more complicated techniques, we need to start by revising a simple functional programming tool, anonymous functions.
 
 ## Anonymous functions
 
-In R, functions are objects in their own right. They aren't automatically bound to a name, unlike many other programming languages. You might have noticed this already, because when you create a function, you use the usual assignment operator to give it a name. Functions that don't have a name are called __anonymous functions__. 
+In R, functions are objects in their own right. They aren't automatically bound to a name and R doesn't have a special syntax for creating named functions, unlike C, C++, python or ruby. You might have noticed this already, because when you create a function, you use the usual assignment operator to give it a name. 
 
-Given the name of a function, like `"mean"`, it's possible to find the function using `match.fun()`. You can't do the opposite: given the object `f <- mean`, there's no way to find its name. Not all functions have a name, and some functions have more than one name. 
+Given the name of a function, like `"mean"`, it's possible to find the function using `match.fun()`. You can't do the opposite: given the object `f <- mean`, there's no way to find its name. Not all functions have a name, and some functions have more than one name. Functions that don't have a name are called __anonymous functions__.
 
 We use anonymous functions when it's not worth the effort of creating a named function:
 
@@ -197,7 +214,7 @@ Filter(function(x) !is.numeric(x), mtcars)
 integrate(function(x) sin(x) ^ 2, 0, pi)
 ```
 
-Unfortunately the default R syntax for anonymous functions is quite verbose.  To make things a little more concise, `pryr` provides `f()`:
+Unfortunately the default R syntax for anonymous functions is quite verbose. To make things a little more concise, the `pryr` packages provides `f()`:
 
 ```R
 lapply(mtcars, f(length(unique(x))))
@@ -205,7 +222,7 @@ Filter(f(!is.numeric(x)), mtcars)
 integrate(f(sin(x) ^ 2), 0, pi)
 ```
 
-I'm not still sure whether I like this style or not, but it sure is compact!
+I'm not still sure whether I like this style or not, but it sure is compact!  Other similar ideas are implemented in `gsubfn::fn()` and `ptools::fun()`.
 
 Like all functions in R, anoynmous functions have `formals()`, a `body()`, and a parent `environment()`:
   
@@ -215,32 +232,34 @@ body(function(x = 4) g(x) + h(x))
 environment(function(x = 4) g(x) + h(x))
 ```
 
-You can call anonymous functions without giving them a name, but the code is a little tricky to read because you must use parentheses in two different ways: to call a function, and to make it clear that we want to call the anonymous function `function(x) 3`, not inside our anonymous function call a function called `3` (which isn't a valid function name!):
+You can call anonymous functions directly, but the code is a little tricky to read because you must use parentheses in two different ways: to call a function, and to make it clear that we want to call the anonymous function `function(x) 3`, not inside our anonymous function call a function called `3` (which isn't a valid function name!):
 
 ```R
-(function(x) 3)()
+(function(x) x + 3)(10)
 
 # Exactly the same as
-f <- function(x) 3
-f()
+f <- function(x) x + 3
+f(10)
 
+# Doesn't what you expect
 function(x) 3()
 ```
 
-The syntax extends in a straightforward way if the function has parameters:
+You can supply arguments to anonymous functions in all the usual ways (by position, exact name and partial name) but if you find yourself doing this, it's probably a sign that your function needs a name.
 
-```R
-(function(x) x)(3)
-(function(x) x)(x = 4)
-```
-
-If you're calling an anonymous function in a complicated way, it's a good sign that it needs a name.
-
-One of the most common uses for anonymous functions is to create closures, functions made by other functions. Closures are the topic of the next section.
+One of the most common uses for anonymous functions is to create closures, functions made by other functions. Closures are described in the next section.
 
 ### Exercises
 
 * Use `lapply()` and an anonymous function to find the coefficient of variation (the standard deviation divided by the mean) for all columns in the `mtcars` dataset
+
+* Use `integrate()` and an anonymous function to find the area under the curve of:
+
+  * `y = x ^ 2 - x`, x in [0, 10]
+  * `y = sin(x) + cos(x)`, x in [-pi, pi]
+  * `y = exp(x) / x`, x in [10, 20]
+  
+  Use [wolframalpha](http://www.wolframalpha.com/) to check your answers.
 
 * A good rule of thumb is that an anonymous function should fit on one line and shouldn't need to use `{}`.  Review your code: where could you have used an anonymous function instead of a named function? Where should you have used a named function instead of an anonymous function?
 
@@ -249,7 +268,7 @@ One of the most common uses for anonymous functions is to create closures, funct
 "An object is data with functions. A closure is a function with data." 
 --- [John D Cook](http://twitter.com/JohnDCook/status/29670670701)
 
-One important use of anonymous functions is to create small functions that it's not worth naming. The other important of use of anonymous functions is to create a closure, a function written by another function. Closures are so called because they __enclose__ the environment of the parent function, and can access all variables and parameters in that function. This is useful because it allows us to have two levels of parameters. One level of parameters (the parent) controls how the function works; the other level (the child) does the work. The following example shows how we can use this idea to generate a family of power functions. The parent function (`power()`) creates child functions (`square()` and `cube()`) that do the work.
+One use of anonymous functions is to create small functions that it's not worth naming; the other main use of anonymous functions is to create closures, functions written by functions. Closures are so called because they __enclose__ the environment of the parent function, and can access all variables in the parent. This is useful because it allows us to have two levels of parameters. One level of parameters (the parent) controls how the function works; the other level (the child) does the work. The following example shows how we can use this idea to generate a family of power functions. The parent function (`power()`) creates child functions (`square()` and `cube()`) that do the work.
 
 ```R
 power <- function(exponent) {
@@ -265,7 +284,7 @@ cube(2)
 cube(4)
 ```
 
-In R, almost every function is a closure, because all functions remember the environment in which they are created, typically either the global environment, if it's a function that you've written, or a package environment, if it's a function that someone else has written. The only exception are primitive functions, which call directly in to C.
+In R, almost every function is a closure, because all functions remember the environment in which they are created, typically either the global environment, if it's a function that you've written, or a package environment, if it's a function that someone else has written. The only exception are primitive functions, which call to C directly.
 
 When you print a closure, you don't see anything terribly useful:
 
@@ -274,7 +293,7 @@ square
 cube
 ```
 
-That's because the function itself doesn't change; it's the enclosing environment, e.g. `environment(square)`, that's different. One way to see the contents of the environment is to convert it to a list:
+That's because the function itself doesn't change; it's the enclosing environment, `environment(square)`, that's different. One way to see the contents of the environment is to convert it to a list:
 
 ```R
 as.list(environment(square))
@@ -306,19 +325,15 @@ Closures are useful for making function factories, and are one way to manage mut
 
 ### Function factories
 
-We've already seen one example of a function factory, `power()`. We might also need a function if our initial example was slightly more complicated: imagine the missing values were inconsistently recorded and in some columns they were -99, in others they were `9999` or `"."`. Rather than copying, pasting and modifying, we could use a closure to create a remove missing function for each case:
+We've already seen two example of function factories, `missing_remover()` and `power()`. In both these cases using a function factory instead of a single function with multiple arguments has little if any benefit. Function factories are most useful when:
 
-```R
-missing_remover <- function(na) {
-  x[x == na] <- NA
-  x
-}
-remove_99 <- missing_remover(-99)
-remove_9999 <- missing_remover(-9999)
-remove_dot <- missing_remover(".")
-```
+* the different levels are more complex, with multiple arguments and complicated bodies
 
-We'll see another compelling using function factories when we learn more about functionals; they are very useful for maximum likelihood problems.
+* some work only needs to be done once, when the function is generated
+
+INSERT USEFUL EXAMPLE HERE
+
+We'll see another compelling use of function factories when we learn more about [[functionals]]; they are particularly well suited to maximum likelihood problems.
 
 ### Mutable state
 
