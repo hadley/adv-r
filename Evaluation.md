@@ -51,7 +51,7 @@ The simplest way to write `subset` would be to require that the user supply a ca
     }
     subset(mtcars, cyl == 4)
 
-We need a new approach. One way is to capture the ensure function call and then extract the piece that corresponds to `condition`. This is what the `match.call` function lets us do:
+We need a new approach. One way is to capture the entire function call and then extract the piece that corresponds to `condition`. This is what the `match.call` function lets us do:
 
     subset <- function(x, condition) {
       match.call()
