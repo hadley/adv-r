@@ -396,9 +396,10 @@ outer(1:10, 1:10, "*")
 
 Good places to learn more about `apply()` are:
 
-* http://petewerner.blogspot.com/2012/12/using-apply-sapply-lapply-in-r.html
-* http://rforpublichealth.blogspot.no/2012/09/the-infamous-apply-function.html?m=1
-* http://stackoverflow.com/questions/3505701
+* [Using apply, sapply, lapply in R](http://petewerner.blogspot.com/2012/12/using-apply-sapply-lapply-in-r.html) by Peter Werner.
+* [The infamous apply function](http://rforpublichealth.blogspot.no/2012/09/the-infamous-apply-function.html) by Slawa Rokicki.
+* [The R apply function – a tutorial with examples](http://forgetfulfunctor.blogspot.com/2011/07/r-apply-function-tutorial-with-examples.html) by axiomOfChoice.
+* The stackoverflow question [R Grouping functions: sapply vs. lapply vs. apply. vs. tapply vs. by vs. aggregate vs](http://stackoverflow.com/questions/3505701).
 
 ### Group apply
 
