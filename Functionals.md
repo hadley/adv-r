@@ -168,7 +168,7 @@ fapply(f, x = runif(1e3))
 
 ### Vector output: `sapply` and `vapply`
 
-`sapply()` and `vapply()` are very similar to `lapply()` except they will simplify their output to produce an atomic vector. `sapply()` guesses, while you have to be specific with `vapply()`. `sapply()` is useful for interactive use because it saves typing, but if you use it inside your functions you will get weird errors if you supply the wrong type of input. `vapply()` is more verbose, but gives more informative errors messages and never fails silently, so is better suited for programming with.
+`sapply()` and `vapply()` are very similar to `lapply()` except they will simplify their output to produce an atomic vector. `sapply()` guesses, while you have to be specific with `vapply()`. `sapply()` is useful for interactive use because it saves typing, but if you use it inside your functions you will get weird errors if you supply the wrong type of input. `vapply()` is more verbose, but gives more informative errors messages and never fails silently, so is better suited for programming.
 
 The following example illustrates these differences.  When given a data frame `sapply()` and `vapply()` give the same results, but if you pass in an empty list, `sapply()` has no basis to guess the correct type of output.
 
@@ -342,7 +342,7 @@ system.time(mclapply(1:100, boot_lm, mc.cores = 2))
 
 ## Data structure 
 
-As well as functionals that exist to eliminate common looping constructs, anotherfamily of functionals works to eliminate loops for common data manipulation tasks.
+As well as functionals that exist to eliminate common looping constructs, another family of functionals works to eliminate loops for common data manipulation tasks.
 
 In this section, we'll give a brief overview of the available options, not spending too much time on each one. The focus is to show you some of the options that are available, hint at how they can help you, and point you in the right direction to learn more:
 
