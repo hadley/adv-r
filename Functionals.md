@@ -123,7 +123,7 @@ lapply(seq_along(xs), function(i) {})
 lapply(names(xs), function(nm) {})
 ```
 
-Typically you use the first form because `lapply()` takes care of saving the output for your. However, if you need to know the position or the name of the element you're working with, you'll need to use the second or third form; they give you both the position of the object (`i`, `nm`) and its value (`x[[i]]`, `x[[nm]]`). If you're struggling to solve a problem using one form, you might find it easier with a different way.
+Typically you use the first form because `lapply()` takes care of saving the output for you. However, if you need to know the position or the name of the element you're working with, you'll need to use the second or third form; they give you both the position of the object (`i`, `nm`) and its value (`x[[i]]`, `x[[nm]]`). If you're struggling to solve a problem using one form, you might find it easier with a different way.
 
 It's also useful to remember that while `lapply` usually varies the first argument of the function, if one of the additional arguments matches the name of the first argument then R's usually matching rules with take over so effectively the second argument is varied over:
 
