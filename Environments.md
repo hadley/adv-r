@@ -252,7 +252,7 @@ funenv("plot")
 funenv("t.test")
 ```
 
-Unsurprisinly, the enclosing environment is particularly important for closures:
+Unsurprisingly, the enclosing environment is particularly important for closures:
 
 ```R
 plus <- function(x) {
