@@ -426,11 +426,54 @@ with
 
 ```
 f <- partial(g, b = 1)
-compact <- curry(Filter, Negate(is.null))
-Map(Curry(f, zs = zs), xs, ys)
+compact <- partial(Filter, Negate(is.null))
+Map(partial(f, zs = zs), xs, ys)
 ```
 
 It is a useful replacement for `...` if you have multiple functions which might need additional arguments.
+
+We could also take a more general approach. A useful function here is `Curry` (named after the famous computer scientist Haskell Curry, not the food), which implements "partial function application". What the curry function does is create a new function that passes on the arguments you specify. A example will make this more clear:
+
+    library(pryr)
+    add <- function(x, y) x + y
+    addOne <- function(x) add(x, 1)
+    # Or:
+    addOne <- Curry(add, y = 1)
+
+With the `Curry` function we can reduce the code a bit:
+
+    funs2 <- list(
+      sum = Curry(sum, na.rm = TRUE),
+      mean = Curry(mean, na.rm = TRUE),
+      median = Curry(median, na.rm = TRUE)
+    )
+
+But if we look closely that will reveal we're just applying the same function to every element in a list, and that's the job of `lapply`. This drastically reduces the amount of code we need:
+
+    funs2 <- lapply(funs, Curry, na.rm = TRUE)
+
+Let's think about a similar, but subtly different case. Let's take a vector of numbers and generate a list of functions corresponding to trimmed means with that amount of trimming. The following code doesn't work because we want the first argument of `Curry` to be fixed to mean.  We could try specifying the argument name because fixed matching overrides positional, but that doesn't work because the name of the function to call in `lapply` is also `FUN`.  And there's no way to specify we want to call the `trim` argument.
+
+    trims <- seq(0, 0.9, length = 5) 
+    lapply(trims, Curry, "mean")
+    lapply(trims, Curry, FUN = "mean")
+
+Instead we could use an anonymous function
+
+    funs3 <- lapply(trims, function(t) Curry("mean", trim = t))
+    lapply(funs3, call_fun, c(1:100, (1:50) * 100))
+
+But that doesn't work because each function gets a promise to evaluate `t`, and that promise isn't evaluated until all of the functions are run.  To make it work you need to manually force the evaluation of t:
+
+    funs3 <- lapply(trims, function(t) {force(t); Curry("mean", trim = t)})
+    lapply(funs3, call_fun, c(1:100, (1:50) * 100))
+
+A simpler solution in this case is to use `Map`, as described in the last chapter, which works similarly to `lapply` except that you can supply multiple arguments by both name and position. For this example, it doesn't do a good job of figuring out how to name the functions, but that's easily fixed.
+
+    funs3 <- Map(Curry, "mean", trim = trims)
+    names(funs3) <- trims
+    lapply(funs3, call_fun, c(1:100, (1:50) * 100))
+
 
 Partial function application is straightforward in many functional programming languages, but it's not entirely clear how it should interact with R's lazy evaluation rules. The approach of `plyr::partial` is to create a function as similar as possible to the anonymous function you'd create by hand. Peter Meilstrup takes a different approach in his [ptools package](https://github.com/crowding/ptools/); you might want to read about this if you're interested in the topic.
 

@@ -17,9 +17,9 @@ This means that you can do anything with functions that you can do with vectors:
 
 The chapter concludes with a case study exploring __numerical integration__ showing how we can build a family of composite integration tools starting from very simple primitives.  This will a recurring theme: if we start with small building blocks that we can easily understand, when we combine them into more complex structures, we can still feel confident that they are correct.
 
-The exposition of functional programming continues in the following two chapters: [[functionals]] and [[functional operators]].
+The exposition of functional programming continues in the following two chapters: [[functionals]] and [[function operators]].
 
-### Other language
+### Other languages
 
 FP programming techniques are the core technique in FP languages, like Haskell, OCaml and F#. They are also well supported in multi-paradigm systems like Lisp, Scheme, Clojure and Scala. You can use FP techniques in modern scripting languages, like python, ruby and javascript, but they tend not to be the dominant technique employed by most programmers. Java and C# provide few functional tools, and while it's possible to do FP in those languages, it tends to be a somewhat awkward fit. Similarly, for functional programming in C. Googling for "functional programming in X" will find you a tutorial in any language, but it may be syntactically awkward or used so rarely that other programmers will not understand your code.
 
@@ -325,7 +325,7 @@ Closures are useful for making function factories, and are one way to manage mut
 
 ### Function factories
 
-We've already seen two example of function factories, `missing_remover()` and `power()`. In both these cases using a function factory instead of a single function with multiple arguments has little if any benefit. Function factories are most useful when:
+We've already seen two example of function factories, `missing_remover()` and `power()`. In both these cases using a function factory instead of a single function with multiple arguments has little, if any, benefit. Function factories are most useful when:
 
 * the different levels are more complex, with multiple arguments and complicated bodies
 
@@ -337,9 +337,9 @@ We'll see another compelling use of function factories when we learn more about 
 
 ### Mutable state
 
-Having variables at two levels makes it possible to maintain state across function invocations by allowing a function to modify variables in the environment of its parent. The key to managing variables at different levels is the double arrow assignment operator (`<<-`). Unlike the usual single arrow assignment (`<-`) that always assigns in the current environment, the double arrow operator will keep looking up the chain of parent environments until it finds a matching name. ([[Environments]] has more details on how it works)
+Having variables at two levels makes it possible to maintain state across function invocations, because while the function environment is refreshed every time, its parent environment stays constant. The key to managing variables at different levels is the double arrow assignment operator (`<<-`). Unlike the usual single arrow assignment (`<-`) that always assigns in the current environment, the double arrow operator will keep looking up the chain of parent environments until it finds a matching name. ([[Environments]] has more details on how it works)
 
-This makes it possible to maintain a counter that records how many times a function has been called, as shown in the following example. Each time `new_counter` is run, it creates an environment, initialises the counter `i` in this environment, and then creates a new function.
+Together, a static parent environment and `<<-` make it possible to maintain state across function calls.  The following example shows a counter that records how many times a function has been called. Each time `new_counter` is run, it creates an environment, initialises the counter `i` in this environment, and then creates a new function.
 
 ```R
 new_counter <- function() {
@@ -351,7 +351,7 @@ new_counter <- function() {
 }
 ```
 
-The new function is a closure, and its environment is the enclosing environment. When the closures `counter_one` and `counter_two` are run, each one modifies the counter in its enclosing environment and then returns the current count. 
+The new function is a closure, and its enclosing environment is the usually temporary environment created with `new_counter` is run.  When the closures `counter_one` and `counter_two` are run, each one modifies the counter in a different enclosing environment and so maintain different counts. 
 
 ```R
 counter_one <- new_counter()
@@ -388,9 +388,9 @@ new_counter3 <- function() {
 }
 ```
 
-Modifying values in a parent environment is an important technique because it is one way to generate "mutable state" in R. Mutable state is hard to achieve normally, because every time it looks like you're modifying an object, you're actually creating a copy and modifying that. That said, if you do need mutable objects, it's usually better to use the [[R5]] OO system, except in the simplest of cases. R5 objects are easier to document, and provide easier ways to inherit behaviour across functions.
+Modifying values in a parent environment is an important technique because it is one way to generate "mutable state" in R. Mutable state is normally hard to achieve, because every time it looks like you're modifying an object, you're actually creating a copy and modifying that. That said, if you do need mutable objects, except in the simplest of cases, it's usually better to use the [[R5]] OO system. R5 objects are easier to document, and provide easier ways to inherit behaviour.
 
-The power of closures is tightly coupled to another important class of functions: higher-order functions (HOFs), which include functions that take functions as arguments. Mathematicians distinguish between functionals, which accept a function and return a scalar, and function operators, which accept a function and return a function. Integration over an interval is a functional, the indefinite integral is a function operator. The following two chapters discuss functionals and function operators in turn.
+The power of closures is tightly coupled to [[functionals]] and [[function operators]], and you'll see many more examples of closures in those two chapters.  The following section disucsses the remaining important property of functions: the ability to store them in a list.
 
 ### Exercises
 
@@ -417,134 +417,168 @@ The power of closures is tightly coupled to another important class of functions
     stopifnot(all.equal(m2(x), var(x) * 99 / 100))
     ```
 
-* What does `approxfun()` return? What does it return? What does the `ecdf()` function do? What does it return? 
+* What does `approxfun()` do? What does it return? 
+
+* What does the `ecdf()` function do? What does it return? 
 
 * Create a function `pick()`, that takes an index, `i`, as an argument and returns a function an argument `x` that subsets `x` with `i`.
   
   ```R
   lapply(mtcars, pick(5))
+  # should do the same this as
+  lapply(mtcars, function(x) x[[5]])
   ```
 
 ## Lists of functions
 
-In R, functions can be stored in lists. Together with closures and higher-order functions, this gives us a set of powerful tools for reducing duplication in code.
+In R, functions can be stored in lists. Instead of giving a set of functions related names, you can store them in a list.  This makes it easier to work with groups of related functions, in the same way a data frame makes it easier to work with groups of related vectors.
 
 We'll start with a simple example: benchmarking, when you are comparing the performance of multiple approaches to the same problem. For example, if you wanted to compare a few approaches to computing the mean, you could store each approach (function) in a list:
 
-    compute_mean <- list(
-      base = function(x) mean(x),
-      sum = function(x) sum(x) / length(x),
-      manual = function(x) {
-        total <- 0
-        n <- length(x)
-        for (i in seq_along(x)) {
-          total <- total + x[i] / n
-        }
-        total
-      }
-    )
+```R
+compute_mean <- list(
+  base = function(x) mean(x),
+  sum = function(x) sum(x) / length(x),
+  manual = function(x) {
+    total <- 0
+    n <- length(x)
+    for (i in seq_along(x)) {
+      total <- total + x[i] / n
+    }
+    total
+  }
+)
+```
 
 Calling a function from a list is straightforward: just get it out of the list first:
 
-    x <- runif(1e5)
-    system.time(compute_mean$base(x))
-    system.time(compute_mean[[2]](x))
-    system.time(compute_mean[["manual"]](x))
+```R
+x <- runif(1e5)
+system.time(compute_mean$base(x))
+system.time(compute_mean[[2]](x))
+system.time(compute_mean[["manual"]](x))
+```
+
+If we want to call each functions to check that we've implemented them correctly and they return the same answer, we can use `lapply()`, either with an anonymous function, or an equivalent named function.
+
+```R
+lapply(compute_mean, function(f, ...) f(...))
+
+call_fun <- function(f, ...) f(...)
+lapply(compute_mean, call_fun, x)
+```
+
+If we want to time how long each function takes, we can combine lapply with `system.time()`:
+
+```R
+lapply(compute_mean, function(f) system.time(f(x)))
+```
     
-If we want to call all functions to check that we've implemented them correctly and they return the same answer, we can use `lapply`, either with an anonymous function, or a new function that calls it's first argument with all other arguments:
+Coming back to our original motivating example, another use case of lists of functions is summarising an object in multiple ways. We could store each summary function in a list, and then run them all with `lapply()`:
 
-    lapply(compute_mean, function(f) f(x))
+```R
+funs <- list(
+  sum = sum,
+  mean = mean,
+  median = median
+)
+lapply(funs, function(f) f(1:10))
+```
 
-    call_fun <- function(f, ...) f(...)
-    lapply(compute_mean, call_fun, x)
+What if we wanted our summary functions to automatically remove missing values?  One approach would be make a list of anonymous functions that call our summary functions with the appropriate arguments:
 
-We can time every function on the list with `lapply` or `Map` along with a simple anonymous function:
-    
-    lapply(compute_mean, function(f) system.time(f(x)))
-    Map(function(f) system.time(f(x)), compute_mean)
-    
-Another useful example is when we want to summarise an object in multiple ways.  We could store each summary function in a list, and run each function with `lapply` and `call_fun`:
-
-    funs <- list(
-      sum = sum,
-      mean = mean,
-      median = median
-    )
-    lapply(funs, call_fun, 1:10)
-
-What if we wanted to modify our summary functions to automatically remove missing values?  One approach would be make a list of anonymous functions that call our summary functions with the appropriate arguments:
-
-    funs2 <- list(
-      sum = function(x, ...) sum(x, ..., na.rm = TRUE),
-      mean = function(x, ...) mean(x, ..., na.rm = TRUE),
-      median = function(x, ...) median(x, ..., na.rm = TRUE)
-    )
+```R
+funs2 <- list(
+  sum = function(x, ...) sum(x, ..., na.rm = TRUE),
+  mean = function(x, ...) mean(x, ..., na.rm = TRUE),
+  median = function(x, ...) median(x, ..., na.rm = TRUE)
+)
+```
 
 But this leads to a lot of duplication - each function is almost identical apart from a different function name. We could write a closure to abstract this away:
 
-    remove_missings <- function(f) {
-      function(...) f(..., na.rm = TRUE)
-    }
-    funs2 <- lapply(funs, remove_missings)
+Instead, we could modify our original `lapply()` call:
 
-We could also take a more general approach. A useful function here is `Curry` (named after the famous computer scientist Haskell Curry, not the food), which implements "partial function application". What the curry function does is create a new function that passes on the arguments you specify. A example will make this more clear:
+```R
+lapply(funs, function(f) f(x))
+lapply(funs, function(f) f(x, na.rm = TRUE))
 
-    library(pryr)
-    add <- function(x, y) x + y
-    addOne <- function(x) add(x, 1)
-    # Or:
-    addOne <- Curry(add, y = 1)
-
-With the `Curry` function we can reduce the code a bit:
-
-    funs2 <- list(
-      sum = Curry(sum, na.rm = TRUE),
-      mean = Curry(mean, na.rm = TRUE),
-      median = Curry(median, na.rm = TRUE)
-    )
-
-But if we look closely that will reveal we're just applying the same function to every element in a list, and that's the job of `lapply`. This drastically reduces the amount of code we need:
-
-    funs2 <- lapply(funs, Curry, na.rm = TRUE)
-
-Let's think about a similar, but subtly different case. Let's take a vector of numbers and generate a list of functions corresponding to trimmed means with that amount of trimming. The following code doesn't work because we want the first argument of `Curry` to be fixed to mean.  We could try specifying the argument name because fixed matching overrides positional, but that doesn't work because the name of the function to call in `lapply` is also `FUN`.  And there's no way to specify we want to call the `trim` argument.
-
-    trims <- seq(0, 0.9, length = 5) 
-    lapply(trims, Curry, "mean")
-    lapply(trims, Curry, FUN = "mean")
-
-Instead we could use an anonymous function
-
-    funs3 <- lapply(trims, function(t) Curry("mean", trim = t))
-    lapply(funs3, call_fun, c(1:100, (1:50) * 100))
-
-But that doesn't work because each function gets a promise to evaluate `t`, and that promise isn't evaluated until all of the functions are run.  To make it work you need to manually force the evaluation of t:
-
-    funs3 <- lapply(trims, function(t) {force(t); Curry("mean", trim = t)})
-    lapply(funs3, call_fun, c(1:100, (1:50) * 100))
-
-A simpler solution in this case is to use `Map`, as described in the last chapter, which works similarly to `lapply` except that you can supply multiple arguments by both name and position. For this example, it doesn't do a good job of figuring out how to name the functions, but that's easily fixed.
-
-    funs3 <- Map(Curry, "mean", trim = trims)
-    names(funs3) <- trims
-    lapply(funs3, call_fun, c(1:100, (1:50) * 100))
-
+# Or use a named function instead of an anonymous function
+remove_missings <- function(f) {
+  function(...) f(..., na.rm = TRUE)
+}
+funs2 <- lapply(funs, remove_missings)
+```
 
 ### Moving lists of functions to the global environment
 
-From time to time you may want to create a list of functions that you want to be available to your users without having to an special syntax.  There are a few ways to achieve that, based on the idea that lists and environments share very similar interfaces
+From time to time you may want to create a list of functions that you want to be available to your users without having to use a special syntax. For a simple example, imagine you want to make it easy to create HTML with code, by mapping each html tag to an R function. The following simple example creates functions for `<p>` (paragraphics), `<b>` (bold), `<i>` (italics), and `<img>` (images).  Note the use of a closure function factory to produce the text for `<p>`, `<b>` and `<i>` tags.
 
-* `with(fs, mycode)`
+```R
+simple_tag <- function(tag) {
+  function(...) paste0("<", tag, ">", paste0(...), "</", tag, ">")
+}
+html <- list(
+  p = simple_tag("p"),
+  b = simple_tag("b"),
+  i = simple_tag("i"),
+  img = function(path, width, height) {
+    paste0("<img src='", path, "' width='", width, "' height = '", height, '" />')
+  }
+)
+```
 
-* `attach(fs)` - this makes a copy of the list so that there's no connection between the two, but it is easier to remove afterwards.
+We store the functions in a list because we don't want them to be available all the time: the risk of a conflict between an existing R function and an HTML tag is high. However, keeping them in a list means that our code is more verbose than necessary:
 
-* `list2env(fs, environment())` - efficiently copies from a list into the `globalenv()` (or wherever the code is running - using `environment()` means that it will also work just within a function or as top-level code in a package.)
+```R
+html$p("This is ", html$b("bold"), ", ", html$i("italic"), " and ",
+   html$b(html$i("bold italic")), " text")
+```
 
-An alternative approach is to work with names of function with `get()` and `assign()` - I prefer the approach of keeping functions in a list as long as possible, because there are a richer set of functions for dealing with lists than there are for dealing with character vectors containing variable names.
+We have three options to eliminate the use of `html$`, depending on how long we want the effect to last:
+
+* For a very temporary effect, we can use a `with()` block:
+
+    ```R
+    with(html, p("This is ", b("bold"), ", ", i("italic"), " and ",
+      b(i("bold italic")), " text"))
+    ```
+
+* For a longer effect, we can use `attach()` to add the functions in `html` in to the search path.  It's possible to undo this action using `detach`:
+
+    ```R
+    attach(html)
+    p("This is ", b("bold"), ", ", i("italic"), " and ",
+      b(i("bold italic")), " text")
+    detach(html)
+    ````
+
+* Finally, we could copy the functions into the global environment with `list2env()`.  We can undo this action by deleting the functions after we're done.
+  
+    ```R
+    list2env(html, environment())
+    p("This is ", b("bold"), ", ", i("italic"), " and ",
+      b(i("bold italic")), " text")
+    rm(list = names(html), envir = environment())
+    ```
+
+I recommend the first option because it makes it very clear what's going on, and when code is being executed in a special context.
 
 ### Exercises
 
-* Write a compose function that takes a list of function and creates a new function that calls them in order from left to right. 
+* Implement a summary function that works like `base::summary()`, but takes a list of functions to use to compute the summary. Modify the function so it returns a closure, making it possible to use it as a function factory.
+
+* Create a named list of all base functions.  Use `ls()`, `get()` and `is.fucntion()`. Use that list of functions to answer the following questions:
+
+    * Which base function has the most arguments? 
+    * How many base functions have no arguments?
+
+* Which of the following commands is `with(x, f(z))` equivalent to?
+
+    (a) `x$f(x$z)`
+    (b) `f(x$z)`
+    (c) `x$f(z)`
+    (d) `f(z)`
 
 ## Case study: numerical integration
 
