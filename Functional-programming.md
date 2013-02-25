@@ -582,145 +582,147 @@ I recommend the first option because it makes it very clear what's going on, and
 
 ## Case study: numerical integration
 
-To conclude this chapter, we will develop a simple numerical integration tool, and along the way, illustrate the use of many properties of first-class functions: we'll use anonymous functions, lists of functions, functions that make closures and functions that take functions as input. Each step is driven by a desire to make our approach more general and to reduce duplication.
+To conclude this chapter, we will develop a simple numerical integration tool, and along the way, illustrate the use of many properties of first-class functions. Each step is driven by a desire to make our approach more general and to reduce duplication.  The idea behind numerical integration is simple: we want to find the area under the curve by approximating a complex curve with simpler components.
 
-We'll start with two very simple approaches: the midpoint and trapezoid rules. Each takes a function we want to integrate, `f`, and a range to integrate over, from `a` to `b`. For this example we'll try to integrate `sin x` from 0 to pi, because it has a simple answer: 2
+The two simpliest approaches are the __midpoint__ and __trapezoid__ rules; the mid point rule approximates a curve by a rectangle, and the trapezoid rule by a trapezoid. Each takes a function we want to integrate, `f`, and a range to integrate over, from `a` to `b`. For this example we'll try to integrate `sin x` from 0 to pi, because it has a simple answer: 2.
 
-    midpoint <- function(f, a, b) {
-      (b - a) * f((a + b) / 2)
-    }
+```R
+midpoint <- function(f, a, b) {
+  (b - a) * f((a + b) / 2)
+}
 
-    trapezoid <- function(f, a, b) {
-      (b - a) / 2 * (f(a) + f(b))
-    }
+trapezoid <- function(f, a, b) {
+  (b - a) / 2 * (f(a) + f(b))
+}
+
+midpoint(sin, 0, pi)
+trapezoid(sin, 0, pi)
+```
+
+Neither of these functions gives a very good approximation, so we'll do what we normally do in calculus: break up the range into smaller pieces and integrate each piece using one of the simple rules. This is called __composite integration__, and we'll implement it with two new functions:
+
+```R
+midpoint_composite <- function(f, a, b, n = 10) {
+  points <- seq(a, b, length = n + 1)
+  h <- (b - a) / n
+  
+  area <- 0
+  for (i in seq_len(n)) {
+    area <- area + h * f((points[i] + points[i + 1]) / 2)
+  }
+  area
+}
+
+trapezoid_composite <- function(f, a, b, n = 10) {
+  points <- seq(a, b, length = n + 1)
+  h <- (b - a) / n
+  
+  area <- 0
+  for (i in seq_len(n)) {
+    area <- area + h / 2 * (f(points[i]) + f(points[i + 1]))
+  }
+  area
+}
+
+midpoint_composite(sin, 0, pi, n = 10)
+midpoint_composite(sin, 0, pi, n = 100)
+trapezoid_composite(sin, 0, pi, n = 10)
+trapezoid_composite(sin, 0, pi, n = 100)
     
-    midpoint(sin, 0, pi)
-    trapezoid(sin, 0, pi)
-
-
-Neither of these functions gives a very good approximation, so we'll do what we normally do in calculus: break up the range into smaller pieces and integrate each piece using one of the simple rules. To do that we create two new functions for performing composite integration:
-
-    midpoint_composite <- function(f, a, b, n = 10) {
-      points <- seq(a, b, length = n + 1)
-      h <- (b - a) / n
-      
-      area <- 0
-      for (i in seq_len(n)) {
-        area <- area + h * f((points[i] + points[i + 1]) / 2)
-      }
-      area
-    }
-
-    trapezoid_composite <- function(f, a, b, n = 10) {
-      points <- seq(a, b, length = n + 1)
-      h <- (b - a) / n
-      
-      area <- 0
-      for (i in seq_len(n)) {
-        area <- area + h / 2 * (f(points[i]) + f(points[i + 1]))
-      }
-      area
-    }
-    
-    midpoint_composite(sin, 0, pi, n = 10)
-    midpoint_composite(sin, 0, pi, n = 100)
-    trapezoid_composite(sin, 0, pi, n = 10)
-    trapezoid_composite(sin, 0, pi, n = 100)
-    
-    mid <- sapply(1:20, function(n) midpoint_composite(sin, 0, pi, n))
-    trap <- sapply(1:20, function(n) trapezoid_composite(sin, 0, pi, n))
-    matplot(cbind(mid = mid, trap))
+mid <- sapply(1:20, function(n) midpoint_composite(sin, 0, pi, n))
+trap <- sapply(1:20, function(n) trapezoid_composite(sin, 0, pi, n))
+matplot(cbind(mid = mid, trap))
+```
 
 But notice that there's a lot of duplication across `midpoint_composite` and `trapezoid_composite`: they are basically the same apart from the internal rule used to integrate over a simple range. Let's extract out a general composite integrate function:
 
-    composite <- function(f, a, b, n = 10, rule) {
-      points <- seq(a, b, length = n + 1)
-      
-      area <- 0
-      for (i in seq_len(n)) {
-        area <- area + rule(f, points[i], points[i + 1])
-      }
-      
-      area
-    }
-    
-    midpoint_composite(sin, 0, pi, n = 10)
-    composite(sin, 0, pi, n = 10, rule = midpoint)
-    composite(sin, 0, pi, n = 10, rule = trapezoid)
+```R
+composite <- function(f, a, b, n = 10, rule) {
+  points <- seq(a, b, length = n + 1)
+  
+  area <- 0
+  for (i in seq_len(n)) {
+    area <- area + rule(f, points[i], points[i + 1])
+  }
+  
+  area
+}
+
+midpoint_composite(sin, 0, pi, n = 10)
+composite(sin, 0, pi, n = 10, rule = midpoint)
+composite(sin, 0, pi, n = 10, rule = trapezoid)
+```
 
 This function now takes two functions as arguments: the function to integrate, and the integration rule to use for simple ranges. We can now add even better rules for integrating small ranges:
 
-    simpson <- function(f, a, b) {
-      (b - a) / 6 * (f(a) + 4 * f((a + b) / 2) + f(b))
-    }
-    
-    boole <- function(f, a, b) {
-      pos <- function(i) a + i * (b - a) / 4
-      fi <- function(i) f(pos(i))
-      
-      (b - a) / 90 * 
-        (7 * fi(0) + 32 * fi(1) + 12 * fi(2) + 32 * fi(3) + 7 * fi(4))
-    }
+```R
+simpson <- function(f, a, b) {
+  (b - a) / 6 * (f(a) + 4 * f((a + b) / 2) + f(b))
+}
+
+boole <- function(f, a, b) {
+  pos <- function(i) a + i * (b - a) / 4
+  fi <- function(i) f(pos(i))
+  
+  (b - a) / 90 * 
+    (7 * fi(0) + 32 * fi(1) + 12 * fi(2) + 32 * fi(3) + 7 * fi(4))
+}
+```
     
 Let's compare these different approaches.
 
-    expt1 <- expand.grid(
-      n = 5:50, 
-      rule = c("midpoint", "trapezoid", "simpson", "boole"), 
-      stringsAsFactors = F)
+```R
+expt1 <- expand.grid(
+  n = 5:50, 
+  rule = c("midpoint", "trapezoid", "simpson", "boole"), 
+  stringsAsFactors = F)
+
+abs_sin <- function(x) abs(sin(x))
+run_expt <- function(n, rule) {
+  composite(abs_sin, 0, 4 * pi, n = n, rule = match.fun(rule))
+}
+
+library(plyr)
+res1 <- mdply(expt1, run_expt)
+
+library(ggplot2)
+qplot(n, V1, data = res1, colour = rule, geom = "line")
+```
+
+It turns out that the midpoint, trapezoid, Simpson and Boole rules are all examples of a more general family called Newton-Cotes rules. (They are polynomials of increasing complexity).  We can take our integration one step further by extracting out this commonality to produce a function that can generate any general Newton-Cotes rule:
+
+```R
+# http://en.wikipedia.org/wiki/Newton%E2%80%93Cotes_formulas
+newton_cotes <- function(coef, open = FALSE) {
+  n <- length(coef) + open
+  
+  function(f, a, b) {
+    pos <- function(i) a + i * (b - a) / n
+    points <- pos(seq.int(0, length(coef) - 1))
     
-    abs_sin <- function(x) abs(sin(x))
-    run_expt <- function(n, rule) {
-      composite(abs_sin, 0, 4 * pi, n = n, rule = match.fun(rule))
-    }
-    
-    library(plyr)
-    res1 <- mdply(expt1, run_expt)
-    
-    library(ggplot2)
-    qplot(n, V1, data = res1, colour = rule, geom = "line")
+    (b - a) / sum(coef) * sum(f(points) * coef)        
+  }
+}
 
-It turns out that the midpoint, trapezoid, Simpson and Boole rules are all examples of a more general family called Newton-Cotes rules. We can take our integration one step further by extracting out this commonality to produce a function that can generate any general Newton-Cotes rule:
+trapezoid <- newton_cotes(c(1, 1))
+midpoint <- newton_cotes(1, open = TRUE)
+simpson <- newton_cotes(c(1, 4, 1))
+boole <- newton_cotes(c(7, 32, 12, 32, 7))
+milne <- newton_cotes(c(2, -1, 2), open = TRUE)
 
-    # http://en.wikipedia.org/wiki/Newton%E2%80%93Cotes_formulas
-    newton_cotes <- function(coef, open = FALSE) {
-      n <- length(coef) + open
-      
-      function(f, a, b) {
-        pos <- function(i) a + i * (b - a) / n
-        points <- pos(seq.int(0, length(coef) - 1))
-        
-        (b - a) / sum(coef) * sum(f(points) * coef)        
-      }
-    }
-    
-    trapezoid <- newton_cotes(c(1, 1))
-    midpoint <- newton_cotes(1, open = T)
-    simpson <- newton_cotes(c(1, 4, 1))
-    boole <- newton_cotes(c(7, 32, 12, 32, 7))
-    milne <- newton_cotes(c(2, -1, 2), open = TRUE)
-    
-    # Alternatively, make list then use lapply
-    lapply(values, newton_cotes, closed)
-    lapply(values, newton_cotes, open, open = TRUE)
-    lapply(values, do.call, what = "newton_cotes")
-    
-    expt1 <- expand.grid(n = 5:50, rule = names(rules), stringsAsFactors = F)
-    run_expt <- function(n, rule) {
-      composite(abs_sin, 0, 4 * pi, n = n, rule = rules[[rule]])
-    }
-    
+expt1 <- expand.grid(n = 5:50, rule = names(rules), 
+  stringsAsFactors = FALSE)
+run_expt <- function(n, rule) {
+  composite(abs_sin, 0, 4 * pi, n = n, rule = rules[[rule]])
+}
+```
 
-Mathematically, the next step in improving numerical integration is to move from a grid of evenly spaced points to a grid where the points are closer together near the end of the range. 
+Mathematically, the next step in improving numerical integration is to move from a grid of evenly spaced points to a grid where the points are closer together near the end of the range, such as __Gaussian quadrature__.  That's beyond the scope of this case study, but you would use similar techniques to add it.
 
-## Summary
+### Exercises
 
-## Exercises
+* Instead of creating individual fuctions `midpoint()`, `trapezoid()`, `simpson()` etc, we could store them in a list. If we do that, how does the code change? Can you create the list of functions from a list of coefficients for the Newton-Cotes formulae?
 
-1. Read the source code for `Filter`, `Negate`, `Find` and `Position`. Write a couple of sentences for each describing how they work.
+* The tradeoff in integration rules is that more complex rules are slower to compute, but need fewer pieces.  For `sin()` in the range [0, pi], determine the number of pieces needed to for each rule to be equally accurate. Illustrate your results with a graph.  How do they change for different functions? `sin(1 / x^2)` is particularly challenging. 
 
-1. Write an `And` function that given two logical functions, returns a logical And of all their results. Extend the function to work with any number of logical functions. Write similar `Or` and `Not` functions.
-
-1. Write a general compose function that composes together an arbitrary number of functions. Write it using both recursion and looping.
-
-1. How does the first version of `Curry` work?
+*  For each of the Newton-Cotes rules, how many pieces do you need to get within 0.1% of the true answer for `sin()` in the range [0, pi].  Write a function that determines that automatically for any function (hint: look at `optim()` and construct a one-argument function with closures)
