@@ -12,7 +12,7 @@ This chapter describes techniques to use when things go wrong:
 
 * Getting help: what to do if you can't figure out what the problem is
 
-As with many other parts of R, the approach to dealing with errors and exceptions comes from a LISP-heritage, and is quite different (although some of the terminology is the same) to that of languages like Java.
+As with many other parts of R, the approach to dealing with errors and exceptions comes from a LISP-heritage, and is quite different (although some of the terminology is the same) from that of languages like Java.
 
 ## Interactive analysis vs. programming
 
