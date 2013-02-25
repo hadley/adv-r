@@ -36,7 +36,7 @@ After reading this book:
 
 * R is mostly a functional programming language with a dash of object orientedness. It has three three distinct OO frameworks in base R, and others available in add on packages (it's somewhat like Perl in this sense). Two of the OO styles are built around generic functions, a style of OO that comes from lisp, and is unfamiliar to most contemporary programmers.
 
-* R has a strong ability to compute on the language; not only can functions access the values of their arguments, but they can also access the expressions that computed then. This is a double edged sword: computing on the language gives powerful tools for creating succinct domain specific languages, but if used incorrectly can lead to code that fails in unpredictable ways.
+* R has a strong ability to compute on the language; not only can functions access the values of their arguments, but they can also access the expressions that computed them. This is a double edged sword: computing on the language gives powerful tools for creating succinct domain specific languages, but if used incorrectly can lead to code that fails in unpredictable ways.
 
 ## Meta-techniques
 
@@ -44,7 +44,7 @@ There are two meta-techniques that are tremendously helpful for improving your s
 
 Reading source code is a tremedously useful technique because it exposes you to new ways of doing things. Over time you'll develop a sense of taste as an R programmer, and even if you find something your taste violently objects to, it's still helpful: emulate the things you like and avoid the things you don't like. I think the clarity of my code increased considerably once I started grading code in the classroom, and was exposed to a lot of code I couldn't make heads nor tails of! We'll talk about this much more in the package development section of the book, but I think it's a great idea to start by reading the source code for the functions and packages that you use most frequently. Reading the source becomes even more important when you start using more esoteric parts of R; often the documentation will be lacking, and you'll need to figure out how a function works by reading the source and experimenting.
 
-A scientific mindset is extremely helpful when learning R. If you don't understand how something, develop a hypothesis, come up with some experiments and then perform them.  This exercise is extremely useful if you can't figure it out and need to get help from others: you can easily show what you tried, and when you learn the right answer, you'll be mentally prepared to update your world view. I find that the effort of explaining a problem so that others can understand and help be solve it (the art of a [reproducible example](http://stackoverflow.com/questions/5963269)) I figure out the solution myself.
+A scientific mindset is extremely helpful when learning R. If you don't understand how something works, develop a hypothesis, come up with some experiments and then perform them.  This exercise is extremely useful if you can't figure it out and need to get help from others: you can easily show what you tried, and when you learn the right answer, you'll be mentally prepared to update your world view. I often find that whenever I make the effort to explain a problem so that others can understand and help be able to solve it (the art of a [reproducible example](http://stackoverflow.com/questions/5963269)), I figure out the solution myself.
 
 ## Recommended readings
 
