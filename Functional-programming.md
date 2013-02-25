@@ -1,13 +1,13 @@
 # Functional programming
 
-At it's core, R is a functional programming (FP) language which means it focusses on the creation and execution of functions. R possesses what's know as first class functions, functions that can be:
+At its heart, R is a functional programming (FP) language; it focusses on the creation and manipulation of functions. R has what's know as first class functions, functions that can be:
 
 * created without a name,
-* assigned to variables and stored in list,
-* returned from functions,
-* passed as arguments to other functions
+* assigned to variables and stored in lists,
+* returned from functions, and
+* passed as arguments to other functions.
 
-This means that you can do anything with functions that you can do with vectors: you can create them inside other functions, pass them as arguments to functions, return them as results from functions and store multiple functions in a list. This chapter, along with [[functionals]] and [[function operators]], will explore the consequences of R's functional nature and introduce a new set of techniques for removing redundancy and duplication in your code. We'll start with a motivating example, showing how you can use functional programming techniques to reduce duplication in some typical code for cleaning data and summarising data. This example will introduce some of the key building blocks of functional programming, which we will then dive into in more detail:
+This means that you can do anything with functions that you can do with vectors: you can create them inside other functions, pass them as arguments to functions, return them as results from functions and store multiple functions in a list. This chapter will explore the consequences of R's functional nature and introduce a new set of techniques for removing redundancy and duplication in your code. We'll start with a motivating example, showing how you can use functional programming techniques to reduce duplication in some typical code for cleaning data and summarising data. This example will introduce some of the key building blocks of functional programming, which we will then dive into in more detail:
 
 * __Anonymous functions__, functions that don't have a name
 
@@ -17,13 +17,13 @@ This means that you can do anything with functions that you can do with vectors:
 
 The chapter concludes with a case study exploring __numerical integration__ showing how we can build a family of composite integration tools starting from very simple primitives.  This will a recurring theme: if we start with small building blocks that we can easily understand, when we combine them into more complex structures, we can still feel confident that they are correct.
 
-The exposition of functional programming continues in the following two chapters: [[functionals]] and [[function operators]].
+The exposition of functional programming continues in the following two chapters: [[functionals]], which explore functions that take functions as arguments and give vectors as output, and [[function operators]], functions that both input and output functions.
 
 ### Other languages
 
 FP programming techniques are the core technique in FP languages, like Haskell, OCaml and F#. They are also well supported in multi-paradigm systems like Lisp, Scheme, Clojure and Scala. You can use FP techniques in modern scripting languages, like python, ruby and javascript, but they tend not to be the dominant technique employed by most programmers. Java and C# provide few functional tools, and while it's possible to do FP in those languages, it tends to be a somewhat awkward fit. Similarly, for functional programming in C. Googling for "functional programming in X" will find you a tutorial in any language, but it may be syntactically awkward or used so rarely that other programmers will not understand your code.
 
-Recently FP has experienced a surge in interest because it provides a complementary set of techniques to object oriented programming, which has been the dominant style for the last several decades. Since FP functions tend to not modify their inputs, it makes programs that are easier to reason about using only local information, and are often easier to parallelise. The traditional weaknesses of FP languages, poorer performance and sometimes unpredictable memory usage, have largely been eliminated in recent years.
+Recently FP has experienced a surge in interest because it provides a complementary set of techniques to object oriented programming, which has been the dominant style for the last several decades. Since FP functions tend to not modify their inputs, it makes programs that are easier to reason about using only local information, and are often easier to parallelise. The traditional weaknesses of FP languages, poorer performance and sometimes unpredictable memory usage, have been largely eliminated in recent years.
 
 ## Motivation
 
