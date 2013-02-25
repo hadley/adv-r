@@ -551,7 +551,7 @@ We have three options to eliminate the use of `html$`, depending on how long we 
     p("This is ", b("bold"), ", ", i("italic"), " and ",
       b(i("bold italic")), " text")
     detach(html)
-    ````
+    ```
 
 * Finally, we could copy the functions into the global environment with `list2env()`.  We can undo this action by deleting the functions after we're done.
   
