@@ -1,6 +1,6 @@
 # Functional programming
 
-At its heart, R is a functional programming (FP) language; it focusses on the creation and manipulation of functions. R has what's know as first class functions, functions that can be:
+At its heart, R is a functional programming (FP) language; it focusses on the creation and manipulation of functions. R has what's known as first class functions, functions that can be:
 
 * created without a name,
 * assigned to variables and stored in lists,
