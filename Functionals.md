@@ -22,29 +22,33 @@ randomise(mean)
 randomise(sum)
 ```
 
-This function is not terribly useful, but it illustrates the basic idea: in R, functions are first class objects and there's no difference between calling a function with a vector or function as input. The chances are that you've already used a functional: `lapply()` is probably the most commonly used functional in R, followed closely by `apply()` and `tapply()`.
+This function is not terribly useful, but it illustrates the basic idea: since functions are first class objects in R, there's no difference between calling a function with a vector or function as input. The chances are that you've already used a functional: the most frequently used are `lapply()`, `apply()` and `tapply()`. These three functions all take a function as input (among other things) and give a vector as output.
 
-Many functionals (like `lapply()`) offer alternatives to for loops. For loops have a bad rap in R, and some programmers try to eliminate them at all costs. The real performance story is a little more complicated than what you might have heard (we'll explore their speed in the [[performance]] chapter); the real downside of for loops is that they're not very expressive. A for loop conveys that you're iterating over something, but it doesn't communicate the higher-level task you're trying to achieve. Functionals are not as general as for loops, but by being more specific they allow you to communicate more clearly. Functionals allow you to take a step up the ladder of abstraction: instead of expressing solutions using looping constructs, you express them at a higher level of specificity.
+Many functionals (like `lapply()`) offer alternatives to for loops. For loops have a bad rap in R, and some programmers try to eliminate them at all costs. The performance story is a little more complicated than what you might have heard (we'll explore that in the [[performance]] chapter); the real downside of for loops is that they're not very expressive. A for loop conveys that you're iterating over something, but it doesn't communicate the higher-level task you're trying to complete. Functionals are not as general as for loops, but by being more specific they allow you to communicate more clearly. A functional allows you to say I want to transform each element of this list, or each row of this array.
 
-As well as more clearly communicating intent (e.g. I want to transform each element of this list, or each row of this array), functionals reduce the chances of bugs, and can be more efficient. Both of these features occur because functionals are used by many people, so they will be well tested, and may have been implemented with special tricks. For example, many functionals in base R are written in C, and often use a few tricks to get extra performance.
+As well as more clearly communicating intent, functionals reduce the chances of bugs, and can be more efficient. Both of these features occur because functionals are used by many people, so they will be well tested, and may have been implemented with an eye to performance. For example, many functionals in base R are written in C, and often use a few tricks to get extra performance.
 
-Thinking about functionals as replacements for loops is not the only way to think about them. They are also useful tools for encapsulating common data manipulation tasks, the split-apply-combine pattern; for thinking "functionally"; and for working with mathematical functions. In this chapter, you'll learn about:
+As well as replacements for for loops, functionals do play other roles. They are also useful tools for encapsulating common data manipulation tasks, the split-apply-combine pattern; for thinking "functionally"; and for working with mathematical functions. In this chapter, you'll learn about:
 
-* Functionals that encapulsate a common pattern of for-loop use, like `lapply`, `vapply` and `Map`.
+* Functionals that replace a common pattern of for-loop use, like `lapply`, `vapply` and `Map`.
 
 * Functionals for manipulating common R data structures, like `apply`, `split`, `tapply` and the plyr package.
 
-* Popular functionals from other programming languages, like `Map`, `Reduce` and `Filter`
+* Popular functionals from other programming languages, like `Map`, `Reduce` and `Filter`.
 
 * Mathematical functionals, like `integrate`, `uniroot`, and `optim`.
 
-* how to convert a loop to a functionals, and when you shouldn't do it.
+We'll also talk about how (and why) you might convert loop to use a functional. The chapter concludes with a case study where we take simple scalar addition and use functionals to build a complete family of addition functions including vectorised addition, sum, cumulative sum, and row- and column-wise summation. 
 
-The focus in this chapter is on clear communication with your code, and developing tools to solve wide classes of problems. Once you do have clear, correct code you can focus on optimising it use the techniques in the [[performance]] chapter.
+The focus in this chapter is on clear communication with your code, and developing tools to solve wide classes of problems. This will not always produce the fastest code, but it is a mistake to focus on speed until you know it will be a problem. Once you do have clear, correct code you can make it fast using the techniques in the [[performance]] chapter.
 
-## For loop functionals: `lapply()` and friends
+## My first functional: `lapply()`
 
-You're probably already familiar with `lapply()`, which applies a function to each element of a list, storing the results in a list. It's informative to look at a pure R implementation:
+The simplest functional is `lapply()`, which you may already be familiar with. `lapply()` takes a function and applies it to each element of a list, saving the results back into a list.  `lapply()` is the building block for many other functionals, so it's important to understand how it works
+
+![A sketch of how `lapply()` works](diagrams/lapply.png)
+
+`lapply()` is written in C for performance, but we can create a simple R implementation that works the same way:
 
 ```R
 lapply2 <- function(x, f, ...) {
@@ -56,57 +60,70 @@ lapply2 <- function(x, f, ...) {
 }
 ```
 
-`lapply()` is just a wrapper around a common for loop pattern. The art of using functionals is to recognise what common looping patterns are implemented in existing base functionals, and then use them instead of loops. 
+From this code, you can see that `lapply()` is a wrapper around a common for loop pattern: we create a space for output, and then fill it in, applying `f()` to each component of the list. All other for loop functionals build on this base, modifying either the input, the output, or what data the function is applied to. From this code you can see that `lapply()` will also works with vectors: both `length()` and `'[[` work the same way for lists and vectors.
 
-Once you've mastered the existing functionals, the next step is to start writing your own: if you discover you're duplicating the same looping pattern in many places, you should extract it out into its own function. Once we've talked about the most important R functionals, we'll introduce some other loop patterns and start writing our own.
-
-<!-- There's often a moderate performance improvement of `lapply()` to for loops.
+`lapply()` makes it easier to work with lists by eliminating much of the boilerplate, focussing on the operation you're applying to each piece:
 
 ```R
-library(microbenchmark)
-options(digits = 3)
-x <- 1:1000
-microbenchmark(
-  lapply = lapply(x, sqrt),
-  loop = {out <- numeric(length(x)); for(i in 1:1000) out[i] <- sqrt(x[i])}
-)
+# Create some random data
+l <- replicate(20, runif(sample(1:10, 1)), simplify = FALSE)
+
+# With a for loop
+out <- vector("list", length(l))
+for (i in seq_along(l)) {
+  out[[i]] <- length(l[[i]])    
+}
+unlist(out)
+
+# With lapply
+unlist(lapply(l, length))
 ```
 
-Note, however, that this is a pathological example because the work done inside the loop is minimal; in most cases there is no percievable difference.
- -->
+Since data frames are also lists, `lapply()` is useful when you want to do something to each column of a data frame:
 
-The following sections discuss:
+```R
+# What class is each column?
+lapply(mtcars, class)
 
-* patterns of looping, for both for loops and `lapply()`.  The same ideas also apply to pretty much every for-loop-functional in R.
+# Divide each column by the mean
+mtcars[] <- lapply(mtcars, function(x) x / mean(x))
+```
 
-* `sapply()` and `vapply()`, variants of `lapply()` that produce 
-vectors, matrices and arrays as __output__, instead of lists.
+The pieces of `x` are always supplied as the first argument to `f`. You can override this using R's regular function calling semantics, supplying additional named arguments. For example, imagine you wanted to compute various trimmed means of the same dataset. `trim` is the second parameter of `mean()`, so we want to vary that, keeping the first argument (`x`) fixed.  It's easy provided that you remember that the following two calls are equivalent 
 
-* `Map()` and `mapply()` which iterate over multiple __input__ data structures in parallel.
+```R
+mean(1:100, trim = 0.1)
+mean(0.1, x = 1:100)
+```
 
-* Parallel versions of `lapply()` and `Map()`
+So to use `lapply()` with the second argument, we just need to name the first argument:
 
-* Rolling computations, showing how a new problem can be solved with for loops, or by building on top of `lapply()`.
+```R
+trims <- c(0, 0.1, 0.2, 0.5)
+x <- rcauchy(100)
+lapply(trims, mean, x = x)
+```
 
 ### Looping patterns
 
-When using functionals that encapsulate for loops, it's useful to remember that there's usually three ways to loop over an vector: 
+When using `lapply()` and friends, it's useful to remember that there are usually three ways to loop over an vector: 
 
 1. loop over the elements of the vector: `for(x in xs)`
 2. loop over the numeric indices of the vector: `for(i in seq_along(xs))`
-3. loop over the names of the vector: `for(nm in names(xs)) {}`
+3. loop over the names of the vector: `for(nm in names(xs))`
 
-If you're saving the results from a for loop, you usually can't use the first form because it makes very inefficient code: if you're extending an existing data structure, the existing data gets copied every time you extend it:
+If you're saving the results from a for loop, you usually can't use the first form because it makes very inefficient code.  When extending an existing data structure, all the existing data must be copied every time you extend it:
 
 ```R
 xs <- runif(1e3)
 res <- c()
 for(x in xs) {
+  # This is slow!
   res <- c(res, sqrt(x))
 }
 ```
 
-It's much better to create enough space for the output and then fill it in:
+It's much better to create enough space for the output and then fill it in, using the second looping form:
 
 ```R
 res <- numeric(length(xs))
@@ -123,29 +140,9 @@ lapply(seq_along(xs), function(i) {})
 lapply(names(xs), function(nm) {})
 ```
 
-Typically you use the first form because `lapply()` takes care of saving the output for you. However, if you need to know the position or the name of the element you're working with, you'll need to use the second or third form; they give you both the position of the object (`i`, `nm`) and its value (`x[[i]]`, `x[[nm]]`). If you're struggling to solve a problem using one form, you might find it easier with a different way.
+Typically you use the first form because `lapply()` takes care of saving the output for you. However, if you need to know the position or the name of the element you're working with, you'll need to use the second or third form; they give you both the position of the object (`i`, `nm`) and its value (`xs[[i]]`, `xs[[nm]]`). If you're struggling to solve a problem using one form, you might find it easier with a different form.
 
-It's also useful to remember that while `lapply` usually varies the first argument of the function, if one of the additional arguments matches the name of the first argument then R's usually matching rules with take over so effectively the second argument is varied over:
-
-```R
-# These two calls do the same thing:
-lm(mpg ~ disp + wt, data = mtcars)
-lm(mtcars, formula = mpg ~ disp + wt)
-
-# So if we want to fit a list of different formulas to the same 
-# dataset, we do:
-formulas <- list(mpg ~ disp, mpg ~ wt, mpg ~ disp + wt)
-models1 <- lapply(formulas, lm, data = mtcars)
-
-# If we want to fit the same formula to different datasets
-bootstraps <- lapply(1:10, function(i) {
-  rows <- sample(1:nrow(mtcars), rep = TRUE)
-  mtcars[rows, ]
-})
-models2 <- lapply(bootstraps, lm, formula = mpg ~ disp + wt)
-```
-
-Finally if you're working with a list of functions, remember to use `call_fun`:
+If you're working with a list of functions, remember to use `call_fun`:
 
 ```R
 call_fun <- function(f, ...) f(...)
@@ -153,7 +150,7 @@ f <- list(sum, mean, median, sd)
 lapply(f, call_fun, x = runif(1e3))
 ```
 
-Or you create a variant of `fapply()` specifically for working with lists of functions:
+Or you could create a variant, `fapply()`, specifically for working with lists of functions:
 
 ```R
 fapply <- function(fs, ...) {
@@ -166,11 +163,64 @@ fapply <- function(fs, ...) {
 fapply(f, x = runif(1e3))
 ```
 
+
+### Exercises
+
+* The function `scale01()` given below scales a vector to have range 0-1. How would you apply it to every column in a data frame? How would you apply it to every numeric column in a data frame?
+
+    ```R
+    scale01 <- function(x) {
+      rng <- range(x, na.rm = TRUE)
+      (x - rng[1]) / (rng[2] - rng[1])
+    }
+    ```
+
+* For each formula in the list below, use a for-loop and lapply to fit the corresponding model to the `mtcars` dataset
+
+    ```R
+    formulas <- list(
+      mpg ~ disp,
+      mpg ~ I(1 / disp),
+      mpg ~ disp + wt,
+      mpg ~ I(1 / disp) + wt
+    )
+    ```
+
+* Fit the model `mpg ~ disp` to each of the bootstrap replicates of `mtcars` in the list below, using a for loop and then `lapply()`. Can you do it without an anonymous function?
+
+    ```R
+    bootstraps <- lapply(1:10, function(i) {
+      rows <- sample(1:nrow(mtcars), rep = TRUE)
+      mtcars[rows, ]
+    })
+    ```
+
+* For each model in the previous two exercises extract the R^2 using the function below.
+
+  ```R
+  rsq <- function(mod) summary(mod)$r.squared
+  ```
+
+## For loop functionals: friends of `lapply()`
+
+The art of using functionals is to recognise what common looping patterns are implemented in existing base functionals, and then use them instead of loops. Once you've mastered the existing functionals, the next step is to start writing your own: if you discover you're duplicating the same looping pattern in many places, you should extract it out into its own function. 
+
+The following sections build on `lapply()` and discuss:
+
+* `sapply()` and `vapply()`, variants of `lapply()` that produce 
+vectors, matrices and arrays as __output__, instead of lists.
+
+* `Map()` and `mapply()` which iterate over multiple __input__ data structures in parallel.
+
+* __Parallel__ versions of `lapply()` and `Map()`, `mclapply()` and `mcMap()`
+
+* __Rolling computations__, showing how a new problem can be solved with for loops, or by building on top of `lapply()`.
+
 ### Vector output: `sapply` and `vapply`
 
-`sapply()` and `vapply()` are very similar to `lapply()` except they will simplify their output to produce an atomic vector. `sapply()` guesses, while you have to be specific with `vapply()`. `sapply()` is useful for interactive use because it saves typing, but if you use it inside your functions you will get weird errors if you supply the wrong type of input. `vapply()` is more verbose, but gives more informative errors messages and never fails silently, so is better suited for programming.
+`sapply()` and `vapply()` are very similar to `lapply()` except they will simplify their output to produce an atomic vector. `sapply()` guesses, while `vapply()` takes an additional argument specifying the output type. `sapply()` is useful for interactive use because it saves typing, but if you use it inside your functions you will get weird errors if you supply the wrong type of input. `vapply()` is more verbose, but gives more informative errors messages and never fails silently, so is better suited for use inside other functions.
 
-The following example illustrates these differences.  When given a data frame `sapply()` and `vapply()` give the same results, but if you pass in an empty list, `sapply()` has no basis to guess the correct type of output.
+The following example illustrates these differences.  When given a data frame `sapply()` and `vapply()` give the same results. When given an empty list, `sapply()` has no basis to guess the correct type of output, and returns `NULL`, instead of the more correct zero-length logical vector.
 
 ```R
 sapply(mtcars, is.numeric)
@@ -179,7 +229,9 @@ sapply(list(), is.numeric)
 vapply(list(), is.numeric, logical(1))
 ```
 
-Similarly, if the function returns different types or lengths of results, `sapply()` will silently coerce, while `vapply()` will throw an error. `sapply()` is fine for interactive use because you'll normally notice if something went wrong, but it's dangerous when writing functions.  The following example illustrates a possible problem when extracting the class of columns in data frame: if you falsely assume that class only has one value and use `sapply()` you won't find out about the problem until some future function call gets a list instead of a character vector.
+If the function returns results of different types or lengths, `sapply()` will silently return a list, while `vapply()` will throw an error. `sapply()` is fine for interactive use because you'll normally notice if something went wrong, but it's dangerous when writing functions. 
+
+The following example illustrates a possible problem when extracting the class of columns in data frame: if you falsely assume that class only has one value and use `sapply()` you won't find out about the problem until some future function is given a list instead of a character vector.
 
 ```R
 df <- data.frame(x = 1:10, y = letters[1:10])
@@ -214,26 +266,58 @@ vapply2 <- function(x, f, f.value, ...) {
 vapply2(1:10, f, logical(1))
 ```
 
-`vapply()` and `sapply()` are like `lapply()`, but with different inputs; the following section discusses `Map()`, which is like `lapply()` but with different inputs. 
+![Schematics of `sapply` and `vapply`, cf `lapply`.](diagrams/sapply-vapply.png)
+
+`vapply()` and `sapply()` are like `lapply()`, but with different outputs; the following section discusses `Map()`, which is like `lapply()` but with different inputs. 
 
 ### Multiple inputs: `Map` (and `mapply`)
 
-With `lapply()`, only one argument to the function varies; the others are fixed. With `Map`, all arguments vary:
+With `lapply()`, only one argument to the function varies; the others are fixed. This makes it poorly suited for some problems. For example, how would you find the weighted means when you have two lists, one of observations and the other of weights:
 
 ```R
-a <- c(1, 2, 3)
-b <- c("a", "b", "c")
-
-str(lapply(FUN = list, a, b))
-str(Map(f = list, a, b))
+# Generate some sample data
+x <- replicate(10, runif(10), simplify = FALSE)
+w <- replicate(10, rpois(10, 5) + 1, simplify = FALSE)
 ```
 
-`Map()` iterates over all of its arguments, not just the first one, so that `Map(f, x, y, z)` is equivalent to:
+It's easy to use `lapply()` to compute the unweighted means:
+
+```R
+lapply(x, means)
+```
+
+But how could we supply the weights to `weighted.mean()`? `lapply(x, means, w)` won't work because the additional arguments to `lapply()` are passed to every call. We could change looping forms:
+
+```R
+lapply(seq_along(x), function(i) weighted.mean(x[[i]], w[[i]]))
+```
+
+Or we could use `Map`, a variant of `lapply()` where all arguments vary.  This lets us write:
+
+```R
+Map(weighted.mean, x, w)
+```
+
+(Note that the order of arguments is a little different: with `Map()` the function is the first argument, with `lapply()` it's the second.
+
+In other words, `Map(f, x, y, z)` is equivalent to:
 
 ```R
 for(i in seq_along(x)) {
   output[[i]] <- f(x[[i]], y[[i]], z[[i]])
 }
+```
+
+There's a natural equivalence between `Map()` and `lapply()` because you can always convert a `Map()` to an `lapply()` that iterates over indices, but using `Map()` is more concise, and more clearly indicates what you're trying to do (looping over multiple lists in parallel).
+
+`Map` is useful whenever you have two (or more) lists (or data frames) that you need to process in parallel.  For example, we could compute the mean of each column and then divide it out.  We could do this with `lapply()`, but that wouldn't work if the means were computed in an external process.
+
+```R
+mtmeans <- lapply(mtcars, mean)
+mtmeans[] <- Map(`/`, mtcars, mtmeans)
+
+# In this case, equivalent to
+mtcars[] <- lapply(mtcars, function(x) x / mean(x))
 ```
 
 What if you have arguments that need to be fixed, not varying? Use an anonymous function!
@@ -248,7 +332,7 @@ You may be more familiar with `mapply()` than `Map()`. I prefer `Map()` because:
 
 * Instead of using an anonymous function to provide constant inputs, `mapply` has the `MoreArgs` argument which takes a list of extra arguments that will be supplied, as is, to each call. This breaks R's usual lazy evaluation semantics, and is inconsistent with other functions.
 
-In brief, `mapply()` is much more complicated for little gain.
+In brief, `mapply()` is more complicated for little gain.
 
 ### Rolling computations
 
