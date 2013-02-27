@@ -276,41 +276,43 @@ With `lapply()`, only one argument to the function varies; the others are fixed.
 
 ```R
 # Generate some sample data
-x <- replicate(10, runif(10), simplify = FALSE)
-w <- replicate(10, rpois(10, 5) + 1, simplify = FALSE)
+xs <- replicate(10, runif(10), simplify = FALSE)
+ws <- replicate(10, rpois(10, 5) + 1, simplify = FALSE)
 ```
 
 It's easy to use `lapply()` to compute the unweighted means:
 
 ```R
-lapply(x, means)
+lapply(xs, means)
 ```
 
 But how could we supply the weights to `weighted.mean()`? `lapply(x, means, w)` won't work because the additional arguments to `lapply()` are passed to every call. We could change looping forms:
 
 ```R
-lapply(seq_along(x), function(i) weighted.mean(x[[i]], w[[i]]))
+lapply(seq_along(x), function(i) weighted.mean(xs[[i]], ws[[i]]))
 ```
 
-Or we could use `Map`, a variant of `lapply()` where all arguments vary.  This lets us write:
+This works, but is a little clumsy. A cleaner alternative is to use `Map`, a variant of `lapply()`, where all arguments vary.  This lets us write:
 
 ```R
-Map(weighted.mean, x, w)
+Map(weighted.mean, xs, ws)
 ```
 
 (Note that the order of arguments is a little different: with `Map()` the function is the first argument, with `lapply()` it's the second.
 
-In other words, `Map(f, x, y, z)` is equivalent to:
+This is equivalent to:
 
 ```R
-for(i in seq_along(x)) {
-  output[[i]] <- f(x[[i]], y[[i]], z[[i]])
+stopifnot(length(x) == length(w))
+out <- vector("list", length(x))
+for (i in seq_along(x)) {
+  out[[i]] <- weighted.mean(x[[i]]], w[[i]])
 }
 ```
 
-There's a natural equivalence between `Map()` and `lapply()` because you can always convert a `Map()` to an `lapply()` that iterates over indices, but using `Map()` is more concise, and more clearly indicates what you're trying to do (looping over multiple lists in parallel).
+There's a natural equivalence between `Map()` and `lapply()` because you can always convert a `Map()` to an `lapply()` that iterates over indices, but using `Map()` is more concise, and more clearly indicates what you're trying to do.
 
-`Map` is useful whenever you have two (or more) lists (or data frames) that you need to process in parallel.  For example, we could compute the mean of each column and then divide it out.  We could do this with `lapply()`, but that wouldn't work if the means were computed in an external process.
+`Map` is useful whenever you have two (or more) lists (or data frames) that you need to process in parallel. For example, another way of standardising columns, is to first compute the means and then divide by them. We could do this with `lapply()`, but if we do it in two steps, we can more easily check the results at each step, which is particularly important if the first step is more complicated.
 
 ```R
 mtmeans <- lapply(mtcars, mean)
@@ -320,11 +322,15 @@ mtmeans[] <- Map(`/`, mtcars, mtmeans)
 mtcars[] <- lapply(mtcars, function(x) x / mean(x))
 ```
 
-What if you have arguments that need to be fixed, not varying? Use an anonymous function!
+If some of the arguments should be fixed, and not varying, you need to use an anonymous function:
 
 ```R
-Map(function(x, y) f(x, y, zs), xs, ys)
+Map(function(x, w) weighted.mean(x, w, na.rm = TRUE), xs, ys)
 ```
+
+We'll see a more compact way to express the same idea in the next chapter.
+
+<!-- This should be a sidebar -->
 
 You may be more familiar with `mapply()` than `Map()`. I prefer `Map()` because:
 
@@ -336,9 +342,7 @@ In brief, `mapply()` is more complicated for little gain.
 
 ### Rolling computations
 
-What if you need a for-loop replacement that doesn't exist in base R? You can create your own by recognising common looping structures and implementing your own wrapper.
-
-For example, you might be interested in smoothing your data using a rolling (or running) mean function:
+What if you need a for-loop replacement that doesn't exist in base R? You can often create your own by recognising common looping structures and implementing your own wrapper. For example, you might be interested in smoothing your data using a rolling (or running) mean function:
 
 ```R
 rollmean <- function(x, n) {
@@ -356,13 +360,17 @@ lines(rollmean(x, 5))
 lines(rollmean(x, 10), col = "red")
 ```
 
-But if your noise was more variable (i.e. it had a longer-tail) you might worry that your rolling mean was too sensitive to the occassional outlier and instead implement a rolling median.  To modify `rollmean()` to `rollmedian()` all you need to do is replace `mean` with `median` inside the loop, but instead of copying and pasting to create a new function, you might think about abstracting out the notion of computing a rolling summary.
+But if the noise was more variable (i.e. it had a longer tail) you might worry that your rolling mean was too sensitive to the occassional outlier and instead implement a rolling median. 
 
 ```R
 x <- seq(1, 3, length = 1e2) + rt(1e2, df = 2) / 3
 plot(x)
 lines(rollmean(x, 5))
+```
 
+To modify `rollmean()` to `rollmedian()` all you need to do is replace `mean` with `median` inside the loop, but instead of copying and pasting to create a new function, you might think about abstracting out the notion of computing a rolling summary.
+
+```R
 rollapply <- function(x, n, f, ...) {
   out <- rep(NA, length(x))
 
@@ -377,11 +385,20 @@ lines(rollapply(x, 5, median), col = "red")
 
 You might notice that this is pretty similar to what `vapply` does, and in fact we could rewrite it as
 
+```R
+rollapply <- function(x, n, f, ...) {
+  offset <- trunc(n / 2)
+  locs <- (offset + 1):(length(x) - n + offset - 1)
+  vapply(locs, function(i) f(x[(i - offset):(i + offset - 1)], ...),
+    numeric(1))
+})
+```
+
 which is effectively how `zoo::rollapply` implements it, albeit with many more features and much more error checking.
 
 ### Parallelisation
 
-One thing that's interesting about our defintions of `lapply()` and and variants is that because each iteration is isolated from all others, it doesn't matter in which order they are computed. Even though `lapply3()`, defined below, scrambles the order in which computation occurs, the results are always the same:
+One thing that's interesting about the defintions of `lapply()` and variants is that because each iteration is isolated from all others, the order in which they are computed doesn't matter. For example, while `lapply3()`, defined below, scrambles the order in which computation occurs, the results are same every time:
 
 ```R
 lapply3 <- function(x, f, ...) {
@@ -391,9 +408,8 @@ lapply3 <- function(x, f, ...) {
   }
   out
 }
-lapply3(1:10, sqrt)
-lapply3(1:10, sqrt)
-lapply3(1:10, sqrt)
+unlist(lapply3(1:10, sqrt))
+unlist(lapply3(1:10, sqrt))
 ```
 
 This has a very important consequence: since we can compute each element in any order, it's easy to dispatch the tasks to different cores, and compute in parallel.  This is what `mclapply()` (and `mcMap`) in the parallel package do:
@@ -412,27 +428,46 @@ boot_lm <- function(i) {
   rsquared(lm(mpg ~ wt + disp, data = boot_df(mtcars)))
 }
 
-system.time(lapply(1:100, boot_lm))
-system.time(mclapply(1:100, boot_lm, mc.cores = 2))
+system.time(lapply(1:500, boot_lm))
+system.time(mclapply(1:500, boot_lm, mc.cores = 2))
 ```
+
+It is rare to get a linear improvement with increasing number of cores, but if your code uses `lapply()` or `Map()`, this is an easy way to improve performance.
 
 ### Exercises
 
-* Implement a combination of `Map()` and `vapply()` to create an `lapply()` variant that iterates in parallel over all of its inputs and stores its outputs in a vector (or a matrix).
+* Use `vapply()` to:
+
+  * Compute the standard deviation of every column in a numeric data frame.
+  
+  * Compute the standard deviation of of every numeric column in a mixed data frame (you'll need to use `vapply()` twice)
+
+* Recall: why is using `sapply()` to get the `class()` of each element in a data frame dangerous?
+
+* The following code simulates the performance of a t-test for non-normal data. Use `sapply()` and an anonymous function to extract the p value from every trial. Extra challenge: get rid of the anonymous function and use the `'[[` function.  
+
+    ```R
+    trials <- replicate(100, t.test(rpois(10, 10), rpois(7, 10)), 
+      simplify = FALSE)
+    ```
+
+* Implement a combination of `Map()` and `vapply()` to create an `lapply()` variant that iterates in parallel over all of its inputs and stores its outputs in a vector (or a matrix).  What arguments should the function take?
 
 * What does `replicate()` do? What sort of for loop does it eliminate? Why do its arguments differ from `lapply()` and friends?
 
-* Implement `mcsapply()`, a multicore version of `sapply()`
+* Implement `mcsapply()`, a multicore version of `sapply()`.  Can you implement `mcvapply()` a parallel version of `vapply()`? Why/why not?
 
-## Data structure 
+* Implement a version of `lapply()` that supplies `f()` with both the name and the value of each component.
+
+## Data structure functionals
 
 As well as functionals that exist to eliminate common looping constructs, another family of functionals works to eliminate loops for common data manipulation tasks.
 
-In this section, we'll give a brief overview of the available options, not spending too much time on each one. The focus is to show you some of the options that are available, hint at how they can help you, and point you in the right direction to learn more:
+In this section, we'll give a brief overview of the available options. The focus is to show you some of the options that are available, hint at how they can help you, and point you in the right direction to learn more:
 
 * base matrix functions `apply()`, `sweep()` and `outer()`
 
-* the `tapply()` function for summarising a vector divided into groups by another vector
+* `tapply()`, which summarises a vector divided into groups by the values of another vector
 
 * the `plyr` package, which generalises the ideas of `tapply()` to work with inputs of data frames, lists and arrays, and outputs of data frames, lists, arrays and nothing
 
@@ -440,7 +475,7 @@ In this section, we'll give a brief overview of the available options, not spend
 
 So far, all the functionals we've seen work with 1d input structures. The three functionals in this section provide useful tools for working with high-dimensional data strucures. 
 
-`apply()` is like a variant of `sapply()` that works with matrices and arrays, but it's easier to think of it as an operation than summarises a matrix or array, collapsing a row or column to a single number.  It has four arguments: 
+`apply()` is like a variant of `sapply()` that works with matrices and arrays, and you can think of it as an operation that summarises a matrix or array, collapsing a row or column to a single number.  It has four arguments: 
 
 * `X`, the matrix or array to summarise
 * `MARGIN`, an integer vector giving the dimensions to summarise over, 1 = rows, 2 = columns, etc
@@ -463,9 +498,12 @@ identical(a, a1)
 identical(a, t(a1))
 ```
 
+(You can put high-dimensional arrays back in the right order using `aperm()`, or use `plyr::aaply()`, which is idempotent.)
+
 `sweep()` is a function that allows you to "sweep" out the values of a summary statistic. It is most often useful in conjunction with `apply()` and it often used to standardise arrays in some way.
 
 ```R
+# Scale matrix to [0, 1]
 x <- matrix(runif(20), nrow = 4)
 x1 <- sweep(x, 1, apply(x, 1, min))
 x2 <- sweep(x1, 1, apply(x1, 1, max), "/")
@@ -497,13 +535,13 @@ tapply(pulse, group, length)
 tapply(pulse, group, mean)
 ```
 
-It's easiest to understand how `tapply()` works by first creating a "ragged" data structure from the inputs. This is the job of the `split()` function, which takes two inputs, and returns a list, where all the elements in the first vector with equal entries in the second vector get put in the same element of the list:
+It's easiest to understand how `tapply()` works by first creating a "ragged" data structure from the inputs. This is the job of the `split()` function, which takes two inputs and returns a list, where all the elements in the first vector with equal entries in the second vector get put in the same element of the list:
 
 ```R
 split(pulse, group)
 ```
 
-Then it's obvious that `tapply()` is just the combination of `split()` and `sapply()`:
+Then you can see that `tapply()` is just the combination of `split()` and `sapply()`:
 
 ```R
 tapply2 <- function(x, group, f, ..., simplify = TRUE) {
@@ -514,15 +552,17 @@ tapply2(pulse, group, length)
 tapply2(pulse, group, mean)
 ```
 
-This is a common pattern: if you have a good foundational set of functionals, you can solve many problems by combining then with new tools.
+This is a common pattern: if you have a good foundational set of functionals, you can solve many problems by combining them in new ways.
 
 ### The plyr package
 
-One challenge with using the functionals provided by the base package is that they have grown organically over time, and have been written by multiple authors.  This means that they are not very consistent:
+One challenge with using the functionals provided by the base package is that they have grown organically over time, and have been written by multiple authors.  This means that they are not very consistent. For example,
 
-* The simplify argument is called `simplify` in `tapply()` and `sapply()`, but `SIMPLIFY` for `mapply()`, and `apply()` doesn't have any way to turn off simplification.
+* The simplify argument is called `simplify` in `tapply()` and `sapply()`, but `SIMPLIFY` for `mapply()`, and `apply()` lacks the argument altogether.
 
-* `vapply()` provides a variant of `sapply()` where you describe what the output should be, but there are not corresponding variants for `tapply()`, or `apply()`.
+* `vapply()` provides a variant of `sapply()` where you describe what the output should be, but there are not corresponding variants for `tapply()`, `apply()`, or `Map()`.
+
+* The first to most apply functions is the input `x`, but the first argument to `Map()` is the function `f`.
 
 This makes learning these operators challenging, as you have to memorise all of the variations. Additionally, if you think about the combination of input and output types, base R only provides a partial set of functions:
 
@@ -546,6 +586,8 @@ You can read more about these plyr function in [The Split-Apply-Combine Strategy
 
 ### Exercises
 
+* How does `apply()` arrange the output.  Read the documentation and perform some experiments.
+
 * There's no equivalent to `split()` + `vapply()`. Should there be? When would it be useful? Implement it yourself.
 
 * Implement a pure R version of `split()`. (Hint: use unique and subseting)
@@ -561,11 +603,21 @@ You can read more about these plyr function in [The Split-Apply-Combine Strategy
   Clojure and python documentation is not so useful
  -->
 
-The three most important functionals, implemented in almost every other functional programming language are `Map()`, `Reduce()`, and `Filter()`. We've seen `Map()` already, `Reduce()` is a powerful tool for extending two-argument functions, and `Filter()` is a member of an important class of functions that work with predicate functions, functions that return a single boolean.
+The three most important functionals, implemented in almost every functional programming language are `Map()`, `Reduce()`, and `Filter()`. We've seen `Map()` already, `Reduce()` is a powerful tool for extending two-argument functions, and `Filter()` is a member of an important class of functions that work with predicate functions, functions that return a single boolean.
 
 ### `Reduce()`
 
-`Reduce()`: recursively reduces a vector to a single value by first calling `f` with the first two elements, then the result of `f` and the second element and so on. 
+`Reduce()` recursively reduces a vector to a single value by first calling `f` with the first two elements, then the result of `f` and the third element and so on. In some languages, reduce is known as fold.
+
+```R
+Reduce(`+`, 1:3)
+((1 + 2) + 3)
+
+Reduce(sum, 1:3)
+sum(sum(1, 2), 3)
+```
+
+As you might have come to expect by now, the essence of `Reduce()` can be described by a simple for loop: 
 
 ```R
 out <- x[[1]]
@@ -574,31 +626,42 @@ for(i in seq(2, length(x)) {
 }
 ```
 
-Reduce is useful for implementing many types of recursive operations: merges, finding smallest values, intersections, unions.
+The real `Reduce()` is more complicated because it includes arguments to control whether the values are reduced from the left or from the right (`right`), an optional initial value (`init`), and an option to output every intermediate result (`accumulate`).
 
-Reduce is an elegant way of turning binary functions into functions that can deal with any number of arguments, but it is generally of limited use in R because it will produce functions that are much slower than equivalent hand-vectorised code.
+Reduce is useful for implementing many types of recursive operations: merges, finding smallest values, intersections, unions. For example, imagine you had a list of numeric vectors, and you wanted to find the values that occured in each vector:
 
-Can you implement unlist with reduce? + c?
+```R
+l <- replicate(5, sample(1:10, 15, rep = T), simplify = FALSE)
+```
 
-### Predicates
+You could do that by intersecting each element in turn:
 
-A __predicate__ is a function that returns `TRUE` or `FALSE`. 
+```R
+intersect(intersect(intersect(intersect(l[[1]], l[[2]]), l[[3]]), l[[4]]), l[[5]])
+Reduce(intersect, l)
+```
 
-Predicate functions are more useful in non-vectorised languages: you don't need them in R, because many useful predictates are already vectorised: `is.na`, comparisons, boolean operators
+Reduce is an elegant way of turning binary functions into functions that can deal with any number of arguments, and we'll see another use in the final case study. 
+
+### Predicate functionals
+
+A __predicate__ is a function that returns a single `TRUE` or `FALSE`, like `is.character`, `all`, or `is.NULL`. 
+
+`is.na` is not a predicate function because it returns a vector of values.  
+
+The predicate functionals make it easy to apply predicates to lists
 
 * `Filter`: returns a new vector containing only elements where the predicate is `TRUE`.
-
-One function that I find very helpful is `compact`.
 
 As well as filter, two other functions are useful when you have logical predicates
 
 * `Find()`: return the first element that matches the predicate (or the last element if `right = TRUE`).
 
-  ```R
-  for(i in seq_along(x)) {
-    if (f(x[[i]])) return(x[[i]])
-  }
-  ```
+    ```R
+    for(i in seq_along(x)) {
+      if (f(x[[i]])) return(x[[i]])
+    }
+    ```
 
 * `Position()`: return the position of the first element that matches the predicate (or the last element if `right = TRUE`).
 
