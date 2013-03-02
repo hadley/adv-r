@@ -382,7 +382,7 @@ Other output function operators can have a more profound affect on the operation
 
 `time_it()` allows us to rewrite some of the code from the functionals chapter:
 
-```
+```R
 compute_mean <- list(
   base = function(x) mean(x),
   sum = function(x) sum(x) / length(x)

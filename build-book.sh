@@ -1,10 +1,10 @@
-pandoc --chapters -o fp.pdf --latex-engine xelatex \
-  -f markdown+pipe_tables \
-  -V papersize:oneside -V links-as-notes \
-  Functional-programming.md \
-  Functionals.md
+# pandoc --chapters -o fp.pdf --latex-engine xelatex \
+#   -f markdown+pipe_tables \
+#   -V papersize:oneside -V links-as-notes \
+#   Functional-programming.md \
+#   Functionals.md
 
-pandoc --chapters -o book.pdf --latex-engine xelatex \
+pandoc --chapters -o programming.pdf --latex-engine xelatex \
   -V papersize:oneside -V links-as-notes --toc \
   Introduction.md \
   Functions.md \
@@ -22,6 +22,10 @@ pandoc --chapters -o book.pdf --latex-engine xelatex \
   Performance.md \
   Profiling.md \
   Rcpp.md \
+  C-interface.md
+
+pandoc --chapters -o packages.pdf --latex-engine xelatex \
+  -V papersize:oneside -V links-as-notes --toc \
   Philosophy.md \
   package-basics.md \
   Package-development-cycle.md \
@@ -33,6 +37,5 @@ pandoc --chapters -o book.pdf --latex-engine xelatex \
   git.md \
   Release.md \
   Vocabulary.md \
-  Data-structures.md \
-  C-interface.md \
-  && open book.pdf
+  Data-structures.md
+ 
