@@ -134,9 +134,8 @@ A minimal description file (this one is taken from an early version of plyr) loo
     Title: Tools for splitting, applying and combining data
     Description: 
     Version: 0.1
-    Authors@R: 
-    Maintainer: Hadley Wickham <h.wickham@gmail.com>
     Author: Hadley Wickham <h.wickham@gmail.com>
+    Maintainer: Hadley Wickham <h.wickham@gmail.com>
     License: MIT
 
 This is the critical subset of package metadata: what it's called (`Package`), what it does (`Title`, `Description`), who's allowed to use and distribute it (`License`), who wrote it (`Author`), and who to contact if you have problems (`Maintainer`). Here I've left the `Description` blank to illustrate that if you haven't decided what the correct value is yet, it's ok to leave it blank. 
