@@ -52,7 +52,7 @@ After the code and function documentation, the most important optional component
   features of the package.
 
 * the `inst/doc/` directory is used for larger scale documentation, like
-  vignettes, long-form documents which show how to combine multiple the parts
+  vignettes, long-form documents which show how to combine multiple parts
   of your package to solve problems.
 
 Other optional files and directories are part of good development practice:
