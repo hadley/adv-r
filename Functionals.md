@@ -368,7 +368,7 @@ plot(x)
 lines(rollmean(x, 5))
 ```
 
-To modify `rollmean()` to `rollmedian()` all you need to do is replace `mean` with `median` inside the loop, but instead of copying and pasting to create a new function, you might think about abstracting out the notion of computing a rolling summary.
+To modify `rollmean()` to `rollmedian()` all you need to do is replace `mean` with `median` inside the loop, but instead of copying and pasting to create a new function, we could extract the idea of computing a rolling summary into its own function:
 
 ```R
 rollapply <- function(x, n, f, ...) {
@@ -383,7 +383,7 @@ rollapply <- function(x, n, f, ...) {
 lines(rollapply(x, 5, median), col = "red")
 ```
 
-You might notice that this is pretty similar to what `vapply` does, and in fact we could rewrite it as
+You might notice that the internal loop looks pretty similar to a `vapply()` loop, so we could rewrite the function as:
 
 ```R
 rollapply <- function(x, n, f, ...) {
@@ -394,11 +394,11 @@ rollapply <- function(x, n, f, ...) {
 })
 ```
 
-which is effectively how `zoo::rollapply` implements it, albeit with many more features and much more error checking.
+This is effectively the same as the implementation in `zoo::rollapply()`, but it provides many more features and much more error checking.
 
 ### Parallelisation
 
-One thing that's interesting about the defintions of `lapply()` and variants is that because each iteration is isolated from all others, the order in which they are computed doesn't matter. For example, while `lapply3()`, defined below, scrambles the order in which computation occurs, the results are same every time:
+One thing that's interesting about the defintions of `lapply()` is that because each iteration is isolated from all others, the order in which they are computed doesn't matter. For example, while `lapply3()`, defined below, scrambles the order in which computation occurs, the results are same every time:
 
 ```R
 lapply3 <- function(x, f, ...) {
@@ -419,7 +419,7 @@ library(parallel)
 mclapply(1:10, sqrt, mc.cores = 4)
 ```
 
-In this case `mclapply()` is actually slower than `lapply()`, becuase the cost of the individual computations is low, and some additional work is needed to send the computation to the different cores and then collect the results together. If we take a more realistic example, generating bootstrap replicates of a linear model, we see the advantage of parallel computation:
+In this case `mclapply()` is actually slower than `lapply()`, becuase the cost of the individual computations is low, and some additional work is needed to send the computation to the different cores then collect the results together. If we take a more realistic example, generating bootstrap replicates of a linear model, we see more of an advantage:
 
 ```R
 boot_df <- function(x) x[sample(nrow(x), rep = T), ]
@@ -440,7 +440,7 @@ It is rare to get a linear improvement with increasing number of cores, but if y
 
   * Compute the standard deviation of every column in a numeric data frame.
   
-  * Compute the standard deviation of of every numeric column in a mixed data frame (you'll need to use `vapply()` twice)
+  * Compute the standard deviation of of every numeric column in a mixed data frame (Hint: you'll need to use `vapply()` twice)
 
 * Recall: why is using `sapply()` to get the `class()` of each element in a data frame dangerous?
 
@@ -461,11 +461,9 @@ It is rare to get a linear improvement with increasing number of cores, but if y
 
 ## Data structure functionals
 
-As well as functionals that exist to eliminate common looping constructs, another family of functionals works to eliminate loops for common data manipulation tasks.
+As well as functionals that exist to eliminate common looping constructs, another family of functionals works to eliminate loops for common data manipulation tasks. In this section, we'll give a brief overview of the available options. We'll show you some of the available options, hint at how they can help you, and point you in the right direction to learn more. We'll cover three categories of data structure functionals:
 
-In this section, we'll give a brief overview of the available options. The focus is to show you some of the options that are available, hint at how they can help you, and point you in the right direction to learn more:
-
-* base matrix functions `apply()`, `sweep()` and `outer()`
+* base functions for working with matrices: `apply()`, `sweep()` and `outer()`
 
 * `tapply()`, which summarises a vector divided into groups by the values of another vector
 
@@ -473,9 +471,7 @@ In this section, we'll give a brief overview of the available options. The focus
 
 ### Matrix and array operations
 
-So far, all the functionals we've seen work with 1d input structures. The three functionals in this section provide useful tools for working with high-dimensional data strucures. 
-
-`apply()` is like a variant of `sapply()` that works with matrices and arrays, and you can think of it as an operation that summarises a matrix or array, collapsing a row or column to a single number.  It has four arguments: 
+So far, all the functionals we've seen work with 1d input structures. The three functionals in this section provide useful tools for working with high-dimensional data strucures.  `apply()` is a variant of `sapply()` that works with matrices and arrays. You can think of it as an operation that summarises a matrix or array, collapsing each row or column to a single number.  It has four arguments: 
 
 * `X`, the matrix or array to summarise
 * `MARGIN`, an integer vector giving the dimensions to summarise over, 1 = rows, 2 = columns, etc
@@ -490,20 +486,21 @@ apply(a, 1, mean)
 apply(a, 2, mean)
 ```
 
-There are a few caveats apply to using `apply()`: it does not have a simplify argument, so you can never be completely sure what type of output you will get. This generally means that `apply()` is not safe to program with, unless you very carefully check the inputs.  `apply()` is also not idempotent in the sense that if the summary function is the identity operator, the output is not always the same as the input:
+There are a few caveats to using `apply()`: it does not have a simplify argument, so you can never be completely sure what type of output you will get. This generally means that `apply()` is not safe to use inside a function, unless you carefully check the inputs. `apply()` is also not idempotent in the sense that if the summary function is the identity operator, the output is not always the same as the input:
 
 ```R
 a1 <- apply(a, 1, identity)
 identical(a, a1)
 identical(a, t(a1))
+a2 <- apply(a, 2, identity)
+identical(a, a2)
 ```
 
 (You can put high-dimensional arrays back in the right order using `aperm()`, or use `plyr::aaply()`, which is idempotent.)
 
-`sweep()` is a function that allows you to "sweep" out the values of a summary statistic. It is most often useful in conjunction with `apply()` and it often used to standardise arrays in some way.
+`sweep()` is a function that allows you to "sweep" out the values of a summary statistic. It is most often useful in conjunction with `apply()` and it often used to standardise arrays in some way. The following example scales a matrix so that all values lie between 0 and 1.
 
 ```R
-# Scale matrix to [0, 1]
 x <- matrix(runif(20), nrow = 4)
 x1 <- sweep(x, 1, apply(x, 1, min))
 x2 <- sweep(x1, 1, apply(x1, 1, max), "/")
@@ -516,7 +513,7 @@ The final matrix functional is `outer()`. It's a little different in that it tak
 outer(1:10, 1:10, "*")
 ```
 
-Good places to learn more about `apply()` are:
+Good places to learn more about `apply()` and friends are:
 
 * [Using apply, sapply, lapply in R](http://petewerner.blogspot.com/2012/12/using-apply-sapply-lapply-in-r.html) by Peter Werner.
 * [The infamous apply function](http://rforpublichealth.blogspot.no/2012/09/the-infamous-apply-function.html) by Slawa Rokicki.
@@ -525,7 +522,7 @@ Good places to learn more about `apply()` are:
 
 ### Group apply
 
-In some sense, `tapply()` is a generalisation to `apply()` that allows for "ragged" arrays, where each row can have different numbers of rows. This often comes about when you're trying to summarise a data set. For example, imagine you've collected some pulse rate from a medical trial, and you want to compare the two groups:
+You can think about `tapply()` as a generalisation to `apply()` that allows for "ragged" arrays, where each row can have different numbers of rows. This is often needed when you're trying to summarise a data set. For example, imagine you've collected some pulse rate from a medical trial, and you want to compare the two groups:
 
 ```R
 pulse <- round(rnorm(22, 70, 10 / 3)) + rep(c(0, 5), c(10, 12))
