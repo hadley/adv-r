@@ -12,7 +12,7 @@ In this section you'll learn how to write R code that modifies other R code.  Wh
 
 ## Basics of R code
 
-To compute on the language, we first need to be understand the structure of the language. That's going to require some new vocabulary, some new tools and some new ways of thinking about R code. Thoroughout this chapter we're going to use tools from the `pryr` package to help see what's going on.  If you don't already have it, install it by running `pryr::install_github("pryr")`
+To compute on the language, we first need to be understand the structure of the language. That's going to require some new vocabulary, some new tools and some new ways of thinking about R code. Thoroughout this chapter we're going to use tools from the `pryr` package to help see what's going on.  If you don't already have it, install it by running `devtools::install_github("pryr")`
 
 The first thing we need to discuss is the distinction between an operation and it's result:
 
