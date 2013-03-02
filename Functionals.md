@@ -549,17 +549,17 @@ tapply2(pulse, group, length)
 tapply2(pulse, group, mean)
 ```
 
-This is a common pattern: if you have a good foundational set of functionals, you can solve many problems by combining them in new ways.
+Be able to rewrite our `tapply()` as a combination of `split()` and `sapply()` is a good indication that we've been able to extract independent pieces that we can recombine to solve new problems.
 
 ### The plyr package
 
-One challenge with using the functionals provided by the base package is that they have grown organically over time, and have been written by multiple authors.  This means that they are not very consistent. For example,
+One challenge with using the base functionals is that they have grown organically over time, and have been written by multiple authors. This means that they are not very consistent. For example,
 
 * The simplify argument is called `simplify` in `tapply()` and `sapply()`, but `SIMPLIFY` for `mapply()`, and `apply()` lacks the argument altogether.
 
-* `vapply()` provides a variant of `sapply()` where you describe what the output should be, but there are not corresponding variants for `tapply()`, `apply()`, or `Map()`.
+* `vapply()` is a variant of `sapply()` that allows you to describe what the output should be, but there are no corresponding variants of `tapply()`, `apply()`, or `Map()`.
 
-* The first to most apply functions is the input `x`, but the first argument to `Map()` is the function `f`.
+* The first to most functionals is the vector, but the first argument to `Map()` is the function.
 
 This makes learning these operators challenging, as you have to memorise all of the variations. Additionally, if you think about the combination of input and output types, base R only provides a partial set of functions:
 
@@ -569,7 +569,7 @@ This makes learning these operators challenging, as you have to memorise all of 
 | data frame | by     |            |        |
 | array      |        |            | apply  |
 
-This was one of the driving forces behind the creation of the plyr package, which provides consistently named functions with consistently named arguments, that implement all combinations of input and output data structures:
+This was one of the driving forces behind the creation of the plyr package, which provides consistently named functions with consistently named arguments and implements all combinations of input and output data structures:
 
 |            | list   | data frame | array | 
 |------------|--------|------------|-------|
@@ -577,9 +577,7 @@ This was one of the driving forces behind the creation of the plyr package, whic
 | data frame | dlply  | ddply      | daply |
 | array      | alply  | adply      | aaply |
 
-Each of these functions processes breaks up a data structure in some way, applies a function to each piece and then joins the results back together. 
-
-You can read more about these plyr function in [The Split-Apply-Combine Strategy for Data Analysis](http://www.jstatsoft.org/v40/i01/), an open-access article published in the Journal of Statistical Software.
+Each of these functions splits up the input, applies a function to each piece and then joins the results back together. Overall, this process is called "split-apply-combine", and you can read more about it and plyr in [The Split-Apply-Combine Strategy for Data Analysis](http://www.jstatsoft.org/v40/i01/), an open-access article published in the Journal of Statistical Software.
 
 ### Exercises
 
@@ -589,7 +587,7 @@ You can read more about these plyr function in [The Split-Apply-Combine Strategy
 
 * Implement a pure R version of `split()`. (Hint: use unique and subseting)
 
-* What other types of input and output are missing? Brainstorm before you look up in the answers in the [plyr paper](http://www.jstatsoft.org/v40/i01/)
+* What other types of input and output are missing? Brainstorm before you look up some answers in the [plyr paper](http://www.jstatsoft.org/v40/i01/)
 
 ## Functional programming
 
@@ -600,11 +598,13 @@ You can read more about these plyr function in [The Split-Apply-Combine Strategy
   Clojure and python documentation is not so useful
  -->
 
-The three most important functionals, implemented in almost every functional programming language are `Map()`, `Reduce()`, and `Filter()`. We've seen `Map()` already, `Reduce()` is a powerful tool for extending two-argument functions, and `Filter()` is a member of an important class of functions that work with predicate functions, functions that return a single boolean.
+Another way of thinking about functionals is as a set of general tools for altering, subsetting and collapsing lists. Every functional programming has three tools for this: `Map()`, `Reduce()`, and `Filter()`. We've seen `Map()` already, and the following sections described `Reduce()`, a powerful tool for extending two-argument functions, and `Filter()`, a member of an important class of functionals that work with predicates, functions that return a single boolean.
 
 ### `Reduce()`
 
-`Reduce()` recursively reduces a vector to a single value by first calling `f` with the first two elements, then the result of `f` and the third element and so on. In some languages, reduce is known as fold.
+`Reduce()` recursively reduces a vector, `x`, to a single value by recursively calling a function `f` with two arguments at a time.  It combines the first two elements with `f`, then combines the result of that call with the third element, and so on. Reduce is also known as fold, because it folds together adjacent elements in the list.
+
+The following two examples show what `Reduce` does with an infix and prefix function:
 
 ```R
 Reduce(`+`, 1:3)
@@ -617,15 +617,18 @@ sum(sum(1, 2), 3)
 As you might have come to expect by now, the essence of `Reduce()` can be described by a simple for loop: 
 
 ```R
-out <- x[[1]]
-for(i in seq(2, length(x)) {
-  out <- f(out, x[[i]])
+Reduce2 <- function(f, x) {
+  out <- x[[1]]
+  for(i in seq(2, length(x)) {
+    out <- f(out, x[[i]])
+  }
+  out  
 }
 ```
 
 The real `Reduce()` is more complicated because it includes arguments to control whether the values are reduced from the left or from the right (`right`), an optional initial value (`init`), and an option to output every intermediate result (`accumulate`).
 
-Reduce is useful for implementing many types of recursive operations: merges, finding smallest values, intersections, unions. For example, imagine you had a list of numeric vectors, and you wanted to find the values that occured in each vector:
+Reduce is an elegant way of turning binary functions into functions that can deal with any number of arguments. It's useful for implementing many types of recursive operations, like merges and intersections (We'll see another use in the final case study). For example, imagine you had a list of numeric vectors, and you wanted to find the values that occured in every element:
 
 ```R
 l <- replicate(5, sample(1:10, 15, rep = T), simplify = FALSE)
@@ -634,81 +637,63 @@ l <- replicate(5, sample(1:10, 15, rep = T), simplify = FALSE)
 You could do that by intersecting each element in turn:
 
 ```R
-intersect(intersect(intersect(intersect(l[[1]], l[[2]]), l[[3]]), l[[4]]), l[[5]])
+intersect(intersect(intersect(intersect(l[[1]], l[[2]]), 
+  l[[3]]), l[[4]]), l[[5]])
+```
+
+That's hard to read because of the dagwood sandwich problem, and is equivalent to:
+
+```R
 Reduce(intersect, l)
 ```
 
-Reduce is an elegant way of turning binary functions into functions that can deal with any number of arguments, and we'll see another use in the final case study. 
 
 ### Predicate functionals
 
-A __predicate__ is a function that returns a single `TRUE` or `FALSE`, like `is.character`, `all`, or `is.NULL`. 
-
-`is.na` is not a predicate function because it returns a vector of values.  
-
-The predicate functionals make it easy to apply predicates to lists
+A __predicate__ is a function that returns a single `TRUE` or `FALSE`, like `is.character`, `all`, or `is.NULL`.  `is.na` isn't a predicate function because it returns a vector of values. Predicate functionals make it easy to apply predicates to lists or data frames.  There are a three useful predicate functionals in base R: `Filter()`, `Find()` and `Position()`.
 
 * `Filter`: returns a new vector containing only elements where the predicate is `TRUE`.
 
-As well as filter, two other functions are useful when you have logical predicates
-
 * `Find()`: return the first element that matches the predicate (or the last element if `right = TRUE`).
-
-    ```R
-    for(i in seq_along(x)) {
-      if (f(x[[i]])) return(x[[i]])
-    }
-    ```
 
 * `Position()`: return the position of the first element that matches the predicate (or the last element if `right = TRUE`).
 
-    ```R
-    for(i in seq_along(x)) {
-      if (f(x[[i]])) return(i)
-    }
-    ```
-
-Other languages like Haskell and clojure provide more functions:
-
-```R
-take_while <- function(x, f) {
-  x[1:Position(x, f, nomatch = length(x))]
-}
-drop_while <- function(x, f) {
-  x[1:Position(x, f, nomatch = length(x))]
-}
-break <- function(x, f) {
-  list(take_while(x, f), drop_while(x, f))
-}
-```
-
-Another useful function is the ability to apply a non-vectorised predicate to a vectorised predicate:
+Another useful functional makes it easy to generate a logical vector from a list (or a data frame) and a predicate:
 
 ```R
 where <- function(x, f) {
   vapply(x, f, logical(1))
 }
-where(mtcars, is.character)
 ```
 
-Once we have that function, `Filter` is particularly easy to implement:
+The following example shows how you might use these functionals with a data frame:
 
 ```R
-Filter <- function(f, x) x[where(x, f)]
+str(Filter(is.character, iris))
+where(iris, is.character)
+str(Find(is.character, iris))
+Position(is.character, iris)
 ```
 
-But `where` makes for a better low level function because there are many ways to combine logical vectors.
+One function I use a lot is `compact()`:
 
-* STL: `find_if`, `count_if`, `replace_if`, `remove_if`, `none_of`, `any_of`, `stable_partition`
+```R
+compact <- function(x) Filter(function(y) !is.null(y), y)
+```
+
+It removes all non-null elements from a list - you'll see it again in the [[fuction operators]] chapter.
 
 ### Exercises
 
-* Implement `Any` which takes a list and a predicate function, and returns `TRUE` if the predicate function returns `TRUE` for any of the inputs.  Implement a similar `All` function.
+* Use `Filter()` and `vapply()` to create a function that applies a summary statistic to every column in a data frame.
 
-* Implement a more efficient version of break that avoids finding the location of the true value twice.
+* What's the relationship between `which()` and `Position()`? 
 
-* Implement the `span` function from Haskell, which given a list `x` and a predicate function `f`, returns the longest sequential run of elements where the predicate is true.
+* Re-write `compact` to eliminate the anonymous function.
 
+* Implement `Any`, a function that takes a list and a predicate function, and returns `TRUE` if the predicate function returns `TRUE` for any of the inputs. Implement the complementary `All` function.
+
+* Implement the `span` function from Haskell, which given a list `x` and a predicate function `f`, returns the longest sequential run of elements where the predicate is true. (Hint: you might find `rle` helpful.)
 
 ## Mathematical functionals
 
@@ -717,15 +702,15 @@ But `where` makes for a better low level function because there are many ways to
   find_funs("package:stats", fun_args, "^f$")
 -->
 
-Functionals are very common in mathematics: the limit, the maximum, the roots (the set of points where `f(x) = 0`), and the definite integral are all functionals; given a function, they return a single number (or a vector of numbers). At first glance, these functions don't seem to fit in with the theme of eliminating loops, but if you dig deeper you'll see all of them are implemented using an algorithm that involves iteration.
+Functionals are very common in mathematics. The limit, the maximum, the roots (the set of points where `f(x) = 0`), and the definite integral are all functionals: given a function, they return a single number (or a vector of numbers). At first glance, these functions don't seem to fit in with the theme of eliminating loops, but if you dig deeper you'll see all of them are implemented using an algorithm that involves iteration.
 
-In this section we'll explore some of R's built-in mathematical functionals. There are three functions that work with a 1d numeric function:
+In this section we'll explore some of R's built-in mathematical functionals. There are three functions that work with functions that return a single numeric value:
 
-* `integrate`: integrate it over a given range
-* `uniroot`: find where it hits zero over a given range
-* `optimise`: find location of minima (or maxima)
+* `integrate`: find the area under the curve given by `f`
+* `uniroot`: find where `f` hits zero
+* `optimise`: find location of lowest (or highest) value of `f`
 
-Let's explore how these are used with a simple function:
+Let's explore how these are used with a simple function, `sin`:
 
 ```R
 integrate(sin, 0, pi)
@@ -734,9 +719,9 @@ optimise(sin, c(0, 2 * pi))
 optimise(sin, c(0, pi), maximum = TRUE)
 ```
 
-In statistics, optimisation is often used for maximum likelihood estimation. Maximum likelihood estimation (MLE) is a natural fit for functional programming.  We have a problem and a general technique to solve it.  MLE also works well with closures because the arguments to a likelihood fall into two groups: the data, which is fixed for a given problem, and the parameters, which will vary as we try to find a maximum numerically. This naturally gives rise to an approach like the following.
+In statistics, optimisation is often used for maximum likelihood estimation. Maximum likelihood estimation (MLE) is a natural fit for functional programming because we have a well defined problem domain and a general technique to solve it. In MLE, we have two sets of parameters: the data, which is fixed for a given problem, and the parameters, which will vary as we try to find the maximum. That fits naturally with closures because we can have two layers of parameters to a closure. Closures plus optimisation gives rise to an approach to solving MLE problems like the following.
 
-First, we create a function that computes the negative log likelihood (NLL) for a given dataset.  In in R, it's common to use the negative since `optimise()` defaults to findinging the minimum.
+First, we create a function that computes the negative log likelihood (NLL) for a given dataset. In R, it's common to use the negative since `optimise()` defaults to findinging the minimum.
 
 ```R
 poisson_nll <- function(x) {
@@ -757,7 +742,9 @@ optimise(nll1, c(0, 100))
 optimise(nll2, c(0, 100))
 ```
 
-Another important mathmatical functional is `optim()`. It is a generalisation of `optim()` to more than one direction. If you're interested in how `optim()` works, you might want to explore the `Rvmmin` package, which provides a pure-R implementation of R. Interestingly `Rvmmin` is no slower than `optim()`, even though it is written in R, not C: for this problem, the bottleneck is evaluating the function multiple times, not controlling the optimisation.
+We can verify these values are correct by using the analytic solution: in this case, it's just the mean of the data values, 32.1 and 5.45. 
+
+Another important mathmatical functional is `optim()`. It is a generalisation of `optim()` to more than one dimension. If you're interested in how `optim()` works, you might want to explore the `Rvmmin` package, which provides a pure-R implementation of R. Interestingly `Rvmmin` is no slower than `optim()`, even though it is written in R, not C: for this problem, the bottleneck is evaluating the function multiple times, not controlling the optimisation.
 
 ### Exercises
 
@@ -767,7 +754,9 @@ Another important mathmatical functional is `optim()`. It is a generalisation of
 
 ## Converting loops to functionals, and when it's not possible
 
-That there are wide class of for loops that can not be simplified to a single existing function call in R.  It is not always a good idea to eliminate a for-loop: for loops are verbose and not very expressive, but all R programmers are familiar with them. For example, it's sometimes possible to work around the limitations of `lapply` by using more estoeric language features like `<<-`
+### Why you shouldn't convert every for loop to a functional
+
+There are a wide class of for loops that do not naturally match of the functionals we've described so far. Sometimes it's possible to torture your code to make it work, but it's usually not a good idea: for loops are verbose and not very expressive, but all R programmers are familiar with them. For example, the following code sample performs a variable-by-variable transformation by matching the names of a list of functions to the names of variables in a data frame.
 
 ```R
 trans <- list(
@@ -779,7 +768,7 @@ for(var in names(trans)) {
 }
 ```
 
-You could rewrite this as
+We couldn't normally use `lapply()` to replace this loop directly, but it is _possible_ to replace the loop with `lapply()` by using `<<-`:
 
 ```R
 lapply(names(trans), function(var) {
@@ -787,16 +776,11 @@ lapply(names(trans), function(var) {
 })
 ```
 
-We've eliminated the obvious for loop, but our code is longer, and we've had to use a language feature that few people are familiar with `<<-`.  And to really understand what `mtcars[[var]] <<-` is doing, you need to have a good mental model of how replacement functions really work.  So we've taken something simple and made more complicated, for effectively no gain.
+We've eliminated the for loop, but our code is longer and we've had to use an unusual language feature, `<<-`. And to understand what `mtcars[[var]] <<- ...` does, you have to understand not only how `<<-`, but also what `x[[y]] <<- z` does behind the scenes. We've taken a simple, easily understood for loop, and turned it into something few people will understand: not a good idea!
 
-There is 
-Good stackoverflow discussions on converting loops to more efficient/expressive code:
+### Recursive relationships
 
-* http://stackoverflow.com/a/14520342/16632
-* http://stackoverflow.com/a/2970284/16632
-
-
-* Relationships that a defined recursively, like exponential smoothing. 
+Another case where it's hard to convert a for loop into a functional is when the relationship is defined recursively.  For example, exponential smoothing, smoothes data values by taking a weighted average of the current and previous point.  The `exps()` function below implements exponential smoothing with a for loop.
     
 ```R
 exps <- function(x, alpha) {
@@ -812,7 +796,7 @@ exps <- function(x, alpha) {
 exps(x, 0.5)
 ```
 
-(What's the key feature? Dependening on previously calculated values? Or is it just a cumulative weighted sum?)
+We can't eliminate the for loop because none of the functionals we've seen allow the output at position `i` to depend on the input  and output at position `i - 1`. However, if we encountered this pattern a lot, we could create our own function. I've called it `lbapply()`, where `lb` is short for lookback.
 
 ```R
 lbapply <- function(x, f, init = x[1], ...) {
@@ -825,14 +809,9 @@ lbapply <- function(x, f, init = x[1], ...) {
 
 f <- function(x, out, alpha) alpha * x + (1 - alpha) * out
 lbapply(x, f, alpha = 0.5)
-
-lbapply(x, function(x, out) x + y, 0)
 ```
 
-Closures vs `...`.  `...` usually requires less typing, but there can be confusion about which function arguments belong to.  If you're passing in more than one function, definitely go with closures.
-
-
-Sometimes it's possible to [solve the recurrence relation](http://en.wikipedia.org/wiki/Recurrence_relation#Solving). In this case, it's possible to rewrite in terms of `i`:
+Another solution for eliminate the for loop in these cases is to [solve the recurrence relation](http://en.wikipedia.org/wiki/Recurrence_relation#Solving). This requires a new set of tools, and is mathematically challenging, but it can pay off by producing a simpler function. For exponential smoothing, it is possible to rewrite in terms of `i`:
 
 ```R
 exps1 <- function(x, alpha) {
@@ -845,11 +824,17 @@ lapply(seq_along(x), expsm1(x, alpha = 0.5))
 
 We'll see another example of a function defined recursively, the Fibonacci series, in the [[SoftwareSystems]] chapter.
 
-Another family of looping constructs in R is the `while` loop: this runs code until a condition is met.  `while` loops are more general than `for` loops because every for loop than rewriting into a while loop:
+### While loops
+
+Another type of looping construct in R is the `while` loop: this keeps running code until a condition is met. `while` loops are more general than `for` loops because you can rewrite every for loop as a while loop, but you can't do the opposite.  For example, this for loop:
 
 ```R
 for (i in 1:10) print(i)
+```
 
+Can be turned into this while loop:
+
+```R
 i <- 1
 while(i <= 10) {
   print(i)
@@ -857,7 +842,7 @@ while(i <= 10) {
 }
 ```
 
-Not every while loop can be turned into a for loop, because for many while loops you don't know in advance how many times it will be run:
+Not every while loop can be turned into a for loop, because many while loops don't know in advance how many times they will be run:
 
 ```R
 i <- 0
@@ -867,22 +852,13 @@ while(TRUE) {
 }
 ```
 
-This is a common situation when you're writing simulations: one of the random parameters in your simulation may be how many times it is run.  
+This is a common situation when you're writing simulations: one of the random parameters in your simulation may be how many times a process occurs.
 
-In some cases, like above, you may be able to remove the loop by recongnising some special feature of the problem. For example, the above problem is counting how many times a Bernoulli trial with p = 0.1 is run before it is successful: this is a geometric random variable so you could replace the above code with `i <- rgeom(1, 0.1)`.  Similar to solving recurrence relations, this is extremely difficult to do in general, but you'll get big gains if you manage to. In most cases it is difficult to write code like that efficiently in R, and if you are calling the code a lot, you may need to convert it to [[C++|Rcpp]].
-
-It's certainly possible to write functions that encapsulate these types of loops, but they are not built in to R. Whether or not it's worth building your own function depends on how often you'll be using, and how much more expressive a better function name would be.
-
-It is also possible to create more sophisticated control flow structures by [[computing on the language]] - developing these might be appropriate if you have a special need not otherwise met, e.g. you want to access a variable defined elsewhere, but this come with a high cost of increased complexity, and will be harder for new readers of the code to understand.
-
-Often the trick is to not to solve the problem in complete generality, but identify what patterns common recur in your code, and then develop functions to automate them. Once you have done this a few times, you might start to recognise bigger patterns.
-
+In some cases, like above, you may be able to remove the loop by recongnising some special feature of the problem. For example, the above problem is counting how many times a Bernoulli trial with p = 0.1 is run before it is successful: this is a geometric random variable so you could replace the above code with `i <- rgeom(1, 0.1)`.  Similar to solving recurrence relations, this is extremely difficult to do in general, but you'll get big gains if you can do it for your situtation. 
 
 ## A family of functions
 
-The following case study shows how you can use functionals to start small, with very simple functions, then build them up into more complicated and featureful tools. We'll start with a simple idea, adding two numbers together, and show how we can extending to summing any number inputs, or computing parallel sums, or cumulative sums, and sums for arrays in various structures. 
-
-We'll start with addition, and show how we can use exactly the same ideas for multiplication, smallest and largest, and string concatenation to generate a wide family of functions, including over 20 functions provided in base R.
+The following case study shows how you can use functionals to start small, with very simple functions, then build them up into more complicated and featureful tools. We'll start with a simple idea, adding two numbers together, and show how we can extend it to summing multiple numbers, computing parallel sums, cumulative sums, and sums for arrays. While we'll illustrate the ideas with addition, and you can use exactly the same ideas for multiplication, smallest and largest, and string concatenation to generate a wide family of functions, including over 20 functions provided in base R.
 
 We'll start by defining a very simple plus function, that takes two scalar arguments:
 
@@ -896,7 +872,7 @@ add <- function(x, y) {
 
 (We're using R's existing addition operator here, which does much more, but the focus in this section is on how we can take very very simple functions and extend them to do more).
 
-We really should also have some way to deal with missing values. A helper function will make this a bit easier -  if x is missing it returns y, if y is missing it returns x, and if both inputs are missing then it returns another argument to the function: `identity`. (We'll talk a bit later about while we've called it identity later).  This function is probably a bit more general than what we need now, but it will come in handy when you implement other binary operators.
+We really should also have some way to deal with missing values. A helper function will make this a bit easier: if `x` is missing it should return `y`, if `y` is missing it should returns `x`, and if both `x` and `y` are missing then it should returns another argument to the function: `identity`. (We'll talk a bit later about while we've called it identity). This function is probably a bit more general than what we need now, but it will come in handy when you implement other binary operators.
 
 ```R
 rm_na <- function(x, y, identity) {
@@ -908,6 +884,9 @@ rm_na <- function(x, y, identity) {
     x
   }  
 }
+rm_na(NA, 10, 0)
+rm_na(10, NA, 0)
+rm_na(NA, NA, 0)
 ```
 
 That allows us to write a version of `add` that can deal with missing values if needed: (and it often is!)
@@ -916,18 +895,22 @@ That allows us to write a version of `add` that can deal with missing values if 
 add <- function(x, y, na.rm = FALSE) {
   if (na.rm && (is.na(x) || is.na(y))) rm_na(x, y, 0) else x + y
 }
+add(10, NA)
+add(10, NA, na.rm = TRUE)
+add(NA, NA)
+add(NA, NA, na.rm = TRUE)
 ```
 
-Why should `add(NA, NA, na.rm = TRUE)` return 0?  Well for every other input it returns a numeric vector of length 1, so it should probably do that too even if both arguments are missing values.  There's also something special about add: it's associative, which means if you're adding together multiple numbers, it shouldn't matter in which order you're doing it.  In other words, the following two function calls should return the same value:
+Why did we pick an identity of `0`? Why should `add(NA, NA, na.rm = TRUE)` return 0?  Well, for every other input it returns a numeric vector of length 1, so it should do that even if both arguments are missing values. We next needs to figure out what that number should be. We can use a special property of add to work this out: add is associative, which the order of addition doesn't matter. In other words, the following two function calls should return the same value:
 
 ```R
 add(add(3, NA, na.rm = TRUE), NA, na.rm = TRUE)
 add(3, add(NA, NA, na.rm = TRUE), na.rm = TRUE)
 ```
 
-Which implies that `add(NA, NA, na.rm = TRUE)` must be 0.
+That implies that `add(NA, NA, na.rm = TRUE)` must be 0.
 
-The first way we might want to extend this function is to make it possible to add multiple numbers together.  This is a simple application of `Reduce`: if the input is `c(1, 2, 3)`, then we want to compute `add(1, add(2, 3))`:
+Now we have the basics working, we can extend this function to deal with more complicated inputs. The first way we might want to extend it is add more than two numbers together. This is a simple application of `Reduce`: if the input is `c(1, 2, 3)`, then we want to compute `add(1, add(2, 3))`:
 
 ```R
 r_add <- function(xs, na.rm = TRUE) {
@@ -943,9 +926,9 @@ r_add(NA, na.rm = TRUE)
 r_add(numeric())
 ```
 
-These are incorrect: in the first case we get a missing value even thought we've explicitly asked for them to be ignored, and in the second case we get a null, instead of a length 1 numeric vector (as for every other set of inputs).
+These are incorrect: in the first case we get a missing value even thought we've explicitly asked for them to be ignored, and in the second case we get `NULL`, instead of a length 1 numeric vector (as for every other set of inputs).
 
-The two problems are related: if we give `Reduce()` a length one vector it doesn't have anything to reduce, so it just returns the same value. And if we give it a length 0 input it returns `NULL`.  There are two ways to fix this: we can add `0` to every input vector, or we can use the `init` argument to `Reduce()` which effectively does the same thing:
+The two problems are related: if we give `Reduce()` a length one vector it doesn't have anything to reduce, so it just returns the input; if we give it a length 0 input it always returns `NULL`.  There are two ways to fix this: we can concatenate `0` to every input vector, or we can use the `init` argument to `Reduce()` (which effectively does the same thing):
 
 ```R
 r_add <- function(xs, na.rm = TRUE) {
@@ -958,11 +941,9 @@ r_add(numeric())
 
 (There is of course a function in R that already does that: `sum`)
 
-But it would be nice to have a vectorised version so that we could give it two vectors of numbers and they were added together.
+It would also be nice to have a vectorised version of `add` so that we can give it two vectors of numbers to add in parallel. We have two ways, using `Map()` or `vapply()`, to implement this, neither of which are perfect. `Map()` returns a list (we want a numeric vector), and while `vapply()` returns a vector, we'll need to loop over the indices.
 
-We have two options to implement this, neither of which are perfect.  We could use `Map`, but that will give us a list, or we could use `vapply` by looping over the indices.  That gives us a better output data structure, but a version of `Map` where we could specify the output type would be even better.
-
-A few test cases makes sure that it behaves as we expect: the output is always the same as the input (we're a bit stricter than base R here because we don't do recyclying - you could add that if you wanted, but I find you get fewer bugs by avoidingin recycling and being specific anyway.)
+A few test cases makes sure that it behaves as we expect.  We're a bit stricter than base R here because we don't do recyclying - you could add that if you wanted, but I find problems with recycling a common source of silent bugs.
 
 ```R
 v_add <- function(x, y, na.rm = TRUE) {
@@ -980,7 +961,7 @@ v_add(numeric(), numeric())
 v_add(c(1, NA), c(1, NA), na.rm = TRUE)
 ```
 
-(This is of course exactly the usual behavior of `+` in R, although we don't have the same control over missing values - there's no way to tell `+` to remove missing values)
+(This is the usual behavior of `+` in R, although we have more control over missing values.)
 
 Another variant of adding is the cumulative sum: it's like the reductive version, but we see every step along the way to the final result. This is easy to implement with `Reduce()`'s `accumuate` argument:
 
@@ -993,9 +974,9 @@ c_add(1:10)
 c_add(10:1)
 ```
 
-(This function also already has an existing R equivalent)
+(This function also already has an existing R equivalent, `cumsum`)
 
-Finally, we might want to define versions for more complicated data structures, like matrices.  We could create `row` and `col` variants that sum across rows and columns respectively, or we could go the whole hog and define an array version that would sum across any arbitrary dimensions of an array.  These are easy to implement: they're a combination of `add` and `apply`
+Finally, we might want to define versions for more complicated data structures like matrices.  We could create `row` and `col` variants that sum across rows and columns respectively, or we could go the whole hog and define an array version that would sum across any arbitrary dimensions of an array.  These are easy to implement: they're a combination of `add()` and `apply()`
 
 ```R
 row_sum <- function(x, na.rm = TRUE) apply(x, 1, add, na.rm = na.rm)
@@ -1003,27 +984,27 @@ col_sum <- function(x, na.rm = TRUE) apply(x, 2, add, na.rm = na.rm)
 arr_sum <- function(x, dim, na.rm = TRUE) apply(x, dim, add, na.rm = na.rm)
 ```
 
-(And again we have the existing `rowSums` and `colSums` functions that do the same thing)
+(These are equivalent to the existing `rowSums` and `colSums` functions)
 
-So if every function we have created already has an existing equivalent in base R, why did we bother? There are three main reasons:
+If every function we have created already has an existing equivalent in base R, why did we bother? There are two main reasons:
 
-* because we've created all our variants from a primitive binary operator (`add`) and a functional (`Reduce`, `Map` and `apply`), we know all the functions will behave absolutely consistently.
+* we've created all our variants from a very simple binary operator (`add`) and a well-tested functional (`Reduce`, `Map` and `apply`), so we know all the variants will behave consistently.
 
-* we've seen the infrastructure for addition, and now we can adapt it to other operators.
+* we've seen the infrastructure for addition, so we can now adapt it to other operators that might not have the full suite variants in base R.
 
-The downside of this approach is that these implementations are unlikely to be very efficient.  However, even if they don't turn out to be fast enough for your purposes they are still a good starting point because they are less likely to have bugs - when you create faster versions (maybe using [[Rcpp]]), you can compare results to make sure your fast versions are still correct.
+The downside of this approach is that these implementations are unlikely to be efficient (For example, `colSums(x)` is much faster than `apply(x, 2, sum)`). However, even if they don't turn out to be fast enough, they are still a good starting point because they are less likely to have bugs; and when you create faster versions (maybe using [[Rcpp]]), you can compare results to make sure your fast versions are still correct.
 
 ### Exercises
 
-* Implement `smaller` and `larger` functions that given two inputs return either the small or the large value. Implement `na.rm = TRUE`: what should the identity be? (Hint: `smaller(x, smaller(NA, NA, na.rm = TRUE), na.rm = TRUE)` must be `x`, so `smaller(NA, NA, na.rm = TRUE)` must be bigger than any other value of x.).  Use `smaller` and `larger` to implement equivalents of `min`, `max`, `pmin`, `pmax`, and new functions `row_min` and `row_max`
+* Implement `smaller` and `larger` functions that given two inputs return either the smaller or the larger value. Implement `na.rm = TRUE`: what should the identity be? (Hint: `smaller(x, smaller(NA, NA, na.rm = TRUE), na.rm = TRUE)` must be `x`, so `smaller(NA, NA, na.rm = TRUE)` must be bigger than any other value of x.). Use `smaller` and `larger` to implement equivalents of `min`, `max`, `pmin`, `pmax`, and new functions `row_min` and `row_max`
 
-* Create a table that has:
-  * columns: add, multiple, smaller, larger, and, or
-  * rows: binary operator, reducing version, vectorised version, array versions
+* Create a table that has add, multiply, smaller, larger, and, and or in the columns and binary operator, reducing variant, vectorised variant, array variants in the rows.
   
   * Fill in the cells with the names of base R functions that perform each of the roles
+  
   * Compare the names and arguments of the existing R functions. How consistent are they? How could you improve them?
-  * Complete the matric by implementing versions
+  
+  * Complete the matrix by implementing any missing functions
 
-* How does `paste` fit into this structure? What is the primitive function that underlies paste? What are the `sep` and `collapse` arguments equivalent to? Are there are any components that are missing for paste?
+* How does `paste()` fit into this structure? What is the scalar binary function that underlies `paste()`? What are the `sep` and `collapse` arguments to `paste()` equivalent to? Are there are any paste variants that don't have existing R implementations?
 
