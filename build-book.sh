@@ -21,6 +21,8 @@ pandoc --chapters -o programming.pdf --latex-engine xelatex \
   R5.md \
   Performance.md \
   Profiling.md \
+  Vocabulary.md \
+  Data-structures.md \
   Rcpp.md \
   C-interface.md
 
@@ -35,7 +37,5 @@ pandoc --chapters -o packages.pdf --latex-engine xelatex \
   style.md \
   Namespaces.md \
   git.md \
-  Release.md \
-  Vocabulary.md \
-  Data-structures.md
+  Release.md
  
