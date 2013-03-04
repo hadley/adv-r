@@ -265,10 +265,10 @@ fapply(f, x = runif(1e3))
 
 * For each model in the previous two exercises extract the R^2 using the function below.
 
-  
-  ```r
-  rsq <- function(mod) summary(mod)$r.squared
-  ```
+    
+    ```r
+    rsq <- function(mod) summary(mod)$r.squared
+    ```
 
 
 ## For loop functionals: friends of `lapply()`
