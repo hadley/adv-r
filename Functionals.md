@@ -693,7 +693,7 @@ It removes all non-null elements from a list - you'll see it again in the [[fuct
 
 * Implement `Any`, a function that takes a list and a predicate function, and returns `TRUE` if the predicate function returns `TRUE` for any of the inputs. Implement the complementary `All` function.
 
-* Implement the `span` function from Haskell, which given a list `x` and a predicate function `f`, returns the longest sequential run of elements where the predicate is true. (Hint: you might find `rle` helpful.)
+* Implement the `span` function from Haskell, which given a list `x` and a predicate function `f`, returns the longest sequential run of elements where the predicate is true. (Hint: you might find `rle()` helpful. Make sure to read the source and figure out how it works)
 
 ## Mathematical functionals
 
@@ -750,13 +750,26 @@ Another important mathmatical functional is `optim()`. It is a generalisation of
 
 * Implement the `arg_max` function. It should take a function, and a vector of inputs, returning the elements of the input where the function returns the highest number. For example, `arg_max(-10:5, function(x) x ^ 2)` should return -10. `arg_max(-5:5, function(x) x ^ 2)` should return `c(-5, 5)`.  Also implement the matching `arg_min`.
 
-* Read about the fixed point algorithm in http://mitpress.mit.edu/sicp/full-text/book/book-Z-H-12.html#%_sec_1.3.  Complete the exercises using R.
+* Challenge: read about the fixed point algorithm in http://mitpress.mit.edu/sicp/full-text/book/book-Z-H-12.html#%_sec_1.3.  Complete the exercises using R.
 
 ## Converting loops to functionals, and when it's not possible
 
-### Why you shouldn't convert every for loop to a functional
+There are a wide class of for loops that do not naturally match of the functionals we've described so far. Sometimes it's possible to torture your code to make it work, but it's usually not a good idea: for loops are verbose and not very expressive, but all R programmers are familiar with them. It takes a while before you can identify whether or not a for loop has a related vectorised solution, or a matching functional. It's also easy to go too far: trying to convert for loops that really should stay as loops.  This section provides some more resources for learning and highlights three types of loop that you shouldn't try and convert into a functional:
 
-There are a wide class of for loops that do not naturally match of the functionals we've described so far. Sometimes it's possible to torture your code to make it work, but it's usually not a good idea: for loops are verbose and not very expressive, but all R programmers are familiar with them. For example, the following code sample performs a variable-by-variable transformation by matching the names of a list of functions to the names of variables in a data frame.
+* modifying in place
+* recursive functions
+* while loops
+
+Stackoverflow is a good resource for learning more about converting for loops to use functionals. A couple of questions and answers that I think are particularly helpful are:
+
+* ["Alternative to loops in R"](http://stackoverflow.com/a/14520342/16632)
+* ["Speed up the loop operation in R"](http://stackoverflow.com/a/2970284/16632)
+
+You can also look for other similar questions that have cropped up since I wrote this with a [search](http://stackoverflow.com/search?tab=votes&q=%5br%5d%20for%20loop)
+
+### Modifying in place
+
+If you need to modify part of an existing data frame, it's often better to use a for loop. For example, the following code sample performs a variable-by-variable transformation by matching the names of a list of functions to the names of variables in a data frame.
 
 ```R
 trans <- list(
@@ -776,11 +789,11 @@ lapply(names(trans), function(var) {
 })
 ```
 
-We've eliminated the for loop, but our code is longer and we've had to use an unusual language feature, `<<-`. And to understand what `mtcars[[var]] <<- ...` does, you have to understand not only how `<<-`, but also what `x[[y]] <<- z` does behind the scenes. We've taken a simple, easily understood for loop, and turned it into something few people will understand: not a good idea!
+We've eliminated the for loop, but our code is longer and we've had to use an unusual language feature, `<<-`. And to understand what `mtcars[[var]] <<- ...` does, you have to understand not only how `<<-` works, but also what `x[[y]] <<- z` does behind the scenes. We've taken a simple, easily understood for loop, and turned it into something few people will understand: not a good idea!
 
 ### Recursive relationships
 
-Another case where it's hard to convert a for loop into a functional is when the relationship is defined recursively.  For example, exponential smoothing, smoothes data values by taking a weighted average of the current and previous point.  The `exps()` function below implements exponential smoothing with a for loop.
+Another case where it's hard to convert a for loop into a functional is when the relationship is defined recursively. For example, exponential smoothing smoothes data values by taking a weighted average of the current and previous point. The `exps()` function below implements exponential smoothing with a for loop.
     
 ```R
 exps <- function(x, alpha) {
@@ -796,7 +809,9 @@ exps <- function(x, alpha) {
 exps(x, 0.5)
 ```
 
-We can't eliminate the for loop because none of the functionals we've seen allow the output at position `i` to depend on the input  and output at position `i - 1`. However, if we encountered this pattern a lot, we could create our own function. I've called it `lbapply()`, where `lb` is short for lookback.
+We can't eliminate the for loop because none of the functionals we've seen allow the output at position `i` to depend on the input  and output at position `i - 1`. 
+
+If we encountered this pattern a lot, we could create our own function. I've called it `lbapply()`, where `lb` is short for lookback.
 
 ```R
 lbapply <- function(x, f, init = x[1], ...) {
@@ -811,7 +826,9 @@ f <- function(x, out, alpha) alpha * x + (1 - alpha) * out
 lbapply(x, f, alpha = 0.5)
 ```
 
-Another solution for eliminate the for loop in these cases is to [solve the recurrence relation](http://en.wikipedia.org/wiki/Recurrence_relation#Solving). This requires a new set of tools, and is mathematically challenging, but it can pay off by producing a simpler function. For exponential smoothing, it is possible to rewrite in terms of `i`:
+This is only worthwhile if we need this function frequently: otherwise it just places an additional cognitive burden on the reader.
+
+Another solution for eliminate the for loop in these cases is to [solve the recurrence relation](http://en.wikipedia.org/wiki/Recurrence_relation#Solving), removing the recursion and replacing it explicit references. This requires a new set of tools, and is mathematically challenging, but it can pay off by producing a simpler function. For exponential smoothing, it is possible to rewrite in terms of `i`:
 
 ```R
 exps1 <- function(x, alpha) {
@@ -822,7 +839,7 @@ exps1 <- function(x, alpha) {
 lapply(seq_along(x), expsm1(x, alpha = 0.5))
 ```
 
-We'll see another example of a function defined recursively, the Fibonacci series, in the [[SoftwareSystems]] chapter.
+It's arguable whether or not that's more understandable for this case, but it may be useful for your problem. We'll see another example of a function defined recursively, the Fibonacci series, in the [[SoftwareSystems]] chapter.
 
 ### While loops
 
