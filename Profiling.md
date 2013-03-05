@@ -62,7 +62,7 @@ Each iteration of the loop prints a different memory address - the complete data
 We can rewrite it to be much faster by eliminating all those copies, and instead relying on vectorised data frame subtraction: if you subtract a list from a data frame, the elements of the list are matched up with the elements of the data frame. That loop occurs at the C-level, which means the data frame is only copied once, not many many times.
 
     system.time({
-      y - as.list(medians)
+      x - as.list(medians)
     })
 
 The art of R performance improvement is to build up a good intuitions for what operations incur a copy, and what occurs in place. Each version of R usually implements a few performance improvements that eliminates copies, so it's impossible to give an up-to-date list, but some rules of thumb are:
