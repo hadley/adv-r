@@ -711,7 +711,7 @@ Most base R functions are pure, with a few notable exceptions:
 
 * S4 related functions which modify global tables of classes and methods.
 
-* random number generators which produce different numbers each time you run then
+* random number generators which produce different numbers each time you run them
 
 It's generally a good idea to minimise the use of side effects, and where possible separate functions into pure and impure, isolating side effects to the smallest possible location. Pure functions are easier to test (because all you need to worry about are the input values and the output), and are less likely to work differently on different versions of R or on different platforms.  For example, this is one of the motivating principles of ggplot2: most operations work on an object that represents a plot, and only the final `print` or `plot` call has the side effect of actually drawing the plot.
 
