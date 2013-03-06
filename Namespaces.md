@@ -10,7 +10,7 @@ For example, take the simple `nrow` function:
     # function (x) 
     # dim(x)[1L]
 
-What happens if we create out own dim method? Does `dim` break?
+What happens if we create our own dim method? Does `dim` break?
 
     dim <- function(x) c(1, 1)
     dim(mtcars)
