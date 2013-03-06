@@ -15,7 +15,7 @@ This means that you can do anything with functions that you can do with vectors:
 
 * __Lists of functions__, storing functions in a list
 
-The chapter concludes with a case study exploring __numerical integration__ showing how we can build a family of composite integration tools starting from very simple primitives.  This will a recurring theme: if we start with small building blocks that we can easily understand, when we combine them into more complex structures, we can still feel confident that they are correct.
+The chapter concludes with a case study exploring __numerical integration__ showing how we can build a family of composite integration tools starting from very simple primitives.  This will be a recurring theme: if we start with small building blocks that we can easily understand, when we combine them into more complex structures, we can still feel confident that they are correct.
 
 The exposition of functional programming continues in the following two chapters: [[functionals]], which explore functions that take functions as arguments and give vectors as output, and [[function operators]], functions that both input and output functions.
 
