@@ -233,10 +233,10 @@ There are a number of options for letting the user know when something has gone 
 
 * use `message()` to inform the user about something expected - I often do
   this when filling in important missing arguments that have a non-trivial
-  computation or impact. Two examples are `reshape2::melt` package which
-  informs the user what melt and id variables where used if not specific, and
-  `plyr::join` which informs which variables where used to join the two
-  tables.  You can supress messages with `suppressMessages`.
+  computation or impact. Two examples are `reshape2::melt` package, which
+  informs the user what melt and id variables were used if not specified, and
+  `plyr::join`, which informs which variables were used to join the two
+  tables.  You can suppress messages with `suppressMessages`.
 
 * use `warning()` for unexpected problems that aren't show stoppers.
   `options(warn = 2)` will turn warnings into errors. Warnings are often
