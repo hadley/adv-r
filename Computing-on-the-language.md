@@ -71,7 +71,7 @@ Calls are recursive because the arguments to a call can be other calls, e.g. `f(
 
 Everything in R parses into this tree structure - even things that don't look like calls such as `{`, `function`, control flow, infix operators and assignment. The figure below shows the parse tree for some of these special constructs. All calls are labelled with "()" even if we don't normally think of them as function calls.
 
-    draw_tree(expression(
+    call_tree(expression(
       {a + b; 2},
       function(x, y = 2) 3,
       (a - b) * 3,
