@@ -252,7 +252,23 @@ when it passed a __concrete__ type, in this case a `FibonacciData` object.
 
 ## S4
 
+S4 was first described in the 1998 ``Green Book'' (Chambers 1998). It allows
+for more sophisticated handling of method calls and, as a result, 
+it is better at managing more complex class heirarchies. Just as in S3,
+an S4 class has an associated type along with data members. Returning 
+to our Fibonacci example, an S4 `Sequence` and `Fibonacci` class are 
+defined as follows.
+
     setClass("Sequence")
+    setClass("Fibonacci", representation(lastTwo="numeric"),
+      contains="Sequence")
+
+A new class is defined using the `setClass` function. The code above
+defines two new classes. The first is called `Sequence`, the second
+is `Fibonacci`, which holds a numeric vector named `lastTwo` and inherits
+from the `Sequence` class. Now that we have two new S4 classes we can 
+define their associated methods.
+
     setGeneric("value", function(x)
       standardGeneric("value"))
     setGeneric("nextNum", function(x, n)
@@ -276,14 +292,29 @@ when it passed a __concrete__ type, in this case a `FibonacciData` object.
         stop("You cannot call the value method on an abtract class")
       })
       
-    setClass("Fibonacci", representation(lastTwo="numeric"),
-      contains="Sequence")
 
     Fibonacci <- function() {
       new("Fibonacci", lastTwo=vector(mode="numeric"))
     }
 
 ## Closures as S3 objects
+
+You may have noticed that, so far in this chapter whenever we want to 
+go to the next Fibonacci number we are actually calculating the next
+number with the `nextNum` method and then overwriting the current one.
+Put another way, the `nextNum` methods we have created do not change 
+their parameters beyond their function scope, and if we pass a parameter
+to a function, we expect that it has the same value after the function is
+called. As a result, in our Fibonacci examples we have been able to either
+get the next number and overwrite or we have been able to retrieve the
+value, but not both.
+
+While separating access from assignment is conceptually appealing, it does
+make our example a little bit cumbersome. Each call to `nextNum` was
+immediately followed by a call to `value`. It would be much more convenient
+`nextNum` would calculated the next Fibonacci number and update the
+object holding the current one. This is easily done using closures
+with the following code.
 
     FibonacciGenerator <- function() {
       lastTwo <- c()
@@ -293,6 +324,22 @@ when it passed a __concrete__ type, in this case a `FibonacciData` object.
         tail(lastTwo, 1)
       }
     }
+
+While the `FibonacciGenerator` will create a closure that both updates and
+returns the updated value, it suffers from two drawbacks. First, the 
+overarching goal was to create a software system for generating sequences,
+not just Fibonacci numbers. We may want to create other types of sequences,
+like random walks. This simple closure does not further out effort to create 
+a framework for sequence generation. Second, the closures we've seen so far
+were essentially functions with associated data. They are capable of performing
+a single thing, defined by a function. This means that if we want to be able
+to do more than simply get the next number we to take another approach.
+
+R does allow a closure to be defined with associated data, as before,
+along with named methods. Furthermore, since can make these closures S3 
+objects simply by specifying a class attribute. The following code creates
+an abstract `Sequence` class with two methods `nextNum` and `value`, 
+using a closure.
 
     Sequence <- function() {
 
@@ -306,6 +353,7 @@ when it passed a __concrete__ type, in this case a `FibonacciData` object.
       class(object) <- "Sequence"
       object
     }
+
 
     Fibonacci <- function() {
       lastTwo <- c()
