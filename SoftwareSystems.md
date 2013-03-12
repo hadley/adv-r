@@ -88,7 +88,7 @@ Creating a general framework for sequences has two advantages. First, it allows
 for abstraction. In our example we've defined a vector to hold the last two
 values in the Fibonacci sequence along with a function that gets the next
 value in the sequence. By realizing that any integer sequence that we might like
-to generate can be expressed computationally as data, the last two value
+to generate can be expressed computationally as data, the last two values
 for the Fibonacci sequence, and a function to get the next value. We've 
 identified the essential pieces generating sequences. From here we can 
 start thinking about the types of things we might like to do with any sequence,
