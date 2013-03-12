@@ -19,7 +19,7 @@ are created to work with them. The data structures and their functions
 can be encapsulated to create classes. Classes help us to compartmentalize
 conceptually coherent pieces of software. For example, an R vector is
 class holding a sequence of atomic types in R. We can create an instance 
-a vector using one of R's vector creation routines.
+of a vector using one of R's vector creation routines.
 
     x <- 1:10
     length(x)
