@@ -107,7 +107,7 @@ system used by the base R installation. In this system, new data types or
 classes are built from native types (vector, list, etc.) but they are given 
 a `class` attribute. This is a character vector of class names and you should
 note that a single object can have multiple types.
-Recalling that in the last section the data data needed to create a
+Recalling that in the last section the data needed to create a
 Fibonacci sequence was a vector of size two, we can create a new
 data type, called FibonacciData to hold these values:
 
