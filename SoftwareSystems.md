@@ -60,7 +60,7 @@ and are defined by the recurrence
 These numbers can easily be generated in R using the familiar vectors and 
 functions that you already know. An example of how to do this is 
 provided below. It's important to realize that the techniques shown in this
-chapter will not allow you to express algorithms your couldn't express 
+chapter will not allow you to express algorithms you couldn't express 
 with R's native data structures and functions. The techniques do allow you
 to organize data structures and functions to create a general system
 or framework for generating sequences. 
