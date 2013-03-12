@@ -11,7 +11,7 @@ If you want to distribute R code to someone else, there's no excuse not to use a
 
 This document explains how to get started, with a description of package structure, tips for naming your package, and more details about the `DESCRIPTION` file.
 
-The most accurate resource for up-to-date details on package development is always the official [writing R extensions][r-ext] guide. However, it's rather hard to read and follow if you're not already familiar with the basis of packages. It's also exhaustive, covering every possible package component, rather than focussing on the most common and useful components as this package does. Once you are familiar with the content here, you should find R extensions a little easier to read.
+The most accurate resource for up-to-date details on package development is always the official [writing R extensions][r-ext] guide. However, it's rather hard to read and follow if you're not already familiar with the basics of packages. It's also exhaustive, covering every possible package component, rather than focussing on the most common and useful components as this package does. Once you are familiar with the content here, you should find R extensions a little easier to read.
 
 ## Package essentials
 
