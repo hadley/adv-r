@@ -40,7 +40,7 @@ methods, or functions associated with a specific class, are defined much
 like any other function. However, when an instance of an object is passed
 to the generic function as a parameter, it is dispatched to its associated 
 method. R5 is implemented in a style called message-passing OO. In this style
-a methods are directly associated with classes and it is the object that
+methods are directly associated with classes and it is the object that
 determines which function to call.
 
 For the rest of this chapter we are going to explore the use of S3, S4, and
