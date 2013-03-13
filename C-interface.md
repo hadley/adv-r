@@ -546,7 +546,7 @@ Or if we wanted to be more accepting of diverse inputs:
       add_(a, b)
     }
 
-To coerce objects at the C level, use `PROTEXT(new = coerceVector(old, SEXPTYPE))`. This will return an error if the `SEXP` can not be converted to the desired type.  Note that these coercion functions do not use S3 dispatch.
+To coerce objects at the C level, use `PROTECT(new = coerceVector(old, SEXPTYPE))`. This will return an error if the `SEXP` can not be converted to the desired type.  Note that these coercion functions do not use S3 dispatch.
 
 To check if an object is of a specified type, you can use `TYPEOF`, which returns a `SEXPTYPE`:
 
