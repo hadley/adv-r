@@ -15,7 +15,9 @@ All examples in this chapter use the `inline` package - this makes it extremely 
     install.packages("inline")
     library(inline)
 
-You'll also (obviously) need a working C compiler. The final section of this chapter shows you how to turn C functions you've created with inline into C code for a package
+You'll also (obviously) need a working C compiler. Windows users can use Rupert Murdoch's [Rtools](http://cran.r-project.org/bin/windows/Rtools/). Mac users will need the [Xcode command line tools](http://developer.apple.com/). Most linux distributions will come with the necessary compilers.
+
+The final section of this chapter shows you how to turn C functions you've created with inline into C code for a package
 
 ## Differences between R and C
 
