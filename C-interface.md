@@ -305,6 +305,23 @@ The following function just makes a copy of a string, so you can at least see ho
     ')
     copy(letters)
 
+One last useful function for operating with strings: we can use `STRING_PTR` to get a pointer to the `STRING_ELT`s in a vector, such that we can access the `STRING_ELT`s by de-referencing the pointer. Occasionally, this can be easier to work with. We'll show how this can make a simple example of reversing a vector of strings easier.
+
+    reverse <- cfunction( signature(x="character"), '
+        SEXP out;
+        int len = length(x);
+        PROTECT( out = allocVector(STRSXP, len) );
+        SEXP* out_ptr = STRING_PTR(out);
+        SEXP* x_ptr = STRING_PTR(x);
+        for( int i=0; i < len; ++i ) {
+          out_ptr[i] = x_ptr[len-i-1];
+        }
+        UNPROTECT(1);
+        return out;
+        ')
+
+    reverse(letters)
+
 ### Coercing scalars
 
 There also a few helper functions if you want to turn the first element of an R vector into a C scalar:
