@@ -505,6 +505,8 @@ For example, a primitive implementation of `is.NA` might look like
     is_na(c(NA, "a"))
     is_na(c(NA, TRUE))
 
+It's worth noting that R's `base::is.na` returns `TRUE` for both `NA` and `NaN`s in a numeric vector, as opposed to the C level `ISNA` macro, which returns `TRUE` only for `NA_REAL`s.
+
 There are a few other special values:
 
     nil <- cfunction(NULL, 'return(R_NilValue);')
