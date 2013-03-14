@@ -114,7 +114,7 @@ Once you have a name, create a directory with that name, and inside that create 
 The `R/` directory contains all your R code, so copy in any existing code.
 
 It's up to you how you arrange your functions into files. There are two
-possible extremes: all functions in one file, and each function in it's own
+possible extremes: all functions in one file, and each function in its own
 file. I think these are both too extreme, and I suggest grouping related
 functions into a single file. My rule of thumb is that if I can't remember
 which file a function lives in, I probably need to split them up into more
