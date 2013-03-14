@@ -121,7 +121,7 @@ which file a function lives in, I probably need to split them up into more
 files: having only one function in a file is perfectly reasonable,
 particularly if the functions are large or have a lot of documentation. As
 you'll see in the next capture, often the code for the function is small
-compared to it's documentation (it's much easier to do something than it is to
+compared to its documentation (it's much easier to do something than it is to
 explain to someone else how to do it.)
 
 The next step is to create a `DESCRIPTION` file that defines package metadata.
