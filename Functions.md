@@ -573,7 +573,7 @@ The names of infix functions are more flexible than regular R functions: they ca
 R's default precedence rules mean that infix operators are composed from left to right:
 
 ```R
-"%-%" <- function(a, b) paste("(", a, " - ", b, ")", sep = "")
+"%-%" <- function(a, b) paste("(", a, " %-% ", b, ")", sep = "")
 "a" %-% "b" %-% "c"
 ```
 
