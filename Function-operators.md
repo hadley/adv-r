@@ -1,6 +1,5 @@
 
 
-
 # Function operators
 
 In this chapter, you'll learn about function operators: functions that take one (or more) function as input and return a function as output. Function operators are a FP technique related to functionals, but where functionals abstract away common uses of loops, function operators abstract over common uses of anonymous functions. Like functionals, there's nothing you can't do without then; but they can make your code more readable, more expressive and faster to write. 
@@ -473,7 +472,7 @@ models <- lapply(datasets, failwith(NULL, glm),
 
 # remove failed models (NULLs) with compact
 ok_models <- compact(models)
-# use where to exctract the datasets corresponding to failed models
+# use where to extract the datasets corresponding to failed models
 failed_data <- datasets[where(models, is.null)]
 ```
 
