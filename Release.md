@@ -45,7 +45,7 @@ Then you need to publicise your package.  This is vitally important - for you ha
 * announce on twitter, blog etc.
 
 * Finally, don't forget to update your package webpage. If you don't have a
-  package webpage - create one! There you can announce new versions, point to
+  package webpage – create one! There you can announce new versions, point to
   help resources, videos and talks about the package. If you're using github,
   I'd recommend using [github pages](http://pages.github.com/) to create the
   website.
