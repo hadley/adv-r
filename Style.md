@@ -38,7 +38,7 @@ Variable and function names should be lowercase. Use `_` to separate words withi
 
 ### Spacing
 
-Place spaces around all infix operators (`=`, `+`, `-`, `<-`, etc.). Do not place a space before a comma, but always place one after a comma (just like in regular english).
+Place spaces around all infix operators (`=`, `+`, `-`, `<-`, etc.). Do not place a space before a comma, but always place one after a comma (just like in regular English).
 
     # Good
     average <- mean(feet / 12 + inches, na.rm = T)
