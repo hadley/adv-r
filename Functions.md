@@ -172,7 +172,7 @@ However, this can make for confusing code, and is generally best avoided.
 
 ### A fresh start
 
-What happens to the values in between invocations of a function? What will happen the first time you run this function? What will happen the second time? (If you haven't seen `exists` before it returns `TRUE` if there's a variable of that name, otherwise it returns `FALSE`)
+What happens to the values in between invocations of a function? What will happen the first time you run this function? What will happen the second time? (If you haven't seen `exists` before: it returns `TRUE` if there's a variable of that name, otherwise it returns `FALSE`)
 
 ```R
 j <- function() {
