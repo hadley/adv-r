@@ -1,10 +1,9 @@
 
-
 # Function operators
 
 In this chapter, you'll learn about function operators: functions that take one (or more) function as input and return a function as output. Function operators are a FP technique related to functionals, but where functionals abstract away common uses of loops, function operators abstract over common uses of anonymous functions. Like functionals, there's nothing you can't do without then; but they can make your code more readable, more expressive and faster to write. 
 
-Here's an example of a simple function operator (FO) that makes a function chatty, showing its input and output (albeit in a naive way). It's useful because it gives a window into functionals, and we can use it to see how `lapply()` and `mclapply()` execute code differently. (We'll explore this theme in more detail below with the fully-featured `tee()` function below)
+Here's an example of a simple function operator (FO) that makes a function chatty, showing its input and output (albeit in a naive way). It's useful because it gives a window into functionals, and we can use it to see how `lapply()` and `mclapply()` execute code differently. (We'll explore this theme in more detail  with the fully-featured `tee()` function below)
 
 
 ```r
