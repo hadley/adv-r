@@ -455,10 +455,11 @@ a
 my_get()
 ```
 
-However, it's often easier to avoid the implicit environment and deal with it explicitly:
+However, it can be easier to see what's going on if you avoid the implicit environment and create and access it explicitly:
 
 ```R
 my_env <- new.env(parent = emptyenv())
+my_env$a <- 1
 my_get <- function() my_env$a
 my_set <- function(value) my_env$a <- value
 ```
@@ -552,7 +553,7 @@ assign("mean", function(x) sum(x) / length(x), env = baseenv())
 
 ### `<<-`
 
-Another way to modify the binding between name and value is `<<-`. The regular assignment arrow, `<-`, always creates a variable in the current environmnt.  The special assignment arrow, `<<-`, tries to modify an existing variable by walking up the parent environments. 
+Another way to modify the binding between name and value is `<<-`. The regular assignment arrow, `<-`, always creates a variable in the current environmnt. The special assignment arrow, `<<-`, never creates a variable in the current environment, but instead modifies an existing variable found by walking up the parent environments. 
 
 ```R
 f <- function() {
@@ -564,6 +565,14 @@ f <- function() {
   x
 }
 f()
+
+h <- function() {
+  x <- 1
+  x <<- 2
+  x
+}
+h()
+x
 ```
 
 If `<<-` doesn't find an existing variable, it will create one in the global environment. This is usually undesirable, because global variables introduce non-obvious dependencies between functions.

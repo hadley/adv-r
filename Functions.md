@@ -12,6 +12,8 @@ In this chapter you will learn:
 * The three ways of supplying arguments to a function, and the impact of lazy evaluation.
 * The two types of special functions: infix and replacement functions.
 
+<!-- Need to mention do.call somewhere in this chapter  -->
+
 ## Components of a function
 
 There are three main components of a function:
@@ -110,7 +112,7 @@ g()
 rm(x, g)
 ```
 
-The same rules apply if a function is defined inside another function.  First it looks inside the current function, then where that function was defined, and so on, all the way until the global environment. Run the following code in your head, then confirm the output by running the R code.
+The same rules apply if a function is defined inside another function.  First it looks inside the current function, then where that function was defined, and so on, all the way until the global environment, and then on to packages in the search list. Run the following code in your head, then confirm the output by running the R code.
 
 ```R
 x <- 1
@@ -126,7 +128,7 @@ h()
 rm(x, h)
 ```
 
-The same rules apply to closures, functions that return functions. The following function, `j()`, returns a function.  What do you think this function will return when we call it?
+The same rules apply to closures, functions created by other functions. The following function, `j()`, returns a function.  What do you think this function will return when we call it?
 
 ```R
 j <- function(x) {
@@ -307,7 +309,7 @@ It's useful to distinguish between the formal arguments and the actual arguments
 
 ### Calling functions
 
-When calling a function you can specify arguments by position, by complete name, or by partial name. Arguments are matched first by exact name, then by prefix matching and finally by position.
+When calling a function you can specify arguments by position, by complete name, or by partial name. Arguments are matched first by exact name (perfect matching), then by prefix matching and finally by position.
 
 ```R
 f <- function(abcdef, bcde1, bcde2) {
@@ -321,7 +323,7 @@ f(2, 3, a = 1)
 f(1, 3, b = 1)
 ```
 
-Generally, you only want to use positional matching for the first one or two arguments: they will be the mostly commonly used, and most readers will probably know what they are. Avoid using positional matching for less commonly used arguments, and only use readable abbreviations with partial matching. (If you are writing code for a package that you want to publish on CRAN you can not use partial matching.) Named arguments should always come after unnamed arguments.
+Generally, you only want to use positional matching for the first one or two arguments: they will be the mostly commonly used, and most readers will probably know what they are. Avoid using positional matching for less commonly used arguments, and only use readable abbreviations with partial matching. (If you are writing code for a package that you want to publish on CRAN you can not use partial matching.) Named arguments should always come after unnamed arguments. If an function uses `...` (discussed in more detail more), you can only specify arguments listed after `...` with their full name.
 
 These are good calls:
 
@@ -470,11 +472,13 @@ f()
 f(ls())
 ```
 
-More technically, an unevaluated argument is called a __promise__, or a thunk. A promise is made up of two parts:
+More technically, an unevaluated argument is called a __promise__, or (less commonly) a thunk. A promise is made up of two parts:
 
-* an expression giving the delayed computation, which can be accessed with `substitute` (see [[controlling evaluation|evaluation]] for more details)
+* an expression giving the delayed computation, which can be accessed with `substitute` (see [[controlling evaluation|evaluation] for more details)
 
 * the environment where the expression was created and where it should be evaluated
+
+The first time a promise is accessed the expression is evaluated in the environment where it was created. This value is cached, so that subsequently access to the evaluted promise does not recompute the value (but the original expression is still associated with the value, so that `substitute` can continue to access it).
 
 You can find more information about a promise using `langr::promise_info`.  This uses some of R's C api to extract information about the promise without evaluating it (which is otherwise very tricky).
 
@@ -518,11 +522,38 @@ Functions like `&&` and `||` have to be implemented as special cases in language
 
 ### `...`
 
-There is a special argument called `...`.  This argument will match any arguments not otherwise matched, and can be used to call other functions.  This is useful if you want to collect arguments to call another function, but you don't want to prespecify their possible names.
+There is a special argument called `...`.  This argument will match any arguments not otherwise matched, and can be easily passed on to other functions.  This is useful if you want to collect arguments to call another function, but you don't want to prespecify their possible names. `...` is often used in conjunction with S3 generic functions to allow individual methods to be more flexible.
 
-To capture `...` in a form that is easier to work with, you can use `list(...)`. (See [[Computing on the language]] for other ways to capture ...)
+One relatively sophisticated user of `...` is the base `plot()` function. `plot()` is a generic method with arguments `x`, `y` and `....`. To understand what `...` for a given function we need to read the help: "Arguments to be passed to methods, such as graphical parameters". Most simple invocation of `plot()` end up calling `plot.default()` which has many more arguments, but also has `...`.  Again, reading the documentation reveals that `...` accepts "other graphical parameters", which are listed the help for `par()`.  This allows us to write code like:
 
-Using `...` comes with a cost - any misspelled arguments will be silently ignored.  It's often better to be explicit rather than implicit, so you might instead ask users to supply a list of additional arguments.  And this is certainly easier if you're trying to use `...` with multiple additional functions.
+```R
+plot(1:5, col = "red")
+plot(1:5, cex = 5, pch = 20)
+```
+
+This illustrates both the advantages and disadvantages of `...`: it makes `plot()` very flexible, but to understand how to use it, we have to carefully read the documentation. Additionally, if we read the source code for `plot.default`, we can discover undocumented features. It's possible to pass along other arguments to `Axis()` and `box()`:
+
+```R
+plot(1:5, bty = "u")
+plot(1:5, labels = FALSE)
+```
+
+To capture `...` in a form that is easier to work with, you can use `list(...)`. (See [[Computing on the language]] for other ways to capture `...` without evaluating the arguments).
+
+```R
+f <- function(...) {
+  names(list(...))
+}
+f(a = 1, b = 2)
+```
+
+Using `...` comes with a cost - any misspelled arguments will not raise an error, and any arguments after `...` must be fully named.  This makes it easy for typos to go unnoticed:
+
+```R
+sum(1, 2, na.mr = TRUE)
+```
+
+It's often better to be explicit rather than implicit, so you might instead ask users to supply a list of additional arguments.  And this is certainly easier if you're trying to use `...` with multiple additional functions.
 
 
 ## Special calls

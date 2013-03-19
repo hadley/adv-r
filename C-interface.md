@@ -92,7 +92,7 @@ __Beware:__ At the C level, R's lists are `VECSXP`s not `LISTSXP`s. This is beca
 There are also `SEXP`s for less common object types:
 
 * `CPLXSXP`: complex vectors
-* `LISTSXP`: "pair" lists, in R used only for function arguments
+* `LISTSXP`: "pair" lists. At the R level, you only need to care about the distinction lists and pair lists for function arguments, but internally they are used in many more places.
 * `DOTSXP`: '...'
 * `SYMSXP`: names/symbols
 * `NILSXP`: `NULL`
@@ -150,11 +150,13 @@ Strings have this more complicated design because individual `CHARSXP`'s (elemen
       x <- "banana"
       y <- rep(x, 1e6)
       object.size(x)
-      # 64 bytes
+      # 32-bit: 64 bytes
+      # 64-bit: 96 bytes
       object.size(y) / 1e6
-      # 4.000056 bytes
+      # 32-bit: 4.000056 bytes
+      # 32-bit: 8.000088 bytes
 
-(This is also the reason why factors are no more memory efficient than strings. `factor(y)` is actually slightly bigger than `y`)
+In 32-bit R, factors occupy about the same amount of memory as strings: both pointers and integers are 4 bytes. In 64-bit R, pointers are 8 bytes, so factors take use about twice as much memory as strings.
 
 ## Coercion and object creation
 
@@ -186,7 +188,7 @@ You might wonder what all the `PROTECT` calls do. They tell R that we're current
 You also need to make sure that every protected object is unprotected. `UNPROTECT` takes a single integer argument, n, and unprotects the last n objects that were protected. If your calls don't match, R will warn about a "stack imbalance in .Call".
 
 Other specialised forms of `PROTECT` and `UNPROTECT` are needed in some circumstances: `UNPROTECT_PTR(s)` unprotects the
-object pointed to by the `SEXP` s, `PROTECT_WITH_INDEX` saves an index of the protection location that can be used to replace the protected value using `REPROTECT`. Consult [R externals](http://cran.r-project.org/doc/manuals/R-exts.html#Garbage-Collection) for more details.
+object pointed to by the `SEXP` s, `PROTECT_WITH_INDEX` saves an index of the protection location that can be used to replace the protected value using `REPROTECT`. Consult the R externals section on [garbage collection](http://cran.r-project.org/doc/manuals/R-exts.html#Garbage-Collection) for more details.
 
 If you run `dummy()` a few times, you'll notice the output is basically random. This is because `allocVector` assigns memory to each output, but it doesn't clean it out first. For real functions, you'll want to loop through each element in the vector and zero it out. The most efficient way to do that is to use `memset`:
 
@@ -461,8 +463,7 @@ There are some (confusingly named) shortcuts for common setting operations: `cla
 
 ## Missing and non-finite values
 
-R's `NA` is a subtype of `NaN` so IEEE 754 arithmetic should handle it
-correctly.  However, it is unwise to depend on such details, and is better to deal with missings explicitly:
+For floating point numbers, R's `NA` is a subtype of `NaN` so IEEE 754 arithmetic should handle it correctly. However, it is unwise to depend on such details, and is better to deal with missings explicitly:
 
 * In `REALSXP`s, use the `ISNA` macro, `ISNAN`, or `R_FINITE` macros to check for missing, NaN or non-finite values.  Use the constants `NA_REAL`, `R_NaN`, `R_PosInf` and `R_NegInf` to set those values
 
