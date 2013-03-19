@@ -1,9 +1,11 @@
 
+
+
 # Function operators
 
 In this chapter, you'll learn about function operators: functions that take one (or more) function as input and return a function as output. Function operators are a FP technique related to functionals, but where functionals abstract away common uses of loops, function operators abstract over common uses of anonymous functions. Like functionals, there's nothing you can't do without then; but they can make your code more readable, more expressive and faster to write. 
 
-Here's an example of a simple function operator (FO) that makes a function chatty, showing its input and output (albeit in a naive way). It's useful because it gives a window into functionals, and we can use it to see how `lapply()` and `mclapply()` execute code differently. (We'll explore this theme in more detail  with the fully-featured `tee()` function below)
+Here's an example of a simple function operator (FO) that makes a function chatty, showing its input and output (albeit in a naive way). It's useful because it gives a window into functionals, and we can use it to see how `lapply()` and `mclapply()` execute code differently. (We'll explore this theme in more detail below with the fully-featured `tee()` function)
 
 
 ```r
@@ -199,6 +201,10 @@ Another thing you might worry about when downloading multiple files is accidenta
 
 ```r
 library(memoise)
+```
+
+
+```r
 slow_function <- function(x) {
   Sys.sleep(1)
   10
@@ -212,7 +218,7 @@ system.time(slow_function())
 fast_function <- memoise(slow_function)
 system.time(fast_function())
 #    user  system elapsed 
-#   0.001   0.000   1.002
+#   0.001   0.000   1.001
 system.time(fast_function())
 #    user  system elapsed 
 #       0       0       0
@@ -231,10 +237,10 @@ fib <- function(n) {
 }
 system.time(fib(23))
 #    user  system elapsed 
-#   0.100   0.000   0.101
+#   0.102   0.001   0.103
 system.time(fib(24))
 #    user  system elapsed 
-#   0.168   0.001   0.169
+#   0.167   0.000   0.167
 fib2 <- memoise(function(n) {
   if (n < 2) return(1)
   fib2(n - 2) + fib2(n - 1)
@@ -244,7 +250,7 @@ system.time(fib2(23))
 #   0.003   0.000   0.003
 system.time(fib2(24))
 #    user  system elapsed 
-#   0.001   0.000   0.001
+#       0       0       0
 ```
 
 
@@ -254,9 +260,9 @@ It doesn't make sense to memoise all functions. The example below shows that a m
 ```r
 runifm <- memoise(runif)
 runifm(5)
-# [1] 0.2537 0.5709 0.7497 0.9482 0.0231
+# [1] 0.967 0.769 0.875 0.636 0.587
 runifm(5)
-# [1] 0.2537 0.5709 0.7497 0.9482 0.0231
+# [1] 0.967 0.769 0.875 0.636 0.587
 ```
 
 
@@ -389,9 +395,9 @@ plot(error, type = "b"); abline(h = 0, col = "grey50")
     }
     runif2 <- f(runif)
     runif2(5)
-    # [1] 0.111 0.923 0.764 0.903 0.766
+    # [1] 0.409 0.288 0.539 0.569 0.435
     runif2(5)
-    # [1] 0.111 0.923 0.764 0.903 0.766
+    # [1] 0.409 0.288 0.539 0.569 0.435
     ```
 
 
@@ -529,7 +535,7 @@ lapply(compute_mean, function(f) system.time(f(x)))
 # 
 # $sum
 #    user  system elapsed 
-#   0.002   0.000   0.002
+#   0.001   0.000   0.001
 # We can compose function operators
 call_fun <- function(f, ...) f(...)
 lapply(compute_mean, time_it(call_fun), x)
@@ -539,7 +545,7 @@ lapply(compute_mean, time_it(call_fun), x)
 # 
 # $sum
 #    user  system elapsed 
-#   0.002   0.000   0.002
+#   0.001   0.000   0.001
 ```
 
 
@@ -637,7 +643,7 @@ funs4 <- lapply(trims, function(t) partial(mean, trim = t))
 funs4[[1]]
 # function (...) 
 # mean(trim = t, ...)
-# <environment: 0x107382720>
+# <environment: 0x1080f7520>
 sapply(funs4, call_fun, c(1:100, (1:50) * 100))
 # [1] 75.5 75.5 75.5 75.5 75.5
 ```
@@ -654,7 +660,7 @@ funs5 <- lapply(trims, function(t) {
 funs5[[1]]
 # function (...) 
 # mean(trim = t, ...)
-# <environment: 0x1053b3fc0>
+# <environment: 0x105a79cb0>
 sapply(funs5, call_fun, c(1:100, (1:50) * 100))
 # [1] 883.7 235.6  75.5  75.5  75.5
 ```
@@ -711,19 +717,19 @@ Instead of a minor change to the function's inputs, it's also possible to make a
     # [1] 1
     # 
     # [[2]]
-    # [1] 2
+    # [1] 1
     # 
     # [[3]]
     # [1] 5 2 1
     sample2(1:5, 5:3)
     # [[1]]
-    # [1] 5 2 4 3 1
+    # [1] 3 4 5 2 1
     # 
     # [[2]]
-    # [1] 3 1 5 4
+    # [1] 1 4 3 5
     # 
     # [[3]]
-    # [1] 2 3 1
+    # [1] 4 3 2
     ```
 
 
@@ -759,7 +765,7 @@ Instead of a minor change to the function's inputs, it's also possible to make a
     # [1] 10.4
     # 
     # [[3]]
-    # [1] 0.499
+    # [1] 0.49
     ```
 
 
@@ -798,7 +804,7 @@ Instead of operating on single functions, function operators can take multiple f
 summaries <- plyr::each(mean, sd, median)
 summaries(1:10)
 #   mean     sd median 
-#   5.50   2.87   5.50
+#   5.50   3.03   5.50
 ```
 
 

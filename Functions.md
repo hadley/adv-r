@@ -712,7 +712,7 @@ f <- function(x, y) {
 
 Functions can return only a single value, but this is not a limitation in practice because you can always return a list containing any number of objects.
 
-The functions that are the most easy to understand and reason about are pure functions, functions that always map the same input to the same output and have no other impact on the workspace. In other words, pure functions have no __side-effects__: they don't affect the state of the world they live in anyway apart from the value they return. 
+The functions that are the most easy to understand and reason about are pure functions, functions that always map the same input to the same output and have no other impact on the workspace. In other words, pure functions have no __side-effects__: they don't affect the state of the world in any way apart from the value they return. 
 
 R protects you from one type of side-effect: arguments are passed-by-value, so modifying a function argument does not change the original value:
 
