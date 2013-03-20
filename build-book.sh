@@ -7,35 +7,40 @@
 pandoc --chapters -o programming.pdf --latex-engine xelatex \
   -V papersize:oneside -V links-as-notes --toc \
   Introduction.md \
+  part-fp.md \
   Functions.md \
   Environments.md \
   Functional-programming.md \
   Functionals.md \
   Function-operators.md \
-  Evaluation.md \
-  Computing-on-the-language.md \
-  Exceptions-debugging.md \
+  part-oo.md \
   SoftwareSystems.md \
   S3.md \
   S4.md \
   R5.md \
-  Performance.md \
+  part-adv.md \
+  Evaluation.md \
+  Computing-on-the-language.md \
+  Exceptions-debugging.md \
+  part-perf.md \
   Profiling.md \
+  Performance.md \
+  Rcpp.md \
+  appendix.md \
   Vocabulary.md \
   Data-structures.md \
-  Rcpp.md \
   C-interface.md
 
-pandoc --chapters -o packages.pdf --latex-engine xelatex \
-  -V papersize:oneside -V links-as-notes --toc \
-  Philosophy.md \
-  package-basics.md \
-  Package-development-cycle.md \
-  Documenting-packages.md \
-  Documenting-functions.md \
-  Testing.md \
-  style.md \
-  Namespaces.md \
-  git.md \
-  Release.md
+# pandoc --chapters -o packages.pdf --latex-engine xelatex \
+#   -V papersize:oneside -V links-as-notes --toc \
+#   Philosophy.md \
+#   package-basics.md \
+#   Package-development-cycle.md \
+#   Documenting-packages.md \
+#   Documenting-functions.md \
+#   Testing.md \
+#   style.md \
+#   Namespaces.md \
+#   git.md \
+#   Release.md
  
