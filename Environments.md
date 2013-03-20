@@ -1,5 +1,8 @@
 # Environments
 
+<!-- Comment from reviewer: There's lots of signposting but I cannot say that I sense an underlying logical progression. Maybe there isn't one for this material. But I think it would benefit from an afternoon of contemplation - - can we interest the reader in the details of introducing capabilities of basic environment construction for a) very basic workspace management at the heart of interactive R, b) for the sake of reference semantics for large data objects (this was done in Bioconductor exprSet long
+ago) and then c) towards more complicated things like active bindings, with various other things along the way perhaps. -->
+
 ## Introduction
 
 Understanding environment objects is an important next step of understanding scoping. This chapter will teach you:

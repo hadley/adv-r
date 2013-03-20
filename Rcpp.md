@@ -836,7 +836,7 @@ The following case studies illustrate some real life uses of C++ to replace slow
 
 ### Gibbs sampler
 
-The following case study updates an example [blogged about](http://dirk.eddelbuettel.com/blog/2011/07/14/) by Dirk Eddelbuettel, illustrating the conversion of a gibbs sampler in R to C++. The R and C++ code shown below is very similar (it only took a few minutes to convert the R version to the C++ version), but runs about 20 times faster on my computer. Dirk's blog post also shows another way to make it even faster: using the faster (but presumably less numerically accurate) random number generator functions in GSL (easily accessible from R through RcppGSL) can eke out another 2-3x speed improvement.
+The following case study updates an example [blogged about](http://dirk.eddelbuettel.com/blog/2011/07/14/) by Dirk Eddelbuettel, illustrating the conversion of a gibbs sampler in R to C++. The R and C++ code shown below is very similar (it only took a few minutes to convert the R version to the C++ version), but runs about 20 times faster on my computer. Dirk's blog post also shows another way to make it even faster: using the faster (but presumably less accurate) random number generator functions in GSL (easily accessible from R through RcppGSL) can eke out another 2-3x speed improvement.
 
 The R code is as follows:
 
@@ -932,7 +932,7 @@ vacc2 <- function(age, female, ily) {
 }
 ```
 
-(If you've worked R a lot you might recongise some potential bottlenecks in this code: `ifelse`, `pmin`, and `pmax` are known to be slow, and could be replaced with `p + 0.75 + 0.5 * female`, `p[p < 0] <- 0`, `p[p > 1] <- 1`.  You might want to try timing that function yourself, but since it relies on rather esoteric knowledge I haven't included it in this case study.)
+(If you've worked R a lot you might recongise some potential bottlenecks in this code: `ifelse`, `pmin`, and `pmax` are known to be slow, and could be replaced with `p + 0.75 + 0.5 * female`, `p[p < 0] <- 0`, `p[p > 1] <- 1`.  You might want to try timing those variations yourself.)
 
 Or in C++:
 

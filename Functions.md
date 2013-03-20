@@ -191,7 +191,7 @@ You might be surprised that it returns the same value, `1`, every time. This is 
 
 ### Dynamic lookup
 
-Lexical scoping determines where to look for values, not when to look for them. R looks for values when the function is run, not when it's created. This means results from a function can be different depending on objects outside its environment:
+Lexical scoping determines where to look for values, not when to look for them. R looks for values when the function is run, not when it's created. This means that the output of a function can be different depending on objects outside its environment:
 
 ```R
 f <- function() x
@@ -218,7 +218,7 @@ environment(f) <- emptyenv()
 f()
 ```
 
-This doesn't work because R relies on lexical scoping to find _everything_, even the `+` operator.  
+This doesn't work because R relies on lexical scoping to find _everything_, even the `+` operator. It's never possible to make a function completely self-contained because you must always rely on functions defined in base R or other packages.
 
 You can use this same idea to do other things that are extremely ill-advised. For example, since all of the standard operators in R are functions, you can override them with your own alternatives.  If you ever are feeling particularly evil, run the following code while your friend is away from their computer:
 
@@ -262,9 +262,9 @@ This will introduce a particularly pernicious bug: 10% of the time, 1 will be ad
   f(10)
   ```
 
-## Everything is a function call
+## Every operation is a function call
 
-The previous example of redefining `(` works because every operation in R is a function call, even operations with special syntax are just a disguise for ordinary function calls. This includes infix operators like `+`, control flow operators like `for`, `if`, and `while`, subsetting operators like `[]` and `$` and even the curly braces `{`. This means that each of these pairs of statements are exactly equivalent.  Note that `` ` ``, the backtick, lets you refer to functions or variables that have reserved or illegal names:
+The previous example of redefining `(` works because every operation in R is a function call, and even operations with special syntax are just a disguise for ordinary function calls. This includes infix operators like `+`, control flow operators like `for`, `if`, and `while`, subsetting operators like `[]` and `$` and even the curly braces `{`. This means that each of these pairs of statements are exactly equivalent.  Note that `` ` ``, the backtick, lets you refer to functions or variables that have reserved or illegal names:
 
 ```R
 x + y
@@ -283,7 +283,7 @@ x[3]
 `{`(print(1), print(2), print(3))
 ```
 
-It is possible to override the definitions of these special functions, but almost certainly a bad idea. However, it can occassionally allow you to do something that would have otherwise been impossible. For example, this feature makes it possible for the `dplyr` package to translate R expressions into SQL expressions.
+It is possible to override the definitions of these special functions, but this is almost certainly a bad idea. However, it can occassionally allow you to do something that would have otherwise been impossible. For example, this feature makes it possible for the `dplyr` package to translate R expressions into SQL expressions.
 
 It's more often useful to treat special functions as ordinary functions. For example, we could use `lapply` to add 3 to every element of a list by first defining a function `add`, like this:
 
@@ -292,7 +292,7 @@ add <- function(x, y) x + y
 lapply(1:10, add, 3)
 ```
 
-But we can get the same effect using the built in `+` function.
+But we can get the same effect using the built-in `+` function.
 
 ```R
 lapply(1:10, `+`, 3)
@@ -714,7 +714,7 @@ Functions can return only a single value, but this is not a limitation in practi
 
 The functions that are the most easy to understand and reason about are pure functions, functions that always map the same input to the same output and have no other impact on the workspace. In other words, pure functions have no __side-effects__: they don't affect the state of the world in any way apart from the value they return. 
 
-R protects you from one type of side-effect: arguments are passed-by-value, so modifying a function argument does not change the original value:
+R protects you from one type of side-effect: most R objects have copy-on-modify semantics, so modifying a function argument does not change the original value:
 
 ```R
 f <- function(x) {
@@ -725,6 +725,8 @@ x <- list(a = 1)
 f(x)
 x$a
 ```
+
+(There are two important exceptions to the copy-on-modify rule: environments and reference classes. These can be modified in place, so extra care is needed when working with them.)
 
 This is notably different to languages like Java where you can modify the inputs to a function. This copy-on-modify behaviour has important performance consequences which are discussed in depth in [[profiling]]. (Note that the performance consequences are a result of R's implementation of copy-on-modify semantics, they are not true in general. Clojure is a new language that makes extensive use of copy-on-modify semantics with limited performance consequences.)
 
