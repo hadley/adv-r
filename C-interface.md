@@ -2,22 +2,24 @@
 
 ## Introduction
 
-This is an opinionated re-write of section 5 ("System and foreign language interfaces") of [Writing R extensions](http://cran.r-project.org/doc/manuals/R-exts.html), focussing on best practices and modern tools. This means it does not cover:
+Reading the source code of R is an extremely powerful technique for improving your R programming. However, at some point you will hit a brick wall: many R functions are implemented in C. This guide gives you a basic introduction C and R's internal C api, giving you the basic knowledge needed to read the internals of R that are written in C.
+
+If you want to write new high-performance code, we do not recommend using C, but instead strongly recommend using Rcpp to connect to C++. The Rcpp API protects you from many of the historical idiosyncracies of the R API, takes care of memory management for you, and provides many useful helper methods
+
+The contents of this chapter come from section 5 ("System and foreign language interfaces") of [Writing R extensions](http://cran.r-project.org/doc/manuals/R-exts.html), focussing on best practices and modern tools. This means it does not cover:
 
 * the `.C` interface
 * the old api defined in `Rdefines.h`
 * esoteric language features that are rarely used
 
-It focusses mainly on section 5.9, "Handling R objects in C", considerably expanding with many more examples. The main point of the guide is to help you read and understand R's C source code. It will also help you write your own C functions, but for anything more than the simplest function, we recommend using C++ and Rcpp.
+To understand existing C code, it's useful to be generate simple examples of your own that you can experiment with. To that end, all examples in this chapter use the `inline` package, which makes it extremely easy to get up and running with C code. Make sure you have it installed and loaded with the following code:
 
-All examples in this chapter use the `inline` package - this makes it extremely easy to get up and running with C code. Make sure you have it installed and loaded with the following code:
-
-    install.packages("inline")
-    library(inline)
+```R
+install.packages("inline")
+library(inline)
+```
 
 You'll also (obviously) need a working C compiler. Windows users can use Rupert Murdoch's [Rtools](http://cran.r-project.org/bin/windows/Rtools/). Mac users will need the [Xcode command line tools](http://developer.apple.com/). Most linux distributions will come with the necessary compilers.
-
-The final section of this chapter shows you how to turn C functions you've created with inline into C code for a package
 
 ## Differences between R and C
 
@@ -92,7 +94,7 @@ __Beware:__ At the C level, R's lists are `VECSXP`s not `LISTSXP`s. This is beca
 There are also `SEXP`s for less common object types:
 
 * `CPLXSXP`: complex vectors
-* `LISTSXP`: "pair" lists. At the R level, you only need to care about the distinction lists and pair lists for function arguments, but internally they are used in many more places.
+* `LISTSXP`: "pair" lists. At the R level, you only need to care about the distinction lists and pairlists for function arguments, but internally they are used in many more places.
 * `DOTSXP`: '...'
 * `SYMSXP`: names/symbols
 * `NILSXP`: `NULL`
@@ -578,17 +580,6 @@ In many R functions you'll find code like `.Internal(mean(x))` or `.Primitive("s
 * First, open [src/main/names.c](https://github.com/wch/r-source/blob/trunk/src/main/names.c) and search for the name of the function.  You'll find an entry that tells you the name of the function (which always starts with `do_`)
 
 * Next, search the R source code for the name of that function.  To make it easier to find where it's defined (rather than everywhere it's used), you can add `(SEXP`.  e.g. to find the source code for `findInterval`, search for `do_findinterval(SEXP`.
-
-## Errors, warnings, messages and printing
-
-    R_ShowMessage
-    warning
-    error
-    Rprintf
-
-## Long running C code
-
-    R_CheckUserInterrupt
 
 ## `.External`
 
