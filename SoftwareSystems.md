@@ -252,7 +252,7 @@ when it passed a __concrete__ type, in this case a `FibonacciData` object.
 
 ## S4
 
-S4 was first described in the 1998 ``Green Book'' (Chambers 1998). It allows
+S4 was first described in the 1998 'Green Book' (Chambers 1998). It allows
 for more sophisticated handling of method calls and, as a result, 
 it is better at managing more complex class heirarchies. Just as in S3,
 an S4 class has an associated type along with data members. Returning 
