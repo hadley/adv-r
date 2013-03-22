@@ -10,11 +10,11 @@ In this section you'll learn how to write R code that modifies other R code.  Wh
 
 * to extend the tools you learned in [[evaluation]] to create even more flexible functions for interactive data analysis
 
+Thoroughout this chapter we're going to use tools from the `pryr` package to help see what's going on.  If you don't already have it, install it by running `devtools::install_github("pryr")`
+
 ## Basics of R code
 
-To compute on the language, we first need to be understand the structure of the language. That's going to require some new vocabulary, some new tools and some new ways of thinking about R code. Thoroughout this chapter we're going to use tools from the `pryr` package to help see what's going on.  If you don't already have it, install it by running `devtools::install_github("pryr")`
-
-The first thing we need to discuss is the distinction between an operation and it's result:
+To compute on the language, we first need to be understand the structure of the language. That's going to require some new vocabulary, some new tools and some new ways of thinking about R code. The first thing you need to understand is the distinction between an operation and its result:
 
 ```R
 x <- 4
@@ -24,117 +24,70 @@ y <- x * 10
 We want to distinguish between the operation of multiplying x by 10 and assinging the result to `y`, vs. the actual result.  In R, we can capture the operation with `quote()`:
 
 ```R
-quote(y <- x * 10)
+z <- quote(y <- x * 10)
+z
 ```
 
-`quote()` gives us back exactly the expression that we typed in. Every expression is a tree, and we can use `pryr::call_tree()` to see the hierarchy more clearly.
+`quote()` gives us back a quoted call. A quoted call is also called an abstract syntax tree (AST) because it represents the abstruct structure of the code in a tree form. We can use `pryr::call_tree()` to see the hierarchy more clearly:
 
 ```R
-call_tree(quote(y <- x * 10))
+call_tree(z)
 ```
 
-There are three basic things you'll see in a call tree.  Names and constants form the leaves, or terminal nodes of the tree:
+There are three basic things you'll see in a call tree: constants, names and calls.
 
-* __names__, which represent the name, not value, of a variable. These are prefixed with `'`
+* __constants__ are atomic vectors, like `"a"` or `10`. These appear as is. 
 
-* __constants__, are atomic vectors, like `"a"` or `1:10`
+    ```R
+    call_tree(quote("a"))
+    call_tree(quote(1))
+    call_tree(quote(1L))
+    call_tree(quote(TRUE))
+    ```
 
-Whereas the internal nodes are all made up of calls:
+* __names__ which represent the name of a variable, not its value. (Names are also sometimes called symbols). These are prefixed with `'`
 
-* __calls__, which represents a function call. These are suffixed with `()`.
+    ```R
+    call_tree(quote(x))
+    call_tree(quote(mean))
+    call_tree(quote(`an unusual name`))
+    ```
 
-Even things in R that don't look like calls still follow this same hierarchical structre:
+* __calls__ represent the action of calling a function (not its result). These are suffixed with `()`.  The arguments to the function are listed below it, and can be a constant, a name or another call.
+
+    ```R
+    call_tree(quote(f()))
+    call_tree(quote(f(1, 2)))
+    call_tree(quote(f(a, b)))
+    call_tree(quote(f(g(), h(1, a))))
+    ```
+
+    As mentioned in [[Functions]], even things that don't look like function calls still follow this same hierarchical structre:
+
+    ```R
+    call_tree(quote(a + b))
+    call_tree(quote(if (x > 1) x else 1/x))
+    call_tree(quote(function(x, y) {x * y}))
+    ```
+
+There are two ways to aggregate together multiple calls: expressions and braces.
+
+* Expressions are lists of calls, and are needed only when you parse a file. Expressions have one special behaviour compared to lists: when you `eval()` a expression, it evaluates each piece in turn and returns the result of last piece of parsed code.
+
+* Braces calls represent multiline functions as a call to the special function `{`, with one argument for each code chunk in the function.
+
+## Evaluation
+
+The `quote()` function captures the quoted call that represents an action to perform. `eval()` does the opposite: it takes a quoted call and performs the action it represents:
 
 ```R
-call_tree(quote(a + b))
-call_tree(quote(if (x > 1) x else 1/x))
-call_tree(quote(function(x, y) {x * y}))
+eval(z)
+y
 ```
-
-There are three fundamental building blocks of R code:
-
-Collectively I'll call these three things parsed code, because they each represent a stand-alone piece of R code that you could run from the command line. 
-
-A call is made up of two parts:
-
-* a name, giving the name of the function to be called
-* arguments, a list of parsed code
-
-Calls are recursive because the arguments to a call can be other calls, e.g. `f(x, 1, g(), h(i()))`. This means we can think about calls as trees. For example, we can represent that call as:
-
-    \- f()
-       \- x
-       \- 1
-       \- g()
-       \- h()
-          \- i()
-
-Everything in R parses into this tree structure - even things that don't look like calls such as `{`, `function`, control flow, infix operators and assignment. The figure below shows the parse tree for some of these special constructs. All calls are labelled with "()" even if we don't normally think of them as function calls.
-
-    call_tree(expression(
-      {a + b; 2},
-      function(x, y = 2) 3,
-      (a - b) * 3,
-      if (x < 3) y <- 3 else z <- 4,
-      name(df) <- c("a", "b", "c"),
-      -x
-    ))
-    
-    # \- {()
-    #    \- +()
-    #       \- a
-    #       \- b
-    #    \- 2
-    # 
-    # \- function()
-    #    \- list(x = , y = 2)
-    #    \- 3
-    #    \- "function(x, y = 2) 3"
-    # 
-    # \- *()
-    #    \- (()
-    #       \- -()
-    #          \- a
-    #          \- b
-    #    \- 3
-    # 
-    # \- if()
-    #    \- <()
-    #       \- x
-    #       \- 3
-    #    \- <-()
-    #       \- y
-    #       \- 3
-    #    \- <-()
-    #       \- z
-    #       \- 4
-    # 
-    # \- <-()
-    #    \- name()
-    #       \- df
-    #    \- c()
-    #       \- "a"
-    #       \- "b"
-    #       \- "c"
-    # 
-    # \- -()
-    #    \- x
-
-Calls can be built up into larger structures in two ways: with expressions or braced expressions:
-
-* Expressions are lists of code chunks, and are created when you parse a file.
-  Expressions have one special behaviour compared to lists: when you `eval()`
-  a expression, it evaluates each piece in turn and returns the result of last
-  piece of parsed code.
-
-* Braced calls represent complex multiline functions as a call to the
-  special function `{`, with one argument for each code chunk in the function.
-  Despite the name, braced expressions are not actually expressions, although
-  the accomplish much the same task.
 
 ## Code to text and back again
 
-As well as representation as an AST, code also has a string representation. This section shows how to go from a string to an AST, and from an AST to a string.
+As well as representation as an quoted call, code also has a string representation. This section shows how to go from a string to an AST, and from an AST to a string.
 
 The `parse` function converts a string into an expression. It's called parse because this is the formal CS name for converting a string representing code into a format that the computer can work with. Note that parse defaults to work within files - if you want to parse a string, you need to use the `text` argument.  Technically, parse returns an expression, or a list of calls. 
 
@@ -430,6 +383,8 @@ unenclose(f(1))
 
 (Exercise: modify this function so it only substitutes in atomic vectors, not more complicated objects.)
 
+Look at the source code for partial.
+
 ## Walking the code tree
 
 Because code is a tree, we're going to need recursive functions to work with it. You now have basic understanding of how code in R is put together internally, and so we can now start to write some useful functions. In this section we'll write functions to:
@@ -649,7 +604,7 @@ capply(expression(1, 2, 3), identity)
 capply(quote(f(1, 2, 3)), identity)
 capply(formals(data.frame), identity)
 capply(quote(function(x) x + 1), identity)
-```  
+```
 
 This leads to:
 
