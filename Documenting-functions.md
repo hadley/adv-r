@@ -72,12 +72,7 @@ This produces an `.Rd` file in the `man/` directory:
     \alias{arrange}
     \title{Order a data frame by its columns.}
     \usage{arrange(df, ...)}
-
     \description{
-      Order a data frame by its columns.
-    }
-
-    \details{
       This function completes the subsetting, transforming and
       ordering triad with a function that works in a similar
       way to \code{\link{subset}} and \code{\link{transform}}
