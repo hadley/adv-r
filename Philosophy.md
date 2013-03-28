@@ -49,7 +49,7 @@ It will print out some compilation code (this is needed to help diagnose problem
 
 The goal of the devtools package is to make package development as painless as possible by encoding package building best practices in functions (so you don't have to remember or even know about them), and by minimising the iteration time when you're developing a package.
 
-Most of the devtools function we will use take a path to the package as their first argument. If the path is omitted, devtools will look in the current working directory - so for that reason, it's good practice to have your working directory set to the package directory.
+Most of the devtools functions we will use take a path to the package as their first argument. If the path is omitted, devtools will look in the current working directory - so for that reason, it's good practice to have your working directory set to the package directory.
 
 The functions that you'll use most often are those that facilitate the [[package development cycle |development]]:
 
@@ -79,7 +79,7 @@ Other functions mimic standard R commands that you run from the command line:
   tests against your package. Read more about checking as part of the
   [[release]] process.
 
-These tools should be more reliable than running the equivalent commands in the terminal (and a much easier to use if you're not familiar with the terminal). They do more to ensure that command-line R is running in exactly the same way as your R GUI. They check that you're running the same version of R, with the same library paths, and with a standard collation order. These are things you don't need to worry about most of the time, but if they ever trip you up, it can take hours to figure out the source of the problem. `check()` and `install()` also run build first, which is recommended best practice.
+These tools should be more reliable than running the equivalent commands in the terminal (and much easier to use if you're not familiar with the terminal). They do more to ensure that command-line R is running in exactly the same way as your R GUI. They check that you're running the same version of R, with the same library paths, and with a standard collation order. These are things you don't need to worry about most of the time, but if they ever trip you up, it can take hours to figure out the source of the problem. `check()` and `install()` also run build first, which is recommended best practice.
 
 There are two other functions that you use less commonly, only at the start and the end of package development:
 
