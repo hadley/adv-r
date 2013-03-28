@@ -22,7 +22,7 @@ This workflow has a number of advantages over writing `.Rd` files by hand:
 
 **Note**: this chapter currently describes the use of the in-development [roxygen3](http://github.com/hadley/roxygen3) package. This will be merged back into roxygen2 in the near future.
 
-This chapter will proceed as follows. First, we'll discuss the basic documentation process, what each step does, and how to see the output at every stage. Next we'll show you, at a high-level, how to document all the different types of R objects (functions, datasets, s3 methods, s4 methods, s4 classes, r5 classes, and packages). After that you'll learn how to format text within the documentation
+This chapter will proceed as follows. First, we'll discuss the basic documentation process, what each step does, and how to see the output at every stage. Next we'll show you, at a high-level, how to document all the different types of R objects (functions, datasets, s3 methods, s4 methods, s4 classes, r5 classes, and packages). After that you'll learn how to format text within the documentation.
 
 ## Help
 
@@ -64,7 +64,7 @@ There's a three step process to go from the R comments in the source files to Rd
       unrowname(df[ord, ])
     }
 
-To convert roxygen comments to the official `.Rd` files, we'll use `devtools::document()`. Like the other devtools functions you've seen so far, it takes a package directory as it's first argument, and if you omit it, it will use the current working directory.
+To convert roxygen comments to the official `.Rd` files, we'll use `devtools::document()`. Like the other devtools functions you've seen so far, it takes a package directory as its first argument, and if you omit it, it will use the current working directory.
 
 This produces an `.Rd` file in the `man/` directory:
 
