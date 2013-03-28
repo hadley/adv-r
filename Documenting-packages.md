@@ -196,9 +196,9 @@ If you write a nice vignette, you might want to consider submitting it to the Jo
 
 ## Demos
 
-A demo is very much like a function example, but is longer, and shows how to use multiple functions together. Demos are `.R` files that live in the `demo/` package directory, and are access with the `demo()` function.
+A demo is very much like a function example, but is longer, and shows how to use multiple functions together. Demos are `.R` files that live in the `demo/` package directory, and are accessed with the `demo()` function.
 
-(NOT YET IMPLEMENTED) The `demos` directory also needs an index. The easiest way to generate that index is to a roxygen comment with `@demoTitle` tag:
+(NOT YET IMPLEMENTED) The `demos` directory also needs an index. The easiest way to generate that index is to add a roxygen comment with `@demoTitle` tag:
 
     #' @demoTitle my title
 
