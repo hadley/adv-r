@@ -188,7 +188,7 @@ A more complete `DESCRIPTION` (this one from a more recent version of `plyr`) lo
 This `DESCRIPTION` includes other components that are optional, but still
 important:
 
-* `Depends`, `Suggests`, `Imports` and `Enhances` describe the which packages
+* `Depends`, `Suggests`, `Imports` and `Enhances` describe which packages
   this package needs. They are described in more detail in [[namespaces]].
 
 * `URL`: a url to the package website. Multiple urls can be separated with a
@@ -211,14 +211,14 @@ There are a number of other less commonly used fields like `BugReports`, `KeepSo
 
 ## Source, binary and bundled packages
 
-So far we've just described the structure of a source package: the development version of a package that lives on your computer. There are also two other type of package: bundled packages and binary packages.
+So far we've just described the structure of a source package: the development version of a package that lives on your computer. There are also two other types of package: bundled packages and binary packages.
 
 A package __bundle__ is a compressed version of a package in a single file. By convention, package bundles in R use the extension `.tar.gz`. This is linux convention indicating multiple files have been collapsed into a single file (`.tar`) and then compressed using gzip (`.gz`). The package bundle is useful if you want to manually distribute your package to another R package developer. It is not OS specific. You can use `devtools::build()` to make a package bundle.
 
 If you want to distribute your package to another R user (i.e. someone who doesn't necessarily have the development tools installed) you need to make a __binary__ package. Like a package bundle, a binary package is a single file, but if you uncompress it, you'll see that the internal structure is a little different to a source package: 
 
 * a `Meta/` directory contains a number of `Rds` files. These contain cached
-  metadata about the package, like what topics the help files cover and a
+  metadata about the package, like what topics the help files cover and
   parsed versions of the `DESCRIPTION` files. (If you want to look at what's
   in these files you can use `readRDS`)
 
@@ -226,7 +226,7 @@ If you want to distribute your package to another R user (i.e. someone who doesn
 
 * there are no `.R` files in the `R/` directory - instead there are three
   files that store the parsed functions in an efficient format. This is
-  basically the results of loading all the R code and then saving the
+  basically the result of loading all the R code and then saving the
   functions with `save`, but with a little extra metadata to make things as
   fast as possible.
 
@@ -242,7 +242,7 @@ An __installed__ package is just a binary package that's been uncompressed into 
 
 A library is a collection of installed packages. You can have multiple libraries on your computer and most people have at least two: one for the recommended packages that come with a base R install (like `base`, `stats` etc), and one library where the packages you've installed live. The default is to make that directory dependent on which version of R you have installed - that's why you normally lose all your packages when you reinstall R. If you want to avoid this behaviour, you can manually set the `R_LIBS` environmental variable to point somewhere else. `.libPaths()` tells you where your current libraries live.
 
-This makes When you use `library(pkg)` to load a package, R looks through each path in `.libPaths()` to see if a directory called `pkg` exists. 
+When you use `library(pkg)` to load a package, R looks through each path in `.libPaths()` to see if a directory called `pkg` exists. 
 
 ## Installing packages
 
@@ -267,7 +267,7 @@ Package installation is the process whereby a source package gets converted into
 
 (to be integrated throughout the chapter)
 
-* Go to CRAN and download the source and binary for XXX. Unzipped and compare.
+* Go to CRAN and download the source and binary for XXX. Unzip and compare.
   How do they differ?
 
 * Download the __source__ packages for XXX, YYY, ZZZ. What directories do they
