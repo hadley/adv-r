@@ -314,7 +314,7 @@ length(ls(funenv("t.test")))
 length(ls(where("t.test")))
 ```
 
-This mechanism makes it possible for for packages to have internal objects that can be accessed by its functions, but not by external functions.
+This mechanism makes it possible for packages to have internal objects that can be accessed by its functions, but not by external functions.
 
 ### The environment created every time a function is run
 
