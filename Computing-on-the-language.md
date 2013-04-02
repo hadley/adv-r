@@ -1,5 +1,7 @@
 # Computing on the language
 
+''Flexibility in syntax, if it does not lead to ambiguity, would seem a reasonable thing to ask of an interactive programming language.'' --- Kent Pitman, http://www.nhplace.com/kent/Papers/Special-Forms.html
+
 In this section you'll learn how to write R code that modifies other R code.  Why might you want to do this?
 
 * to work around functions that use non-standard evaluation rules (like lattice functions, )
@@ -10,7 +12,35 @@ In this section you'll learn how to write R code that modifies other R code.  Wh
 
 * to extend the tools you learned in [[evaluation]] to create even more flexible functions for interactive data analysis
 
+* make use of R's lazy evaluation to write functions that you couldn't in other languages
+
 Thoroughout this chapter we're going to use tools from the `pryr` package to help see what's going on.  If you don't already have it, install it by running `devtools::install_github("pryr")`
+
+<!-- 
+http://lists.warhead.org.uk/pipermail/iwe/2005-July/000130.html
+
+Macro systems have a range of uses. Being able to choose the order of evaluation (see lazy evaluation and non-strict functions) enables the creation of new syntactic constructs (e.g. control structures) indistinguishable from those built into the language
+http://en.wikipedia.org/wiki/Macro_(computer_science)
+
+ -->
+
+```R
+gensym <- function(prefix = "G__") {
+  
+}
+random_name <- function(prefix) {
+  paste0(prefix, sample(letters, 5))
+}
+```
+
+Downsides: unlike most other languages no formal way to distinguish between regular and special evaluation. Must document!
+
+`test_that("asdfdsf", {})`
+`pryr::f()`
+
+Differences with macros: occurs at runtime, not compile time (which doesn't have any meaning in R). Returns results, not expression.  More like `fexprs`.
+
+Anaphoric functions (http://amalloy.hubpages.com/hub/Unhygenic-anaphoric-Clojure-macros-for-fun-and-profit): e.g. curve - expects to have x defined. `with_file`
 
 ## Basics of R code
 
@@ -21,16 +51,23 @@ x <- 4
 y <- x * 10
 ```
 
-We want to distinguish between the operation of multiplying x by 10 and assinging the result to `y`, vs. the actual result.  In R, we can capture the operation with `quote()`:
+We want to distinguish between the operation of multiplying x by 10 and assinging the result to `y` compared to the actual result (40).  In R, we can capture the operation with `quote()`:
 
 ```R
 z <- quote(y <- x * 10)
 z
 ```
 
-`quote()` gives us back a quoted call. A quoted call is also called an abstract syntax tree (AST) because it represents the abstruct structure of the code in a tree form. We can use `pryr::call_tree()` to see the hierarchy more clearly:
+`quote()` gives us back a quoted call: it's like a regular function call that hasn't happened yet. A quoted call is often called an expression, but we'll avoid that term because R already has expression objects which are lists of calls. `is.call()` checks if you have a quoted call:
 
 ```R
+is.call(z)
+```
+
+A quoted call is also called an abstract syntax tree (AST) because it represents the abstruct structure of the code in a tree form. We can use `pryr::call_tree()` to see the hierarchy more clearly:
+
+```R
+library(pryr)
 call_tree(z)
 ```
 
@@ -53,7 +90,7 @@ There are three basic things you'll see in a call tree: constants, names and cal
     call_tree(quote(`an unusual name`))
     ```
 
-* __calls__ represent the action of calling a function (not its result). These are suffixed with `()`.  The arguments to the function are listed below it, and can be a constant, a name or another call.
+* __calls__ represent the action of calling a function, not its result. These are suffixed with `()`.  The arguments to the function are listed below it, and can be constants, names or other calls.
 
     ```R
     call_tree(quote(f()))
@@ -70,13 +107,15 @@ There are three basic things you'll see in a call tree: constants, names and cal
     call_tree(quote(function(x, y) {x * y}))
     ```
 
-There are two ways to aggregate together multiple calls: expressions and braces.
+Constants, names and calls define the structure of all R code. 
 
-* Expressions are lists of calls, and are needed only when you parse a file. Expressions have one special behaviour compared to lists: when you `eval()` a expression, it evaluates each piece in turn and returns the result of last piece of parsed code.
+Computing on the language involves manipulating quoted calls in different ways.  You can:
 
-* Braces calls represent multiline functions as a call to the special function `{`, with one argument for each code chunk in the function.
+* evaluate them, to execute the operations that they represent
+* convert back and forth to text
+* modify them
 
-## Evaluation
+## Evaluating
 
 The `quote()` function captures the quoted call that represents an action to perform. `eval()` does the opposite: it takes a quoted call and performs the action it represents:
 
@@ -85,37 +124,67 @@ eval(z)
 y
 ```
 
-## Code to text and back again
+`eval()` has three main arguments:
 
-As well as representation as an quoted call, code also has a string representation. This section shows how to go from a string to an AST, and from an AST to a string.
+* `expr`, a quoted call
 
-The `parse` function converts a string into an expression. It's called parse because this is the formal CS name for converting a string representing code into a format that the computer can work with. Note that parse defaults to work within files - if you want to parse a string, you need to use the `text` argument.  Technically, parse returns an expression, or a list of calls. 
+* `envir`, an environment in which to evaluate the code.  You can also use objects that aren't environments, but behave like them, like lists and data frames.
 
-The `deparse` function is an almost inverse of `parse` - it converts an call into a text string representing that call. It's an almost inverse because it's impossible to be completely symmetric. Deparse will returns character vector with an entry for each line - if you want a single string be sure to `paste` it back together. 
+* `enclose`, if `envir` isn't an environment, where to look for names that aren't found in `envir`
 
-A common idiom in R functions is `deparse(substitute(x))` - this will capture the character representation of the code provided for the argument `x`. Note that you must run this code before you do anything to `x`, because substitute can only access the code which will be used to compute `x` before the promise is evaluated.
+## Parsing and deparsing
 
-### The missing argument
+You can convert quoted calls back and forth between text with `parse()` and `deparse()`.  `parse()` takes a character vector and returns a list of calls (an expression object). `deparse()` takes a quoted call and returns a character vector.
 
-If you experiment with the structure function arguments, you might come across a rather puzzling beast: the "missing" object:
+Note that because the primary use of `parse()` is parsing files of code on disk, the first argument is a file path, and if you have the code in a character vector, you need to use the `text` argument.
 
-    formals(plot)$x
-    x <- formals(plot)$x
-    x
-    # Error: argument "x" is missing, with no default
+```R
+z <- quote(y <- x * 10)
+deparse(z)
 
-It is basically an empty symbol, but you can't create it directly:
+parse(text = deparse(z))
+```
 
-    is.symbol(formals(plot)$x)
-    # [1] TRUE
-    deparse(formals(plot)$x)
-    # [1] ""
-    as.symbol("")
-    # Error in as.symbol("") : attempt to use zero-length variable name
-    
-You can either capture it from a missing argument of the formals of a function, as above, or create with `substitute()` or `bquote()`.
+`deparse()` returns a character vector with an entry for each line, and by default it will try to make lines that are around 60 characters long. If you want a single string be sure to `paste()` it back together. 
+
+`parse()` can't return just a regular quoted call, because there might be many quoted calls in an file. You should never need to create expression objects yourself, and all you need to about them is that they're a list of calls:
+
+```R
+exp <- parse(text = c("x <- 4", "y <- x * 10"))
+length(exp)
+exp[[1]]
+is.call(exp[[1]])
+call_tree(exp)
+```
+
+`parse()` and `deparse()` are not completely symmetric.
+
+With `parse()` and `eval()` you can write your own simple version of `source()`. We read in the file on disk, `parse()` it and then `eval()` each component in the specified environment. This version defaults to a new environment, so it doesn't affect your existing code. `source()` invisibly returns the result of the last expression and `simple_source()` does the same.
+
+```R
+simple_source <- function(file, envir = new.env()) {
+  stopifnot(file.exists(file))
+  stopifnot(is.environment(envir))
+
+  lines <- readLines(file, warn = FALSE)
+  exprs <- parse(text = lines, n = -1)
+
+  n <- length(exprs)
+  if (n == 0L) return(invisible())
+
+  for (i in seq_len(n - 1)) {
+    eval(exprs[i], envir)
+  }
+  invisible(eval(exprs[n], envir))
+}
+```
 
 ## Capturing calls
+
+* `substitute()`
+* `match.call()`
+* `sys.call()`
+
 
 ### `...`
 
@@ -137,14 +206,18 @@ Instead, you should use tools like `substitute` and `bquote` to modify expressio
 
 We've seen `substitute` used for it's ability to capture the unevaluated expression of a promise, but it also has another important role for modifying expressions. The second argument to `substitute`, `env`, can be an environment or list giving a set of replacements. It's easiest to see this with an example:
 
-    substitute(a + b, list(a = 1, b = 2))
-    # 1 + 2
+```R
+substitute(a + b, list(a = 1, b = 2))
+# 1 + 2
+```
 
 Note that `substitute` doesn't evaluate its first argument:
 
-    x <- quote(a + b)
-    substitute(x, list(a = 1, b = 2))
-    # x
+```R
+x <- quote(a + b)
+substitute(x, list(a = 1, b = 2))
+# x
+```
 
 We can create our own adaption of `substitute` (that uses `substitute`!) to work around this:
 
@@ -190,6 +263,19 @@ A special case of `substitute()` is `bquote()`.  It quotes an call, except for a
     # y + 5
 
 Substitute does have some limitations: you can't change the number of arguments or their names. To do that, you'll need to modify the call directly, the topic of the next section.
+
+A common idiom in R functions is `deparse(substitute(x))` - this will capture the character representation of the code provided for the argument `x`.  Remember that if expression of x is long, this will create a character vector with multiple elements, so prepare accordingly.
+
+It is also possible to create objects that don't print out correctly, but do `deparse()` ok:
+
+```R
+df <- data.frame(x = 1)
+x <- substitute(class(df), list(df = df))
+x
+deparse(x)
+eval(x)
+```
+
 
 ## Modifying calls directly
 
@@ -650,3 +736,23 @@ We're going to focus on `getParseData` (a new feature in R 2.16) which gives us 
 Destructuring assignment
   https://gist.github.com/4543212
   https://github.com/crowding/ptools/blob/master/R/bind.R -->
+
+## The missing argument
+
+If you experiment with the structure function arguments, you might come across a rather puzzling beast: the "missing" object:
+
+    formals(plot)$x
+    x <- formals(plot)$x
+    x
+    # Error: argument "x" is missing, with no default
+
+It is basically an empty symbol, but you can't create it directly:
+
+    is.symbol(formals(plot)$x)
+    # [1] TRUE
+    deparse(formals(plot)$x)
+    # [1] ""
+    as.symbol("")
+    # Error in as.symbol("") : attempt to use zero-length variable name
+    
+You can either capture it from a missing argument of the formals of a function, as above, or create with `substitute()` or `bquote()`.

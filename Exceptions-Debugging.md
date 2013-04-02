@@ -453,6 +453,11 @@ The following function changes the working directory, executes some code, and al
     in_dir(R.home(), stop("Error!"))
     getwd()
 
+<!-- 
+Look at http://stackoverflow.com/questions/15440226/advanced-error-handling-systematically-try-a-range-of-handlers
+ -->
+
+
 Another more casual way of cleaning up is the `on.exit` function, which is called when the function terminates.  It's not as fine grained as `tryCatch`, but it's a bit less typing.
 
     in_dir <- function(path, code) {
