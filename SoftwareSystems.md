@@ -319,7 +319,7 @@ with the following code.
     FibonacciGenerator <- function() {
       lastTwo <- c()
       function() {
-        lastTwo <<- c(tail(lastTwo, 1)),
+        lastTwo <<- c(tail(lastTwo, 1))
           ifelse(!length(lastTwo), 1, sum(lastTwo))
         tail(lastTwo, 1)
       }
@@ -380,10 +380,11 @@ using a closure.
         value=function() {
           stop("You cannot call the value method on an abstract class")
         }
+      )
     )
 
-    Fibonacci <- setRefClas("Fibonacci", contains="Sequence",
-      fields=list(lastTwo="numeric",
+    Fibonacci <- setRefClass("Fibonacci", contains="Sequence",
+      fields=list(lastTwo="numeric"),
       methods=list(
         nextNum=function(n=1) {
           lastTwo <<- c(tail(lastTwo, 1))
