@@ -387,8 +387,8 @@ using a closure.
       fields=list(lastTwo="numeric"),
       methods=list(
         nextNum=function(n=1) {
-          lastTwo <<- c(tail(lastTwo, 1))
-            ifelse(!length(lastTwo), 1, sum(lastTwo))
+          lastTwo <<- c(tail(lastTwo, 1),
+            ifelse(!length(lastTwo), 1, sum(lastTwo)))
           tail(lastTwo, 1)
         },
         value=function() {
