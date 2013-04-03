@@ -319,8 +319,8 @@ with the following code.
     FibonacciGenerator <- function() {
       lastTwo <- c()
       function() {
-        lastTwo <<- c(tail(lastTwo, 1))
-          ifelse(!length(lastTwo), 1, sum(lastTwo))
+        lastTwo <<- c(tail(lastTwo, 1),
+          ifelse(!length(lastTwo), 1, sum(lastTwo)))
         tail(lastTwo, 1)
       }
     }
