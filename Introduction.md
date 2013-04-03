@@ -1,6 +1,6 @@
 # Introduction
 
-This book has grown out of my 10 years of R programming, and my  constant struggle to understand the best way of doing things. The aim of this book is to help you understand R in much much faster than I did, and become an effective R programmer as quickly as possible. 
+This book has grown out of my 10 years of R programming, and my  constant struggle to understand the best way of doing things. The aim of this book is to help you understand R much much faster than I did, and become an effective R programmer as quickly as possible. 
 
 This book, particularly the package development part, is opinionated. You might not agree with everything we say, but it is much easier to learn from a cohesive viewpoint. Just because we don't talk about it in the book, doesn't mean it isn't right: there are so many techniques to solve problems in R that we couldn't include them all. There's a big difference between "I wouldn't do it this way", "I don't think that's the right way to do it", and "that's the wrong way to do it", and it's not always easy to capture that in writing. 
 
