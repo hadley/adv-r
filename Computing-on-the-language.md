@@ -38,9 +38,9 @@ Downsides: unlike most other languages no formal way to distinguish between regu
 `test_that("asdfdsf", {})`
 `pryr::f()`
 
-Differences with macros: occurs at runtime, not compile time (which doesn't have any meaning in R). Returns results, not expression.  More like `fexprs`.
+Differences with macros: occurs at runtime, not compile time (which doesn't have any meaning in R). Returns results, not expression.  More like `fexprs`. a fexpr is like a function where the arguments aren't evaluated by default; or a macro where the result is a value, not code.
 
-Anaphoric functions (http://amalloy.hubpages.com/hub/Unhygenic-anaphoric-Clojure-macros-for-fun-and-profit): e.g. curve - expects to have x defined. `with_file`
+Anaphoric functions (http://amalloy.hubpages.com/hub/Unhygenic-anaphoric-Clojure-macros-for-fun-and-profit): e.g. curve - expects to have x defined. `with_file`.
 
 ## Basics of R code
 
@@ -90,6 +90,7 @@ There are three basic things you'll see in a call tree: constants, names and cal
     call_tree(quote(`an unusual name`))
     ```
 
+
 * __calls__ represent the action of calling a function, not its result. These are suffixed with `()`.  The arguments to the function are listed below it, and can be constants, names or other calls.
 
     ```R
@@ -114,6 +115,63 @@ Computing on the language involves manipulating quoted calls in different ways. 
 * evaluate them, to execute the operations that they represent
 * convert back and forth to text
 * modify them
+
+### Constants
+
+Note that `quote()` is idempotent when you give it a single value:
+
+```R
+identical(1, quote(1))
+identical("test", quote("test"))
+```
+
+But not when you give it multiple values, because you always create a vector of multiple values a some call:
+
+```R
+identical(1:3, quote(1:3))
+identical(c(FALSE, TRUE), quote(c(FALSE, TRUE)))
+```
+
+### Names
+
+Another way to create names is to convert strings to names:
+
+```R
+as.name("name")
+identical(quote(name), as.name("name"))
+```
+
+### Calls
+
+You can also create calls by hand using `as.call()` or `call()`.  `call()` takes a string giving a function name, and additional arguments should be other expressions. `as.call()` takes a list where the first argument is the _name_ of a function (not a string), and the subsequent values are the arguments. 
+
+```R
+x_call <- call(":", 1, 10)
+mean_call <- as.call(list(quote(mean), x_call))
+
+identical(mean_call, quote(mean(1:10)))
+```
+
+Note that the following two calls look the same, but are actually different:
+
+```R
+(a <- call("mean", 1:10))
+(b <- call("mean", quote(1:10)))
+identical(a, b)
+call_tree(a)
+call_tree(b)
+```
+
+In the `a`, the first argument is a integer vector containing the numbers 1 to 10, and in `b` the first argument is a call to `:`.  You can put any R object into a expression, but the printing of expression objects will not always show the difference.  
+
+The key difference is where/when evaluation occurs:
+
+```R
+a <- call("print", Sys.time())
+b <- call("print", quote(Sys.time()))
+eval(a); Sys.sleep(1); eval(a)
+eval(b); Sys.sleep(1); eval(b)
+```
 
 ## Evaluating
 
@@ -181,35 +239,68 @@ simple_source <- function(file, envir = new.env()) {
 
 ## Capturing calls
 
-* `substitute()`
+### Capturing the current call
+
 * `match.call()`
 * `sys.call()`
 
+### Substitute
 
-### `...`
+`substitute()` is a general purpose tool with two main jobs: modifying expressions and capturing the expressions associated with function arguments. It's used most commonly for the second purpose (e.g. as in plot, where its used to label the x and y axes appropriately), but the other purpose is tremendously useful when you're constructing calls by yourself.
+
+`substitute()` has two arguments: `expr`, an R expression captured with non-standard evaluation; and `env`, an environment used to modify `expr`.  If `env` is the global environment then `expr` is returned unchanged. This makes `subsitute()` a little harder to play with interactively, because we always need to run it inside another environment.
+
+The following example shows the basic job of `substitute()`: modifying an expression to replace names with values.
 
 ```R
-substitute(list(...))
-match.call(expand.dots= FALSE)$`...`
+local({
+  a <- 1
+  b <- 2
+  substitute(a + b + x)
+})
+```
+
+If we run this code in the global environment, nothing happens:
+
+```R
+a <- 1
+b <- 2
+substitute(a + b + x)
+```
+
+Formally, substitution takes place by examining each name in the expression, and replacing the name if it refers to:
+
+* a promise, it's replaced by the expression associated with the promise. 
+ 
+* an ordinary variable, it's replaced by the value of the variable.
+
+* `...`, it's replaced by the contents of `...`.
+
+Otherwise the name is left as is. 
+
+If you want to substitute in a variable or function name, you need to be careful to supply the right type object to substitute:
+    
+```R
+substitute(a + b, list(a = y))
+# Error: object 'y' not found
+
+substitute(a + b, list(a = "y"))
+# "y" + b
+
+substitute(a + b, list(a = as.name("y")))
+# y + b
+
+substitute(a + b, list(a = quote(y)))
+# y + b
+
+substitute(a + b, list(a = y()))
+# Error: could not find function "y"
+
+substitute(a + b, list(a = quote(y())))
+# y() + b
 ```
 
 
-## Modifying calls
-
-It's generally a bad idea to create code by operating on its string representation: there is no guarantee that you'll create valid code.  Don't get me wrong: pasting strings together will often allow you to solve your problem in the least amount of time, but it may create subtle bugs that will take your users hours to track down. Learning more about the structure of the R language and the tools that allow you to modify it is an investment that will pay off by allowing you to make more robust code.
-
-[Some examples]
-
-Instead, you should use tools like `substitute` and `bquote` to modify expressions, where you are guaranteed to produce syntactically correct code (although of course it's still easy to make code that doesn't work).  
-
-## `substitute`
-
-We've seen `substitute` used for it's ability to capture the unevaluated expression of a promise, but it also has another important role for modifying expressions. The second argument to `substitute`, `env`, can be an environment or list giving a set of replacements. It's easiest to see this with an example:
-
-```R
-substitute(a + b, list(a = 1, b = 2))
-# 1 + 2
-```
 
 Note that `substitute` doesn't evaluate its first argument:
 
@@ -228,30 +319,59 @@ We can create our own adaption of `substitute` (that uses `substitute`!) to work
     x <- quote(a + b)
     substitute2(x, list(a = 1, b = 2))
 
-When writing functions like this, I find it helpful to do the evaluation last, only after I've made sure that I've constructed the correct substitute call with a few test inputs. If you split the two pieces (call construction and evaluation) in to two functions, it's also much easier to test more formally.
+When writing functions like this, I find it helpful to do the evaluation last, only after I've made sure that I've constructed the correct substitute call with a few test inputs. If you split the two pieces (call construction and evaluation) into two functions, it's also much easier to test more formally.
 
-If you want to substitute in a variable or function name, you need to be careful to supply the right type object to substitute:
-    
-    substitute(a + b, list(a = y))
-    # Error: object 'y' not found
-    
-    substitute(a + b, list(a = "y"))
-    # "y" + b
-    
-    substitute(a + b, list(a = as.name("y")))
-    # y + b
-    
-    substitute(a + b, list(a = quote(y)))
-    # y + b
-    
-    substitute(a + b, list(a = y()))
-    # Error: could not find function "y"
-    
-    substitute(a + b, list(a = call("y")))
-    # y() + b
-    
-    substitute(a + b, list(a = quote(y())))
-    # y() + b
+
+
+### Flexible quoting and unquoting
+
+`bquote()` is a slightly more general form of quote: it allows you to optionally quote and unquote some parts of an expression (it's similar to the backtick operator in lisp):
+
+```R
+a <- 1
+b <- 3
+bquote(a + b)
+bquote(a + .(b))
+bquote(.(a) + .(b))
+bquote(.(a + b))
+```
+
+This provides a fairly easy way to control what gets evaluated now, and what gets evaluated when the expression is evaluated.
+
+### `...`
+
+```R
+substitute(list(...))
+match.call(expand.dots= FALSE)$`...`
+```
+
+Note the difference between these two calls
+
+```R
+f1 <- function(...) {
+  substitute(list(...))
+}
+f2 <- function(...) {
+  match.call(expand.dots = FALSE)$`...`
+}
+f3 <- function(...) {
+  eval(substitute(alist(...)))
+}
+
+str(f1(a, b, c))
+str(f2(a, b, c))
+str(f3(a, b, c))
+```
+
+
+## Modifying calls
+
+It's generally a bad idea to create code by operating on its string representation: there is no guarantee that you'll create valid code.  Don't get me wrong: pasting strings together will often allow you to solve your problem in the least amount of time, but it may create subtle bugs that will take your users hours to track down. Learning more about the structure of the R language and the tools that allow you to modify it is an investment that will pay off by allowing you to make more robust code.
+
+[Some examples]
+
+Instead, you should use tools like `substitute` and `bquote` to modify expressions, where you are guaranteed to produce syntactically correct code (although of course it's still easy to make code that doesn't work).  
+
 
 A special case of `substitute()` is `bquote()`.  It quotes an call, except for any terms wrapped in `.()` which it evaluates:
 
@@ -415,7 +535,7 @@ fname <- function(call) {
     fname <- f
     f <- match.fun(f)
   } else if (is.function(f)) {
-    fname <- if (is.symbol(call)) as.character(call) else "<anonymous>"
+    fname <- if (is.name(call)) as.character(call) else "<anonymous>"
   }
   list(f, fname)
 }
@@ -746,13 +866,13 @@ If you experiment with the structure function arguments, you might come across a
     x
     # Error: argument "x" is missing, with no default
 
-It is basically an empty symbol, but you can't create it directly:
+It is basically an empty name, but you can't create it directly:
 
-    is.symbol(formals(plot)$x)
+    is.name(formals(plot)$x)
     # [1] TRUE
     deparse(formals(plot)$x)
     # [1] ""
-    as.symbol("")
-    # Error in as.symbol("") : attempt to use zero-length variable name
+    as.name("")
+    # Error in as.name("") : attempt to use zero-length variable name
     
 You can either capture it from a missing argument of the formals of a function, as above, or create with `substitute()` or `bquote()`.
