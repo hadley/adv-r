@@ -71,7 +71,7 @@ library(pryr)
 call_tree(z)
 ```
 
-There are three basic things you'll see in a call tree: constants, names and calls.
+There are three basic things you'll commonly see in a call tree: constants, names and calls.
 
 * __constants__ are atomic vectors, like `"a"` or `10`. These appear as is. 
 
@@ -90,7 +90,6 @@ There are three basic things you'll see in a call tree: constants, names and cal
     call_tree(quote(`an unusual name`))
     ```
 
-
 * __calls__ represent the action of calling a function, not its result. These are suffixed with `()`.  The arguments to the function are listed below it, and can be constants, names or other calls.
 
     ```R
@@ -107,6 +106,14 @@ There are three basic things you'll see in a call tree: constants, names and cal
     call_tree(quote(if (x > 1) x else 1/x))
     call_tree(quote(function(x, y) {x * y}))
     ```
+
+(In general, it's possible for any type of R object to live in a call tree, but these are the only three types you'll get from parsing R code. It's possible to put anything else inside an expression using the tools described below, but while technically correct, support is often patchy.)
+
+Note that `str()` is somewhat inconsistent with respect to this naming convention, describing calls as a language objects:
+
+```R
+str(quote(a + b))
+```
 
 Constants, names and calls define the structure of all R code. 
 
@@ -173,6 +180,69 @@ eval(a); Sys.sleep(1); eval(a)
 eval(b); Sys.sleep(1); eval(b)
 ```
 
+The behaviour of a call is almost identical to that of a list: a call has `length`, `'[[` and `[` methods. The length of a call minus 1 gives the number of arguments:
+
+```R
+x <- quote(read.csv(x, "important.csv", row.names = FALSE))
+length(x) - 1
+# [1] 3
+```
+
+The first element of the call is the _name_ of the function:
+
+```R
+x[[1]]
+# read.csv
+
+is.name(x[[1]])
+# [1] TRUE
+```
+
+The remaining elements are the arguments to the function, which can be extracted by name or by position.
+
+```R
+x$row.names
+# FALSE
+x[[3]]
+# [1] "important.csv"
+
+names(x)
+```
+
+Generally, extracting arguments by position is dangerous, because R's function calling semantics are so flexible. It's better to match by name, but all arguments might not be named. The solution to this problem is to use `match.call` which takes a function and a call as arguments:
+
+```R
+match.call(read.csv, x)
+# Or if you don't know in advance what the function is
+match.call(eval(x[[1]]), x)
+# read.csv(file = x, header = "important.csv", row.names = FALSE)
+```
+
+You can modify (or add) elements of the call with replacement operators:
+
+```R
+x$col.names <- FALSE
+x
+# read.csv(x, "important.csv", row.names = FALSE, col.names = FALSE)
+
+x[[5]] <- NULL
+x[[3]] <- "less-imporant.csv"
+x
+# read.csv(x, "less-imporant.csv", row.names = FALSE)
+```
+
+Calls also support the `[` method, but use it with care: it produces a call object, and it's easy to produce invalid calls. If you want to get a list of the arguments, explicitly convert to a list.
+
+```R
+x[-3] # remove the second argument
+
+x[-1] # remove the function name - but it's still a call!
+x
+
+# A list of the unevaluated arguments
+as.list(x[-1])
+```
+
 ## Evaluating
 
 The `quote()` function captures the quoted call that represents an action to perform. `eval()` does the opposite: it takes a quoted call and performs the action it represents:
@@ -237,12 +307,45 @@ simple_source <- function(file, envir = new.env()) {
 }
 ```
 
-## Capturing calls
+The real `source()` is considerably more complicated because it will also `echo` input and output, and has many additional settings to control behaviour.
+
+## Capturing expressions
 
 ### Capturing the current call
 
-* `match.call()`
-* `sys.call()`
+You may want to capture the expression that caused the current function to be run.  There are two ways to do this: `sys.call()` and `match.call()`.  `sys.call()` captures exactly what the user typed, where `match.call()` uses R's regular argument matching rules and converts everything to full name matching.  This is usually easier to work with because you know that the call will always have the same structure.
+
+```R
+f <- function(abc = 1, def = 2, ghi = 3, ...) {
+  list(sys = sys.call(), match = match.call())
+}
+f(d = 2, 2)
+```
+
+If you provide `call` and `definition` arguments to `match.call()` you can use it as a general tool for standardising function calls:
+
+```R
+call <- quote(mean(n = 5, x = 1:10))
+match.call(call = call, def = mean)
+match.call(call = call, def = mean.default)
+```
+
+This will be an important tool when we start manipulating existing function calls. If we don't use `match.call` we'll need a lot of extra code to deal with all the possible ways to call a function.
+
+We can wrap this up into a function. To figure out the definition of the associated function we evaluate the first component of the call, the name of the function.  We need to specify an environment here, because the function might be different in different places. Whenever we provide an environment parameter, `parent.frame()` is usually a good default. Note the check for primitive functions: they don't have `formals()` and handle argument matching specially, so there's nothing we can do.
+
+```R
+standardise_call <- function(call, env = parent.frame()) {
+  stopifnot(is.call(call))
+  f <- eval(call[[1]], env)
+  if (is.primitive(f)) return(call)
+
+  match.call(f, call)
+}
+standardise_call(call)
+
+standardise_call(quote(f(d = 2, 2)))
+```
 
 ### Substitute
 
@@ -268,6 +371,13 @@ b <- 2
 substitute(a + b + x)
 ```
 
+If you do want to use `substitute()` in the global environment (or you want to be careful elsewhere), you can use the second argument to provide a list or environment of values to be substituted:
+
+```R
+substitute(a + b + x, list(a = a, b = b))
+substitute(a + b + x, as.list(globalenv()))
+```
+
 Formally, substitution takes place by examining each name in the expression, and replacing the name if it refers to:
 
 * a promise, it's replaced by the expression associated with the promise. 
@@ -277,6 +387,12 @@ Formally, substitution takes place by examining each name in the expression, and
 * `...`, it's replaced by the contents of `...`.
 
 Otherwise the name is left as is. 
+
+It's quite possible to make nonsense commands with `substitute`
+
+```R
+substitute(y <- y + 1, list(y = 1))
+```
 
 If you want to substitute in a variable or function name, you need to be careful to supply the right type object to substitute:
     
@@ -300,8 +416,6 @@ substitute(a + b, list(a = quote(y())))
 # y() + b
 ```
 
-
-
 Note that `substitute` doesn't evaluate its first argument:
 
 ```R
@@ -312,20 +426,36 @@ substitute(x, list(a = 1, b = 2))
 
 We can create our own adaption of `substitute` (that uses `substitute`!) to work around this:
 
-    substitute2 <- function(x, env) {
-      call <- substitute(substitute(x, env), list(x = x))
-      eval(call)
-    }
-    x <- quote(a + b)
-    substitute2(x, list(a = 1, b = 2))
+```R
+substitute2 <- function(x, env) {
+  call <- substitute(substitute(x, env), list(x = x))
+  eval(call)
+}
+x <- quote(a + b)
+substitute2(x, list(a = 1, b = 2))
+```
+
+(This function is also available in `pryr`)
 
 When writing functions like this, I find it helpful to do the evaluation last, only after I've made sure that I've constructed the correct substitute call with a few test inputs. If you split the two pieces (call construction and evaluation) into two functions, it's also much easier to test more formally.
 
+As a general principle, whenever you write a function that uses non-standard evaluation, you always also want to provide a version that uses standard evaluation, and expects the user to provide quoted inputs. Otherwise, they'll have to resort to `substitute()` tricks, like above.
 
+A common idiom in R functions is `deparse(substitute(x))` - this will capture the character representation of the code provided for the argument `x`.  Remember that if expression of x is long, this will create a character vector with multiple elements, so prepare accordingly.
+
+As mentioned above, you can put any arbitrary R object into a call, not just atomic vectors, names and other calls. This is technically ok, but often results in undesiderable behaviour:
+
+```R
+df <- data.frame(x = 1)
+x <- substitute(class(df), list(df = df))
+x
+deparse(x)
+eval(x)
+```
 
 ### Flexible quoting and unquoting
 
-`bquote()` is a slightly more general form of quote: it allows you to optionally quote and unquote some parts of an expression (it's similar to the backtick operator in lisp):
+`bquote()` is a slightly more general form of quote: it allows you to optionally quote and unquote some parts of an expression (it's similar to the backtick operator in lisp).  Everything is quoted, _unless_ it's encapsulated in `.()` in which case it's evaluated and the result is inserted.
 
 ```R
 a <- 1
@@ -340,29 +470,51 @@ This provides a fairly easy way to control what gets evaluated now, and what get
 
 ### `...`
 
-```R
-substitute(list(...))
-match.call(expand.dots= FALSE)$`...`
-```
-
-Note the difference between these two calls
+There are a few ways to capture the unevaluated expressions supplied in `...`.  First, we could use the `expand.dots` argument to `match.call()` and then extract the dots component of the call:
 
 ```R
-f1 <- function(...) {
-  substitute(list(...))
-}
-f2 <- function(...) {
+dots_match <- function(x, y, ...) {
   match.call(expand.dots = FALSE)$`...`
 }
-f3 <- function(...) {
-  eval(substitute(alist(...)))
-}
-
-str(f1(a, b, c))
-str(f2(a, b, c))
-str(f3(a, b, c))
+str(dots_match(x = 1, a = 1, b = x ^ 2)
 ```
 
+Alternatively, we could use `substitute()`, but we need to put the dots inside another function call:
+
+```R
+dots_sub1 <- function(x, y, ...) {
+  substitute(list(...))
+}
+str(dots_sub1(x = 1, a = 1, b = x ^ 2))
+```
+
+However, this gives us a quoted call to list, not a list of quoted calls.  We can fix that with a bit of subsetting and manually converted to a list:
+
+```R
+dots_sub2 <- function(x, y, ...) {
+  as.list(substitute(list(...)))[-1]
+}
+str(dots_sub2(x = 1, a = 1, b = x ^ 2))
+```
+
+Or alternatively, we could take advantage of the `alist()` function which returns its unevaluated arguments:
+
+```R
+dots_sub3 <- function(x, y, ...) {
+  eval(substitute(alist(...)))
+}
+str(dots_sub3(x = 1, a = 1, b = x ^ 2))
+```
+
+It's worth looking at how `alist()` works:
+
+```R
+alist <- function (...) {
+  as.list(sys.call())[-1L]  
+}
+```
+
+So it's the same approach we took with `substitute()` + `list()` above.  
 
 ## Modifying calls
 
@@ -370,103 +522,7 @@ It's generally a bad idea to create code by operating on its string representati
 
 [Some examples]
 
-Instead, you should use tools like `substitute` and `bquote` to modify expressions, where you are guaranteed to produce syntactically correct code (although of course it's still easy to make code that doesn't work).  
-
-
-A special case of `substitute()` is `bquote()`.  It quotes an call, except for any terms wrapped in `.()` which it evaluates:
-
-    x <- 5
-    bquote(y + x)
-    # y + x
-    
-    bquote(y + .(x))
-    # y + 5
-
-Substitute does have some limitations: you can't change the number of arguments or their names. To do that, you'll need to modify the call directly, the topic of the next section.
-
-A common idiom in R functions is `deparse(substitute(x))` - this will capture the character representation of the code provided for the argument `x`.  Remember that if expression of x is long, this will create a character vector with multiple elements, so prepare accordingly.
-
-It is also possible to create objects that don't print out correctly, but do `deparse()` ok:
-
-```R
-df <- data.frame(x = 1)
-x <- substitute(class(df), list(df = df))
-x
-deparse(x)
-eval(x)
-```
-
-
-## Modifying calls directly
-
-You can also modify calls by taking advantage of their list-like behaviour.  List a list, a call has `length`, `'[[` and `[` methods. The length of a call minus 1 gives the number of arguments:
-
-    x <- quote(read.csv(x, "important.csv", row.names = FALSE))
-    length(x) - 1
-    # [1] 3
-
-The first element of the call is the name of the function:
-
-```R
-x[[1]]
-# read.csv
-
-is.name(x[[1]])
-# [1] TRUE
-```
-
-The remaining elements are the arguments to the function, which can be extracted by name or by position.
-
-```R
-x$row.names
-# FALSE
-x[[3]]
-# [1] "important.csv"
-
-names(x)
-```
-
-Generally, extracting arguments by position is dangerous, because R's function calling semantics are so flexible. It's better to match by name, but all arguments might not be named. The solution to this problem is to use `match.call` which takes a function and a call as arguments:
-
-```R
-match.call(read.csv, x)
-# Or if you don't know in advance what the function is
-match.call(eval(x[[1]]), x)
-# read.csv(file = x, header = "important.csv", row.names = FALSE)
-```
-
-You can modify (or add) elements of the call with replacement operators:
-
-```R
-x$col.names <- FALSE
-x
-# read.csv(x, "important.csv", row.names = FALSE, col.names = FALSE)
-
-x[[5]] <- NULL
-x[[3]] <- "less-imporant.csv"
-x
-# read.csv(x, "less-imporant.csv", row.names = FALSE)
-```
-
-Calls also support the `[` method, but use it with care: it produces a call object, and it's easy to produce invalid calls. If you want to get a list of the arguments, explicitly convert to a list.
-
-```R
-x[-3] # remove the second arugment
-# read.csv(x, row.names = FALSE)
-
-x[-1] # just look at the arguments - but is still a call!
-x("important.csv", row.names = FALSE)
-
-as.list(x[-1])
-# [[1]]
-# x
-# 
-# [[2]]
-# [1] "important.csv"
-# 
-# $row.names
-# [1] FALSE
-```
+Instead, you should use tools like `substitute()` and `bquote()` to modify expressions, where you are guaranteed to produce syntactically correct code (although of course it's still easy to make code that doesn't work). If `substitute()` and `bquote()` aren't general enough, then you can use `call()` and `as.call()` to build up an expression piece by piece.
 
 ### Cautions
 
@@ -474,15 +530,17 @@ Computing on the language is an extremely powerful tool, but it can also create 
 
 Typically, computing on the language is most useful for functions called directly by the user, not by other functions. For example, you might try using `subset()` from within a function that is given the name of a variable and it's desired value:
 
-      colname <- "cyl"
-      val <- 6
+```R
+colname <- "cyl"
+val <- 6
 
-      subset(mtcars, colname == val)
-      # Zero rows because "cyl" != 6
+subset(mtcars, colname == val)
+# Zero rows because "cyl" != 6
 
-      col <- as.name(colname)
-      substitute(subset(mtcars, col == val), list(col = col, val = val))
-      bquote(subset(mtcars, .(col) == .(val)))
+col <- as.name(colname)
+substitute(subset(mtcars, col == val), list(col = col, val = val))
+bquote(subset(mtcars, .(col) == .(val)))
+```
 
 Typically, it's better to avoid the function that does non-standard evaluation, and use the underlying verbose code.  In this case, use subsetting, not the subset function:
 
@@ -519,7 +577,7 @@ write.csv <- function(x, file = "", sep = ",", qmethod = "double", ...) {
 }
 ```
 
-This makes the function much much easier to understand - it's just calling `write.table` with different defaults.  This also fixes a subtle bug in the original `write.csv` - `write.csv(mtcars, row = FALSE)` does not turn off rownames, but `write.csv(mtcars, row.names = FALSE)` does. Generally, you always want to use the simplest tool that will solve a problem - that makes it more likely that others will understand your code.
+This makes the function much much easier to understand - it's just calling `write.table` with different defaults.  This also fixes a subtle bug in the original `write.csv` - `write.csv(mtcars, row = FALSE)` raises an error, but `write.csv(mtcars, row.names = FALSE)` does not. Generally, you always want to use the simplest tool that will solve a problem - that makes it more likely that others will understand your code.
 
 ### Exercises
 
@@ -585,7 +643,7 @@ f(1)
 unenclose(f(1))
 ```
 
-(Note we need to use `substitute2` here, because `substitute` doesn't evaluate its arguments).
+(Note we need to use `substitute2` here, because `substitute` uses non-standard evaluation).
 
 (Exercise: modify this function so it only substitutes in atomic vectors, not more complicated objects.)
 
