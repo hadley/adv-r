@@ -51,7 +51,7 @@ x <- 4
 y <- x * 10
 ```
 
-We want to distinguish between the operation of multiplying x by 10 and assinging the result to `y` compared to the actual result (40).  In R, we can capture the operation with `quote()`:
+We want to distinguish between the operation of multiplying x by 10 and assigning the result to `y` compared to the actual result (40).  In R, we can capture the operation with `quote()`:
 
 ```R
 z <- quote(y <- x * 10)
