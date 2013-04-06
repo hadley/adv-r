@@ -31,7 +31,7 @@ Imagine you've loaded a data file that uses -99 to represent missing values, lik
 
 ```R
 # Generate a sample dataset
-set.seet(1014)
+set.seed(1014)
 df <- data.frame(replicate(6, sample(c(1:10, -99), 10, rep = T)))
 names(df) <- letters[1:6]
 head(df)
