@@ -283,7 +283,7 @@ x[3]
 `{`(print(1), print(2), print(3))
 ```
 
-It is possible to override the definitions of these special functions, but this is almost certainly a bad idea. However, it can occassionally allow you to do something that would have otherwise been impossible. For example, this feature makes it possible for the `dplyr` package to translate R expressions into SQL expressions.
+It is possible to override the definitions of these special functions, but this is almost certainly a bad idea. However, it can occasionally allow you to do something that would have otherwise been impossible. For example, this feature makes it possible for the `dplyr` package to translate R expressions into SQL expressions.
 
 It's more often useful to treat special functions as ordinary functions. For example, we could use `lapply` to add 3 to every element of a list by first defining a function `add`, like this:
 
