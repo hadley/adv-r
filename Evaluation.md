@@ -247,61 +247,97 @@ As a developer you should also provide an alternative version that works when pa
 
 But hopefully a little thought, or maybe some experimentation, will show why this doesn't work.
 
-## How does local work?
+## When not to use substitute
 
-Rewrite to emphasise what local should do, and how you could implement it yourself.
+There are a number of base functions that use `substitute()` to capture the expression you've typed instead of just the value.  These include `data.frame()` and `library()`.
 
-The source code for `local` is relatively hard to understand because it is very concise and uses some sutble features of evaluation (including non-standard evaluation of both arguments). If you have read [[computing-on-the-language]], you might be able to puzzle it out, but to make it a bit easier I have rewritten it in a simpler style below. 
-
-```R
-local2 <- function(expr, envir = new.env()) {
-  env <- parent.frame()
-  call <- substitute(eval(quote(expr), envir))
-
-  eval(call, env)
-}
-a <- 100
-local2({
-  b <- a + sample(10, 1)
-  my_get <<- function() b
-})
-my_get()
-```
-
-You might wonder we can't simplify to this:
+For example, `data.frame()` uses the input expressions to automatically name the output variables if not otherwise provided:
 
 ```R
-local3 <- function(expr, envir = new.env()) {
-  eval(substitute(expr), envir)
-}
+x <- 10
+y <- "a"
+df <- data.frame(x, y)
+names(df)
 ```
 
-But it's because of how the arguments are evaluated - default arguments are evalauted in the scope of the function so that `local(x)` would not the same as `local(x, new.env())` without special effort.  
-
-`local` is effectively identical to 
+We could use this same idea to implement a function for lists:
 
 ```R
-local4 <- function(expr, envir = new.env()) {
-  envir <- eval(substitute(envir), parent.frame())
-  eval(substitute(expr), envir)
+list2 <- function(...) {
+  out <- list(...)
+  nms_out <- names(out)
+  nms_in <- vapply(eval(substitute(alist(...))), deparse, character(1))
+
+  if (is.null(nms_out)) {
+    names(out) <- nms_in
+  } else {
+    missing <- nms_out == ""
+    names(out)[missing] <- nms_in[missing]
+  }
+  out
 }
-local4(9+9)
+list2(x, y)
+list2(x, z = y)
 ```
 
-But a better implementation might be
+There are also a number of functions in R that use this in a less effective way, just to avoid using quotes.  For example `library()` and `require()` allow you to call them either with or without quotes. These two lines do exactly the same thing:
 
 ```R
-local5 <- function(expr, envir = NULL) {
-  if (is.null(envir))
-    envir <- new.env(parent = parent.frame())
-
-  eval(substitute(expr), envir)  
-}
+library(ggplot2)
+library("ggplot2")
 ```
 
-## Converting R code into other languages
+Things start to get complicated however, when you want to load a package given by a variable.  What do you think the following lines of code will do?
 
+```R
+x <- "plyr"
+library(x)
 
+ggplot2 <- "plyr"
+library(ggplot2)
+```
+
+For these to work, you have to use an additional argument:
+
+```R
+library(x, character.only = TRUE)
+```
+
+In my opinion this is not an effective use of substitute because it is confusing, needs an extra argument for a common scenario and only saves two characters.
+
+`ls()` is another offender:
+
+```R
+objs <- ls(package:base)
+
+rm(x)
+ls(x)
+
+x <- "package:plyr"
+ls(x)
+```
+
+Here it has different behaviour based on whether or not x is defined!
+
+This is what the code inside `ls()` looks like, and you can easily imagine situations where it will fail.
+
+```R
+if (!missing(name)) {
+    nameValue <- try(name, silent = TRUE)
+    if (identical(class(nameValue), "try-error")) {
+        name <- substitute(name)
+        if (!is.character(name)) 
+            name <- deparse(name)
+        warning(gettextf("%s converted to character string", 
+            sQuote(name)), domain = NA)
+        pos <- name
+    }
+    else pos <- nameValue
+}
+
+```
+
+Generally you want to avoid creating situations where the regular behaviour of R (only value matters, not name) is broken, unless there is significant gain. In my mind, eliminating two quotes does not meet this threshold.  It is useful in `data.frame()` because it eliminates a lot of redundancy in the common scenario when you're creating a data frame from existing variables.
 
 ## Conclusion
 
@@ -314,21 +350,3 @@ Now that you understand how our version of subset works, go back and read the so
 2. Read the code for `transform.data.frame` and `subset.data.frame`. What do they do and how do they work? Compare `transform.data.frame` to `plyr::mutate` what's different?
 
 3. Read the code for `write.csv`. How does it work? What are the advantages/disadvantages of this approach over calling `write.table` in the usual manner?
-
-<!-- # Appendix A: symbols, calls, expressions
-
-    as.symbol("a")
-    as.symbol("a b c")
-
-
-    substitute(x, list(x = quote(2 + 2)))
-    # 2 + 2
-    substitute(x, list(x = expression(2 + 2)))
-    # expression(2 + 2)
-
-    # From R language definition
-    eval(substitute(mode(x), list(x = quote(2 + 2))))
-    # "numeric"
-    eval(substitute(mode(x), list(x = expression(2 + 2))))
-    # "expression" -->
-

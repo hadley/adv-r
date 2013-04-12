@@ -2,9 +2,13 @@
 
 ''Flexibility in syntax, if it does not lead to ambiguity, would seem a reasonable thing to ask of an interactive programming language.'' --- Kent Pitman, http://www.nhplace.com/kent/Papers/Special-Forms.html
 
+It's generally a bad idea to create code by operating on its string representation: there is no guarantee that you'll create valid code.  Don't get me wrong: pasting strings together will often allow you to solve your problem in the least amount of time, but it may create subtle bugs that will take your users hours to track down. Learning more about the structure of the R language and the tools that allow you to modify it is an investment that will pay off by allowing you to make more robust code.
+
+[Some examples]
+
 In this section you'll learn how to write R code that modifies other R code.  Why might you want to do this?
 
-* to work around functions that use non-standard evaluation rules (like lattice functions, )
+* to work around functions that use non-standard evaluation rules (like lattice functions)
 
 * to create refactoring tools that modify your existing functions
 
@@ -13,6 +17,20 @@ In this section you'll learn how to write R code that modifies other R code.  Wh
 * to extend the tools you learned in [[evaluation]] to create even more flexible functions for interactive data analysis
 
 * make use of R's lazy evaluation to write functions that you couldn't in other languages
+
+* to understand how quite a few base functions work: `by`, `transform`, `subset`, `with`
+
+* understand how many functions capture the name of the variable supplied to them: `plot`, `table`, `data.frame`, `save`
+
+* understand where it causes and potential problems: `write.csv`, `library`, `ls`,
+
+<!-- 
+library(pryr)
+library(stringr)
+find_funs("package:base", fun_calls, fixed("substitute"))
+find_funs("package:base", fun_calls, fixed("match.call"))
+find_funs("package:base", fun_calls, fixed("quote"))
+ -->
 
 Thoroughout this chapter we're going to use tools from the `pryr` package to help see what's going on.  If you don't already have it, install it by running `devtools::install_github("pryr")`
 
@@ -231,6 +249,14 @@ x
 # read.csv(x, "less-imporant.csv", row.names = FALSE)
 ```
 
+You can insert other quoted calls:
+
+```R
+x <- quote(read.csv(x, "important.csv", row.names = FALSE))
+y <- match.call(read.csv, x)
+y$file <- quote(paste0(filename, ".csv"))
+```
+
 Calls also support the `[` method, but use it with care: it produces a call object, and it's easy to produce invalid calls. If you want to get a list of the arguments, explicitly convert to a list.
 
 ```R
@@ -242,6 +268,39 @@ x
 # A list of the unevaluated arguments
 as.list(x[-1])
 ```
+
+### A cautionary tale: `write.csv`
+
+`write.csv` is a base R function where call manipulation is used inappropriately:
+
+```R
+write.csv <- function (...) {
+  Call <- match.call(expand.dots = TRUE)
+  for (argname in c("append", "col.names", "sep", "dec", "qmethod")) {
+    if (!is.null(Call[[argname]])) {
+      warning(gettextf("attempt to set '%s' ignored", argname), domain = NA)
+    }
+  }
+  rn <- eval.parent(Call$row.names)
+  Call$append <- NULL
+  Call$col.names <- if (is.logical(rn) && !rn) TRUE else NA
+  Call$sep <- ","
+  Call$dec <- "."
+  Call$qmethod <- "double"
+  Call[[1L]] <- as.name("write.table")
+  eval.parent(Call)
+}
+```
+
+We could write a function that behaves identically using regular function call semantics:
+
+```R
+write.csv <- function(x, file = "", sep = ",", qmethod = "double", ...) {
+  write.table(x = x, file = file, sep = sep, qmethod = qmethod, ...)
+}
+```
+
+This makes the function much much easier to understand - it's just calling `write.table` with different defaults.  This also fixes a subtle bug in the original `write.csv` - `write.csv(mtcars, row = FALSE)` raises an error, but `write.csv(mtcars, row.names = FALSE)` does not. Generally, you always want to use the simplest tool that will solve a problem - that makes it more likely that others will understand your code.
 
 ## Evaluating
 
@@ -259,6 +318,17 @@ y
 * `envir`, an environment in which to evaluate the code.  You can also use objects that aren't environments, but behave like them, like lists and data frames.
 
 * `enclose`, if `envir` isn't an environment, where to look for names that aren't found in `envir`
+
+`quote()` and `eval()` are basically opposites. In the example below, each `eval()` peels off one layer of quoting.
+
+```R
+quote(2 + 2)
+eval(quote(2 + 2))
+
+quote(quote(2 + 2))
+eval(quote(quote(2 + 2)))
+eval(eval(quote(quote(2 + 2))))
+```
 
 ## Parsing and deparsing
 
@@ -351,9 +421,7 @@ standardise_call(quote(f(d = 2, 2)))
 
 `substitute()` is a general purpose tool with two main jobs: modifying expressions and capturing the expressions associated with function arguments. It's used most commonly for the second purpose (e.g. as in plot, where its used to label the x and y axes appropriately), but the other purpose is tremendously useful when you're constructing calls by yourself.
 
-`substitute()` has two arguments: `expr`, an R expression captured with non-standard evaluation; and `env`, an environment used to modify `expr`.  If `env` is the global environment then `expr` is returned unchanged. This makes `subsitute()` a little harder to play with interactively, because we always need to run it inside another environment.
-
-The following example shows the basic job of `substitute()`: modifying an expression to replace names with values.
+`substitute()` has two arguments: `expr`, an R expression captured with non-standard evaluation; and `env`, an environment used to modify `expr`.  If `env` is the global environment then `expr` is returned unchanged. This makes `subsitute()` a little harder to play with interactively, because we always need to run it inside another environment. The following example shows the basic job of `substitute()`: modifying an expression to replace names with values.
 
 ```R
 local({
@@ -363,7 +431,7 @@ local({
 })
 ```
 
-If we run this code in the global environment, nothing happens:
+Note that if we run this code in the global environment, nothing happens:
 
 ```R
 a <- 1
@@ -424,7 +492,7 @@ substitute(x, list(a = 1, b = 2))
 # x
 ```
 
-We can create our own adaption of `substitute` (that uses `substitute`!) to work around this:
+We can create our own adaption of `substitute` (that uses `substitute`!) to work around this: (This function is also available in `pryr`)
 
 ```R
 substitute2 <- function(x, env) {
@@ -435,7 +503,7 @@ x <- quote(a + b)
 substitute2(x, list(a = 1, b = 2))
 ```
 
-(This function is also available in `pryr`)
+Notice that we use the second argument to substitute twice: in the outer call to ensure that we only substitute `x`, not `env`; and in the inner call to make sure substitution happens using the variables in the user specified environment.
 
 When writing functions like this, I find it helpful to do the evaluation last, only after I've made sure that I've constructed the correct substitute call with a few test inputs. If you split the two pieces (call construction and evaluation) into two functions, it's also much easier to test more formally.
 
@@ -466,7 +534,7 @@ bquote(.(a) + .(b))
 bquote(.(a + b))
 ```
 
-This provides a fairly easy way to control what gets evaluated now, and what gets evaluated when the expression is evaluated.
+This provides a fairly easy way to control what gets evaluated when you call `bquote()`, and what gets evaluated when the expression is evaluated.
 
 ### `...`
 
@@ -482,7 +550,7 @@ str(dots_match(x = 1, a = 1, b = x ^ 2)
 Alternatively, we could use `substitute()`, but we need to put the dots inside another function call:
 
 ```R
-dots_sub1 <- function(x, y, ...) {
+dots_sub1 <- function(...) {
   substitute(list(...))
 }
 str(dots_sub1(x = 1, a = 1, b = x ^ 2))
@@ -491,7 +559,7 @@ str(dots_sub1(x = 1, a = 1, b = x ^ 2))
 However, this gives us a quoted call to list, not a list of quoted calls.  We can fix that with a bit of subsetting and manually converted to a list:
 
 ```R
-dots_sub2 <- function(x, y, ...) {
+dots_sub2 <- function(...) {
   as.list(substitute(list(...)))[-1]
 }
 str(dots_sub2(x = 1, a = 1, b = x ^ 2))
@@ -500,7 +568,7 @@ str(dots_sub2(x = 1, a = 1, b = x ^ 2))
 Or alternatively, we could take advantage of the `alist()` function which returns its unevaluated arguments:
 
 ```R
-dots_sub3 <- function(x, y, ...) {
+dots_sub3 <- function(...) {
   eval(substitute(alist(...)))
 }
 str(dots_sub3(x = 1, a = 1, b = x ^ 2))
@@ -514,13 +582,19 @@ alist <- function (...) {
 }
 ```
 
-So it's the same approach we took with `substitute()` + `list()` above.  
+So it's the same approach we took with `substitute()` + `list()` above, but encapsulated into a list.  `match.call()` is worth avoiding because of quirks with missing arguments:
+
+```R
+f1 <- function(...) dots_match(...)
+f2 <- function(...) dots_sub2(...)
+f3 <- function(...) dots_sub3(...)
+
+str(f1(x = 1, z = ))
+str(f2(x = 1, z = ))
+str(f3(x = 1, z = ))
+```
 
 ## Modifying calls
-
-It's generally a bad idea to create code by operating on its string representation: there is no guarantee that you'll create valid code.  Don't get me wrong: pasting strings together will often allow you to solve your problem in the least amount of time, but it may create subtle bugs that will take your users hours to track down. Learning more about the structure of the R language and the tools that allow you to modify it is an investment that will pay off by allowing you to make more robust code.
-
-[Some examples]
 
 Instead, you should use tools like `substitute()` and `bquote()` to modify expressions, where you are guaranteed to produce syntactically correct code (although of course it's still easy to make code that doesn't work). If `substitute()` and `bquote()` aren't general enough, then you can use `call()` and `as.call()` to build up an expression piece by piece.
 
@@ -548,36 +622,6 @@ Typically, it's better to avoid the function that does non-standard evaluation, 
 mtcars[mtcars[[colname]] == val, ]
 ```
 
-`write.csv` is a base R function where call manipulation is used inappropriately:
-
-```R
-write.csv <- function (...) {
-  Call <- match.call(expand.dots = TRUE)
-  for (argname in c("append", "col.names", "sep", "dec", "qmethod")) {
-    if (!is.null(Call[[argname]])) {
-      warning(gettextf("attempt to set '%s' ignored", argname), domain = NA)
-    }
-  }
-  rn <- eval.parent(Call$row.names)
-  Call$append <- NULL
-  Call$col.names <- if (is.logical(rn) && !rn) TRUE else NA
-  Call$sep <- ","
-  Call$dec <- "."
-  Call$qmethod <- "double"
-  Call[[1L]] <- as.name("write.table")
-  eval.parent(Call)
-}
-```
-
-We could write a function that behaves identically using regular function call semantics:
-
-```R
-write.csv <- function(x, file = "", sep = ",", qmethod = "double", ...) {
-  write.table(x = x, file = file, sep = sep, qmethod = qmethod, ...)
-}
-```
-
-This makes the function much much easier to understand - it's just calling `write.table` with different defaults.  This also fixes a subtle bug in the original `write.csv` - `write.csv(mtcars, row = FALSE)` raises an error, but `write.csv(mtcars, row.names = FALSE)` does not. Generally, you always want to use the simplest tool that will solve a problem - that makes it more likely that others will understand your code.
 
 ### Exercises
 
@@ -934,3 +978,55 @@ It is basically an empty name, but you can't create it directly:
     # Error in as.name("") : attempt to use zero-length variable name
     
 You can either capture it from a missing argument of the formals of a function, as above, or create with `substitute()` or `bquote()`.
+
+## How does local work?
+
+Rewrite to emphasise what local should do, and how you could implement it yourself.
+
+The source code for `local` is relatively hard to understand because it is very concise and uses some sutble features of evaluation (including non-standard evaluation of both arguments). If you have read [[computing-on-the-language]], you might be able to puzzle it out, but to make it a bit easier I have rewritten it in a simpler style below. 
+
+```R
+local2 <- function(expr, envir = new.env()) {
+  env <- parent.frame()
+  call <- substitute(eval(quote(expr), envir))
+
+  eval(call, env)
+}
+a <- 100
+local2({
+  b <- a + sample(10, 1)
+  my_get <<- function() b
+})
+my_get()
+```
+
+You might wonder we can't simplify to this:
+
+```R
+local3 <- function(expr, envir = new.env()) {
+  eval(substitute(expr), envir)
+}
+```
+
+But it's because of how the arguments are evaluated - default arguments are evalauted in the scope of the function so that `local(x)` would not the same as `local(x, new.env())` without special effort.  
+
+`local` is effectively identical to 
+
+```R
+local4 <- function(expr, envir = new.env()) {
+  envir <- eval(substitute(envir), parent.frame())
+  eval(substitute(expr), envir)
+}
+local4(9+9)
+```
+
+But a better implementation might be
+
+```R
+local5 <- function(expr, envir = NULL) {
+  if (is.null(envir))
+    envir <- new.env(parent = parent.frame())
+
+  eval(substitute(expr), envir)  
+}
+```
