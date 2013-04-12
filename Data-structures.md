@@ -142,7 +142,7 @@ When an accessor function is available, it's usually better to use that: get the
 
 # Higher dimensions
 
-Atomic vectors and lists are the building blocks for higher dimensional data structures. Atomic vectors extend to matrices anda arrays, and lists are used to create data frames.
+Atomic vectors and lists are the building blocks for higher dimensional data structures. Atomic vectors extend to matrices and arrays, and lists are used to create data frames.
 
 ## Matrices and arrays
 
