@@ -18,8 +18,9 @@ Objected oriented programming
   * [[Reference based classes|R5]]
 
 Advanced programming techniques
-  * [[Controlling evaluation|Evaluation]]
   * [[Computing on the language|Computing-on-the-language]]
+  * [[Expressions|expressions]]
+  * [[Computing in special environments|Special-environments]]
   * [[Exceptions, debugging and getting help|Exceptions-debugging]]
 
 Performant code
