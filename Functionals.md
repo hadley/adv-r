@@ -1,6 +1,5 @@
 
 
-
 # Functionals 
 
 <!--  
@@ -996,7 +995,7 @@ optimise(nll2, c(0, 100))$minimum
 
 We can verify these values are correct by using the analytic solution: in this case, it's just the mean of the data values, 32.1 and 5.45. 
 
-Another important mathmatical functional is `optim()`. It is a generalisation of `optim()` to more than one dimension. If you're interested in how `optim()` works, you might want to explore the `Rvmmin` package, which provides a pure-R implementation of R. Interestingly `Rvmmin` is no slower than `optim()`, even though it is written in R, not C: for this problem, the bottleneck is evaluating the function multiple times, not controlling the optimisation.
+Another important mathmatical functional is `optim()`. It is a generalisation of `optimise()` to more than one dimension. If you're interested in how `optim()` works, you might want to explore the `Rvmmin` package, which provides a pure-R implementation of R. Interestingly `Rvmmin` is no slower than `optim()`, even though it is written in R, not C: for this problem, the bottleneck is evaluating the function multiple times, not controlling the optimisation.
 
 ### Exercises
 
