@@ -4,6 +4,7 @@
 library(pryr)
 library(stringr)
 find_funs("package:base", fun_calls, fixed("substitute"))
+find_funs("package:base", fun_calls, fixed("eval"))
 find_funs("package:base", fun_calls, fixed("match.call"))
 find_funs("package:base", fun_calls, fixed("quote"))
  -->
@@ -12,7 +13,7 @@ find_funs("package:base", fun_calls, fixed("quote"))
 
 It's generally a bad idea to create code by operating on its string representation: there is no guarantee that you'll create valid code.  Don't get me wrong: pasting strings together will often allow you to solve your problem in the least amount of time, but it may create subtle bugs that will take your users hours to track down. Learning more about the structure of the R language and the tools that allow you to modify it is an investment that will pay off by allowing you to make more robust code.
 
-Differences with macros: occurs at runtime, not compile time (which doesn't have any meaning in R). Returns results, not expression.  More like `fexprs`. a fexpr is like a function where the arguments aren't evaluated by default; or a macro where the result is a value, not code.
+Differences with macros: occurs at runtime, not compile time (which doesn't have any meaning in R). Returns results, not expression.  More like `fexprs`. a fexpr is like a function where the arguments aren't evaluated by default; or a macro where the result is a value, not code. 
 
 Thoroughout this chapter we're going to use tools from the `pryr` package to help see what's going on.  If you don't already have it, install it by running `devtools::install_github("pryr")`
 
