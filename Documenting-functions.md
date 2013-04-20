@@ -13,7 +13,7 @@ This workflow has a number of advantages over writing `.Rd` files by hand:
   figure out a lot of information `.Rd` files need by itself.  For example, it
   can automatically add links to super and subclasses.
 
-* Rt takes care of other files that are fiddly or downright painful to
+* It takes care of other files that are fiddly or downright painful to
   maintain by hand: the [namespace](`NAMESPACE`), collate order in
   description, and the demos index.
 
