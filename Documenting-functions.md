@@ -148,9 +148,6 @@ If use explicit tags you can put them in any order and still get the same output
 
 You can also opt to document multiple functions in one `.Rd` file.  If you want to do so, use the `@rdname` tag to manully specify the name of the rd file (if you omit this it's done automatically in a way that every object gets its own documentation). You should be careful about documenting too many functions in one file because it gets confusing (which parameter belongs to which function?), but it can be useful if the functions are tightly connected.  
 
-      
-      mean <- function()
-
 You can get documentation on a given tag with `?TagName`. For example, if you wanted to get help on the param tag, you'd do `?TagParam`. (Unfortunately you can't do `?@param` because of a technical limitation in Rd files.)
 
 ## Documenting functions (and methods)
