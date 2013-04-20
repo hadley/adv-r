@@ -146,7 +146,7 @@ If use explicit tags you can put them in any order and still get the same output
       #'
       sum <- function(..., na.rm = TRUE) {}
 
-You can also opt to document multiple functions in one file.  If you want to do so, use the `@rdname` tag to manully specify the name of the rd file (if you omit this it's done automatically in a way that every object gets its own documentation). You should be careful about documenting too many functions in one file because it gets confusing (which parameter belongs to which function?), but it can be useful if the functions are tightly connected.  
+You can also opt to document multiple functions in one `.Rd` file.  If you want to do so, use the `@rdname` tag to manully specify the name of the rd file (if you omit this it's done automatically in a way that every object gets its own documentation). You should be careful about documenting too many functions in one file because it gets confusing (which parameter belongs to which function?), but it can be useful if the functions are tightly connected.  
 
       
       mean <- function()
