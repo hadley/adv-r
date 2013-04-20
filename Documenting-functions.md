@@ -211,7 +211,6 @@ The following tags apply to all types of documentation
   documentation when the user looks them up from the command line. 
 
 * `@family`
-### Documenting a S4 method
 
 ## Documenting S3 generic functions and methods
 
