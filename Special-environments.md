@@ -9,8 +9,11 @@ Evaluating code in different environments
 
 * Evaluate code in a special context: `local`, `capture.output`, `with_*`
 
+* parseNamespace
+
 * Supply an expression instead of a function: `curve` (
 Anaphoric functions), anaphoric if, http://www.arcfn.com/doc/anaphoric.html, http://www.perlmonks.org/index.pl?node_id=666047
+
 
 Anaphoric functions (http://amalloy.hubpages.com/hub/Unhygenic-anaphoric-Clojure-macros-for-fun-and-profit): e.g. curve - expects to have x defined. `with_file`.
 

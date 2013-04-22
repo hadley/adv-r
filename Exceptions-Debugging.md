@@ -1,5 +1,7 @@
 # Exceptions, debugging and getting help.
 
+<!-- http://www.noamross.net/blog/2013/4/18/r-debug-tools.html -->
+
 This chapter describes techniques to use when things go wrong:
 
 * Exceptions: dealing with errors in your code

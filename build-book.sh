@@ -19,8 +19,9 @@ pandoc --chapters -o programming.pdf --latex-engine xelatex \
   S4.md \
   R5.md \
   part-adv.md \
-  Evaluation.md \
   Computing-on-the-language.md \
+  Expressions.md \
+  Special-environments.md \
   Exceptions-debugging.md \
   part-perf.md \
   Profiling.md \

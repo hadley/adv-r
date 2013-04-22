@@ -1,6 +1,8 @@
 # Special evaluation
 
-R has powerful tools for computing not only on values, but also on expressions. These tools powerful and magical, and one of the most surprising features if you're coming from another programming language.  Take the following simple snippet of code that draws a sine curve:
+''Flexibility in syntax, if it does not lead to ambiguity, would seem a reasonable thing to ask of an interactive programming language.'' --- Kent Pitman, http://www.nhplace.com/kent/Papers/Special-Forms.html
+
+R has powerful tools for computing not only on values, but also on the actions that lead to those values. These tools powerful and magical, and one of the most surprising features if you're coming from another programming language.  Take the following simple snippet of code that draws a sine curve:
 
 ```R
 x <- seq(0, 2 * pi, length = 100)
@@ -136,6 +138,23 @@ eval(quote(x <- 1))
 eval(quote(x))
 
 eval(quote(cyl))
+```
+
+Note that `quote()` and `eval()` are basically opposites. In the example below, each `eval()` peels off one layer of quoting.
+
+```R
+quote(2 + 2)
+eval(quote(2 + 2))
+
+quote(quote(2 + 2))
+eval(quote(quote(2 + 2)))
+eval(eval(quote(quote(2 + 2))))
+```
+
+What will this code return?
+
+```R
+eval(quote(eval(quote(eval(quote(2 + 2))))))
 ```
 
 The second argument to `eval()` controls which environment the code is evaluated in:
