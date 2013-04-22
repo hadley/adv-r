@@ -181,8 +181,6 @@ It is basically an empty name, but you can't create it directly:
     
 You can either capture it from a missing argument of the formals of a function, as above, or create with `substitute()` or `bquote()`.
 
-#### `...`
-
 ### Calls
 
 You can also create calls by hand using `as.call()` or `call()`.  `call()` takes a string giving a function name, and additional arguments should be other expressions. `as.call()` takes a list where the first argument is the _name_ of a function (not a string), and the subsequent values are the arguments. 
@@ -451,65 +449,6 @@ bquote(.(a + b))
 ```
 
 This provides a fairly easy way to control what gets evaluated when you call `bquote()`, and what gets evaluated when the expression is evaluated.
-
-### `...`
-
-There are a few ways to capture the unevaluated expressions supplied in `...`.  First, we could use the `expand.dots` argument to `match.call()` and then extract the dots component of the call:
-
-```R
-dots_match <- function(x, y, ...) {
-  match.call(expand.dots = FALSE)$`...`
-}
-str(dots_match(x = 1, a = 1, b = x ^ 2)
-```
-
-Alternatively, we could use `substitute()`, but we need to put the dots inside another function call:
-
-```R
-dots_sub1 <- function(...) {
-  substitute(list(...))
-}
-str(dots_sub1(x = 1, a = 1, b = x ^ 2))
-```
-
-However, this gives us a quoted call to list, not a list of quoted calls.  We can fix that with a bit of subsetting and manually converted to a list:
-
-```R
-dots_sub2 <- function(...) {
-  as.list(substitute(list(...)))[-1]
-}
-str(dots_sub2(x = 1, a = 1, b = x ^ 2))
-```
-
-Or alternatively, we could take advantage of the `alist()` function which returns its unevaluated arguments:
-
-```R
-dots_sub3 <- function(...) {
-  eval(substitute(alist(...)))
-}
-str(dots_sub3(x = 1, a = 1, b = x ^ 2))
-```
-
-It's worth looking at how `alist()` works:
-
-```R
-alist <- function (...) {
-  as.list(sys.call())[-1L]  
-}
-```
-
-So it's the same approach we took with `substitute()` + `list()` above, but encapsulated into a list.  `match.call()` is worth avoiding because of quirks with missing arguments:
-
-```R
-f1 <- function(...) dots_match(...)
-f2 <- function(...) dots_sub2(...)
-f3 <- function(...) dots_sub3(...)
-
-str(f1(x = 1, z = ))
-str(f2(x = 1, z = ))
-str(f3(x = 1, z = ))
-```
-
 
 ### Getting the name of an argument
 
@@ -821,6 +760,19 @@ unenclose(f(1))
 (Exercise: modify this function so it only substitutes in atomic vectors, not more complicated objects.)
 
 Look at the source code for partial.
+
+
+## Formulas
+
+There is one other approach we could use: a formula. `~` works much like quote, but it also captures the environment in which it is created. We need to extract the second component of the formula because the first component is `~`.
+
+```R
+subset <- function(x, f) {
+  r <- eval(f'[[2]], x, environment(f))
+  x[r, ]
+}
+subset(mtcars, ~ cyl == x)
+```
 
 ### Exercises
 
