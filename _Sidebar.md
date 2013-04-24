@@ -17,10 +17,13 @@ Objected oriented programming
   * [[The S4 object system|S4]]
   * [[Reference based classes|R5]]
 
-Advanced programming techniques
-  * [[Computing on the language|Computing-on-the-language]]
+Computing on the language
+  * [[Introduction|Computing-on-the-language]]
   * [[Expressions|expressions]]
+  * [[Formulas|formula]]
   * [[Computing in special environments|Special-environments]]
+
+Advanced programming techniques
   * [[Exceptions, debugging and getting help|Exceptions-debugging]]
 
 Performant code

@@ -21,6 +21,7 @@ pandoc --chapters -o programming.pdf --latex-engine xelatex \
   part-adv.md \
   Computing-on-the-language.md \
   Expressions.md \
+  Formulas.md \
   Special-environments.md \
   Exceptions-debugging.md \
   part-perf.md \
