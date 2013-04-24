@@ -18,23 +18,15 @@ In [[computing on the language]], you learned the basics of accessing the expres
 
 * The structure of expressions (a tree made up of constants, names and calls) and how you can create and modify them directly
 
-* How to flexibly convert expressions between their tree form and text, and learn how `source()` works.
+* How to flexibly convert expressions between their tree form and their text form, and learn how `source()` works.
 
-* Walk the code tree: `pryr:call_tree()`, `codetools::findGlobals`, find assignments, find calls
+* Create functions by hand as an alternative instead of using a closure, so that viewing the source of the function shows something meaningful
 
-  * List all assignments in a function
-  * Replace `T` with `TRUE` and `F` with `FALSE`
-
-
-* Modifying calls: `partial_eval`
-
-* Create functions by hand as an alternative to closures: `pryr::make_function`, `pryr::unenclose`, `pryr::partial`, `memoise`
+* Walk the code tree using recursive functions to understand how many of the functions in the codetools package work, and to you write your own functions that detect if a function uses logical abbreviations, list all assignments inside a function and understand how `bquote()` works.
 
 It's generally a bad idea to create code by operating on its string representation: there is no guarantee that you'll create valid code.  Don't get me wrong: pasting strings together will often allow you to solve your problem in the least amount of time, but it may create subtle bugs that will take your users hours to track down. Learning more about the structure of the R language and the tools that allow you to modify it is an investment that will pay off by allowing you to make more robust code.
 
 Thoroughout this chapter we're going to use tools from the `pryr` package to help see what's going on.  If you don't already have it, install it by running `devtools::install_github("pryr")`
-
-Because code is a tree, we're going to need recursive functions to work with it. You now have basic understanding of how code in R is put together internally, and so we can now start to write some useful functions. In this section we'll write functions to:
 
 ## Structure of expressions
 
@@ -428,6 +420,8 @@ simple_source <- function(file, envir = new.env()) {
 
 The real `source()` is considerably more complicated because it preserves the underlying source course, can `echo` input and output, and has many additional settings to control behaviour.
 
+### Exercises
+
 ## Capturing the current call
 
 You may want to capture the expression that caused the current function to be run. There are two ways to do this: 
@@ -549,17 +543,13 @@ object.size(environment(mod$terms)$x)
 
 ## Creating a function
 
-There's one function call that's so special it's worth devoting a little extra attention to: the `function` function that creates functions.
-
-This is another place we'll see pairlists (the object type that predated lists in R's history).  The arguments of a function are stored as a pairlist: for our purposes we can treat a pairlist like a list, but we need to remember to cast arguments with `as.pairlist()`.
+There's one function call that's so special it's worth devoting a little extra attention to: the `function` function that creates functions. This is one place we'll see pairlists (the object type that predated lists in R's history).  The arguments of a function are stored as a pairlist: for our purposes we can treat a pairlist like a list, but we need to remember to cast arguments with `as.pairlist()`.
 
 ```R
 str(quote(function(x, y = 1) x + y)[[2]])
 ````
 
-Building up a function by hand is also useful when you can't use a closure because you don't know in advance what the arguments will be. We'll use `pryr::make_function` to build up a function from its component pieces: an argument list, a quoted body (the code to run) and the environment in which it is defined (which defaults to the current environment):
-
-It's 
+Building up a function by hand is also useful when you can't use a closure because you don't know in advance what the arguments will be. We'll use `pryr::make_function` to build up a function from its component pieces: an argument list, a quoted body (the code to run) and the environment in which it is defined (which defaults to the.current environment). The function itself is fairly simple: it creates a call to `function` with the args and body as arguments, and then evaluates that in the correct environment so that the function has the right scope;
 
 ```R
 make_function <- function(args, body, env = parent.frame()) {
@@ -570,20 +560,33 @@ make_function <- function(args, body, env = parent.frame()) {
 }
 ```
 
-`pryr::make_function()` includes a little more error checking but is otherwise identical.
+(`pryr::make_function()` includes a little more error checking but is otherwise identical.)
+
+Let's see a simple example
 
 ```R
-add <- make_function(alist(a = 1, b = 2), quote(a + b))
+a <- make_function(alist(a = 1, b = 2), quote(a + b))
+add2(1)
+add2(1, 2)
 ```
 
-Note that to use this function we need to use the special `alist` function to create an **a**rgument list.
+Note our use of the `alist()` (**a**rgument list) function.  We used this earlier when capturing unevaluated `...`, and we use it again here. Note that `alist()` doesn't evaluate it's arguments and supports arguments with and without defaults (although if you don't want a default you need to be explicit). There's one small trick if you want to have `...` in the argument list: you need to use it on the left-hand side of an equals sign.
 
 ```R
-add2 <- make_function(alist(a = 1, b = a), quote(a + b))
-add(1)
-add(1, 2)
+make_function(alist(a = , b = a), quote(a + b))
+make_function(alist(a = , b = ), quote(a + b))
+make_function(alist(a = , b = , ... =), quote(a + b))
+```
 
-add3 <- make_function(alist(a = , b = ), quote(a + b))
+If you want to mix evaluated and unevaluated functions, it might be easier to make the list by hand:
+
+```R
+x <- 1
+args <- list()
+args$a <- x
+args$b <- quote(expr = )
+
+make_function(args, quote(a + b))
 ```
 
 ### Unenclose
@@ -610,11 +613,11 @@ unenclose(f(1))
 
 * Why does `unenclose()` use `substitute2()`, not `substitute`?
 
-* Modify `unenclose` so it only substitutes in atomic vectors, not more complicated object. (Hint: you'll need two cases to handle the two potential parent environments.)
+* Modify `unenclose` so it only substitutes in atomic vectors, not more complicated object. (Hint: think about what the parent environment should be.)
 
 * Read the documentation and source for `pryr::partial()` - what does it do? How does it work?
 
-## Walking the call tree
+## Walking the call tree with recursive functions
 
 We've seen a couple of examples modifying a single call using `substitute()` or `modify_call()`. What if we want to do something more complicated, drilling down into a nested set of function calls and either extracting useful information or modifying the calls.  The `codetools` package, included in the base distribution, provides some built-in tools for automated code inspection that use these ideas:
 
@@ -626,34 +629,53 @@ We've seen a couple of examples modifying a single call using `substitute()` or 
   unused local variables, unused parameters and use of partial 
   argument matching.
 
-* `showTree`: works in a similar way to the `drawTree` used above, 
-  but presents the parse tree in a more compact format based on 
-  Lisp's S-expressions
+In this section you'll learn how to write functions that do things like that.
 
-In this section we'll learn how those functions work and then write our own functions to do interesting things like extracting the names of all assignments inside a function, or listing all the functions called by a function.
-
-The key to any function that works with the parse tree right is getting the recursion right, which means making sure that you know what the base case is (the leaves of the tree) and figuring out how to combine the results from the recursive case. The nodes of a tree are always calls (except in the rare case of function arguments, which are pairlists), and the leaves are names, single argument calls or constants. R provides a helpful function to distinguish whether an object is a node or a leave: `is.recursive()`.
+Because code is a tree, we're going to need recursive functions to work with it. You now have basic understanding of how code in R is put together internally, and so we can now start to write some useful functions. The key to any function that works with the parse tree right is getting the recursion right, which means making sure that you know what the base case is (the leaves of the tree) and figuring out how to combine the results from the recursive case. The nodes of a tree are always calls (except in the rare case of function arguments, which are pairlists), and the leaves are names, single argument calls or constants. R provides a helpful function to distinguish whether an object is a node or a leaf: `is.recursive()`.
 
 ### Finding F and T
 
-```R
-is_flag <- function(x) {
-  is.name(x) && (identical(x, quote(T)) || identical(x, quote(F)))
-}
+We'll start with a function returns a single logical value, indicating whether or not a function uses the logical abbreviations `T` and `F`.  Using `T` and `F` is generally considered to be poor coding practice, and it's something that `R CMD check` will warn about.
 
+When writing a recursive function, it's useful to first think about the simplest case: how do we tell if a leaf is a `T` or a `F`?  This is very simple since the set of possibilities is small enough to enumeriate explicitly:
+
+```R
+is_logical_abbr <- function(x) {
+  identical(x, quote(T)) || identical(x, quote(F))
+}
+is_logical_abbr(quote(T))
+is_logical_abbr(quote(TRUE))
+is_logical_abbr(quote(true))
+is_logical_abbr(quote(10))
+```
+
+Next we right the recursive function. The base case is simple: if the object isn't recursive, then we just return the value of `is_logical_abbr()` applied to the object. If the object is not a node, then we work through each of the elements of the node in turn, recursively calling `logical_abbr()`. We need a special case for functions because we can't iterate through their components, instead we need to explicitly operate on the body and formals separately.
+
+```R
 logical_abbr <- function(x) {
   # Base case
-  if (!is.recursive(x)) return(is_flag(x))
+  if (!is.recursive(x)) return(is_logical_abbr(x))
 
-  # Recursive case
-  for (i in seq_along(x)) {
-    if (is_flag(x[[i]])) return(TRUE)
+  # Recursive cases
+  if (is.function(x)) {
+    if (logical_abbr(body(x))) return(TRUE)
+    if (logical_abbr(formals(x))) return(TRUE)
+  } else {
+    for (i in seq_along(x)) {
+      if (logical_abbr(x[[i]])) return(TRUE)
+    }
   }
+
   FALSE
 }
 
 logical_abbr(quote(T))
 logical_abbr(quote(mean(x, na.rm = T)))
+
+f <- function(x = TRUE) {
+  g(x + T)
+}
+logical_abbr(f)
 ```
 
 ### Finding all variables created by assignment
@@ -669,7 +691,7 @@ is_call_to <- function(x, name) {
 
 find_assign <- function(obj) {
   # Base case
-  if (!is.recursive(obj)) return(character())
+  if (!is.recursive(obj)) return()
 
   if (is_call_to(obj, "<-")) {
     obj[[2]]
@@ -684,7 +706,7 @@ find_assign(quote({
 }))
 ```
 
-This function seems to work for these simple cases, but it's a bit verbose.  Instead of returning a list, let's keep it simple and stick with a character vector. We'll also test it with two slightly more complicated examples:
+This function seems to work for these simple cases, but the output is rather verbose. Instead of returning a list, let's keep it simple and stick with a character vector. We'll also test it with two slightly more complicated examples:
 
 ```R
 find_assign <- function(obj) {
@@ -709,7 +731,7 @@ find_assign(quote({
 # [1] "x"
 ```
 
-This is better, but we have two problems: repeated names, and we miss assignments inside function calls. The fix for the first problem is easy: we need to wrap `unique` around the recursive case to remove duplicate assignments. The second problem is a bit more subtle: it's possible to do assignment within the arguments to a call, but we're failing to recurse down in to this case. 
+This is better, but we have two problems: repeated names, and we miss assignments inside function calls. The fix for the first problem is easy: we need to wrap `unique()` around the recursive case to remove duplicate assignments. The second problem is a bit more subtle: it's possible to do assignment within the arguments to a call, but we're failing to recurse down in to this case. 
 
 ```R
 find_assign <- function(obj) {
@@ -749,19 +771,6 @@ draw_tree(quote({
   ls$a <- 5
   names(ls) <- "b"
 }))
-# \- {()
-#    \- <-()
-#       \- ls
-#       \- list()
-#    \- <-()
-#       \- $()
-#          \- ls
-#          \- a
-#       \- 5
-#    \- <-()
-#       \- names()
-#          \- ls
-#       \- "b"
 ```
 
 This behaviour might be ok, but we probably just want assignment into whole objects, not assignment that modifies some property of the object. Drawing the tree for that quoted object helps us see what condition we should test for - we want the object on the left hand side of assignment to be a name.  This gives the final version of the `find_assign` function.
@@ -786,11 +795,11 @@ find_assign(quote({
 [1] "ls"
 ```
 
-Making this function work absolutely correct requires quite a lot more work, because we need to figure out all the other ways that assignment might happen: with `=`, `assign`, or `delayedAssign`.
+Making this function work absolutely correct requires quite a lot more work, because we need to figure out all the other ways that assignment might happen: with `=`, `assign()`, or `delayedAssign()`. But a static tool can never be perfect: the best you can hope for is a set of heuristics that catches the most common 90% of cases. 
 
-### Flexible quoting and unquoting
+### Modifying the call tree
 
-`bquote()` is a slightly more general form of quote: it allows you to optionally quote and unquote some parts of an expression (it's similar to the backtick operator in lisp).  Everything is quoted, _unless_ it's encapsulated in `.()` in which case it's evaluated and the result is inserted.
+Instead of returning vectors computed from the contents of an expression, you can also return a modified expression, such as base R's `bquote()`. `bquote()` is a slightly more flexible form of quote: it allows you to optionally quote and unquote some parts of an expression (it's similar to the backtick operator in lisp).  Everything is quoted, _unless_ it's encapsulated in `.()` in which case it's evaluated and the result is inserted.
 
 ```R
 a <- 1
@@ -801,135 +810,52 @@ bquote(.(a) + .(b))
 bquote(.(a + b))
 ```
 
-This provides a fairly easy way to control what gets evaluated when you call `bquote()`, and what gets evaluated when the expression is evaluated.
-
-How does `bquote()` work?
+This provides a fairly easy way to control what gets evaluated when you call `bquote()`, and what gets evaluated when the expression is evaluated. How does `bquote()` work? Below, I've rewritten `bquote()` to use the same style as our other functions: it expects input to be quoted already, and makes the base and recursive cases more explicit:
 
 ```R
-bquote2 <- function (expr, where = parent.frame()) {
-    unquote <- function(e) {
-      if (is.pairlist(e)) {
-        as.pairlist(lapply(e, unquote))
-      } else if (length(e) <= 1L) {
-        e
-      } else if (e[[1L]] == as.name(".")) {
-        eval(e[[2L]], where)
-      } else {
-        as.call(lapply(e, unquote))
-      } 
-    }
-    
-    unquote(substitute(expr))
-}
-```
+bquote2 <- function (x, where = parent.frame()) {
+  # Base case
+  if (!is.recursive(x)) return(x)
 
-### Modifying the call tree
-
-Differences with macros: occurs at runtime, not compile time (which doesn't have any meaning in R). Returns results, not expression.  More like `fexprs`. a fexpr is like a function where the arguments aren't evaluated by default; or a macro where the result is a value, not code. 
-
-A more useful function might solve a common problem encountered when running `R CMD check`: you've used `T` and `F` instead of `TRUE` and `FALSE`.  Again, we'll pursue the same strategy of starting simple and then gradually building up our function to deal with more cases.
-
-First we'll start just by locating logical abbreviations. A logical abbreviation is the name `T` or `F`. We need to recursively breakup any recursive objects, anything else is not a short cut.
-
-    find_logical_abbr <- function(obj) {
-      if (!is.recursive(obj)) {
-        identical(obj, as.name("T")) || identical(obj, as.name("F"))
-      } else {
-        any(vapply(obj, find_logical_abbr, logical(1)))
-      }
-    }
-
-    
-    f <- function(x = T) 1
-    g <- function(x = 1) 2
-    h <- function(x = 3) T
-    
-    find_logical_abbr(body(f))
-    find_logical_abbr(formals(f))
-    find_logical_abbr(body(g))
-    find_logical_abbr(formals(g))
-    find_logical_abbr(body(h))
-    find_logical_abbr(formals(h))
-  
-To replace `T` with `TRUE` and `F` with `FALSE`, we need to make our recursive function return either the original object or the modified object, making sure to put calls back together appropriately. The main difference here is that we need to be much more careful with recursive objects, because each type needs to be treated differently:
-
-* pairlists, which are used for function formals, can be processed as lists,
-  but need to be turned back into pairlists with `as.pairlist`
-
-* expressions, again can be processed like lists, but need to be turned back
-  into expressions objects with `as.expression`. You won't find these inside a
-  quoted object, but this might be the quoted object that you're passing in.
-
-* calls require the most special treatment: don't process first element
-  (that's the name of the function), and turn back into a call with `as.call`
-
-We'll wrap this behaviour up into a function
-
-```R
-capply <- function(X, FUN, ...) {
-  if (is.call(X)) {
-    args <- lapply(X[-1], FUN, ...)
-    as.call(c(list(X[[1]]), args))
-  } else {
-    out <- lapply(X, FUN, ...)
-
-    if (is.function(X)) {
-      out <- as.function(out, environment(X))
+  if (is.call(x)) {
+    if (identical(x[[1]], quote(.))) {
+      # Call to .(), so evaluate
+      eval(x[[2]], where)
     } else {
-      mode(out) <- mode(X)
+      as.call(lapply(x, bquote2, where = where))
     }
-    out
+  } else if (is.pairlist(x)) {
+    as.pairlist(lapply(x, bquote2, where = where))
+  } else {
+    stop("Unknown case")
   }
 }
-capply(expression(1, 2, 3), identity)
-capply(quote(f(1, 2, 3)), identity)
-capply(formals(data.frame), identity)
-capply(quote(function(x) x + 1), identity)
+x <- 1
+bquote2(quote(x == .(x)))
+y <- 2
+bquote2(quote(function(x = .(x)) {
+  x + .(y)
+}))
 ```
 
-This leads to:
-
-    fix_logical_abbr <- function(obj) {
-      # Base case
-      if (!is.recursive(obj)) {
-        if (identical(obj, as.name("T"))) return(TRUE)
-        if (identical(obj, as.name("F"))) return(FALSE)
-        return(obj)
-      }
-
-      capply(obj, fix_logical_abbr)
-    }
-
-However, this function is still not that useful because it loses all non-code structure:
-
-    g <- parse(text = "f <- function(x = T) {
-      # This is a comment
-      if (x)                  return(4)
-      if (emergency_status()) return(T)
-    }")
-    f <- function(x = T) {
-      # This is a comment
-      if (x)                  return(4)
-      if (emergency_status()) return(T)
-    }
-    fix_logical_abbr(g)
-    fix_logical_abbr(f)
-
-It is possible to work around this problem using `srcrefs` and `getParseData`, but neither solution naturally fits this hierarchical framework. You effectively end up having to recreate huge chunks of R's internal code in order to handle the majority of R code.  So the above approach can be useful in simple cases (particularly when you don't care what the output code looks like), but it's very hard to automatically transform R code, and is hence beyond the scope of this book.
-
-
-## Formulas
-
-There is one other approach we could use: a formula. `~` works much like quote, but it also captures the environment in which it is created. We need to extract the second component of the formula because the first component is `~`.
+Note that functions that modify the source tree are most useful for creating expressions that are used at run-time, not saved back into the original source file.  That's because all non-code information is lost:
 
 ```R
-subset <- function(x, f) {
-  r <- eval(f'[[2]], x, environment(f))
-  x[r, ]
-}
-subset(mtcars, ~ cyl == x)
+bquote2(quote(function(x = .(x)) {
+  # This is a comment
+  x +  # funky spacing
+    .(y)
+}))
 ```
+
+It is possible to work around this problem using `srcrefs` and `getParseData`, but neither solution naturally fits this hierarchical framework. You effectively end up having to recreate huge chunks of R's internal code in order to handle the majority of R code.  So the above approach can be useful in simple cases (particularly when you don't care what the output code looks like), but it's very hard to automatically transform R code, and is beyond the scope of this book.
+
+`bquote()` is rather like a macro from a languages like LISP.  
+But unlike macros the modifications occur at runtime, not compile time (which doesn't have any meaning in R). And unlike a macro there is no restriction to return an expression: a macro-like function in R can return anything. More like `fexprs`. a fexpr is like a function where the arguments aren't evaluated by default; or a macro where the result is a value, not code. 
+
+[Programmer’s Niche: Macros in R](http://www.r-project.org/doc/Rnews/Rnews_2001-3.pdf#page=11) by Thomas Lumley.
 
 ### Exercises
 
-* Read the source code for `pryr::partial` and refer to XXX for uses. How does it work?
+* Write a function that extracts all calls to a function. Compare your function to `pryr::fun_calls()`.
+
