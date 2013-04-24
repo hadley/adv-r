@@ -16,30 +16,15 @@ ggplot2:::invert(funs)
 
 In [[computing on the language]], you learned the basics of accessing the expressions underlying computation in R, and evaluating them in new ways. In this chapter, you'll learn more about the underlying structure of expressions, and how you can compute on them directly.
 
-* Calls in more detail
+* The structure of expressions (a tree made up of constants, names and calls) and how you can create and modify them directly
 
-* Implement a function by calling another function (bad idea): `write.csv()`, `xtabs()`
-
-* Parsing and evaluating text: `source`
+* How to flexibly convert expressions between their tree form and text, and learn how `source()` works.
 
 * Walk the code tree: `pryr:call_tree()`, `codetools::findGlobals`, find assignments, find calls
 
   * List all assignments in a function
   * Replace `T` with `TRUE` and `F` with `FALSE`
 
-  The `codetools` package, included in the base distribution, provides some other built-in tools based for automated code inspection:
-
-  * `findGlobals`: locates all global variables used by a function.
-    This can be useful if you want to check that your functions don't inadvertently rely on variables defined in their parent 
-    environment.
-
-  * `checkUsage`: checks for a range of common problems including 
-    unused local variables, unused parameters and use of partial 
-    argument matching.
-
-  * `showTree`: works in a similar way to the `drawTree` used above, 
-    but presents the parse tree in a more compact format based on 
-    Lisp's S-expressions
 
 * Modifying calls: `partial_eval`
 
@@ -355,38 +340,42 @@ If you want to get a list of the unevaluated arguments, explicitly convert it to
 as.list(x[-1])
 ```
 
-#### A cautionary tale: `write.csv`
-
-`write.csv()` is a base R function where call manipulation is used in a suboptimal manner. It captures the call to `write.csv()` and mangles it to instead call `write.table()`:
+We can use these ideas to create an easy way modify a call given a list. 
 
 ```R
-write.csv <- function (...) {
-  Call <- match.call(expand.dots = TRUE)
-  for (argname in c("append", "col.names", "sep", "dec", "qmethod")) {
-    if (!is.null(Call[[argname]])) {
-      warning(gettextf("attempt to set '%s' ignored", argname), domain = NA)
-    }
+modify_call <- function(call, new_args) {
+  call <- standardise_call(call)
+  nms <- names(new_args) %||% rep("", length(new_args))
+
+  if (any(nms == "")) {
+    stop("All new arguments must be named", call. = FALSE)
   }
-  rn <- eval.parent(Call$row.names)
-  Call$append <- NULL
-  Call$col.names <- if (is.logical(rn) && !rn) TRUE else NA
-  Call$sep <- ","
-  Call$dec <- "."
-  Call$qmethod <- "double"
-  Call[[1L]] <- as.name("write.table")
-  eval.parent(Call)
+
+  for(nm in nms) {
+    call[[nm]] <- new_args[[nm]]
+  }
+  call
 }
+modify_call(quote(mean(x, na.rm = TRUE)), list(na.rm = NULL))
+modify_call(quote(mean(x, na.rm = TRUE)), list(na.rm = FALSE))
+modify_call(quote(mean(x, na.rm = TRUE)), list(x = quote(y)))
 ```
 
-We could write a function that behaves identically using regular function call semantics:
+### Exercises
 
-```R
-write.csv <- function(x, file = "", sep = ",", qmethod = "double", ...) {
-  write.table(x = x, file = file, sep = sep, qmethod = qmethod, ...)
-}
-```
+* If you create a functional, you may want it to accept the name of a function as a string or the name of a function. Use `substitute()` and what you know about expressions to create a function that returns a list containing the name of the function (where you can determine it) and the function itself. 
 
-This makes the function much easier to understand: it's just calling `write.table` with different defaults.  This also fixes a subtle bug in the original `write.csv`: `write.csv(mtcars, row = FALSE)` raises an error, but `write.csv(mtcars, row.names = FALSE)` does not. There's also no reason that `write.csv` shouldn't accept the `append` argument. Generally, you always want to use the simplest tool that will solve a problem - that makes it more likely that others will understand your code. Again, there's no point in using non-standard evaluation unless there's a big win: non-standard evaluation will make your function behave much less predictably.
+  ```R
+  fname(mean)
+  list(name = "mean", f = mean)
+  fname("mean")
+  list(name = "mean", f = mean)
+  fname(function(x) sum(x) / length(x))
+  list(name = "<anonymous>", f = function(x) sum(x) / length(x))
+  ```
+
+  Create a version that uses standard evaluation suitable for calling from another function (Hint: it should have two arguments: an expression and an environment).
+
 
 ## Parsing and deparsing
 
@@ -456,36 +445,132 @@ f <- function(abc = 1, def = 2, ghi = 3, ...) {
 f(d = 2, 2)
 ```
 
+#### A cautionary tale: `write.csv`
 
-### Getting the name of an argument
-
+`write.csv()` is a base R function where call manipulation is used in a suboptimal manner. It captures the call to `write.csv()` and mangles it to instead call `write.table()`:
 
 ```R
-fname <- function(call) {
-  f <- eval(call, parent.frame())
-  if (is.character(f)) {
-    fname <- f
-    f <- match.fun(f)
-  } else if (is.function(f)) {
-    fname <- if (is.name(call)) as.character(call) else "<anonymous>"
+write.csv <- function (...) {
+  Call <- match.call(expand.dots = TRUE)
+  for (argname in c("append", "col.names", "sep", "dec", "qmethod")) {
+    if (!is.null(Call[[argname]])) {
+      warning(gettextf("attempt to set '%s' ignored", argname), domain = NA)
+    }
   }
-  list(f, fname)
+  rn <- eval.parent(Call$row.names)
+  Call$append <- NULL
+  Call$col.names <- if (is.logical(rn) && !rn) TRUE else NA
+  Call$sep <- ","
+  Call$dec <- "."
+  Call$qmethod <- "double"
+  Call[[1L]] <- as.name("write.table")
+  eval.parent(Call)
 }
-f <- function(f) {
-  fname(substitute(f))
-}
-f("mean")
-f(mean)
-f(function(x) mean(x))
 ```
 
+We could write a function that behaves identically using regular function call semantics:
+
+```R
+write.csv <- function(x, file = "", sep = ",", qmethod = "double", ...) {
+  write.table(x = x, file = file, sep = sep, qmethod = qmethod, ...)
+}
+```
+
+This makes the function much easier to understand: it's just calling `write.table` with different defaults.  This also fixes a subtle bug in the original `write.csv`: `write.csv(mtcars, row = FALSE)` raises an error, but `write.csv(mtcars, row.names = FALSE)` does not. There's also no reason that `write.csv` shouldn't accept the `append` argument. Generally, you always want to use the simplest tool that will solve a problem - that makes it more likely that others will understand your code. Again, there's no point in using non-standard evaluation unless there's a big win: non-standard evaluation will make your function behave much less predictably.
+
+### Other uses of call capturing
+
+Many modelling functions use `match.call()` to capture the call used to create the model. (This is one reason that creating lists of models using a function doesn't give the greatest output). This is makes it possible to `update()` a model, modifying only a few components of the original model (but note that it doesn't preserve any of the computation, even if possible). Here's a quick example of `update()` in case you haven't used it before:
+
+```R
+mod <- lm(mpg ~ wt, data = mtcars)
+update(mod, formula = . ~ . + cyl)
+update(mod, subset = cyl == 4)
+```
+
+How does `update()` work?  We can rewrite it using some of the tools (`dots()` and `modify_call()`) we've developed in this chapter to make it easier to see exactly what's going on.  Once you've figured out what's going on here, you might want to read the source code for `update.default()` and see if you can how each component corresponds between the two versions.
+
+```R
+update_call <- function (object, formula., ...) {
+  call <- object$call
+  
+  # Use a update.formula to deal with formulas like . ~ .
+  if (!missing(formula.)) {
+    call$formula <- update.formula(formula(object), formula.)
+  }
+
+  modify_call(call, dots(...))   
+}
+update2 <- function(object, formula., ...) {
+  call <- update_call(object, formula., ...)
+  eval(call, parent.frame())
+}
+update_call(mod, formula = . ~ . + cyl)
+update_call(mod, subset = cyl == 4)
+```
+
+The original `update()` has an `evaluate` argument that controls whether the function returns a call or the result, but I think it's good principle for a function to only return one type of object (not different types depending on the arguments) so I split it into two.
+
+This rewrite also allows us to fix a small bug in update: it evaluates the call in the global environment, when really we want to re-evaluate it in the environment where the model was original fit. This happens to be stored in the formula (called terms) so we can easily extract it.
+
+```R
+f <- function() {
+  n <- 3
+  lm(mpg ~ poly(wt, n), data = mtcars)
+}
+mod <- f()
+update(mod, data = mtcars)
+
+update2 <- function(object, formula., ...) {
+  call <- update_call(object, formula., ...)
+  eval(call, environment(object$terms))
+}
+update2(mod, data = mtcars)
+```
+
+This is a good principle to remember: if want to later replay the code you've captured using `match.call()` you really also need to capture the environment in which the code was evaluated.
+
+There is a big potential downside: because you've captured that environment and saved it in an object, that environment will hang around and any objects in the environment will also hang around. That can have big implications for memory use.  For example, in the following code, the big `x` and `y` objects will be captured in memory.
+
+```R
+f <- function() {
+  x <- runif(1e7)
+  y <- runif(1e7)
+
+  lm(mpg ~ wt, data = mtcars)
+}
+mod <- f()
+object.size(environment(mod$terms)$x)
+```
+
+### Exercises
+
+* Create a version of lm that doesn't do any special evaluation: all arguments should be quoted expressions, and it should construct a call to `lm` that preserves all information.
+
 ## Creating a function
+
+There's one function call that's so special it's worth devoting a little extra attention to: the `function` function that creates functions.
+
+This is another place we'll see pairlists (the object type that predated lists in R's history).  The arguments of a function are stored as a pairlist: for our purposes we can treat a pairlist like a list, but we need to remember to cast arguments with `as.pairlist()`.
 
 ```R
 str(quote(function(x, y = 1) x + y)[[2]])
 ````
 
-Building up a function by hand is also useful when you can't use a closure because you don't know in advance what the arguments will be. We'll use `pryr::make_function` to build up a function from its components pieces: an argument list, a quoted body (the code to run) and the environment in which it is defined (which defaults to the current environment):
+Building up a function by hand is also useful when you can't use a closure because you don't know in advance what the arguments will be. We'll use `pryr::make_function` to build up a function from its component pieces: an argument list, a quoted body (the code to run) and the environment in which it is defined (which defaults to the current environment):
+
+It's 
+
+```R
+make_function <- function(args, body, env = parent.frame()) {
+  args <- as.pairlist(args)
+  env <- to_env(env)
+
+  eval(call("function", args, body), env)
+}
+```
+
+`pryr::make_function()` includes a little more error checking but is otherwise identical.
 
 ```R
 add <- make_function(alist(a = 1, b = 2), quote(a + b))
@@ -501,38 +586,77 @@ add(1, 2)
 add3 <- make_function(alist(a = , b = ), quote(a + b))
 ```
 
-We could use `make_function` to create an `unenclose` function that takes a closure and modifies it so when you look at the source you can see what's going on: 
+### Unenclose
+
+Most of the time it's simpler to use closures to create new functions, but `make_function()` is useful if we want to make it obvious to the user what the function does (printing out a closure isn't usually that helpful because all the variables are present by name, not by value).
+
+We could use `make_function()` to create an `unenclose()` function that takes a closure and modifies it so when you look at the source you can see what's going on: 
 
 ```R
 unenclose <- function(f) {
-  stopifnot(is.function(f))
   env <- environment(f)
-
-  make_function(formals(f), substitute2(body(f), env), parent.env(env))
+  new_body <- substitute2(body(f), env)
+  make_function(formals(f), new_body, parent.env(env))
 }
 
 f <- function(x) {
-  function(y) { 
-    x + y
-  }
+  function(y) x + y
 }
 f(1)
 unenclose(f(1))
 ```
 
-(Note we need to use `substitute2` here, because `substitute` uses non-standard evaluation).
+### Exercises
 
-(Exercise: modify this function so it only substitutes in atomic vectors, not more complicated objects.)
+* Why does `unenclose()` use `substitute2()`, not `substitute`?
 
-Look at the source code for partial.
+* Modify `unenclose` so it only substitutes in atomic vectors, not more complicated object. (Hint: you'll need two cases to handle the two potential parent environments.)
 
+* Read the documentation and source for `pryr::partial()` - what does it do? How does it work?
 
+## Walking the call tree
 
-## Find assignment
+We've seen a couple of examples modifying a single call using `substitute()` or `modify_call()`. What if we want to do something more complicated, drilling down into a nested set of function calls and either extracting useful information or modifying the calls.  The `codetools` package, included in the base distribution, provides some built-in tools for automated code inspection that use these ideas:
 
-The key to any function that works with the parse tree right is getting the recursion right, which means making sure that you know what the base case is (the leaves of the tree) and figuring out how to combine the results from the recursive case. 
+* `findGlobals`: locates all global variables used by a function.
+  This can be useful if you want to check that your functions don't inadvertently rely on variables defined in their parent 
+  environment.
 
-The nodes of the tree can be any recursive data structure that can appear in a quoted object: pairlists, calls, and expressions. The leaves can be 0-argument calls (e.g. `f()`), atomic vectors, names or `NULL`. The easiest way to tell the difference is the `is.recursive` function.
+* `checkUsage`: checks for a range of common problems including 
+  unused local variables, unused parameters and use of partial 
+  argument matching.
+
+* `showTree`: works in a similar way to the `drawTree` used above, 
+  but presents the parse tree in a more compact format based on 
+  Lisp's S-expressions
+
+In this section we'll learn how those functions work and then write our own functions to do interesting things like extracting the names of all assignments inside a function, or listing all the functions called by a function.
+
+The key to any function that works with the parse tree right is getting the recursion right, which means making sure that you know what the base case is (the leaves of the tree) and figuring out how to combine the results from the recursive case. The nodes of a tree are always calls (except in the rare case of function arguments, which are pairlists), and the leaves are names, single argument calls or constants. R provides a helpful function to distinguish whether an object is a node or a leave: `is.recursive()`.
+
+### Finding F and T
+
+```R
+is_flag <- function(x) {
+  is.name(x) && (identical(x, quote(T)) || identical(x, quote(F)))
+}
+
+logical_abbr <- function(x) {
+  # Base case
+  if (!is.recursive(x)) return(is_flag(x))
+
+  # Recursive case
+  for (i in seq_along(x)) {
+    if (is_flag(x[[i]])) return(TRUE)
+  }
+  FALSE
+}
+
+logical_abbr(quote(T))
+logical_abbr(quote(mean(x, na.rm = T)))
+```
+
+### Finding all variables created by assignment
 
 In this section, we will write a function that figures out all variables that are created by assignment in an expression. We'll start simply, and make the function progressively more rigorous. One reason to start with this function is because the recursion is a little bit simpler - we never need to go all the way down to the leaves because we are looking for assignment, a call to `<-`.  
 
@@ -664,7 +788,42 @@ find_assign(quote({
 
 Making this function work absolutely correct requires quite a lot more work, because we need to figure out all the other ways that assignment might happen: with `=`, `assign`, or `delayedAssign`.
 
-## Modifying the call tree
+### Flexible quoting and unquoting
+
+`bquote()` is a slightly more general form of quote: it allows you to optionally quote and unquote some parts of an expression (it's similar to the backtick operator in lisp).  Everything is quoted, _unless_ it's encapsulated in `.()` in which case it's evaluated and the result is inserted.
+
+```R
+a <- 1
+b <- 3
+bquote(a + b)
+bquote(a + .(b))
+bquote(.(a) + .(b))
+bquote(.(a + b))
+```
+
+This provides a fairly easy way to control what gets evaluated when you call `bquote()`, and what gets evaluated when the expression is evaluated.
+
+How does `bquote()` work?
+
+```R
+bquote2 <- function (expr, where = parent.frame()) {
+    unquote <- function(e) {
+      if (is.pairlist(e)) {
+        as.pairlist(lapply(e, unquote))
+      } else if (length(e) <= 1L) {
+        e
+      } else if (e[[1L]] == as.name(".")) {
+        eval(e[[2L]], where)
+      } else {
+        as.call(lapply(e, unquote))
+      } 
+    }
+    
+    unquote(substitute(expr))
+}
+```
+
+### Modifying the call tree
 
 Differences with macros: occurs at runtime, not compile time (which doesn't have any meaning in R). Returns results, not expression.  More like `fexprs`. a fexpr is like a function where the arguments aren't evaluated by default; or a macro where the result is a value, not code. 
 
@@ -758,41 +917,6 @@ However, this function is still not that useful because it loses all non-code st
 
 It is possible to work around this problem using `srcrefs` and `getParseData`, but neither solution naturally fits this hierarchical framework. You effectively end up having to recreate huge chunks of R's internal code in order to handle the majority of R code.  So the above approach can be useful in simple cases (particularly when you don't care what the output code looks like), but it's very hard to automatically transform R code, and is hence beyond the scope of this book.
 
-### Flexible quoting and unquoting
-
-`bquote()` is a slightly more general form of quote: it allows you to optionally quote and unquote some parts of an expression (it's similar to the backtick operator in lisp).  Everything is quoted, _unless_ it's encapsulated in `.()` in which case it's evaluated and the result is inserted.
-
-```R
-a <- 1
-b <- 3
-bquote(a + b)
-bquote(a + .(b))
-bquote(.(a) + .(b))
-bquote(.(a + b))
-```
-
-This provides a fairly easy way to control what gets evaluated when you call `bquote()`, and what gets evaluated when the expression is evaluated.
-
-How does `bquote()` work?
-
-```R
-bquote2 <- function (expr, where = parent.frame()) {
-    unquote <- function(e) {
-      if (is.pairlist(e)) {
-        cat("pl")
-        as.pairlist(lapply(e, unquote))
-      } else if (length(e) <= 1L) {
-        e
-      } else if (e[[1L]] == as.name(".")) {
-        eval(e[[2L]], where)
-      } else {
-        as.call(lapply(e, unquote))
-      } 
-    }
-    
-    unquote(substitute(expr))
-}
-```
 
 ## Formulas
 
