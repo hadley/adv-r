@@ -373,7 +373,7 @@ modify_call(quote(mean(x, na.rm = TRUE)), list(x = quote(y)))
 
 ## Parsing and deparsing
 
-You can convert quoted calls back and forth between text with `parse()` and `deparse()`. You've seen `deparse()` already it: takes an epxression and returns a character vector. `parse()` does the opposite: it takes a character vector and returns a list of expressions, also known as an expression object or expression list.
+You can convert quoted calls back and forth between text with `parse()` and `deparse()`. You've seen `deparse()` already it: takes an expression and returns a character vector. `parse()` does the opposite: it takes a character vector and returns a list of expressions, also known as an expression object or expression list.
 
 Note that because the primary use of `parse()` is parsing files of code on disk, the first argument is a file path, and if you have the code in a character vector, you need to use the `text` argument.
 
