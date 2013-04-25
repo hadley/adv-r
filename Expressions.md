@@ -2,12 +2,14 @@
 
 <!-- 
 library(pryr)
+library(stringr)
 special <- c("substitute", "eval", "match.call", "call", "as.call", "quote", "expression", "enquote", "bquote", "parse")
 funs <- lapply(special, function(x) {
   match <- paste0("^", x, "$")
   c(
     find_funs("package:base", fun_calls, match),
-    find_funs("package:utils", fun_calls, match)
+    find_funs("package:utils", fun_calls, match),
+    find_funs("package:stats", fun_calls, match)
   )
 })
 names(funs) <- special
