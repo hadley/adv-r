@@ -368,7 +368,7 @@ The top-level `x` is a red herring: using the regular scoping rules, `g()` looks
 We can access this environment using the confusingly named function `parent.frame()`. This function returns the __environment__ from which the function was called. We can use that to look up the value of names in the environment from which the funtion was called.
 
 ```R
-f2 <- function(x) {
+f2 <- function() {
   x <- 10
   function() {
     def <- get("x", environment())
