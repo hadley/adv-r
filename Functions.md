@@ -142,7 +142,7 @@ k()
 rm(j, k)
 ```
 
-This seems a little magical (how does R know what the value of `y` is after the function has been called), but it works because `k` keeps around the environment in which it was defined, which includes the value of `x`.  [[Environments]] gives some pointers on how you can dive in and figure out what some of the values are.
+This seems a little magical (how does R know what the value of `y` is after the function has been called), but it works because `k` keeps around the environment in which it was defined, which includes the value of `y`.  [[Environments]] gives some pointers on how you can dive in and figure out what some of the values are.
 
 ### Functions vs. variables
 
