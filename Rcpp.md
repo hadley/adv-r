@@ -201,7 +201,7 @@ cppFunction('
     NumericVector out(n);
 
     for(int i = 0; i < n; ++i) {
-      out[i] = pow(ys[i] - x, 2.0);
+      out[i] = sqrt(pow(ys[i] - x, 2.0));
     }
     return out;
   }
