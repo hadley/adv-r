@@ -188,7 +188,7 @@ For our next example, we'll create a function that computes the distance between
 
 ```
 pdistR <- function(x, ys) {
-  (x - ys) ^ 2
+  sqrt( (x - ys) ^ 2 )
 }
 ```
 
