@@ -1004,7 +1004,7 @@ Rcpp.package.skeleton("NewPackage", example_code = FALSE,
                         cpp_files = c("convolve.cpp"))
 ```
 
-To add `Rcpp` to an existing package, your put your C++ files in the `src/` directory and modify/create the following configuration files:
+To add `Rcpp` to an existing package, you put your C++ files in the `src/` directory and modify/create the following configuration files:
 
 * In `DESCRIPTION` add    
 
