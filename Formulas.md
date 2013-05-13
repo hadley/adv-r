@@ -1,22 +1,71 @@
 ## Formulas
 
-There is one other important tool of non-standard evaluation: the formula.
+<!-- 
+methods(class = "formula")
+-->
 
-Uses:
+There is one other important tool of non-standard evaluation: the formula. The formula operator, `~`, is used extensively by modelling functions, but also by some graphics functions (e.g. lattice and `plot`) and a few data manipulation functions (e.g. `xtabs()` and `aggregate()`).
 
-* models
-* xtabs
-* lattice
+## Formula as a quoting function
+
+There are two advantages for using `~` over `quote()`:
+
+* It is shorter
+* It captures both the expression and the environment in which it was evaluated
+
+The formula object is a call that knows in which environment it was evaluated. You can use `length()` to determine if it is one-sided or two-sided, and `[[` to extract the various pieces.
+
+```R
+f1 <- ~ a + b
+length(f1)
+f1[[1]]
+f1[[2]]
+
+f2 <- y ~ a + b
+length(f2)
+f2[[1]]
+f2[[2]]
+f2[[3]]
+```
+
+You can extract the environment of a formula with `environment()`, as demonstrated with this implementation of `subset()`:
+
+```R
+subset_f <- function(x, f) {
+  stopifnot(inherits(f, "formula"), length(f) == 2)
+  r <- eval(f[[2]], x, environment(f))
+  x[r, ]
+}
+subset_f(mtcars, ~ cyl == 4)
+```
+
+Note that because the code is evaluated in the environment associated with the formula, the semantics are a little different if you're creating the formula in a function:
+
+```R
+f <- function(x) ~ cyl == x
+subset_f(mtcars, f(4))
+```
+
+The disadvantage of using `~` is that most people are used to its role in models, and may be surprised in the semantics you imply from it are substantially different from standard modelling formulas.   
+
+### `xtabs()`
+
+## Formulas for modelling
+
+Keep it brief: focus on main concepts (possibly showing complete lm implmentation using Rcpp), and pointing to documentation where necessary.  Need to discuss specials (e.g. offset/Error) and how splines work?
+
+White book.
+
+Patsy: http://patsy.readthedocs.org/en/latest/R-comparison.html
 
 Formula package (http://cran.r-project.org/web/packages/Formula/vignettes/Formula.pdf)
 
-There is one other approach we could use: a formula. `~` works much like quote, but it also captures the environment in which it is created. We need to extract the second component of the formula because the first component is `~`.
+Models use two steps: first converting the formula into matrices, and then manipulating using matrix algebra.
 
-```R
-subset <- function(x, f) {
-  r <- eval(f'[[2]], x, environment(f))
-  x[r, ]
-}
-subset(mtcars, ~ cyl == x)
-```
+* RcppEigen:::fastLm.formula
 
+* http://developer.r-project.org/model-fitting-functions.txt
+* terms, terms.object, terms.formula
+* model.response, model.weights
+* model.matrix, model.frame
+* lm.fit
