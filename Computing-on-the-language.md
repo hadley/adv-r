@@ -221,7 +221,7 @@ eval(quote(cyl1), mtcars)
 
 ## Scoping issues
 
-While it certainly looks like our `subset2()` function works, whenever we're working with expressions instead of values, we need to test a little more carefully. For example, you might expect that the following uses of `subset2()` should all return the same value:
+While it certainly looks like our `subset2()` function works, whenever we're working with expressions instead of values, we need to test a little more carefully. For example, you might expect that the following uses of `subset2()` should all return the same value because each variable refers to the same value:
 
 ```R
 y <- 4
@@ -236,7 +236,7 @@ subset2(mtcars, cyl == condition)
 subset2(mtcars, cyl == condition_call)
 ```
 
-What's going wrong? You might get a hint given by the variable names I've chosen: they are all variables defined inside `subset2()`. It seems like if `eval()` can't find the variable instead of the data frame (it's second argument), it's looking in the function environment.  That's obviously not what we want, so we need some way to tell `eval()` to look somewhere else if it can't find the variables in the data frame.
+What's going wrong? You can get a hint from the variable names I've chosen: they are all variables defined inside `subset2()`. It seems like if `eval()` can't find the variable instead of the data frame (it's second argument), it's looking in the function environment.  That's obviously not what we want, so we need some way to tell `eval()` to look somewhere else if it can't find the variables in the data frame.
 
 The key is the third argument: `enclos`. This allows us to specify the parent (or enclosing) environment for objects that don't have one like lists and data frames (`enclos` is ignored if we pass in a real environment). The `enclos`ing environment is where any objects that aren't found in the data frame will be looked for. By default it uses the environment of the current function, which is not what we want.
 
@@ -277,7 +277,7 @@ f <- function() {
 f()
 ```
 
-And it does work :)
+And indeed it now works.
 
 ### Exercises
 
@@ -334,7 +334,7 @@ traceback()
 # 1: subscramble(mtcars, cyl == 4)
 ```
 
-What's gone wrong? To figure it out, lets `debug` subset and work through the code line-by-line:
+What's gone wrong? To figure it out, lets `debug()` subset and work through the code line-by-line:
 
 ```R
 > debugonce(subset)
@@ -370,7 +370,7 @@ cyl <- sample(10, 100, rep = T)
 subscramble(mtcars, cyl == 4)
 ```
 
-This is an example of the general tension between functions that are designed for interactive use, and functions that are safe to program with. A function that uses `substitute()` might save typing, but it's difficult to call from another function. As a developer you should also provide an alternative version that works when passed a call. For example, we could rewrite:
+This is an example of the general tension between functions that are designed for interactive use, and functions that are safe to program with. A function that uses `substitute()` might save typing, but it's difficult to call from another function. As a developer you should also provide an alternative version that works when passed a quoted expression. For example, we could rewrite:
 
 ```R
 subset2_q <- function(x, condition) {
@@ -386,6 +386,8 @@ subscramble <- function(x, condition) {
   scramble(subset2(x, condition))
 }
 ```
+
+I usually suffix these functions with `q` to indicate that they take a quoted call.  Most users won't need them so the name can be a little longer.
 
 You might wonder why the function couldn't do this automatically:
 
@@ -405,7 +407,7 @@ But hopefully a little thought, or maybe some experimentation, will show why thi
 
 ## Substitute
 
-Following the examples above, whenever you write your own functions that use non-standard evaluation, you always provide alternatives that others can use. But what happens if you want to call a function that uses non-standard evaluation and doesn't have a standard form? For example, imagine you want to create a lattice graphic given the names of two variables:
+Following the examples above, whenever you write your own functions that use non-standard evaluation, you always provide alternatives that others can use. But what happens if you want to call a function that uses non-standard evaluation and doesn't have form that takes expressions? For example, imagine you want to create a lattice graphic given the names of two variables:
 
 ```R
 library(lattice)
@@ -437,13 +439,13 @@ f <- function() {
 f()
 ```
 
-To make things easier, `pryr()` provides the `subs()` function.  It works exactly the same way as `substitute()` except it has a shorter name and if the second argument is the global environment it turns it into a list. Together, this makes it much easier to experiement with substitution:
+To make it easier to experiment with `substitute()`, `pryr()` provides the `subs()` function.  It works exactly the same way as `substitute()` except it has a shorter name and if the second argument is the global environment it turns it into a list. Together, this makes it much easier to experiement with substitution:
 
 ```R
 subs(a + b + x)
 ```
 
-The second argument (to both `sub()` and `substitute()`) can override the use of the current environment, and provide an alternative list of name-value pairs to substitute in. The following example uses that technique to show some variations on substituting a string, variable name or function call:
+The second argument (to both `sub()` and `substitute()`) can override the use of the current environment, and provide an alternative list of name-value pairs to use. The following example uses that technique to show some variations on substituting a string, variable name or function call:
 
 ```R
 subs(a + b, list(a = "y"))
@@ -510,7 +512,7 @@ xyplot3(mpg, displ, data = mtcars, col = "red", aspect = "xy")
 
 ### Non-standard evaluation in substitute
 
-One application of this principle is to make a version of `substitute` that evaluates its first argument. Note the following example:
+One application of this idea is to make a version of `substitute` that evaluates its first argument (i.e. a version that uses standard evaluation). Note the following example:
 
 ```R
 x <- quote(a + b)
@@ -535,9 +537,9 @@ substitute2 <- function(x, env) {
 
 Let's work through the example above: `substitute2(x, list(a = 1, b = 2))`.  It's a little tricky because of `substitute()`'s non-standard evaluation rules, we can't use the usual technique of working through the parentheses inside-out.
 
-1. First `substitute(substitute(y, env), list(y = x))` is evaluated. The first argument is specially evaluated in the environment containing only one item, the value of `x` with the name `y`. Because we've put `x` inside a list, it will be evaluated and the rules of substitute will replace `y` with it's value. This yields `substitute(a + b, env)`
+1. First `substitute(substitute(y, env), list(y = x))` is evaluated. The first argument is specially evaluated in the environment containing only one item, the value of `x` with the name `y`. Because we've put `x` inside a list, it will be evaluated and the rules of substitute will replace `y` with it's value. This yields the expression `substitute(a + b, env)`
 
-2. Next we evaluate that call inside the current function. `substitute()` specially evaluates its first argument, and looks for name value pairs in `env`, which evaluates to `list(a = 1, b = 2)`. Those are both values (not promises) so the result will be `a + b`
+2. Next we evaluate that expression inside the current function. `substitute()` specially evaluates its first argument, and looks for name value pairs in `env`, which evaluates to `list(a = 1, b = 2)`. Those are both values (not promises) so the result will be `a + b`
 
 ### Capturing unevaluated ...
 
@@ -564,7 +566,7 @@ There are usually two principles you can follow when modelling the evaluation of
   
 * You can model evaluation by working from the innermost parentheses to the outermost.
 
-Generally you want to avoid creating situations where these principles are are broken, because it makes the mental model needed to correctly predict the output much more complicated. Non-standard evaluation can break both principles, so it's only worthwhile to do so if there is significant gain. 
+Non-standard evaluation can break both principles.  This makes the mental model needed to correctly predict the output much more complicated, so it's only worthwhile to do so if there is significant gain. 
 
 For example, `library()` and `require()` allow you to call them either with or without quotes, because internally they use `deparse(substitute(x))` plus a couple of tricks. That means that these two lines do exactly the same thing:
 
@@ -586,7 +588,7 @@ It loads ggplot2, not plyr.  If you want to load plyr (the value of the ggplot2 
 library(x, character.only = TRUE)
 ```
 
-Using an argument to change the behaviour of another argument is not a great idea because it means you must completely and carefully read all of the function arguments to understand what one function argument means. You can't understand the effect of each argument in isolation, and it's much harder to read the function and reason about it.
+Using an argument to change the behaviour of another argument is not a great idea because it means you must completely and carefully read all of the function arguments to understand what one function argument means. You can't understand the effect of each argument in isolation, and hence it's harder to reason about the results of a function call.
 
 There are a number of other R functions that use `substitute()` and `deparse()` in this way: `ls()`, `rm()`, `data()`, `demo()`, `example()`, `vignette()`. These all use non-standard evaluation and then have a special ways of enforcing the usual rules. To me, eliminating two quotes is not worth the cognitive cost of non-standard evaluation, and I don't recommend you use `substitute()` for this purpose.
 
@@ -639,13 +641,13 @@ aes <- function (x = NULL, y = NULL, ...) {
 }
 ```
 
-Both functions were written when I didn't know so much about non-standard evaluation, and if I was to write them today, I'd uses the `dots()` helper function I showed previously.
+Both functions were written when I didn't know so much about non-standard evaluation, and if I was to write them today, I'd use the `dots()` helper function I showed previously.  I'd also think more about the environment in which the results of `aes()` should be evaluated, and how that integrates with ggplot2's rules for aesthetic mapping inheritance.
 
 ggplot2 and plyr provide slightly different ways to use standard evaluation so that you can refer to variables by reference. ggplot2 provides `aes_string()` which allows you to specify variables by the string representation of their name, and plyr uses S3 methods so that you can either supply an object of class quoted (as created with `.()`), or a regular character vector.
 
 ### Plyr: summarise, mutate and arrange
 
-The plyr package uses this ideas to make a small DSL for manipulating data frames: in addition to the base `subset()` and `transform()` functions, plyr provides `mutate()`, `summarise()` and `arrange()`. Each of these functions has the same interface: the first argument is a data frame and the subsequent arguments are evaluated in the context of that data frame (i.e. they look there first for variables, and then in the current environment) and they return a data frame.
+The plyr package also uses non-standard evaluation to complete the set of tools provided by the base `subset()` and `transform()` functions with `mutate()`, `summarise()` and `arrange()`. Each of these functions has the same interface: the first argument is a data frame and the subsequent arguments are evaluated in the context of that data frame (i.e. they look there first for variables, and then in the current environment) and they return a data frame.
 
 The following code shows the essence of how these four functions work: 
 
@@ -684,7 +686,7 @@ eval_df <- function(data, env, expr) {
 }
 ```
 
-You might be surprised to see the for loops here, but they are necessary because the computation of one variable might depend on the results of previous variables (this is the key difference between `mutate()` and `transform()`).
+You might be surprised to see the for loops in `eval_df`, but they are necessary because the computation of one variable might depend on the results of previous variables (this is the key difference between `mutate()` and `transform()`).
 
 Combined with a by operator (e.g. `ddply()`) these four functions allow you to express the majority of data manipulation operations. Then when you have a new problem, solving it becomes a matter of thinking about which operations you need to apply and in what order. The realm of possible actions has been shrunk to a manageable number.
 

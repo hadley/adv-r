@@ -1,5 +1,7 @@
 ## Formulas
 
+There is one other important tool of non-standard evaluation: the formula.
+
 Uses:
 
 * models

@@ -238,11 +238,11 @@ mode3(x) <- "character"
 x
 ```
 
-Generally, I'd prefer `mode3<-` over `mode2<-` because it uses concepts familiar to more R programmers, and generally it's a good idea to use the simplest and most commonly understand techniques that solve a given problem.
+Generally, I'd prefer `mode3<-` over `mode2<-` because it uses concepts familiar to more R programmers, and generally it's a good idea to use the simplest and most commonly understand techniques that solve a given problem. 
 
-#### Extracting elements of a call
+#### Extracting elements of a calle
 
-When it comes to extracting pieces from calls or for putting new pieces in, they behave almost the same way as a list: a call has `length`, `'[[` and `[` methods. The length of a call minus 1 gives the number of arguments:
+When it comes to modifying calls, they behave almost exactly like lists: a call has `length`, `'[[` and `[` methods. The length of a call minus 1 gives the number of arguments:
 
 ```R
 x <- quote(read.csv("important.csv", row.names = FALSE))
@@ -277,17 +277,9 @@ match.call(eval(x[[1]]), x)
 # read.csv(file = x, header = "important.csv", row.names = FALSE)
 ```
 
-As we mentionIf you provide `call` and `definition` arguments to `match.call()` you can use it as a general tool for standardising function calls:
-
-```R
-call <- quote(mean(n = 5, x = 1:10))
-match.call(call = call, def = mean)
-match.call(call = call, def = mean.default)
-```
-
 This will be an important tool when we start manipulating existing function calls. If we don't use `match.call` we'll need a lot of extra code to deal with all the possible ways to call a function.
 
-We can wrap this up into a function. To figure out the definition of the associated function we evaluate the first component of the call, the name of the function.  We need to specify an environment here, because the function might be different in different places. Whenever we provide an environment parameter, `parent.frame()` is usually a good default. Note the check for primitive functions: they don't have `formals()` and handle argument matching specially, so there's nothing we can do.
+We can wrap this up into a function. To figure out the definition of the associated function we evaluate the first component of the call, the name of the function. We need to specify an environment here, because the function might be different in different places. Whenever we provide an environment parameter, `parent.frame()` is usually a good default. Note the check for primitive functions: they don't have `formals()` and handle argument matching specially, so there's nothing we can do.
 
 ```R
 standardise_call <- function(call, env = parent.frame()) {
@@ -297,9 +289,9 @@ standardise_call <- function(call, env = parent.frame()) {
 
   match.call(f, call)
 }
-standardise_call(call)
 
-standardise_call(quote(f(d = 2, 2)))
+standardise_call(y)
+standardise_call(quote(standardise_call(y)))
 ```
 
 #### Modifying a call
@@ -319,7 +311,7 @@ y$file <- quote(paste0(filename, ".csv"))
 y
 ```
 
-Calls also support the `[` method, but use it with care: it produces a call object, and it's easy to produce invalid calls since the first element of a call is the function to be called. Be careful not to remove the first element: you're unlikely to get a call that will evaluate without error.
+Calls also support the `[` method, but use it with care: since the first element is the function to call, removing it is unlikely to create a call that will evaluate without error.
 
 ```R
 x[-3] # remove the second argument
