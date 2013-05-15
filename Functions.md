@@ -758,7 +758,7 @@ f1()
 f2()
 f1() == 1
 f2() == 1
-````
+```
 
 You can always force an invisible value to be displayed by wrapping it in parentheses:
 
