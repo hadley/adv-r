@@ -158,7 +158,7 @@ Strings have this more complicated design because individual `CHARSXP`'s (elemen
       # 32-bit: 4.000056 bytes
       # 32-bit: 8.000088 bytes
 
-In 32-bit R, factors occupy about the same amount of memory as strings: both pointers and integers are 4 bytes. In 64-bit R, pointers are 8 bytes, so factors take use about twice as much memory as strings.
+In 32-bit R, factors occupy about the same amount of memory as strings: both pointers and integers are 4 bytes. In 64-bit R, pointers are 8 bytes, so factors take about twice as much memory as strings.
 
 ## Coercion and object creation
 
