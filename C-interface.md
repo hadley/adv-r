@@ -2,7 +2,7 @@
 
 ## Introduction
 
-Reading the source code of R is an extremely powerful technique for improving your R programming. However, at some point you will hit a brick wall: many R functions are implemented in C. This guide gives you a basic introduction C and R's internal C api, giving you the basic knowledge needed to read the internals of R that are written in C.
+Reading the source code of R is an extremely powerful technique for improving your R programming. However, at some point you will hit a brick wall: many R functions are implemented in C. This guide gives you a basic introduction to C and R's internal C api, giving you the basic knowledge needed to read the internals of R that are written in C.
 
 If you want to write new high-performance code, we do not recommend using C, but instead strongly recommend using Rcpp to connect to C++. The Rcpp API protects you from many of the historical idiosyncracies of the R API, takes care of memory management for you, and provides many useful helper methods
 
@@ -12,7 +12,7 @@ The contents of this chapter come from section 5 ("System and foreign language i
 * the old api defined in `Rdefines.h`
 * esoteric language features that are rarely used
 
-To understand existing C code, it's useful to be generate simple examples of your own that you can experiment with. To that end, all examples in this chapter use the `inline` package, which makes it extremely easy to get up and running with C code. Make sure you have it installed and loaded with the following code:
+To understand existing C code, it's useful to generate simple examples of your own that you can experiment with. To that end, all examples in this chapter use the `inline` package, which makes it extremely easy to get up and running with C code. Make sure you have it installed and loaded with the following code:
 
 ```R
 install.packages("inline")
