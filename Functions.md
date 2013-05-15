@@ -734,7 +734,7 @@ Most base R functions are pure, with a few notable exceptions:
 
 * `library` which loads a package, and hence modifies the search path
 
-* `setwd`, `Sys.setenv`, `Sys.setlocale` which change the working directory, evnironment variables and the locale respectively
+* `setwd`, `Sys.setenv`, `Sys.setlocale` which change the working directory, environment variables and the locale respectively
 
 * `plot` and friends which produce graphical output
 
