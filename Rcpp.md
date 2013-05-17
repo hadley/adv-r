@@ -870,7 +870,7 @@ NumericMatrix gibbs_cpp(int N, int thin) {
 
   for(int i = 0; i < N; i++) {
     for(int j = 0; j < thin; j++) {
-      x = rgamma(1, 3.0, y * y + 4)[0];
+      x = rgamma(1, 3, 1 / (y * y + 4))[0];
       y = rnorm(1, 1 / (x + 1), 1 / sqrt(2 * (x + 1)))[0];
     }
     mat(i, 0) = x;
