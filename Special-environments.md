@@ -1,18 +1,16 @@
 # Special environments
 
-R's lexical scoping rules, ability to capture expressions without evaluating them and first-class environments make it an excellent environment for designing special environments that allow you to create domain specific languages (DSLs).
+R's lexical scoping rules, ability to capture expressions without evaluating them and first-class environments make it an excellent environment for designing special environments that allow you to create domain specific languages (DSLs). 
 
 In this chapter, we'll explore evaluating code in environments that are simple modifications of the usual computational environment in R, working our way up to evaluations that completely redefine ordinary function semantics in R.
 
 * Evaluate code in a special context: `local`, `capture.output`, `with_*`
 
-* Supply an expression instead of a function: `curve` (
-Anaphoric functions), anaphoric if, http://www.arcfn.com/doc/anaphoric.html, http://www.perlmonks.org/index.pl?node_id=666047
-
+* Supply an expression instead of a function: `curve` 
 
 * Combine evaluation with extra processing: `test_that`, `assert_that`
 
-* Create a full-blown DSL: `html`, `plotmath`, `deriv`, parseNamespace, sql
+* Create a full-blown DSL: `html`, `plotmath`, `deriv`, `parseNamespace`, `sql`
 
 ## Evaluate code in a special context
 
@@ -72,7 +70,11 @@ capture.output2 <- function(..., env = parent.frame()) {
 
   rval
 }
+```
 
+An alternative implementation of `capture.output()` could take advantage of lazy evaluation of function arguments, and rely on the user combining multiple calls with `{}`:
+
+```R
 capture.output3 <- function(code, env = parent.frame()) {
   file <- textConnection("rval", "w", local = TRUE)
   sink(file); on.exit(sink())
@@ -84,6 +86,8 @@ capture.output3 <- function(code, env = parent.frame()) {
   rval
 }
 ```
+
+Evaluate, more generally.
 
 ### How does local work?
 
@@ -139,6 +143,9 @@ local5 <- function(expr, envir = NULL) {
 
 ## Anaphoric functions
 
+(
+Anaphoric functions), anaphoric if, http://www.arcfn.com/doc/anaphoric.html, http://www.perlmonks.org/index.pl?node_id=666047
+
 Anaphoric functions (http://amalloy.hubpages.com/hub/Unhygenic-anaphoric-Clojure-macros-for-fun-and-profit), are functions that use pronouns. This is easiest to understand with an example using an interesting anaphoric function in base R: `curve()`.  `curve()` draws a plot of the specified function, but interestingly you don't need to use a function, you just supply an expression that uses `x`:
 
 ```R
@@ -176,7 +183,7 @@ curve3(sin(x ^ (-2)), c(0.01, 2), 1000)
 
 As you can see the approaches take about as much code, and require knowing about the same amount of fundamental R concepts. I would have a slight preference for the second because it would be easier to reuse the part of the `curve3()` that turns an expression into a function.
 
-Anaphoric functions need careful documentation so that the user knows that some variable will have special properties inside the anaphoric function and so to avoid using that variable otherwise. 
+Anaphoric functions need careful documentation so that the user knows that some variable will have special properties inside the anaphoric function and must otherwise be avoided. (And recall the caveats with any use of non-standard evaluation)
 
 ### With connection
 
@@ -263,5 +270,33 @@ check_logical_abbr(load_all())
 # ...
 ```
 
-### Assert that
+### Test that
 
+```R
+testthat_env <- new.env()
+testthat_env$reporter <- StopReporter$new()
+
+set_reporter <<- function(value) {
+  old <- testthat_env$reporter
+  testthat_env$reporter <- value
+  old
+}
+get_reporter <<- function() {
+  testthat_env$reporter
+}
+```
+
+```R
+with_reporter <- function(reporter, code) {
+  reporter <- find_reporter(reporter)
+
+  old <- set_reporter(reporter)
+  on.exit(set_reporter(old))
+
+  reporter$start_reporter()
+  res <- force(code)
+  reporter$end_reporter()
+
+  res
+}
+```
