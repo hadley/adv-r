@@ -508,7 +508,7 @@ bool any_naC(NumericVector x) {
 }
 ```
 
-Our C++ `any_naC` function is slightly slower `any_na1` when there are no missing values, or the missing value is at the end, but it's much faster when the first value is missing. 
+Our C++ `any_naC` function is slightly slower than `any_naR` when there are no missing values, or the missing value is at the end, but it's much faster when the first value is missing. 
 
 ```r
 library(microbenchmark)
