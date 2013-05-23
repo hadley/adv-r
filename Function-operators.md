@@ -1,4 +1,3 @@
-
 # Function operators
 
 In this chapter, you'll learn about function operators: functions that take one (or more) function as input and return a function as output. Function operators are a FP technique related to functionals, but where functionals abstract away common uses of loops, function operators abstract over common uses of anonymous functions. Like functionals, there's nothing you can't do without then; but they can make your code more readable, more expressive and faster to write. 
@@ -933,7 +932,7 @@ not <- function(f1) {
 which would allow us to write:
 
 ```R
-Filter(iris, or(is.character, is.factor))
+Filter(or(is.character, is.factor), iris)
 ```
 
 This allows us to express arbitrarily complicated boolean expressing involving functions in a succinct way.
