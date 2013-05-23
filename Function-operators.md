@@ -1,5 +1,4 @@
 
-
 # Function operators
 
 In this chapter, you'll learn about function operators: functions that take one (or more) function as input and return a function as output. Function operators are a FP technique related to functionals, but where functionals abstract away common uses of loops, function operators abstract over common uses of anonymous functions. Like functionals, there's nothing you can't do without then; but they can make your code more readable, more expressive and faster to write. 
@@ -908,7 +907,7 @@ download <- partial(dot_every, 10) %.%
 When I use `Filter()` and other functionals that work with logical predicates, I often find myself using anonymous functions to combine multiple conditions:
 
 ```R
-Filter(iris, function(x) is.character(x) || is.factor(x))
+Filter(function(x) is.character(x) || is.factor(x), iris)
 ```
 
 As an alternative, we could define some function operators that combine logical predicates:
