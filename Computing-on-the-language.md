@@ -2,7 +2,7 @@
 
 ''Flexibility in syntax, if it does not lead to ambiguity, would seem a reasonable thing to ask of an interactive programming language.'' --- Kent Pitman, http://www.nhplace.com/kent/Papers/Special-Forms.html
 
-R has powerful tools for computing not only on values, but also on the actions that lead to those values. These tools powerful and magical, and one of the most surprising features if you're coming from another programming language.  Take the following simple snippet of code that draws a sine curve:
+R has powerful tools for computing not only on values, but also on the actions that lead to those values. These tools are powerful and magical, and one of the most surprising features if you're coming from another programming language.  Take the following simple snippet of code that draws a sine curve:
 
 ```R
 x <- seq(0, 2 * pi, length = 100)
