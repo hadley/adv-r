@@ -293,7 +293,7 @@ There are a few new tags:
 
 ## Documenting packages
 
-As well [[package level documentation|documenting-packages]] resources, every package should also have it's own documentation page.
+As well [[package level documentation|documenting-packages]] resources, every package should also have its own documentation page.
 
 This documentation topic should contain an overview documentation topic that describes the overall purpose of the package, and points to the most important functions. This topic should have `@docType package` and be aliased to `package-pkgname` and `pkgname` (unless there is already a function by that name) so that you can get an overview of the package by doing `?pkgname` or `package?pkgname`.
 
