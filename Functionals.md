@@ -1,5 +1,4 @@
 
-
 # Functionals 
 
 <!--  
@@ -686,7 +685,7 @@ Good places to learn more about `apply()` and friends are:
 
 ### Group apply
 
-You can think about `tapply()` as a generalisation to `apply()` that allows for "ragged" arrays, where each row can have different numbers of rows. This is often needed when you're trying to summarise a data set. For example, imagine you've collected some pulse rate from a medical trial, and you want to compare the two groups:
+You can think about `tapply()` as a generalisation to `apply()` that allows for "ragged" arrays, where each row can have different numbers of columns. This is often needed when you're trying to summarise a data set. For example, imagine you've collected some pulse rate from a medical trial, and you want to compare the two groups:
 
 
 ```r
