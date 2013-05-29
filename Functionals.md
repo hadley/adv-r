@@ -900,7 +900,7 @@ compact <- function(x) Filter(function(y) !is.null(y), y)
 ```
 
 
-It removes all non-null elements from a list - you'll see it again in the [[fuction operators]] chapter.
+It removes all non-null elements from a list - you'll see it again in the [[function operators]] chapter.
 
 ### Exercises
 
