@@ -245,7 +245,16 @@ The same rules apply when documenting S4 generics and methods:
 
 ## Documenting R5 methods
 
-Currently there is no way to use roxygen to document R5 methods.  Use the standard docstring format.
+Currently there is no way to use roxygen to document R5 methods.  Use the standard docstring format. Alternatively, use roxygen to document an object with `@name` named by convention and assign it to `NULL`. For example, if object `obj` has method `getName`, then document the method as follows, using the convention to replace the `$` with `_`:
+
+    #' @title Get the name of the object
+    #' ...
+    #' @name obj_getName
+    NULL
+    
+    obj$methods(getName = function() return("name"))
+
+And the help for `getName` can be accessed by `?obj_getName`
 
 ## Documenting classes
 
@@ -424,4 +433,3 @@ The following function will turn an R data frame into the correct format.  It ig
 ## Dynamic help
 
 Since R.XX, help has been...
-
