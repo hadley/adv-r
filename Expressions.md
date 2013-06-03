@@ -214,7 +214,7 @@ as.call(list(quote(add(1)), 10))
 
 #### An interesting use of `call()`
 
-One interesting use of call lies inside the `mode<-` function which is an alternative way to change the mode of a vector. The important part of the function is extracted in to the `mode2<-` function below.
+One interesting use of call lies inside the `mode<-` function which is an alternative way to change the mode of a vector. The important part of the function is extracted in the `mode2<-` function below.
 
 ```R
 `mode2<-` <- function (x, value) {
@@ -240,7 +240,7 @@ x
 
 Generally, I'd prefer `mode3<-` over `mode2<-` because it uses concepts familiar to more R programmers, and generally it's a good idea to use the simplest and most commonly understand techniques that solve a given problem. 
 
-#### Extracting elements of a calle
+#### Extracting elements of a call
 
 When it comes to modifying calls, they behave almost exactly like lists: a call has `length`, `'[[` and `[` methods. The length of a call minus 1 gives the number of arguments:
 
@@ -279,7 +279,9 @@ match.call(eval(x[[1]]), x)
 
 This will be an important tool when we start manipulating existing function calls. If we don't use `match.call` we'll need a lot of extra code to deal with all the possible ways to call a function.
 
-We can wrap this up into a function. To figure out the definition of the associated function we evaluate the first component of the call, the name of the function. We need to specify an environment here, because the function might be different in different places. Whenever we provide an environment parameter, `parent.frame()` is usually a good default. Note the check for primitive functions: they don't have `formals()` and handle argument matching specially, so there's nothing we can do.
+We can wrap this up into a function. To figure out the definition of the associated function we evaluate the first component of the call, the name of the function. We need to specify an environment here, because the function might be different in different places. Whenever we provide an environment parameter, `parent.frame()` is usually a good default. 
+
+Note the check for primitive functions: they don't have `formals()` and handle argument matching specially, so there's nothing we can do.
 
 ```R
 standardise_call <- function(call, env = parent.frame()) {
@@ -605,9 +607,9 @@ unenclose(f(1))
 
 ### Exercises
 
-* Why does `unenclose()` use `substitute2()`, not `substitute`?
+* Why does `unenclose()` use `substitute2()`, not `substitute()`?
 
-* Modify `unenclose` so it only substitutes in atomic vectors, not more complicated object. (Hint: think about what the parent environment should be.)
+* Modify `unenclose` so it only substitutes in atomic vectors, not more complicated objects. (Hint: think about what the parent environment should be.)
 
 * Read the documentation and source for `pryr::partial()` - what does it do? How does it work?
 

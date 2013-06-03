@@ -641,7 +641,7 @@ aes <- function (x = NULL, y = NULL, ...) {
 }
 ```
 
-Both functions were written when I didn't know so much about non-standard evaluation, and if I was to write them today, I'd use the `dots()` helper function I showed previously.  I'd also think more about the environment in which the results of `aes()` should be evaluated, and how that integrates with ggplot2's rules for aesthetic mapping inheritance.
+Both functions were written when I didn't know so much about non-standard evaluation, and if I was to write them today, I'd use the `dots()` helper function I showed previously.  I'd also think more about the environment in which the results of `aes()` should be evaluated, and how that integrates with ggplot2's rules for aesthetic mapping inheritance. That's a bit murky at the moment and leads to confusion when creating complex graphics across multiple functions.
 
 ggplot2 and plyr provide slightly different ways to use standard evaluation so that you can refer to variables by reference. ggplot2 provides `aes_string()` which allows you to specify variables by the string representation of their name, and plyr uses S3 methods so that you can either supply an object of class quoted (as created with `.()`), or a regular character vector.
 

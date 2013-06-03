@@ -13,6 +13,8 @@ There are two advantages for using `~` over `quote()`:
 * It is shorter
 * It captures both the expression and the environment in which it was evaluated
 
+The disadvantage of using `~` is that most people are used to its role in models, and may be surprised in the semantics you imply from it are substantially different from standard modelling formulas.   
+
 The formula object is a call that knows in which environment it was evaluated. You can use `length()` to determine if it is one-sided or two-sided, and `[[` to extract the various pieces.
 
 ```R
@@ -46,9 +48,9 @@ f <- function(x) ~ cyl == x
 subset_f(mtcars, f(4))
 ```
 
-The disadvantage of using `~` is that most people are used to its role in models, and may be surprised in the semantics you imply from it are substantially different from standard modelling formulas.   
-
 ### `xtabs()`
+
+Is a pretty horrible example because of it's combination of call mangling and tangles with sparse matrices.
 
 ## Formulas for modelling
 

@@ -1,8 +1,6 @@
-# Special environments
+# Special contexts
 
-R's lexical scoping rules, ability to capture expressions without evaluating them and first-class environments make it an excellent environment for designing special environments that allow you to create domain specific languages (DSLs). 
-
-In this chapter, we'll explore evaluating code in environments that are simple modifications of the usual computational environment in R, working our way up to evaluations that completely redefine ordinary function semantics in R.
+R's lexical scoping rules, lazy argument evaluation and first-class environments make it an excellent environment for designing special environments that allow you to create domain specific languages (DSLs). This chapter shows how you can use these ideas to evaluate code in special contexts that pervert the usual behaviour of R.  We'll start with simple modifications then work our way up to evaluations that completely redefine ordinary function semantics in R.
 
 * Evaluate code in a special context: `local`, `capture.output`, `with_*`
 
@@ -13,6 +11,14 @@ In this chapter, we'll explore evaluating code in environments that are simple m
 * Create a full-blown DSL: `html`, `plotmath`, `deriv`, `parseNamespace`, `sql`
 
 ## Evaluate code in a special context
+
+It's often useful to evaluate a chunk of code in a special context
+
+* Temporarily modifying global state, like the working directory, environment variables, plot options or locale.
+
+* Capture side-effects of a function, like the text it prints, or the warnings it emits
+
+* Evaluate code in a new environment
 
 ### `with_something`
 
@@ -72,22 +78,24 @@ capture.output2 <- function(..., env = parent.frame()) {
 }
 ```
 
-An alternative implementation of `capture.output()` could take advantage of lazy evaluation of function arguments, and rely on the user combining multiple calls with `{}`:
+The default R implementation makes it possible to supply multiple pieces of code and combines all of their output. We could considerably simplify the function if we only captured one output. If we do this, we don't need to explicitly evaluate each part of the code, and can instead explicitly force lazy evaluation.
 
 ```R
-capture.output3 <- function(code, env = parent.frame()) {
+capture.output3 <- function(code) {
   file <- textConnection("rval", "w", local = TRUE)
-  sink(file); on.exit(sink())
+  sink(file)
+  on.exit(sink())
 
   force(code)
 
-  sink(); on.exit()
+  sink()
+  on.exit()
 
   rval
 }
 ```
 
-Evaluate, more generally.
+If you want to capture more types of output (like messages and warnings), you may find the `evaluate` package helpful. It powers `knitr`, and does it's best to ensure high fidelity between its output and what you'd see if you copy and pasted the code at the console.
 
 ### How does local work?
 
