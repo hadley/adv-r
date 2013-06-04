@@ -58,50 +58,107 @@ with_locale <- with_something(set_locale)
 
 ### `capture.output`
 
-```R
-capture.output2 <- function(..., env = parent.frame()) {
+`capture.output()` is a useful function when the output you really want from a function is printed to the console. It also allows you to work around badly written functions that have no way to suppress output to the console.  For example, it's difficult to capture the output of `str()`:
 
-  file <- textConnection("rval", "w", local = TRUE)
-  sink(file)
+```R
+y <- 1:10
+y_str <- str(y)
+y_str
+
+y_str <- capture.output(str(y))
+y_str
+```
+
+To work its magic, `capture.output()` uses `sink()`, which allows you to redirect the output stream to an arbitrary connection. We'll first write a helper function that allows us to execute code in the context of a `sink()`, automatically un-`sink()`ing when the function finishes:
+
+```
+with_sink <- function(connection, code, ...) {
+  sink(connection, ...)
   on.exit(sink())
 
-  args <- dots(...)
-  for(i in seq_along(args)) {
-    out <- withVisible(eval(args[[i]], env))
-    if (out$visible) print(out$value)
-  }
+  code
+}
+with_sink("temp.txt", print("Hello"))
+readLines("temp.txt")
+```
 
-  sink()
-  on.exit()
+With this in hand, we just need to add a little extra wrapping to our `capture.output2()` to write to a temporary file, read from it and clean up after ourselves:
+
+```R
+capture.output2 <- function(code) {
+  temp <- tempfile()
+  on.exit(file.remove(temp))
+  
+  with_sink(temp, force(code))
+  readLines(temp)
+}
+capture.output2(cat("a", "b", "c", sep = "\n"))
+```
+
+The real `capture.output()` is a bit more complicated: it uses a local `textConnection` to capture the data sent to sink, and it allows you to supply multiple expressions which are evaluated in turn. Using `with_sink()` this looks like `capture.output3()`
+
+```R
+capture.output3 <- function(..., env = parent.frame()) {
+  txtcon <- textConnection("rval", "w", local = TRUE)
+  
+  with_sink(txtcon, {
+    args <- dots(...)
+    for(i in seq_along(args)) {
+      out <- withVisible(eval(args[[i]], env))
+      if (out$visible) print(out$value)
+    }
+  })
 
   rval
 }
 ```
 
-The default R implementation makes it possible to supply multiple pieces of code and combines all of their output. We could considerably simplify the function if we only captured one output. If we do this, we don't need to explicitly evaluate each part of the code, and can instead explicitly force lazy evaluation.
-
-```R
-capture.output3 <- function(code) {
-  file <- textConnection("rval", "w", local = TRUE)
-  sink(file)
-  on.exit(sink())
-
-  force(code)
-
-  sink()
-  on.exit()
-
-  rval
-}
-```
+You might want to compare this function to the real `capture.output()` and think about the simplifications I've made. Is the code easier to understand or harder? Have I removed important functionality? 
 
 If you want to capture more types of output (like messages and warnings), you may find the `evaluate` package helpful. It powers `knitr`, and does it's best to ensure high fidelity between its output and what you'd see if you copy and pasted the code at the console.
 
 ### How does local work?
 
-Rewrite to emphasise what local should do, and how you could implement it yourself.
+In the process of performing a data analysis, you may create variables that are necessarily because they help break a complicated sequence of steps down in to easily digestible chunks, but are not needed afterwards. For example, in the following example, we might only want to keep the value of c:
 
-The source code for `local` is relatively hard to understand because it is very concise and uses some sutble features of evaluation (including non-standard evaluation of both arguments). If you have read [[computing-on-the-language]], you might be able to puzzle it out, but to make it a bit easier I have rewritten it in a simpler style below. 
+```R
+a <- 10
+b <- 30
+c <- a + b
+```
+
+It's useful to be able to store only the final result, preventing the intermediate results from cluttering your workspace.  We already know one way of doing this using a function:
+
+```R
+c <- (function() {
+  a <- 10
+  b <- 30
+  a + b
+})()
+```
+
+(In javascript this is called the immediately invoked function expression (IIFE))
+
+R provides another tool that's a little less verbose, the `local()` function:
+
+```R
+c <- local({
+  a <- 10
+  b <- 30
+  a + b
+})
+```
+
+The idea of local is to create a new environment (inheriting from the current environment) and run the code in that:
+
+```R
+local2 <- function(expr) {
+  envir <- new.env(parent = parent.frame())
+  eval(substitute(expr), envir)  
+}
+```
+
+The real `local()` code is considerably more complicated because it adds a second environment parameter. I don't think this is necessary because if you have an explicit environment parameter, then you can already evaluate code in that environment with `evalq()`.  The source code for `local` is relatively hard to understand because it is very concise and uses some sutble features of evaluation (including non-standard evaluation of both arguments). If you have read [[computing-on-the-language]], you might be able to puzzle it out, but to make it a bit easier I have rewritten it in a simpler style below. 
 
 ```R
 local2 <- function(expr, envir = new.env()) {
@@ -127,27 +184,6 @@ local3 <- function(expr, envir = new.env()) {
 ```
 
 But it's because of how the arguments are evaluated - default arguments are evalauted in the scope of the function so that `local(x)` would not the same as `local(x, new.env())` without special effort.  
-
-`local` is effectively identical to 
-
-```R
-local4 <- function(expr, envir = new.env()) {
-  envir <- eval(substitute(envir), parent.frame())
-  eval(substitute(expr), envir)
-}
-local4(9+9)
-```
-
-But a better implementation might be
-
-```R
-local5 <- function(expr, envir = NULL) {
-  if (is.null(envir))
-    envir <- new.env(parent = parent.frame())
-
-  eval(substitute(expr), envir)  
-}
-```
 
 ## Anaphoric functions
 
