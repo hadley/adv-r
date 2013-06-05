@@ -374,7 +374,7 @@ This is an example of the general tension between functions that are designed fo
 
 ```R
 subset2_q <- function(x, condition) {
-  r <- eval(condition_call, x, parent.frame())
+  r <- eval(condition, x, parent.frame())
   x[r, ]
 }
 subset2 <- function(x, condition) {
