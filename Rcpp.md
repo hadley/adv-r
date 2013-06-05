@@ -548,7 +548,7 @@ Finally, there are a grab bag of sugar functions that mimic frequently used R fu
 
 If you're working with missing values, you need to know two things:
 
-* what happens when you put missing values in scalars (e.g. `double`)
+* how R's missing values behave in C++'s scalars (e.g. `double`)
 * how to get and set missing values in vectors (e.g. `NumericVector`)
 
 ### Scalars
@@ -571,15 +571,15 @@ List scalar_missings() {
 */
 ```
 
-So
+Things look pretty good here: with the exception of `bool`, all of the missing values have been preserved. 
 
-* `IntegerVector` -> `int`: stored as the smallest integer. If you leave as is, it will be preserved, but no C++ operations are aware of the missingness: `evalCpp('NA_INTEGER + 1')` gives -2147483647.
+#### Integers
 
-* `CharacterVector` -> `String`: the string "NA"
+However, things are not quite as they seem for integers. Missing values are stored as the smallest integer so stored so if you don't do anything to them, they'll be preserved, but C++ doesn't know that the smallest integer has special behaviour so if you do anything with it you're likely to get an incorrect value: `evalCpp('NA_INTEGER + 1')` gives -2147483647.
 
-* `LogicalVector` -> `bool`: TRUE.  To work with missing values in logical vectors, use an `int` instead of a `bool`.
+If you want to work with missing values in integers, either use length one `IntegerVectors` or be very careful with your code.
 
-* `NumericVector` -> `double`: stored as an NaN, and preserved. Most numerical operations will behave as you expect, but logical comparisons will not.  See below for more details.
+#### Doubles
 
 If you're working with doubles, you may be able to get away with ignoring missing values and working with NaN (not a number). R's missing values are a special type of the IEEE 754 floating point number NaN. That means if you coerce them to `double` in your C++ code, they will behave like regular NaN's. That means, in a logical context they always evaluate to FALSE:
 
@@ -605,6 +605,14 @@ evalCpp("NAN - 1")
 evalCpp("NAN / 1")
 evalCpp("NAN * 1")
 ```
+
+### Strings
+
+`String` is an scalar string class introduced by Rcpp, so it knows how to deal with missing values.
+
+### Boolean
+
+C++'s `bool` only stores two values (TRUE or FALSE), but R's logical vector has three possible values (TRUE, FALSE and NA). If you coerce a length 1 logical vector, first make sure it doesn't contain any missing values otherwise they will be converted to TRUE.
 
 ### Vectors
 
