@@ -377,13 +377,14 @@ subset2_q <- function(x, condition) {
   r <- eval(condition, x, parent.frame())
   x[r, ]
 }
+
 subset2 <- function(x, condition) {
-  subset2_q(substitute(x), condition)
+  subset2_q(x, substitute(condition))
 }
 
 subscramble <- function(x, condition) {
   condition <- substitute(condition)
-  scramble(subset2(x, condition))
+  scramble(subset2_q(x, condition))
 }
 ```
 
@@ -693,4 +694,3 @@ Combined with a by operator (e.g. `ddply()`) these four functions allow you to e
 ## Conclusion
 
 Now that you understand how our version of subset works, go back and read the source code for `subset.data.frame`, the base R version which does a little more. Other functions that work similarly are `with.default`, `within.data.frame`, `transform.data.frame`, and in the plyr package `.`, `arrange`, and `summarise`. Look at the source code for these functions and see if you can figure out how they work.
-
