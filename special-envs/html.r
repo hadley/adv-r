@@ -161,3 +161,5 @@ tag_f <- function(tag_name) {
   }
 }
 tags <- list2env(lapply(setNames(tag_names, tag_names), tag_f))
+
+"%||%" <- function(a, b) if (is.null(a)) b else a

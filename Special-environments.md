@@ -2,6 +2,8 @@
 
 R's lexical scoping rules, lazy argument evaluation and first-class environments make it an excellent environment for designing special environments that allow you to create domain specific languages (DSLs). This chapter shows how you can use these ideas to evaluate code in special contexts that pervert the usual behaviour of R.  We'll start with simple modifications then work our way up to evaluations that completely redefine ordinary function semantics in R.
 
+This chapter uses ideas from the breadth of the book including non-standard evaluation, environment manipulation, active bindings, ...
+
 * Evaluate code in a special context: `local`, `capture.output`, `with_*`
 
 * Supply an expression instead of a function: `curve` 
@@ -22,7 +24,43 @@ It's often useful to evaluate a chunk of code in a special context
 
 ### `with_something`
 
-There are a number of parameters in R that have global state (e.g. `option()`, environmental variables, `par()`, ...) and it's useful to be able to run code temporarily in a different context.  devtools provides `with_something()` function to make this a little eaiser:
+There are a number of parameters in R that have global state (e.g. `option()`, environmental variables, `par()`, ...) and it's useful to be able to run code temporarily in a different context.  For example, it's often useful to be able to run code with the working directory temporarily set to a new location:
+
+```R
+in_dir <- function(dir, code) {
+  old <- setwd(dir)
+  on.exit(setwd(old))
+
+  force(code)
+}
+getwd()
+in_dir("~", getwd())
+```
+
+The basic pattern is simple:
+
+* We first set the directory to a new location, capturing the current location from the output of `setwd`.
+
+* We then use `on.exit()` to ensure that the working directory is returned to the previous value regardless of how the function exits.
+
+* Finally, we explicitly force evaluation of the code. (We don't actually need `force()` here, but it makes it clear to readers what we're doing)
+
+We could use similar code to temporarily set global options:
+
+```R
+with_options <- function(opts, code) {
+  old <- options(opts)
+  on.exit(options(old))
+
+  force(code)
+}
+x <- 0.123456
+print(x)
+with_options(list(digits = 3), print(x))
+with_options(list(digits = 1), print(x))
+```
+
+You might notice that there's a lot of similarity between these two functions. We could extract out that commonality with a function operator that takes the setter function as an input:
 
 ```R
 with_something <- function(set) {
@@ -34,7 +72,7 @@ with_something <- function(set) {
 }
 ```
 
-You then combine `with_something()` with a setter function that returns the previous values.  There are a number of base R functions that already behave this way:
+Then we can easily generate a whole set of with functions:
 
 ```R
 in_dir <- with_something(setwd)
@@ -42,19 +80,20 @@ with_options <- with_something(options)
 with_par <- with_something(par)
 ```
 
-Others, like `Sys.setlocale()`, need more wrapping:
+However, many of the setter functions that affect global state in R don't return the previous values in a way that can easily be passed back in.  In that case, like for `.libPaths()`, which controls where R looks for packages to load, we first create a wrapper that enforces the behaviour we want, and then use `with_something()`: 
 
 ```R
-set_locale <- function(cats) {
-  stopifnot(is.named(cats), is.character(cats))
+set_libpaths <- function(paths) {
+  libpath <- normalizePath(paths, mustWork = TRUE)
 
-  old <- vapply(names(cats), Sys.getlocale, character(1))
-
-  mapply(Sys.setlocale, names(cats), cats)
+  old <- .libPaths()
+  .libPaths(paths)
   invisible(old)
 }
-with_locale <- with_something(set_locale)
+with_libpaths <- with_something(set_libpaths)
 ```
+
+These functions (and a few others) are provided by the devtools package. See `?with_something` for more details.
 
 ### `capture.output`
 
@@ -117,7 +156,7 @@ You might want to compare this function to the real `capture.output()` and think
 
 If you want to capture more types of output (like messages and warnings), you may find the `evaluate` package helpful. It powers `knitr`, and does it's best to ensure high fidelity between its output and what you'd see if you copy and pasted the code at the console.
 
-### How does local work?
+### Evaluating code in a new environment
 
 In the process of performing a data analysis, you may create variables that are necessarily because they help break a complicated sequence of steps down in to easily digestible chunks, but are not needed afterwards. For example, in the following example, we might only want to keep the value of c:
 
@@ -127,7 +166,7 @@ b <- 30
 c <- a + b
 ```
 
-It's useful to be able to store only the final result, preventing the intermediate results from cluttering your workspace.  We already know one way of doing this using a function:
+It's useful to be able to store only the final result, preventing the intermediate results from cluttering your workspace.  We already know one way of doing this, using a function:
 
 ```R
 c <- (function() {
@@ -137,7 +176,7 @@ c <- (function() {
 })()
 ```
 
-(In javascript this is called the immediately invoked function expression (IIFE))
+(In javascript this is called the immediately invoked function expression (IIFE), and is used extensively in modern javascript to encapsulate different javascript libraries)
 
 R provides another tool that's a little less verbose, the `local()` function:
 
@@ -149,7 +188,7 @@ c <- local({
 })
 ```
 
-The idea of local is to create a new environment (inheriting from the current environment) and run the code in that:
+The idea of local is to create a new environment (inheriting from the current environment) and run the code in that.  The essence of `local()` is captured in this code:
 
 ```R
 local2 <- function(expr) {
@@ -158,7 +197,7 @@ local2 <- function(expr) {
 }
 ```
 
-The real `local()` code is considerably more complicated because it adds a second environment parameter. I don't think this is necessary because if you have an explicit environment parameter, then you can already evaluate code in that environment with `evalq()`.  The source code for `local` is relatively hard to understand because it is very concise and uses some sutble features of evaluation (including non-standard evaluation of both arguments). If you have read [[computing-on-the-language]], you might be able to puzzle it out, but to make it a bit easier I have rewritten it in a simpler style below. 
+The real `local()` code is considerably more complicated because it adds a second environment parameter. I don't think this is necessary because if you have an explicit environment parameter, then you can already evaluate code in that environment with `evalq()`. The original code is also hard to understand because it is very concise and uses some sutble features of evaluation (including non-standard evaluation of both arguments). If you have read [[computing-on-the-language]], you might be able to puzzle it out, but to make it a bit easier I have rewritten it in a simpler style below. 
 
 ```R
 local2 <- function(expr, envir = new.env()) {
@@ -183,33 +222,45 @@ local3 <- function(expr, envir = new.env()) {
 }
 ```
 
-But it's because of how the arguments are evaluated - default arguments are evalauted in the scope of the function so that `local(x)` would not the same as `local(x, new.env())` without special effort.  
+But it's because of how the arguments are evaluated - default arguments are evalauted in the scope of the function so that `local(x)` would not the same as `local(x, new.env())` without special effort. 
+
+### Exercises
+
+* Compare `capture.output()` to `capture.output2()` and `local()` to `local2()`. How do the functions differ? What features have I removed to make the key ideas easier to see? How have I rewritten the key ideas to be easier to understand?
+
+* How does the `chdir` parameter of `source()` compare to `in_dir()`? Why might you prefer one approach to the other?
 
 ## Anaphoric functions
 
-(
-Anaphoric functions), anaphoric if, http://www.arcfn.com/doc/anaphoric.html, http://www.perlmonks.org/index.pl?node_id=666047
-
-Anaphoric functions (http://amalloy.hubpages.com/hub/Unhygenic-anaphoric-Clojure-macros-for-fun-and-profit), are functions that use pronouns. This is easiest to understand with an example using an interesting anaphoric function in base R: `curve()`.  `curve()` draws a plot of the specified function, but interestingly you don't need to use a function, you just supply an expression that uses `x`:
+Another variant along these lines is an "[anaphoric](http://en.wikipedia.org/wiki/Anaphora_(linguistics)) function", or a function that uses a pronoun. This is easiest to understand with an example using an interesting anaphoric function in base R: `curve()`.`curve()` draws a plot of the specified function, but interestingly you don't need to use a function, you just supply an expression that uses `x`:
 
 ```R
 curve(x ^ 2)
 curve(sin(x), to = 3 * pi)
-curve(log(x))
+curve(sin(exp(4 * x)), n = 1000)
 ```
 
-`curve()` works by evaluating the expression in a special environment in which the appropriate `x` exists:
+Here `x` plays a role like a pronoun in an English sentence: it doesn't represent a single concrete value, but instead is a place holder that varies over the range of the plot. Note that it doesn't matter what the value of `x` outside of `curve()` is: the expression is evaluated in a special environment where `x` has a special meaning:
 
 ```R
-curve2 <- function(expr, xlim, n = 100, env = parent.frame()) {
+x <- 1
+curve(sin(exp(4 * x)), n = 1000)
+```
+
+`curve()` works by evaluating the expression in a special environment in which the appropriate `x` exists. The essence of `curve()`, omitting many useful but incidental details like plot labelling, looks like this:
+
+```R
+curve2 <- function(expr, xlim = c(0, 1), n = 100, env = parent.frame()) {
   env2 <- new.env(parent = env)
   env$x <- seq(xlim[1], xlim[2], length = n)
   
   y <- eval(expr, env2)
   plot(x, y, type = "l", ylab = deparse(substitute(expr)))
 }
-curve2(sin(x ^ (-2)), c(0.01, 2), 10000)
+curve2(sin(exp(4 * x)), n = 1000)
 ```
+
+Creating a new environment containing the pronoun is the key technique for implementing anaphoric functions.
 
 Another way to solve the problem would be to turn the expression into a function using `make_function()`:
 
@@ -222,16 +273,16 @@ curve3 <- function(expr, xlim, n = 100, env = parent.frame()) {
   
   plot(x, y, type = "l", ylab = deparse(substitute(expr)))
 }
-curve3(sin(x ^ (-2)), c(0.01, 2), 1000)
+curve3(sin(exp(4 * x)), n = 1000)
 ```
 
-As you can see the approaches take about as much code, and require knowing about the same amount of fundamental R concepts. I would have a slight preference for the second because it would be easier to reuse the part of the `curve3()` that turns an expression into a function.
+The approaches take about as much code, and require knowledge of  the same number of fundamental R concepts. I would have a slight preference for the second because it would be easier to reuse the part of the `curve3()` that turns an expression into a function. All anaphoric functions need careful documentation so that the user knows that some variable will have special properties inside the anaphoric function and must otherwise be avoided. 
 
-Anaphoric functions need careful documentation so that the user knows that some variable will have special properties inside the anaphoric function and must otherwise be avoided. (And recall the caveats with any use of non-standard evaluation)
+If you're interesting in learning more, there are some good resources for anaphoric functions in  [arc](http://www.arcfn.com/doc/anaphoric.html) (a list like language), [perl](http://www.perlmonks.org/index.pl?node_id=666047) and [clojure](http://amalloy.hubpages.com/hub/Unhygenic-anaphoric-Clojure-macros-for-fun-and-profit)
 
 ### With connection
 
-We could use this idea to create a function that allows you to use a connection and guarantee that it's closed at the end. A simple implementation like this doesn't work:
+We could use this idea to create a function that allows you to use a connection, automatically openning and closing it if needed. This is a common technique in ruby, which uses its block syntax whenever you deal with resources that need to be closed after you're done with them.  We can't use the same implementation as the with functions above because an implementation like that below gives no way for the code to refer to the connection:
 
 ```R
 with_conn <- function(conn, code) {
@@ -242,7 +293,7 @@ with_conn <- function(conn, code) {
 }
 ```
 
-Because the code has no way to refer to the connection.  Instead we could use an anaphoric function and create the variable `it` in the environment in which the code is evaluated.
+We can work around this problem by using an anaphoric function, referring to the connection as `.it`. We'd need to clearly document that convention so the user knew what to call it.
 
 ```R
 with_conn <- function(conn, code, env = parent.frame()) {
@@ -252,30 +303,36 @@ with_conn <- function(conn, code, env = parent.frame()) {
   }
 
   env2 <- new.env(parent = env)
-  env$it <- conn
+  env$.it <- conn
 
   eval(substitute(code), env)
 }
 
-con <- file("test.txt", "r+")
-with_conn(con, {
-  writeLines("This is a test", it)
-  x <- readChar(it, 5)
-  print(x)
-  while(isIncomplete(it)) {
-    x <- readChar(it, 5)
+# Create a new file, and then read it in in pieces of length 6
+with_conn(file("test.txt", "w+"), {
+  writeLines("This is a test", .it)
+  x <- readChar(.it, 6)
+
+  while(length(x) > 0) {
     print(x)
+    x <- readChar(.it, 6)
   }
 })
 ```
+
+The construction of this function also has the appealing side-effect that the scope of the connection is clearly shown with indenting.
 
 ## Special environments for run-time checking
 
 We can take the idea of special evaluation contexts and use the idea to implement run-time checks, by executing code in a special environment that warns or errors when the user does something that we think is a bad idea.
 
+* Checking for logical abbreviations
+
 ### Logical abbreviations
 
-A better approach is to construct a special environment and evaluate the code in that. For example, instead of automatically trying to modify the code, we could create an environment like:
+One of the checks that `R CMD check` runs ensures that you don't use the logical abbreviations `T` and `F`. It's a useful check, but a bit frustrating to use because it terminates on the first `F` or `T` it finds, so you need to run it many times, but `R CMD check` is slow. Instead, we can take the idea that underlies the check and run it ourselves, which makes it faster to iterate.
+
+The basic idea is to use an active binding so that whenever code tries to access `F` or `T` it throws an error.  This is a very similar technique to anaphoric functions:
 
 ```R
 check_logical_abbr <- function(code, env = parent.frame()) {
@@ -286,35 +343,38 @@ check_logical_abbr <- function(code, env = parent.frame()) {
   eval(substitute(code), new_env)
 }
 
-f <- function(x = T) x
-check_logical_abbr(f(T))
-check_logical_abbr(f())
-
-check_logical_abbr <- function(code, env = parent.frame()) {
-  new_env <- new.env(parent = env)
-  on.exit(copy_env(new_env, env))
-  delayedAssign("T", stop("Use TRUE not T"), assign.env = new_env)
-  delayedAssign("F", stop("Use FALSE not F"), assign.env = new_env)
-
-  eval(substitute(code), new_env)
-}
-
-copy_env <- function(src, dest) {
-  for(i in ls(src, all.names = TRUE)) {
-    dest[[i]] <- src[[i]]
-  }
-}
+check_logical_abbr(c(FALSE, T, FALSE))
 ```
 
 Note that functions look in the environment in which they were defined so to test large bodies of code, you'll need to run `check_logical_abbr()` as far as out as possible:
 
 ```R
+f <- function(x) {
+  mean(x, na.rm = T)
+}
+check_logical_abbr(f(1:10))
+
+check_logical_abbr({
+  f <- function(x) {
+    mean(x, na.rm = T)
+  }
+  f(1:10)
+})
+```
+
+This will be typically easiest to do as a wrapper around the code you use to load your code into R:
+
+```R
 check_logical_abbr(source("my-file.r"))
 check_logical_abbr(load_all())
-# ...
 ```
 
 ### Test that
+
+Manage global state accessible from functions. Use special environment.
+
+Create with function that uses `on.exit()` to push and pop from stack.
+
 
 ```R
 testthat_env <- new.env()
@@ -343,4 +403,19 @@ with_reporter <- function(reporter, code) {
 
   res
 }
+```
+
+## Domain specific languages
+
+The combination of first class environments and lexical scoping gives us a powerful toolkit for creating domain specific languages in R. In this section we'll explore how you can new languages that use R's syntax but have different behaviours.
+
+We'll first look at html, making it possible to write code that produces html structured in a way very similar to the output html.
+
+```R
+with_html(
+  body(
+    h1("A heading", id = "first"),
+    p("Some text. ", b("Some bold text."), "Some more text")
+  )
+)
 ```
