@@ -198,7 +198,7 @@ When you first start using `eval()` it's easy to make mistakes.  Here's a common
 ```R
 eval(cyl, mtcars)
 # Carefully look at the difference to this error
-eval(quote(cyl1), mtcars)
+eval(quote(cyl), mtcars)
 ```
 
 ### Exercises
