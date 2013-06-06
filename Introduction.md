@@ -6,9 +6,9 @@ This book, particularly the package development part, is opinionated. You might 
 
 ## Who should read this book
 
-* Have you written a substantial amount of code (perhaps for data analysis), and you now want to learn better techniques for managing all that code, and gain a better understand of how R works?
+* Have you written a substantial amount of code (perhaps for data analysis), and you now want to learn better techniques for managing all that code, and gain a better understanding of how R works?
 
-* Have you tried to write a R package to distribute your code or data, but given up because the process is so frustrating?
+* Have you tried to write an R package to distribute your code or data, but given up because the process is so frustrating?
 
 * Have you come to R from another language and been driven up the wall by R's way of doing things?  Do you want to learn why on earth it works the way it does, and how you can be productive in R?
 
