@@ -1,140 +1,148 @@
-# Extracted from Shiny
+# We first start by creating a way of escaping the characters that have special
+# meaning for html, while making sure we don't end up double-escaping at any
+# point. The easiest way to do this is to create an S3 class that allows us to
+# distinguish between regular text (that needs escaping) and html (that
+# doesn't).
+#
+# We then write an escape method that leaves html unchanged and escapes the
+# special characters (&, <, >) in ordinary text. We also add a method for lists
+# for convenience
 
-# tags$body(tags$p(tags$b("Bold")), "Text", tags$h1("Heading"))
-# with_html(body(p(b("Bold")), "Text", h1("Heading")))
-with_html <- function(code) {
-  eval(substitute(code), tags)
+html <- function(x) structure(x, class = "html")
+escape <- function(x) UseMethod("escape")
+escape.html <- function(x) x
+escape.character <- function(x) {
+  x <- gsub("&", "&amp;", x)
+  x <- gsub("<", "&lt;", x)
+  x <- gsub(">", "&gt;", x)
+
+  html(x)
+}
+escape.list <- function(x) {
+  lapply(x, escape)
 }
 
-tag <- function(`_tag_name`, ...) {
+# ```R
+# escape("This is some text.")
+# escape("x > 1 & y < 2")
+# escape(escape("x > 1 & y < 2"))
+#
+# # Double escaping is not a problem
+# escape(escape("This is some text. 1 > 2"))
+#
+# # And text we know is html doesn't get escaped.
+# escape(html("<hr />"))
+# ```
+
+# Next we'll write a few simple tag functions and then figure out how to
+# generalise for all possible html tags.  Let's start with a paragraph
+# tag since that's probably the most commonly used.
+#
+# HTML tags can have both attributes (e.g. id, or class) and children (like <b>
+# or <i>). We need some way of separating these in the function call: since
+# attributes are named values and children don't have names, it seems natural
+# to separate using named vs. unnamed arguments. Then a call to `p()` might look
+# like:
+#
+# ```R
+# p("Some text.", b("Some bold text"), i("Some italic text"), class = "mypara")
+# ```
+#
+# We could list all the possible attributes of the p tag in the function
+# definition, but that's hard because there are so many, and it's possible to
+# use [custom attributes](http://html5doctor.com/html5-custom-data-attributes/)
+# Instead we'll just use ... and separate the components based on whether
+# or they are named. To do this correctly, we need to be aware of a "feature" of
+# `names()`:
+#
+# ```R
+# names(c(a = 1, b = 2))
+# names(c(a = 1, 2))
+# names(c(1, 2))
+# ```
+#
+# With this in mind we create two helper functions to extract the named
+# and unnamed components of a vector:
+
+named <- function(x) {
+  if (is.null(names(x))) return(NULL)
+  x[names(x) != ""]
+}
+unnamed <- function(x) {
+  if (is.null(names(x))) return(x)
+  x[names(x) == ""]
+}
+
+# With this in hand, we can create our p function. There's one new function
+# here: `html_attributes()`. This takes a list of name-value pairs and
+# creates the correct html attributes specification from them. It's a little
+# complicated, not that important and doesn't introduce any important new
+# ideas, so I won't discuss it here, but you might want to read the source
+# code to see how it works
+
+p <- function(...) {
   args <- list(...)
-  arg_names <- names(args) %||% rep("", length(args))
+  attribs <- html_attributes(named(args))
+  children <- unlist(escape(unnamed(args)))
 
-  attribs <- args[arg_names != ""]
-  children <- collapse_children(args[arg_names == ""])
-
-  structure(
-    list(name = `_tag_name`, attribs = attribs, children = children),
-    class = "tag"
-  )
-}
-as.character.tag <- function(x, ...) html(x)
-format.tag <- function(x, ...) html(x)
-print.tag <- function(x, ...) cat(format(x), "\n", sep = "")
-
-void_tag <- function(`_tag_name`, ...) {
-  args <- list(...)
-  arg_names <- names(args)
-  if (is.null(arg_names) || any(arg_names == "")) {
-    stop(`_tag_name`, " can not have children", call. = FALSE)
-  }
-
-  structure(
-    list(name = `_tag_name`, attribs = attribs),
-    class = c("void_tag", "tag")
-  )
-}
-is.tag <- function(x) inherits(x, "tag")
-
-html <- function(x, indent = 0) UseMethod("html")
-html.tag <- function(x, indent = 0) {
-  multi <- length(x$children) > 1
-
-  attribs <- html_attributes(x$attrib)
-  children <- html(x$children, indent = if (multi) indent + 1 else 0)
-
-  paste0(
-    indent_text(indent),
-    "<", x$name, if (nzchar(attribs)) " ", attribs, ">", if (multi) "\n",
-    children, if (multi) "\n",
-    "</", x$name, ">", if (multi) "\n"
-  )
-}
-html.void_tag <- function(x, indent = 0) {
-  attribs <- html_attributes(x$attrib)
-
-  paste0(indent_text(indent), "<", x$name, attribs, "/>")
+  html(paste0("<p", attribs, ">", paste(children, collapse = ""), "</p>"))
 }
 
-html_attributes <- function(list) {
-  attr <- Map(html_attribute, names(list), list)
-  paste0(unlist(attr, recursive = FALSE, use.names = FALSE), collapse = " ")
-}
-html_attribute <- function(name, value) {
-  if (length(value) == 0) return(name)
-  if (length(value) != 1) stop("value must be NULL or of length 1")
+# ```R
+# p("Some text")
+# p("Some text", id = "myid")
+# p("Some text", image = NULL)
+# p("Some text", class = "important", "data-value" = 10)
+# ```
 
-  if (is.logical(value)) {
-    value <- to_lower(value)
-  } else {
-    value <- html_escape(value, attribute=TRUE)
-  }
-  paste0(name, " = '", value, "'")
-}
+# With this definition of `p()` it's pretty easy to see what will change
+# for different tags.  We'll use a function operator to make it easy to generate
+# a tag function given a tag name:
 
-html.list <- function(x, indent = 0) {
-  pieces <- vapply(x, html, indent = indent, FUN.VALUE = character(1))
-  paste(pieces, collapse = "\n")
-}
-html.character <- function(x, indent = 0) {
-  paste0(indent_text(indent), html_escape(x, attrib = FALSE))
-}
+tag <- function(tag) {
+  function(...) {
+    args <- list(...)
+    attribs <- html_attributes(named(args))
+    children <- unlist(escape(unnamed(args)))
 
-indent_text <- function(x) {
-  paste0(rep(" ", x * 2), collapse = "")
-}
-
-collapse_children <- function(children) {
-  if (is.tag(children) || is.character(children)) {
-    list(children)
-  } else if (is.list(children)) {
-    unlist(lapply(children, collapse_children),
-      recursive = FALSE, use.names = FALSE)
-  } else {
-    list(as.character(children))
+    html(paste0(
+      "<", tag, attribs, ">",
+      paste(children, collapse = ""),
+      "</", tag, ">"
+    ))
   }
 }
+p <- tag("p")
+b <- tag("b")
+i <- tag("i")
 
-html_escape <- local({
-  .htmlSpecials <- list(
-    `&` = '&amp;',
-    `<` = '&lt;',
-    `>` = '&gt;'
-  )
-  .htmlSpecialsPattern <- paste(names(.htmlSpecials), collapse='|')
-  .htmlSpecialsAttrib <- c(
-    .htmlSpecials,
-    "\'" = '&#39;',
-    "\"" = '&quot;',
-    `\r` = '&#13;',
-    `\n` = '&#10;'
-  )
-  .htmlSpecialsPatternAttrib <- paste(names(.htmlSpecialsAttrib), collapse='|')
+# Now we can run our earlier example:
+#
+# ```R
+# p("Some text.", b("Some bold text"), i("Some italic text"), class = "mypara")
+# ```
+#
+# Before we continue to generate functions for every possible html tag, we
+# need a variant of tag for void tags: tags that can not have children.
 
-  function(text, attribute=TRUE) {
-    pattern <- if(attribute)
-      .htmlSpecialsPatternAttrib
-    else
-      .htmlSpecialsPattern
-
-    # Short circuit in the common case that there's nothing to escape
-    if (!grepl(pattern, text))
-      return(text)
-
-    specials <- if(attribute)
-      .htmlSpecialsAttrib
-    else
-      .htmlSpecials
-
-    for (chr in names(specials)) {
-      text <- gsub(chr, specials[[chr]], text, fixed=TRUE)
+void_tag <- function(tag) {
+  function(...) {
+    args <- list(...)
+    if (length(unnamed(args)) > 0) {
+      stop("Tag ", tag, " can not have children", call. = FALSE)
     }
+    attribs <- html_attributes(named(args))
 
-    return(text)
+    html(paste0("<", tag, attribs, " />"))
   }
-})
+}
 
-tag_names <- c("a", "abbr", "address", "area", "article", "aside", "audio", "b",
+img <- void_tag("img")
+img(src = "diamonds.png", width = 10, height = 10)
+
+# Next we need a list of all the html tags:
+
+tags <- c("a", "abbr", "address", "area", "article", "aside", "audio", "b",
   "base", "bdi", "bdo", "blockquote", "body", "br", "button", "canvas",
   "caption", "cite", "code", "col", "colgroup", "command", "data", "datalist",
   "dd", "del", "details", "dfn", "div", "dl", "dt", "em", "embed",
@@ -152,14 +160,66 @@ void_tags <- c("area", "base", "br", "col", "command", "embed", "hr",
   "img", "input", "keygen", "link", "meta", "param",
   "source", "track", "wbr")
 
-tag_f <- function(tag_name) {
-  force(tag_name)
-  if (tag_name %in% void_tags) {
-    function(...) void_tag(tag_name, ...)
-  } else {
-    function(...) tag(tag_name, ...)
-  }
-}
-tags <- list2env(lapply(setNames(tag_names, tag_names), tag_f))
+# If you look at this list carefully, you'll see there are quite a few tags
+# that have the same name as base R functions (body, col, q, source, sub,
+# summary, table), and others that clash with popular packages (e.g. map).
+# So we don't want to make all the functions available (in either the global
+# environment or a package environment) by default.  So what we'll do is
+# put them in a list, and add some additional code to make it easy to use
+# them when desired.
 
-"%||%" <- function(a, b) if (is.null(a)) b else a
+tags <- c(
+  setNames(lapply(tags, tag), tags),
+  setNames(lapply(void_tags, void_tag), void_tags)
+)
+
+# This gives us a way to call tag functions explicitly, but is a little
+# verbose:
+#
+# ```R
+# tags$p("Some text.", tags$b("Some bold text"), tags$i("Some italic text"))
+# ```
+
+# We finish off our HTML DSL by creating a function that allows us to evaluate
+# code in the context of that list:
+
+with_html <- function(code) {
+  eval(substitute(code), tags)
+}
+
+# This gives us a succinct API which allows us to write html when we need it
+# without cluttering up the namespace when we don't. Inside `with_html` if you
+# want to access the R function overridden by an html tag of the same name, you
+# can use the full `package::function` specification.
+#
+# ```R
+# with_html(p("Some text.", b("Some bold text"), i("Some italic text")))
+# ```
+
+# ------------------------------------------------------------------------------
+
+html_attributes <- function(list) {
+  if (length(list) == 0) return("")
+
+  attr <- Map(html_attribute, names(list), list)
+  paste0(" ", unlist(attr), collapse = "")
+}
+html_attribute <- function(name, value = NULL) {
+  if (length(value) == 0) return(name)
+  if (length(value) != 1) stop("value must be NULL or of length 1")
+
+  if (is.logical(value)) {
+    value <- to_lower(value)
+  } else {
+    value <- escape_attr(value)
+  }
+  paste0(name, " = '", value, "'")
+}
+escape_attr <- function(x) {
+  x <- escape.character(x)
+  x <- gsub("\'", '&#39;', x)
+  x <- gsub("\"", '&quot;', x)
+  x <- gsub("\r", '&#13;', x)
+  x <- gsub("\n", '&#10;', x)
+  x
+}
