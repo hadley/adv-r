@@ -205,7 +205,7 @@ eval(quote(cyl), mtcars)
 
 * The real subset function (`subset.data.frame()`) does two other things to the result. What are they?
 
-* The other component of the real subset function is variable selection. It allows you to work with variable names like they are positions, so you can do things like `subset(mtcars, -cyl)` to drop the cylinder variable, or `subset(mtcars, disp:drat)` to select all the variables between `disp` and `drat`.   How does select work? I've made it easier to understand by extracting it out into its own function:
+* The other component of the real subset function is variable selection. It allows you to work with variable names like they are positions, so you can do things like `subset(mtcars, , -cyl)` to drop the cylinder variable, or `subset(mtcars, , disp:drat)` to select all the variables between `disp` and `drat`.   How does select work? I've made it easier to understand by extracting it out into its own function:
 
     ```R
     select <- function(df, vars) {
