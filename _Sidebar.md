@@ -36,6 +36,7 @@ Performant code
   * [[Philosophy]]
   * [[Package basics]]
   * The [[Package development cycle]]
+  * [[Package Quick Reference]]
   * [[Documenting packages]]
   * [[Documenting functions]]
   * [[Testing]]
