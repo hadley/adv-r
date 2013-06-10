@@ -10,7 +10,7 @@ sinx <- sin(x)
 plot(x, sinx, type = "l")
 ```
 
-Look at the labels on the axes! How did R know that the variable on the x axis was called `x` and the variable on the y axis was called `sinx`? In most programming languages, you can only values of the arguments provided to functions, but in R you can also access the expression used to computing them. Combined with R's lazy evaluation mechanism this gives function authors considerable power to both access the underlying expression and do special things with it.
+Look at the labels on the axes! How did R know that the variable on the x axis was called `x` and the variable on the y axis was called `sinx`? In most programming languages, you can only access values of the arguments provided to functions, but in R you can also access the expression used to computing them. Combined with R's lazy evaluation mechanism this gives function authors considerable power to both access the underlying expression and do special things with it.
 
 Techniques based on these tools are generally called "computing on the language", and in R provide a set of tools with power equivalent to functional and object oriented programming.  This chapter will introduce you to the basic ideas of special evaluation, show you how they are used in base R, and how you can use them to create your own functions that save typing for interactive analysis. These tools are very useful for developing convenient user-facing functions because they can dramatically reduce the amount of typing required to specify an action.  
 
@@ -45,7 +45,7 @@ f(x + y ^ 2 / z + exp(a * sin(b)))
 
 We won't worry yet about exactly what sort of object `substitute()` returns (that's the topic of the [[Expressions]] chapter), but we'll call it an expression.  (Note that it's not the same thing as returned by the `expression()` function: we'll call that an expression _object_.)
 
-`substitute()` works because function arguments in R are only evaluated when they are needed, not automatically when the function is called. This means that functions are not just a simple value, but instead store both the expression to compute the value and and the environment in which to compute it. Together these two things are called a __promise__. Most of the time in R, you don't need to anything about promises because the first time you access a promise it is seemlessly evaluated, returning its vaue.
+`substitute()` works because function arguments in R are only evaluated when they are needed, not automatically when the function is called. This means that functions are not just a simple value, but instead store both the expression to compute the value and the environment in which to compute it. Together these two things are called a __promise__. Most of the time in R, you don't need to know anything about promises because the first time you access a promise it is seemlessly evaluated, returning its value.
 
 We need one more function if we want to understand how `plot()` and `data.frame()` work: `deparse()`. This function takes an expression and converts it to a character vector.
 
@@ -64,7 +64,7 @@ g(a + b + c + d + e + f + g + h + i + j + k + l + m + n + o + p + q + r + s + t 
 
 If you need a single string, you can work around this by using the `width.cutoff` argument (which has a maximum value of 500), or by joining the lines back together again with `paste()`.
 
-You might wonder we couldn't use our original `f()` to compute `g()`.  Let's try it:
+You might wonder why we couldn't use our original `f()` to compute `g()`.  Let's try it:
 
 ```R
 g <- function(x) deparse(f(x))
@@ -87,8 +87,8 @@ Others use them to provide default labels. For example, `plot.default()` has cod
 ```R
 plot.default <- function(x, y = NULL, xlabel = NULL, ylabel = NULL, ...) {
     ...
-    xlab <- if (is.null(xlab) && !missing(x)) deparse(substitute(x))
-    ylab <- if (is.null(xlab) && !missing(y)) deparse(substitute(y))
+    xlab <- if (is.null(xlabel) && !missing(x)) deparse(substitute(x))
+    ylab <- if (is.null(xlabel) && !missing(y)) deparse(substitute(y))
     ...
 }
 ```
@@ -107,7 +107,7 @@ This wouldn't be possible in most programming langauges because functions usuall
 
 ## Non-standard evaluation in subset
 
-Just printing out the expression used to generate an argument value is useful, but we can do even more with the unevaluated function.  For exampple, take `subset()`. It's a useful interactive shortcut for subsetting data frames: instead of repeating the data frame you're working with again and again, you can save some typing:
+Just printing out the expression used to generate an argument value is useful, but we can do even more with the unevaluated function.  For example, take `subset()`. It's a useful interactive shortcut for subsetting data frames: instead of repeating the data frame you're working with again and again, you can save some typing:
 
 ```R
 subset(mtcars, cyl == 4)
@@ -168,7 +168,7 @@ e$x <- 20
 eval(quote(x), e)
 ```
 
-Instead of an environments, the second argument can also be a list or a data frame.  This works because an environment is basically a set of mappings between names and values, in the same way as a list or data frame.
+Instead of an environment, the second argument can also be a list or a data frame.  This works because an environment is basically a set of mappings between names and values, in the same way as a list or data frame.
 
 ```R
 eval(quote(x), list(x = 30))
@@ -297,7 +297,7 @@ And indeed it now works.
 
 * What does `with()` do? How does it work? (Read the source code for `with.default()`)
 
-* What does `within()` do? How does it work? (Read the source code for `within.data.frame()`). What makes the code so much more complicated that `with()`?
+* What does `within()` do? How does it work? (Read the source code for `within.data.frame()`). What makes the code so much more complicated than `with()`?
 
 ## Calling from another function
 
@@ -408,7 +408,7 @@ But hopefully a little thought, or maybe some experimentation, will show why thi
 
 ## Substitute
 
-Following the examples above, whenever you write your own functions that use non-standard evaluation, you always provide alternatives that others can use. But what happens if you want to call a function that uses non-standard evaluation and doesn't have form that takes expressions? For example, imagine you want to create a lattice graphic given the names of two variables:
+Following the examples above, whenever you write your own functions that use non-standard evaluation, you should always provide alternatives that others can use. But what happens if you want to call a function that uses non-standard evaluation and doesn't have form that takes expressions? For example, imagine you want to create a lattice graphic given the names of two variables:
 
 ```R
 library(lattice)
@@ -440,7 +440,7 @@ f <- function() {
 f()
 ```
 
-To make it easier to experiment with `substitute()`, `pryr()` provides the `subs()` function.  It works exactly the same way as `substitute()` except it has a shorter name and if the second argument is the global environment it turns it into a list. Together, this makes it much easier to experiement with substitution:
+To make it easier to experiment with `substitute()`, `pryr` provides the `subs()` function.  It works exactly the same way as `substitute()` except it has a shorter name and if the second argument is the global environment it turns it into a list. Together, this makes it much easier to experiment with substitution:
 
 ```R
 subs(a + b + x)
@@ -586,7 +586,7 @@ library(ggplot2)
 It loads ggplot2, not plyr.  If you want to load plyr (the value of the ggplot2 variable), you need to use an additional argument:
 
 ```R
-library(x, character.only = TRUE)
+library(ggplot2, character.only = TRUE)
 ```
 
 Using an argument to change the behaviour of another argument is not a great idea because it means you must completely and carefully read all of the function arguments to understand what one function argument means. You can't understand the effect of each argument in isolation, and hence it's harder to reason about the results of a function call.
