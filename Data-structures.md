@@ -10,13 +10,13 @@ The table below shows the most important R data structures, organised by their d
 
 Given an arbitrary object in R, `str` (short for structure), is probably the most useful function: it will give a compact human readable description of any R data structure.
 
-# 1d: vectors
+## Vectors (1d)
 
 The basic data structure in R is the vector, which comes in two basic flavours: atomic vectors and lists. Vectors have three properties: their `typeof()` (what it is), `length()` (how long it is) and `attributes()` (additional arbitrary metadata).  The most common attribute is `names()`.
 
 Beware `is.vector()`: for historical reasons returns `TRUE` only if the object is a vector with no attributes apart from names.  Use `is.atomic(x) || is.list(x)` instead.
 
-## Atomic vectors
+### Atomic vectors
 
 Atomic vectors can be logical, integer, double (often called numeric), or character, or less commonly complex or raw.  Atomic vectors are typically created with `c`:
 
@@ -34,7 +34,7 @@ Atomic vectors are flat, and nesting `c()` just creates a flat vector:
 c(1, c(2, c(3, 4)))
 ```
 
-### Types and tests
+#### Types and tests
 
 Given a vector, you can determine what type it is using `typeof()`, or a specific tests: `is.character()`, `is.double()`, `is.integer()`, `is.logical()`, or generically `is.atomic()`.  
 
@@ -52,7 +52,7 @@ is.double(numeric)
 is.numeric(numeric)
 ```
 
-### Coercion
+#### Coercion
 
 An atomic vector can only be of one type, so when you attempt to combine different types they will be __coerced__ into one type, picking the first matching class from character, double, integer and logical.
 
@@ -75,7 +75,7 @@ You can also manually force one type of vector to another using a coercion funct
 
 Coercion also happens automatically. Most mathematical functions (`+`, `log`, `abs`, etc.) will coerce to a double or integer, and most logical operations (`&`, `|`, `any`, etc) will coerce to a logical. You will usually get a warning message if the coercion might lose information.
 
-## Lists
+### Lists
 
 Lists are different from atomic vectors in that they can contain any other type of vector. You construct them using `list()` instead of `c()`
 
@@ -140,7 +140,7 @@ The exceptions are for the most common attributes:
 
 When an accessor function is available, it's usually better to use that: get the names of the vector using `names(x)`, not `attr(x, "names")`.
 
-# Higher dimensions
+## Higher dimensions
 
 Atomic vectors and lists are the building blocks for higher dimensional data structures. Atomic vectors extend to matrices and arrays, and lists are used to create data frames.
 
@@ -194,7 +194,7 @@ dim(l) <- c(2, 2)
 l
 ```
 
-### Data frames
+## Data frames
 
 A data frame is a list of vectors, where each vector represents a column, and must have the same length. This makes it a 2d dimensional structure, so it shares the properties of a matrix and a list. 
 
