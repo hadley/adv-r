@@ -404,18 +404,3 @@ with_reporter <- function(reporter, code) {
   res
 }
 ```
-
-## Domain specific languages
-
-The combination of first class environments and lexical scoping gives us a powerful toolkit for creating domain specific languages in R. There's much to be said about domain specific languages, and most of it is said very well by Martin Fowler in his book [Domain Specific Languages](http://amzn.com/0321712943). In this section we'll explore how you can new languages that use R's syntax but have different behaviours.
-
-We'll first look at html, making it possible to write code that produces html structured in a way very similar to the output html.
-
-```R
-with_html(
-  body(
-    h1("A heading", id = "first"),
-    p("Some text. ", b("Some bold text."), "Some more text")
-  )
-)
-```

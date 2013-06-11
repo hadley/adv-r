@@ -23,6 +23,7 @@ pandoc --chapters -o programming.pdf --latex-engine xelatex \
   Expressions.md \
   Formulas.md \
   Special-environments.md \
+  dsl.md \
   Exceptions-debugging.md \
   part-perf.md \
   Profiling.md \

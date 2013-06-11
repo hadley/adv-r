@@ -22,6 +22,7 @@ Computing on the language
   * [[Expressions|expressions]]
   * [[Formulas|formula]]
   * [[Computing in special environments|Special-environments]]
+  * [[dsl|Domain specific languages]]
 
 Advanced programming techniques
   * [[Exceptions, debugging and getting help|Exceptions-debugging]]
