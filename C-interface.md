@@ -38,42 +38,50 @@ Important differences from R include:
 
 Generally, calling C functions from R involves two parts: a C function and an R function that uses `.Call`. The simple function below adds two numbers together and illustrates some of the important features of coding in C (creating new R vectors, coercing input arguments to the appropriate type and dealing with garbage collection).  
 
-    # In C ----------------------------------------
-    #include <R.h>
-    #include <Rinternals.h>
+```C
+# In C ----------------------------------------
+#include <R.h>
+#include <Rinternals.h>
 
-    SEXP add(SEXP a, SEXP b) {
-      SEXP result;
+SEXP add(SEXP a, SEXP b) {
+  SEXP result;
 
-      PROTECT(result = allocVector(REALSXP, 1));
-      REAL(result)[0] = asReal(a) + asReal(b);
-      UNPROTECT(1);
+  PROTECT(result = allocVector(REALSXP, 1));
+  REAL(result)[0] = asReal(a) + asReal(b);
+  UNPROTECT(1);
 
-      return(result);
-    }
+  return(result);
+}
+```
 
-    # In R ----------------------------------------
-    add <- function(a, b) {
-      .Call("add", a, b)
-    }
+```R
+# In R ----------------------------------------
+add <- function(a, b) {
+  .Call("add", a, b)
+}
+```
 
 In this chapter we'll produce these two pieces in one step by using the `inline` package. This allows us to write:
 
-    add <- cfunction(signature(a = "integer", b = "integer"), "
-      SEXP result;
+```R
+add <- cfunction(signature(a = "integer", b = "integer"), "
+  SEXP result;
 
-      PROTECT(result = allocVector(REALSXP, 1));
-      REAL(result)[0] = asReal(a) + asReal(b);
-      UNPROTECT(1);
+  PROTECT(result = allocVector(REALSXP, 1));
+  REAL(result)[0] = asReal(a) + asReal(b);
+  UNPROTECT(1);
 
-      return(result);
-    ")
-    add(1, 5)
+  return(result);
+")
+add(1, 5)
+```
 
 The C functions and macros that R provides for us to modify R data structures are all defined in the header file `Rinternals.h`.  It's easiest to find and display this file from within R:
 
-    rinternals <- file.path(R.home(), "include", "Rinternals.h")
-    file.show(rinternals)
+```R
+rinternals <- file.path(R.home(), "include", "Rinternals.h")
+file.show(rinternals)
+```
 
 Before we begin writing and reading C code, we need to know a little about the basic data structures.
 
@@ -107,41 +115,43 @@ And `SEXP`s for internal objects, objects that are usually only created and used
 * `EXPRSXP`: expressions
 
 There's no built-in R function to easily access these names, but we can write one: (This is adapted from code in R's `inspect.c`)
-    
-    sexp_type <- cfunction(c(x = "ANY"), '
-      switch (TYPEOF(x)) {
-        case NILSXP:      return mkString("NILSXP");
-        case SYMSXP:      return mkString("SYMSXP");
-        case LISTSXP:     return mkString("LISTSXP");
-        case CLOSXP:      return mkString("CLOSXP");
-        case ENVSXP:      return mkString("ENVSXP");
-        case PROMSXP:     return mkString("PROMSXP");
-        case LANGSXP:     return mkString("LANGSXP");
-        case SPECIALSXP:  return mkString("SPECIALSXP");
-        case BUILTINSXP:  return mkString("BUILTINSXP");
-        case CHARSXP:     return mkString("CHARSXP");
-        case LGLSXP:      return mkString("LGLSXP");
-        case INTSXP:      return mkString("INTSXP");
-        case REALSXP:     return mkString("REALSXP");
-        case CPLXSXP:     return mkString("CPLXSXP");
-        case STRSXP:      return mkString("STRSXP");
-        case DOTSXP:      return mkString("DOTSXP");
-        case ANYSXP:      return mkString("ANYSXP");
-        case VECSXP:      return mkString("VECSXP");
-        case EXPRSXP:     return mkString("EXPRSXP");
-        case BCODESXP:    return mkString("BCODESXP");
-        case EXTPTRSXP:   return mkString("EXTPTRSXP");
-        case WEAKREFSXP:  return mkString("WEAKREFSXP");
-        case S4SXP:       return mkString("S4SXP");
-        case RAWSXP:      return mkString("RAWSXP");
-        default:          return mkString("<unknown>");
-    }')
-    sexp_type(10)
-    sexp_type(10L)
-    sexp_type("a")
-    sexp_type(T)
-    sexp_type(list(a = 1))
-    sexp_type(pairlist(a = 1))
+  
+```R
+sexp_type <- cfunction(c(x = "ANY"), '
+  switch (TYPEOF(x)) {
+    case NILSXP:      return mkString("NILSXP");
+    case SYMSXP:      return mkString("SYMSXP");
+    case LISTSXP:     return mkString("LISTSXP");
+    case CLOSXP:      return mkString("CLOSXP");
+    case ENVSXP:      return mkString("ENVSXP");
+    case PROMSXP:     return mkString("PROMSXP");
+    case LANGSXP:     return mkString("LANGSXP");
+    case SPECIALSXP:  return mkString("SPECIALSXP");
+    case BUILTINSXP:  return mkString("BUILTINSXP");
+    case CHARSXP:     return mkString("CHARSXP");
+    case LGLSXP:      return mkString("LGLSXP");
+    case INTSXP:      return mkString("INTSXP");
+    case REALSXP:     return mkString("REALSXP");
+    case CPLXSXP:     return mkString("CPLXSXP");
+    case STRSXP:      return mkString("STRSXP");
+    case DOTSXP:      return mkString("DOTSXP");
+    case ANYSXP:      return mkString("ANYSXP");
+    case VECSXP:      return mkString("VECSXP");
+    case EXPRSXP:     return mkString("EXPRSXP");
+    case BCODESXP:    return mkString("BCODESXP");
+    case EXTPTRSXP:   return mkString("EXTPTRSXP");
+    case WEAKREFSXP:  return mkString("WEAKREFSXP");
+    case S4SXP:       return mkString("S4SXP");
+    case RAWSXP:      return mkString("RAWSXP");
+    default:          return mkString("<unknown>");
+}')
+sexp_type(10)
+sexp_type(10L)
+sexp_type("a")
+sexp_type(T)
+sexp_type(list(a = 1))
+sexp_type(pairlist(a = 1))
+```
 
 ### Character vectors
 
@@ -149,14 +159,16 @@ R character vectors are stored as `STRSXP`s, a vector type where every element i
 
 Strings have this more complicated design because individual `CHARSXP`'s (elements of a character vector) can be shared between multiple strings. This is an optimisation to reduce memory usage, and can result in unexpected behaviour:
 
-      x <- "banana"
-      y <- rep(x, 1e6)
-      object.size(x)
-      # 32-bit: 64 bytes
-      # 64-bit: 96 bytes
-      object.size(y) / 1e6
-      # 32-bit: 4.000056 bytes
-      # 32-bit: 8.000088 bytes
+```R
+x <- "banana"
+y <- rep(x, 1e6)
+object.size(x)
+# 32-bit: 64 bytes
+# 64-bit: 96 bytes
+object.size(y) / 1e6
+# 32-bit: 4.000056 bytes
+# 32-bit: 8.000088 bytes
+```
 
 In 32-bit R, factors occupy about the same amount of memory as strings: both pointers and integers are 4 bytes. In 64-bit R, pointers are 8 bytes, so factors take about twice as much memory as strings.
 
@@ -168,22 +180,24 @@ At the heart of every C function will be a set of conversions between R data str
 
 The simplest way to create an new R-level object is `allocVector`, which takes two arguments, the type of `SEXP` (or `SEXPTYPE`) to create, and the length of the vector. The following code code creates a three element list containing a logical vector, a numeric vector and an integer vector:
 
-    dummy <- cfunction(body = '
-      SEXP vec, real, lgl, ints;
+```R
+dummy <- cfunction(body = '
+  SEXP vec, real, lgl, ints;
 
-      PROTECT(real = allocVector(REALSXP, 2));
-      PROTECT(lgl = allocVector(LGLSXP, 10));
-      PROTECT(ints = allocVector(INTSXP, 10));
+  PROTECT(real = allocVector(REALSXP, 2));
+  PROTECT(lgl = allocVector(LGLSXP, 10));
+  PROTECT(ints = allocVector(INTSXP, 10));
 
-      PROTECT(vec = allocVector(VECSXP, 3));
-      SET_VECTOR_ELT(vec, 0, real);
-      SET_VECTOR_ELT(vec, 1, lgl);
-      SET_VECTOR_ELT(vec, 2, ints);
+  PROTECT(vec = allocVector(VECSXP, 3));
+  SET_VECTOR_ELT(vec, 0, real);
+  SET_VECTOR_ELT(vec, 1, lgl);
+  SET_VECTOR_ELT(vec, 2, ints);
 
-      UNPROTECT(4);
-      return(vec);
-    ')
-    dummy()
+  UNPROTECT(4);
+  return(vec);
+')
+dummy()
+```
 
 You might wonder what all the `PROTECT` calls do. They tell R that we're currently using each object, and not to delete it if the garbage collector is activated. (We don't need to protect objects that R already knows about, like function arguments).
 
@@ -194,31 +208,37 @@ object pointed to by the `SEXP` s, `PROTECT_WITH_INDEX` saves an index of the pr
 
 If you run `dummy()` a few times, you'll notice the output is basically random. This is because `allocVector` assigns memory to each output, but it doesn't clean it out first. For real functions, you'll want to loop through each element in the vector and zero it out. The most efficient way to do that is to use `memset`:
 
-    zeroes <- cfunction(c(n_ = "integer"), '
-      int n = asInteger(n_);
-      SEXP out;
+```R
+zeroes <- cfunction(c(n_ = "integer"), '
+  int n = asInteger(n_);
+  SEXP out;
 
-      PROTECT(out = allocVector(INTSXP, n));
-      memset(INTEGER(out), 0, n * sizeof(int));
-      UNPROTECT(1);
+  PROTECT(out = allocVector(INTSXP, n));
+  memset(INTEGER(out), 0, n * sizeof(int));
+  UNPROTECT(1);
 
-      return out;
-    ')
-    zeroes(10);
+  return out;
+')
+zeroes(10);
+```
 
 ### Allocation shortcuts
 
 There are a few shortcuts for allocating matrices and 3d arrays:
 
-    allocMatrix(SEXPTYPE mode, int nrow, int ncol)
-    alloc3DArray(SEXPTYPE mode, int nrow, int ncol, int nface)
+```C
+allocMatrix(SEXPTYPE mode, int nrow, int ncol)
+alloc3DArray(SEXPTYPE mode, int nrow, int ncol, int nface)
+```
 
 Beware `allocList` - it creates a pairlist, not a regular list.
 
 The `mkNamed` function simplifies the creation of named vectors.  The following code is equivalent to `list(a = NULL, b = NULL, c = NULL)`:
 
-    const char *names[] = {"a", "b", "c", ""};
-    mkNamed(VECSXP, names);
+```C
+const char *names[] = {"a", "b", "c", ""};
+mkNamed(VECSXP, names);
+```
 
 ### Extracting C vectors
 
@@ -226,48 +246,52 @@ There is a helper function for each atomic vector (apart from character, see fol
 
 The following example shows how to use the helper function `REAL` to inspect and modify a numeric vector:
 
-    add_one <- cfunction(c(x = "numeric"), "
-      SEXP out;
-      int n = length(x);
+```R
+add_one <- cfunction(c(x = "numeric"), "
+  SEXP out;
+  int n = length(x);
 
-      PROTECT(out = allocVector(REALSXP, n));
-      for (int i = 0; i < n; i++) {
-        REAL(out)[i] = REAL(x)[i] + 1;
-      }
-      UNPROTECT(1);
+  PROTECT(out = allocVector(REALSXP, n));
+  for (int i = 0; i < n; i++) {
+    REAL(out)[i] = REAL(x)[i] + 1;
+  }
+  UNPROTECT(1);
 
-      return out;
-    ")
-    add_one(as.numeric(1:10))
+  return out;
+")
+add_one(as.numeric(1:10))
+```
 
 There are similar helpers for logical, `LOGICAL(x)`, integer, `INTEGER(x)`, complex `COMPLEX(x)` and raw vectors `RAW(x)`. 
 
 If you're working with long vectors, there's a performance advantage to using the helper function once and saving the result in a pointer:
 
-    add_two <- cfunction(c(x = "numeric"), "
-      SEXP out;
-      int n = length(x);
-      double *px, *pout;
+```R
+add_two <- cfunction(c(x = "numeric"), "
+  SEXP out;
+  int n = length(x);
+  double *px, *pout;
 
-      PROTECT(out = allocVector(REALSXP, n));
+  PROTECT(out = allocVector(REALSXP, n));
 
-      px = REAL(x);
-      pout = REAL(out);
-      for (int i = 0; i < n; i++) {
-        pout[i] = px[i] + 2;
-      }
-      UNPROTECT(1);
+  px = REAL(x);
+  pout = REAL(out);
+  for (int i = 0; i < n; i++) {
+    pout[i] = px[i] + 2;
+  }
+  UNPROTECT(1);
 
-      return out;
-    ")
-    add_two(as.numeric(1:10))
+  return out;
+")
+add_two(as.numeric(1:10))
 
-    library(microbenchmark)
-    x <- as.numeric(1:1e6)
-    microbenchmark(
-      add_one(x),
-      add_two(x)
-    )
+library(microbenchmark)
+x <- as.numeric(1:1e6)
+microbenchmark(
+  add_one(x),
+  add_two(x)
+)
+```
 
 On my computer, `add_two` is about twice as fast as `add_one` for a million element vector. This is a common idiom in the R source code.
 
@@ -277,56 +301,62 @@ Strings and lists are more complicated because the individual elements are `SEXP
 
 String vectors are a little more complicated. As discussed earlier, a string vector is a vector made up of pointers to immutable `CHARSXP`s, and it's the `CHARSXP` that contains the C string (which can be extracted using `CHAR`). The following function shows how to create a vector of fixed values:
 
-    abc <- cfunction(NULL, '
-      SEXP out;
-      PROTECT(out = allocVector(STRSXP, 3));
+```R
+abc <- cfunction(NULL, '
+  SEXP out;
+  PROTECT(out = allocVector(STRSXP, 3));
 
-      SET_STRING_ELT(out, 0, mkChar("a"));
-      SET_STRING_ELT(out, 1, mkChar("b"));
-      SET_STRING_ELT(out, 2, mkChar("c"));
+  SET_STRING_ELT(out, 0, mkChar("a"));
+  SET_STRING_ELT(out, 1, mkChar("b"));
+  SET_STRING_ELT(out, 2, mkChar("c"));
 
-      UNPROTECT(1);
+  UNPROTECT(1);
 
-      return out;
-    ')
-    abc()
+  return out;
+')
+abc()
+```
 
 Things are a little harder if you want to modify the strings in the vector because you need to know a lot about string manipulation in C (which is hard, and harder to do right). For any problem that involves any kind of string modification, you're better off using Rcpp. 
 
 The following function just makes a copy of a string, so you can at least see how all the pieces work together.
 
-    copy <- cfunction(c(x = "character"), '
-      SEXP out;
-      int n = length(x);
-      const char* letter;
+```R
+copy <- cfunction(c(x = "character"), '
+  SEXP out;
+  int n = length(x);
+  const char* letter;
 
-      PROTECT(out = allocVector(STRSXP, n));
-      for (int i = 0; i < n; i++) {
-        letter = CHAR(STRING_ELT(x, i));
-        SET_STRING_ELT(out, i, mkChar(letter));
-      }
-      UNPROTECT(1);
-      
-      return out;
-    ')
-    copy(letters)
+  PROTECT(out = allocVector(STRSXP, n));
+  for (int i = 0; i < n; i++) {
+    letter = CHAR(STRING_ELT(x, i));
+    SET_STRING_ELT(out, i, mkChar(letter));
+  }
+  UNPROTECT(1);
+  
+  return out;
+')
+copy(letters)
+```
 
 One last useful function for operating with strings: we can use `STRING_PTR` to get a pointer to the `STRING_ELT`s in a vector, such that we can access the `STRING_ELT`s by de-referencing the pointer. Occasionally, this can be easier to work with. We'll show how this can make a simple example of reversing a vector of strings easier.
 
-    reverse <- cfunction( signature(x="character"), '
-        SEXP out;
-        int len = length(x);
-        PROTECT( out = allocVector(STRSXP, len) );
-        SEXP* out_ptr = STRING_PTR(out);
-        SEXP* x_ptr = STRING_PTR(x);
-        for( int i=0; i < len; ++i ) {
-          out_ptr[i] = x_ptr[len-i-1];
-        }
-        UNPROTECT(1);
-        return out;
-        ')
+```R
+reverse <- cfunction( signature(x="character"), '
+  SEXP out;
+  int len = length(x);
+  PROTECT( out = allocVector(STRSXP, len) );
+  SEXP* out_ptr = STRING_PTR(out);
+  SEXP* x_ptr = STRING_PTR(x);
+  for( int i=0; i < len; ++i ) {
+    out_ptr[i] = x_ptr[len-i-1];
+  }
+  UNPROTECT(1);
+  return out;
+')
 
-    reverse(letters)
+reverse(letters)
+```
 
 ### Coercing scalars
 
@@ -350,32 +380,36 @@ These all create R-level objects, so need to be `PROTECT`ed.
 
 You must be very careful when modifying an object that the user has passed into the function. The following function has some very unexpected behaviour:
 
-    add_three <- cfunction(c(x = "numeric"), '
-      REAL(x)[0] = REAL(x)[0] + 3;
-      return(x);
-    ')
-    x <- 1
-    y <- x
-    add_three(x)
-    x
-    y
+```R
+add_three <- cfunction(c(x = "numeric"), '
+  REAL(x)[0] = REAL(x)[0] + 3;
+  return(x);
+')
+x <- 1
+y <- x
+add_three(x)
+x
+y
+```
 
 Not only has it modified the value of `x`, but it has also modified `y`!  This happens because of the way that R implements it's copy-on-modify philosophy. It does so lazily, so a complete copy only has to be made if you make a change: `x` and `y` point to the same object, and the object is only duplicated if you change either `x` or `y`.
 
 To avoid problems like this, always `duplicate()` inputs before modifying them:
 
-    add_four <- cfunction(c(x = "numeric"), '
-      SEXP x_copy;
-      PROTECT(x_copy = duplicate(x));
-      REAL(x_copy)[0] = REAL(x_copy)[0] + 4;
-      UNPROTECT(1);
-      return(x_copy);
-    ')
-    x <- 1
-    y <- x
-    add_four(x)
-    x
-    y
+```R
+add_four <- cfunction(c(x = "numeric"), '
+  SEXP x_copy;
+  PROTECT(x_copy = duplicate(x));
+  REAL(x_copy)[0] = REAL(x_copy)[0] + 4;
+  UNPROTECT(1);
+  return(x_copy);
+')
+x <- 1
+y <- x
+add_four(x)
+x
+y
+```
 
 ## Pairlists and symbols
 
@@ -389,79 +423,88 @@ Pairlists differ from lists in the following ways:
 
 Because you can't easily index into a specified location in a pairlist, R provides a set of helper functions to moved along the linked list. The basic helpers are `CAR` which extracts the first element of the first, and `CDR` which extracts the rest. These can be composed to get `CAAR`, `CDAR`, `CADDR`, `CADDR`, `CADDDR`. As well as the getters, R also provides `SETCAR`, `SETCDR` etc. (Or you can just use )
 
-    car <- cfunction(c(x = "ANY"), 'return(CAR(x));')
-    cdr <- cfunction(c(x = "ANY"), 'return(CDR(x));')
-    cadr <- cfunction(c(x = "ANY"), 'return(CADR(x));')
+```R
+car <- cfunction(c(x = "ANY"), 'return(CAR(x));')
+cdr <- cfunction(c(x = "ANY"), 'return(CDR(x));')
+cadr <- cfunction(c(x = "ANY"), 'return(CADR(x));')
 
-    x <- quote(f(a = 1, b = 2))
-    car(x)
-    cdr(x)
-    car(cdr(x))
-    cadr(x)
+x <- quote(f(a = 1, b = 2))
+car(x)
+cdr(x)
+car(cdr(x))
+cadr(x)
+```R
 
 You can make new pairlists with `CONS` or `LCONS` (if you want a call object). A pairlist is always terminated with `R_NilValue`.
 
-    new_call <- cfunction(NULL, '
-      SEXP out;
+```R
+new_call <- cfunction(NULL, '
+  SEXP out;
 
-      out = LCONS(install("+"), LCONS(
-          ScalarReal(10), LCONS(
-            ScalarReal(5), R_NilValue)));
-      return out;
-    ')
-    new_call();
+  out = LCONS(install("+"), LCONS(
+      ScalarReal(10), LCONS(
+        ScalarReal(5), R_NilValue)));
+  return out;
+')
+new_call();
+```
 
 Similarly, you can loop through all elements of a pairlist as follows:
 
-    count <- cfunction(c(x = "ANY"), '
-      SEXP el, nxt;
-      int i = 0;
+```R
+count <- cfunction(c(x = "ANY"), '
+  SEXP el, nxt;
+  int i = 0;
 
-      for(nxt = x; nxt != R_NilValue; el = CAR(nxt), nxt = CDR(nxt)) {
-        i++;
-      }
-      return(ScalarInteger(i));
-    ')
-    count(quote(f(a, b, c)))
-    count(quote(f()))
+  for(nxt = x; nxt != R_NilValue; el = CAR(nxt), nxt = CDR(nxt)) {
+    i++;
+  }
+  return(ScalarInteger(i));
+')
+count(quote(f(a, b, c)))
+count(quote(f()))
+```R
 
 `TAG` and `SET_TAG` allow you to get and set the tag (aka name) associated with an element of a pairlist. The tag should be a symbol. To create a symbol (the equivalent of `as.symbol` or `as.name` in R), use `install`. 
 
 Attributes are also pairlists behind the scenes, but come with the helper functions `setAttrib` and `getAttrib` to make access a little easier:
 
-    set_attr <- cfunction(c(obj = "ANY", attr = "character", value = "ANY"), '
-      const char* attr_s = CHAR(asChar(attr));
+```R
+set_attr <- cfunction(c(obj = "ANY", attr = "character", value = "ANY"), '
+  const char* attr_s = CHAR(asChar(attr));
 
-      duplicate(obj);
-      setAttrib(obj, install(attr_s), value);
-      return(obj);
-    ')
-    x <- 1:10
-    set_attr(x, "a", 1)
+  duplicate(obj);
+  setAttrib(obj, install(attr_s), value);
+  return(obj);
+')
+x <- 1:10
+set_attr(x, "a", 1)
+```
 
 There are some (confusingly named) shortcuts for common setting operations: `classgets`, `namesgets`, `dimgets` and `dimnamesgets` are the internal versions of the default methods of `class<-`, `names<-`, `dim<-` and `dimnames<-`. 
 
-    tags <- cfunction(c(x = "ANY"), '
-      SEXP el, nxt, out;
-      int i = 0;
+```R
+tags <- cfunction(c(x = "ANY"), '
+  SEXP el, nxt, out;
+  int i = 0;
 
-      for(nxt = CDR(x); nxt != R_NilValue; nxt = CDR(nxt)) {
-        i++;
-      }
+  for(nxt = CDR(x); nxt != R_NilValue; nxt = CDR(nxt)) {
+    i++;
+  }
 
-      PROTECT(out = allocVector(VECSXP, i));
+  PROTECT(out = allocVector(VECSXP, i));
 
-      for(nxt = CDR(x), i = 0; nxt != R_NilValue; i++, nxt = CDR(nxt)) {
-        SET_VECTOR_ELT(out, i, TAG(nxt));
-      }
+  for(nxt = CDR(x), i = 0; nxt != R_NilValue; i++, nxt = CDR(nxt)) {
+    SET_VECTOR_ELT(out, i, TAG(nxt));
+  }
 
-      UNPROTECT(1);
+  UNPROTECT(1);
 
-      return out;
-    ')
-    tags(quote(f(a = 1, b = 2, c = 3)))
-    tags(quote(f()))
-
+  return out;
+')
+tags(quote(f(a = 1, b = 2, c = 3)))
+tags(quote(f()))
+```
 
 ## Missing and non-finite values
 
@@ -477,89 +520,99 @@ For floating point numbers, R's `NA` is a subtype of `NaN` so IEEE 754 arithmeti
 
 For example, a primitive implementation of `is.NA` might look like
 
-    is_na <- cfunction(c(x = "ANY"), '
-      SEXP out;
-      int n = length(x);
+```R
+is_na <- cfunction(c(x = "ANY"), '
+  SEXP out;
+  int n = length(x);
 
-      PROTECT(out = allocVector(LGLSXP, n));
+  PROTECT(out = allocVector(LGLSXP, n));
 
-      for (int i = 0; i < n; i++) {
-        switch(TYPEOF(x)) {
-          case LGLSXP:
-            LOGICAL(out)[i] = (LOGICAL(x)[i] == NA_LOGICAL);
-            break;
-          case INTSXP:
-            LOGICAL(out)[i] = (INTEGER(x)[i] == NA_INTEGER);
-            break;
-          case REALSXP:
-            LOGICAL(out)[i] = ISNA(REAL(x)[i]);
-            break;
-          case STRSXP:
-            LOGICAL(out)[i] = (STRING_ELT(x, i) == NA_STRING);
-            break;
-          default:
-            LOGICAL(out)[i] = NA_LOGICAL;
-        }
-      }
-      UNPROTECT(1);
+  for (int i = 0; i < n; i++) {
+    switch(TYPEOF(x)) {
+      case LGLSXP:
+        LOGICAL(out)[i] = (LOGICAL(x)[i] == NA_LOGICAL);
+        break;
+      case INTSXP:
+        LOGICAL(out)[i] = (INTEGER(x)[i] == NA_INTEGER);
+        break;
+      case REALSXP:
+        LOGICAL(out)[i] = ISNA(REAL(x)[i]);
+        break;
+      case STRSXP:
+        LOGICAL(out)[i] = (STRING_ELT(x, i) == NA_STRING);
+        break;
+      default:
+        LOGICAL(out)[i] = NA_LOGICAL;
+    }
+  }
+  UNPROTECT(1);
 
-      return out;
-    ')
-    is_na(c(NA, 1L))
-    is_na(c(NA, 1))
-    is_na(c(NA, "a"))
-    is_na(c(NA, TRUE))
+  return out;
+')
+is_na(c(NA, 1L))
+is_na(c(NA, 1))
+is_na(c(NA, "a"))
+is_na(c(NA, TRUE))
+```
 
 It's worth noting that R's `base::is.na` returns `TRUE` for both `NA` and `NaN`s in a numeric vector, as opposed to the C level `ISNA` macro, which returns `TRUE` only for `NA_REAL`s.
 
 There are a few other special values:
 
-    nil <- cfunction(NULL, 'return(R_NilValue);')
-    unbound <- cfunction(NULL, 'return(R_UnboundValue);')
-    missing_arg <- cfunction(NULL, 'return(R_MissingArg);')
+```R
+nil <- cfunction(NULL, 'return(R_NilValue);')
+unbound <- cfunction(NULL, 'return(R_UnboundValue);')
+missing_arg <- cfunction(NULL, 'return(R_MissingArg);')
 
-    x <- missing_arg()
-    x
+x <- missing_arg()
+x
+```
 
 ## Checking types in C
 
 If the user provides different input to your function to what you're expecting (e.g. provides a list instead of a numeric vector), it's very easy to crash R. For this reason, it's a good idea to write a wrapper function that checks arguments are of the correct type, or coerces them if necessary. It's usually easier to do this at the R level. For example, going back to our first example of C code, we might rename it to `add_` and then write a wrapper function to check the inputs are ok:
 
-    add_ <- cfunction(signature(a = "integer", b = "integer"), "
-      SEXP result;
+```R
+add_ <- cfunction(signature(a = "integer", b = "integer"), "
+  SEXP result;
 
-      PROTECT(result = allocVector(REALSXP, 1));
-      REAL(result)[0] = asReal(a) + asReal(b);
-      UNPROTECT(1);
+  PROTECT(result = allocVector(REALSXP, 1));
+  REAL(result)[0] = asReal(a) + asReal(b);
+  UNPROTECT(1);
 
-      return(result);
-    ")
-    add <- function(a, b) {
-      stopifnot(is.numeric(a), is.numeric(b), length(a) == 1, length(b) == 1)
-      add_(a, b)
-    }
+  return(result);
+")
+add <- function(a, b) {
+  stopifnot(is.numeric(a), is.numeric(b), length(a) == 1, length(b) == 1)
+  add_(a, b)
+}
+```
 
 Or if we wanted to be more accepting of diverse inputs:
 
-    add <- function(a, b) {
-      a <- as.numeric(a)
-      b <- as.numeric(b)
+```R
+add <- function(a, b) {
+  a <- as.numeric(a)
+  b <- as.numeric(b)
 
-      if (length(a) > 1) warning("Only first element of a used")
-      if (length(a) > 1) warning("Only first element of b used")
-      
-      add_(a, b)
-    }
+  if (length(a) > 1) warning("Only first element of a used")
+  if (length(a) > 1) warning("Only first element of b used")
+  
+  add_(a, b)
+}
+```
 
 To coerce objects at the C level, use `PROTECT(new = coerceVector(old, SEXPTYPE))`. This will return an error if the `SEXP` can not be converted to the desired type.  Note that these coercion functions do not use S3 dispatch.
 
 To check if an object is of a specified type, you can use `TYPEOF`, which returns a `SEXPTYPE`:
 
-      is_numeric <- cfunction(c("x" = "ANY"), "
-        return(ScalarLogical(TYPEOF(x) == REALSXP));
-      ")
-      is_numeric(7)
-      is_numeric("a")
+```R
+is_numeric <- cfunction(c("x" = "ANY"), "
+  return(ScalarLogical(TYPEOF(x) == REALSXP));
+")
+is_numeric(7)
+is_numeric("a")
+```
 
 Or you can use one of the many helper functions. They all return 0 for FALSE and 1 for TRUE:
 
@@ -601,5 +654,7 @@ Running `load_all(path/to/package)` will automatically compile and reload the co
 
 Your C code will need these headers:
 
-    #include <R.h>
-    #include <Rinternals.h>
+```C
+#include <R.h>
+#include <Rinternals.h>
+```
