@@ -100,6 +100,7 @@ p <- function(...) {
 # a tag function given a tag name:
 
 tag <- function(tag) {
+  force(tag)
   function(...) {
     args <- list(...)
     attribs <- html_attributes(named(args))
@@ -112,13 +113,13 @@ tag <- function(tag) {
     ))
   }
 }
-p <- tag("p")
-b <- tag("b")
-i <- tag("i")
 
 # Now we can run our earlier example:
 #
 # ```R
+# p <- tag("p")
+# b <- tag("b")
+# i <- tag("i")
 # p("Some text.", b("Some bold text"), i("Some italic text"), class = "mypara")
 # ```
 #
@@ -137,24 +138,25 @@ void_tag <- function(tag) {
   }
 }
 
-img <- void_tag("img")
-img(src = "diamonds.png", width = 10, height = 10)
+# ```R
+# img <- void_tag("img")
+# img(src = "diamonds.png", width = 10, height = 10)
+# ```
 
 # Next we need a list of all the html tags:
 
-tags <- c("a", "abbr", "address", "area", "article", "aside", "audio", "b",
-  "base", "bdi", "bdo", "blockquote", "body", "br", "button", "canvas",
-  "caption", "cite", "code", "col", "colgroup", "command", "data", "datalist",
-  "dd", "del", "details", "dfn", "div", "dl", "dt", "em", "embed",
-  "eventsource", "fieldset", "figcaption", "figure", "footer", "form", "h1",
-  "h2", "h3", "h4", "h5", "h6", "head", "header", "hgroup", "hr", "html", "i",
-  "iframe", "img", "input", "ins", "kbd", "keygen", "label", "legend", "li",
-  "link", "mark", "map", "menu", "meta", "meter", "nav", "noscript", "object",
-  "ol", "optgroup", "option", "output", "p", "param", "pre", "progress", "q",
-  "ruby", "rp", "rt", "s", "samp", "script", "section", "select", "small",
-  "source", "span", "strong", "style", "sub", "summary", "sup", "table",
-  "tbody", "td", "textarea", "tfoot", "th", "thead", "time", "title", "tr",
-  "track", "u", "ul", "var", "video", "wbr")
+tags <- c("a", "abbr", "address", "article", "aside", "audio", "b", "bdi",
+  "bdo", "blockquote", "body", "button", "canvas", "caption", "cite",
+  "code", "colgroup", "data", "datalist", "dd", "del", "details",
+  "dfn", "div", "dl", "dt", "em", "eventsource", "fieldset", "figcaption",
+  "figure", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6",
+  "head", "header", "hgroup", "html", "i", "iframe", "ins", "kbd",
+  "label", "legend", "li", "mark", "map", "menu", "meter", "nav",
+  "noscript", "object", "ol", "optgroup", "option", "output", "p",
+  "pre", "progress", "q", "ruby", "rp", "rt", "s", "samp", "script",
+  "section", "select", "small", "span", "strong", "style", "sub",
+  "summary", "sup", "table", "tbody", "td", "textarea", "tfoot",
+  "th", "thead", "time", "title", "tr", "u", "ul", "var", "video")
 
 void_tags <- c("area", "base", "br", "col", "command", "embed", "hr",
   "img", "input", "keygen", "link", "meta", "param",
@@ -168,7 +170,7 @@ void_tags <- c("area", "base", "br", "col", "command", "embed", "hr",
 # put them in a list, and add some additional code to make it easy to use
 # them when desired.
 
-tags <- c(
+tag_fs <- c(
   setNames(lapply(tags, tag), tags),
   setNames(lapply(void_tags, void_tag), void_tags)
 )
@@ -184,7 +186,7 @@ tags <- c(
 # code in the context of that list:
 
 with_html <- function(code) {
-  eval(substitute(code), tags)
+  eval(substitute(code), tag_fs)
 }
 
 # This gives us a succinct API which allows us to write html when we need it
@@ -209,7 +211,7 @@ html_attribute <- function(name, value = NULL) {
   if (length(value) != 1) stop("value must be NULL or of length 1")
 
   if (is.logical(value)) {
-    value <- to_lower(value)
+    value <- tolower(value)
   } else {
     value <- escape_attr(value)
   }
