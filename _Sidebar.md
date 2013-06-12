@@ -4,18 +4,18 @@
 
 ### R programming
 
-Functional programming
+Foundations
+  * [[Data structures]]
+  * [[Subsetting]]
+  * [[Vocabulary]]
   * [[Functions]]
+  * [[OO essentials]]
+
+Functional programming
   * [[Environments]]
   * [[Functional programming]]
   * [[Functionals]]
   * [[Function operators]]
-
-Objected oriented programming
-  * [[Software systems|SoftwareSystems]]
-  * [[The S3 object system|S3]]
-  * [[The S4 object system|S4]]
-  * [[Reference based classes|R5]]
 
 Computing on the language
   * [[Introduction|Computing-on-the-language]]
@@ -31,6 +31,12 @@ Performant code
   * [[Profiling and benchmarking|profiling]]
   * [[General performance tips and tricks|performance]]
   * [[High performance functions with Rcpp|Rcpp]]
+
+Objected oriented programming
+  * [[Software systems|SoftwareSystems]]
+  * [[The S3 object system|S3]]
+  * [[The S4 object system|S4]]
+  * [[Reference based classes|R5]]
 
 ### Package development
 
@@ -48,7 +54,4 @@ Performant code
 
 ### Appendices
 
-* [[Data structures]]
-* [[Subsetting]]
-* [[Vocabulary]]
 * [[R's C interface|c-interface]]

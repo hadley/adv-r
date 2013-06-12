@@ -12,7 +12,14 @@ This book, particularly the package development part, is opinionated. You might 
 
 * Have you come to R from another language and been driven up the wall by R's way of doing things?  Do you want to learn why on earth it works the way it does, and how you can be productive in R?
 
-If the answer to any of those questions is yes, then this book is right for you. To get the most out of it, you should already be familiar with the basic [[data structures]], understand how [[subsetting]] works, and you should have started developing your R [[vocabulary]]. You should be somewhat familiar with the apply family of functions (like `apply()` and `lapply()`), although you may currently struggle to use them effectively.
+If the answer to any of those questions is yes, then this book is right for you. To get the most out of it, it helps to be familiar with the foundations of R:
+
+* [[data structures]] and [[subsetting]]
+* an intermediate [[vocabulary]]
+* the basics of how [[functions]] work
+* the essentials of [[OO programming||OO-essentials]]
+
+You might be somewhat familiar with the apply family of functions (like `apply()` and `lapply()`), although you may currently struggle to use them effectively.
 
 ## What you will get out of this book
 

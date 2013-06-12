@@ -7,8 +7,12 @@
 pandoc --chapters -o programming.pdf --latex-engine xelatex \
   -V papersize:oneside -V links-as-notes --toc \
   Introduction.md \
-  part-fp.md \
+  part-foundations.md \
+  Data-structures.md \
+  Subsetting.md \
+  Vocabulary.md \
   Functions.md \
+  part-fp.md \
   Environments.md \
   Functional-programming.md \
   Functionals.md \
@@ -30,8 +34,6 @@ pandoc --chapters -o programming.pdf --latex-engine xelatex \
   Performance.md \
   Rcpp.md \
   appendix.md \
-  Vocabulary.md \
-  Data-structures.md \
   C-interface.md
 
 # pandoc --chapters -o packages.pdf --latex-engine xelatex \
