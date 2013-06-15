@@ -34,5 +34,5 @@ You can also subset with matrices.
 ## Simplifying vs. preserving subsetting
 
 * `[` .  Drop argument controls simplification.
-* `'[[` returns an element
-* `x$y` is equivalent to `x'[["y"]]`
+* `[[` returns an element
+* `x$y` is equivalent to `x[["y"]]`
