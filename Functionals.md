@@ -422,7 +422,7 @@ There's a natural equivalence between `Map()` and `lapply()` because you can alw
 
 ```r
 mtmeans <- lapply(mtcars, mean)
-mtmeans[] <- Map(`/`, mtcars, mtmeans)
+mtcars[] <- Map(`/`, mtcars, mtmeans)
 
 # In this case, equivalent to
 mtcars[] <- lapply(mtcars, function(x) x / mean(x))
