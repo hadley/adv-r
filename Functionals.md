@@ -896,11 +896,11 @@ One function I use a lot is `compact()`:
 
 
 ```r
-compact <- function(x) Filter(function(y) !is.null(y), y)
+compact <- function(x) Filter(function(y) !is.null(y), x)
 ```
 
 
-It removes all non-null elements from a list - you'll see it again in the [[function operators]] chapter.
+It removes all null elements from a list - you'll see it again in the [[function operators]] chapter.
 
 ### Exercises
 
