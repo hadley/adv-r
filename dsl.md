@@ -1,6 +1,11 @@
 # Domain specific languages
 
-The combination of first class environments and lexical scoping gives us a powerful toolkit for creating domain specific languages in R. There's much to be said about domain specific languages, and most of it is said very well by Martin Fowler in his book [Domain Specific Languages](http://amzn.com/0321712943). In this chapter we'll explore how you can new languages that use R's syntax but have different behaviours. Creating new DSLs in R combines many of techniques you have learned about from lexical scoping, to first class environments to computing on the language.
+The combination of first class environments and lexical scoping gives us a powerful toolkit for creating domain specific languages in R. There's much to be said about domain specific languages, and most of it is said very well by Martin Fowler in his book [Domain Specific Languages](http://amzn.com/0321712943). In this chapter we'll explore how you can new languages that use R's syntax but have different behaviours. Creating new DSLs in R combines many of techniques you have learned about from lexical scoping, to first class environments to computing on the language.  Before you begin, make sure you're familiar with:
+
+* scoping rules
+* creating and manipulating functions
+* computing on the language
+* S3 basics
 
 This chapter will develop two simple, but useful, DSLs, one for generating HTML, and one for turning R mathematical expressions into a form suitable for inclusion in latex. They will build up in complexity, and show you how you can adapt R to generate very different kinds of output using rather different semantics to usual. The combination of a small amount of computing on the language, and constructing special evaluation environments is very powerful, and quite efficient.
 
@@ -303,21 +308,17 @@ escape_attr <- function(x) {
 
 ## Latex
 
-The next DSL we're going to tackle is to convert R expression into their latex math equivalents. (This is a bit like plotmath, but for text output instead of graphical output.).  Latex is the lingua franca of mathematicians and statisticians: whenever you want to describe an equation in text (e.g. in an email) you write it as a latex equation.
+The next DSL we're going to tackle will convert R expression into their latex math equivalents. (This is a bit like `?plotmath`, but for text instead of plots.) Latex is the lingua franca of mathematicians and statisticians: whenever you want to describe an equation in text (e.g. in an email) you write it as a latex equation. Many reports are produced from R using latex, so it might be useful to facilitate the automate conversion from mathematical expressions from one language to the other.
 
-It is more complicated than the HTML dsl, because not only do we need to convert functions, we also need to convert symbols.  We'll also add a "default" conversion, so that if we don't know how to convert a function, we'll fall back to a standard representation. Like the HTML dsl, we'll also write functionals to make it easier to generated the translators.
+This math expression DSL will be more complicated than the HTML dsl, because not only do we need to convert functions, but we also need to convert symbols.  We'll also create a "default" conversion, so that functions we don't know how to convert get a standard fallback. Like the HTML dsl, we'll also write functionals to make it easier to generate the translators.
 
-Before you begin, make sure you're familiar with
-
-* scoping rules
-* creating and manipulating functions
-* computing on the language
+Before we begin, let's quickly cover how formulas are expressed in latex.
 
 ### Latex mathematics
 
 Latex mathematics are complex, and [well documented](http://en.wikibooks.org/wiki/LaTeX/Mathematics). They have a fairly simple structure:
 
-* Most simple mathematical equations are represented in the way you'd type them into R: `x * y`, `z ^ 5`
+* Most simple mathematical equations are represented in the way you'd type them into R: `x * y`, `z ^ 5`.  Subscripts are written using `_`, e.g. `x_1`.
 
 * Special characters start with a `\`: `\pi` = π, `\pm` = ±, and so on. There are a huge number of symbols available in latex. Googling for `latex math symbols` finds many [lists](http://www.sunilpatel.co.uk/latex-type/latex-math-symbols/), and there's even [a service](http://detexify.kirelabs.org/classify.html) where you can sketch a symbol in the browser and it will look it up for you.
 
@@ -325,25 +326,22 @@ Latex mathematics are complex, and [well documented](http://en.wikibooks.org/wik
 
 * To group elements together use `{}`: i.e. `x ^ a + b` vs. `x ^ {a + b}`.
 
-* In good math typesetting, a distinction is made between variables and functions, but without extra information, latex doesn't know whether `f(a * b)` represents calling the function `f` with argument `a * b`, or is shorthand for `f * a * b`.
-
+* In good math typesetting, a distinction is made between variables and functions, but without extra information, latex doesn't know whether `f(a * b)` represents calling the function `f` with argument `a * b`, or is shorthand for `f * a * b`. If `f` is a function, you can tell latex to typeset it using an upright font with `\textrm{f}(a * b)`
 
 ### Goal
 
-Some cases that we'll want to handle:
+Our goal is to use these rules to automatically convert from an R expression to a latex representation of that expression. We will tackle it in four stages:
 
-* `x` -> `x`
-* `pi` -> `pi`
-* `(a + b) / (c * d)` # simple math & parentheses
-* `x[1]^2` -> `x_1^2  # subsetting and
-* `sin(x + pi / 2)` -> `\sin(x + \pi / 2)` # recognise special symbols and functions
+* Convert known symbols: `pi` -> `\pi`
+* Leave other symbols unchanged: `x` -> `x`, `y` -> `y`
+* Convert known functions: `x * pi` -> `x * \pi`, `sqrt(frac(a, b))` -> `\sqrt{\frac{a, b}}`
+* Wrap unknown functions with `\textrm`: `f(a)` -> `\textrm{f}(a)`
 
-This time we'll work in the opposite direction: we'll start with the
-infrastructure and work our way down to generate all the functions we need
+Compared to the HTML dsl, we'll work in the opposite direction: we'll start with the infrastructure and work our way down to generate all the functions we need
 
 ### `to_math`
 
-First we need a wrapper function that we'll use to convert R expressions into latex math expressions. This works the same way as `to_html`: we capture the unevaluated expression and evaluate it in a special environment.
+To begin, we need a wrapper function that we'll use to convert R expressions into latex math expressions. This works the same way as `to_html`: we capture the unevaluated expression and evaluate it in a special environment. However, the special environment is no longer fixed, and will vary depending on the expression. We need this in order to be able to deal with symbols and functions that we don't know about a priori.
 
 ```r
 to_math <- function(x) {
@@ -354,7 +352,9 @@ to_math <- function(x) {
 
 ### Known symbols
 
-This time we're going to create that environment with a function, because it's going to be slightly different for every invocation.  We'll start by creating an environment that allows us to convert the special latex symbols used for Greek.  This is the same basic trick used in `subset` to make it possible to select column ranges by name (`subset(mtcars, cyl:wt)`): we just bind a name to a string in a special environment.
+Our first step is to create an environment that allows us to convert the special latex symbols used for Greek, e.g. `pi` to `\pi`. This is the same basic trick used in `subset` to make it possible to select column ranges by name (`subset(mtcars, , cyl:wt)`): we just bind a name to a string in a special environment.
+
+First we create than environment by creating a named vector, converting that vector into a list, and then turn that list into an environment.
 
 ```r
 greek <- c(
@@ -368,6 +368,8 @@ greek_list <- setNames(paste0("\\", greek), greek)
 greek_env <- list2env(as.list(greek_list), parent = emptyenv())
 ```
 
+We can then check it:
+
 ```R
 latex_env <- function(expr) {
   greek_env
@@ -379,7 +381,7 @@ to_math(beta)
 
 ### Unknown symbols
 
-Next, we'll leave any other symbols as is.  This is trickier because we don't know in advance what symbols will be used, and we can't possibly generate them all.  So we'll use a little bit of computing on the language to figure it out: we need a fairy simple recursive function to do this. It takes an expression. If its a name, it converts it to a string. If it's a call, it recurses down through its arguments.
+If a symbol isn't greek, we want to leave it as is. This is trickier because we don't know in advance what symbols will be used, and we can't possibly generate them all. So we'll use a little bit of computing on the language to find out what symbols are present in an expression. The `all_names` function takes an expression: if it's a name, it converts it to a string; if it's a call, it recurses down through its arguments.
 
 ```r
 all_names <- function(x) {
@@ -396,7 +398,7 @@ all_names(quote(x + y + f(a, b, c, 10)))
 # [1] "x" "y" "a" "b" "c"
 ```
 
-We now want to take that list of names, and convert it to an environment so that each symbol is mapped to a string giving its name. Given a character vector, we need to make it into a list and then convert that list into a environment.
+We now want to take that list of symbols, and convert it to an environment so that each symbol is mapped to a string representing itself (e.g. so `eval(quote(x), env)` yields `"x"`). We again use the pattern of converting a named character vector to a list, then an environment.
 
 ```r
 latex_env <- function(expr) {
@@ -412,20 +414,24 @@ to_math(longvariablename)
 to_math(pi)
 ```
 
-But we want to use both the greek symbols and the default symbols, so we need to combine the environments somehow in the function. Since we want to prefer Greek to the defaults (e.g. `to_math(pi)` should give `"\\pi", not `"pi"`), `symbol_env` needs to be the parent of `greek_env`.  That necessitates copying `greek_env`.  Strangely R doesn't come with a function for cloning environments, but we can easily create one by combining two existing functions:
+This works, but we need to combine it with the enviroment of the Greek symbols. Since we want to prefer Greek to the defaults (e.g. `to_math(pi)` should give `"\\pi"`, not `"pi"`), `symbol_env` needs to be the parent of `greek_env`, and thus we need to make a copy of `greek_env` with a new parent.  Strangely R doesn't come with a function for cloning environments, but we can easily create one by combining two existing functions:
 
 ```r
 clone_env <- function(env, parent = parent.env(env)) {
   list2env(as.list(env), parent = parent)
 }
+```
 
+This gives us a function that can convert both known (Greek) and unknown symbols.
+
+```r
 latex_env <- function(expr) {
-  # Default for names in expression is to convert to string equivalent
+  # Unknown symbols
   names <- all_names(expr)
   symbol_list <- setNames(as.list(names), names)
   symbol_env <- list2env(symbol_list)
 
-  #
+  # Known symbols
   clone_env(greek_env, symbol_env)
 }
 
@@ -436,23 +442,26 @@ to_math(pi)
 
 ### Known functions
 
-Next we want add some functions to our DSL.  We'll start with a couple of helper closures that make it easy to add new unary and binary operators. These functions are very simple since they only have to assemble strings.
+Next we'll add functions to our DSL.  We'll start with a couple of helper closures that make it easy to add new unary and binary operators. These functions are very simple since they only have to assemble strings. (Again we use `force` to make sure the arguments are evaluated at the right time.)
 
 ```r
 unary_op <- function(left, right) {
+  force(left)
+  force(right)
   function(e1) {
     paste0(left, e1, right)
   }
 }
 
 binary_op <- function(sep) {
+  force(sep)
   function(e1, e2) {
     paste0(e1, sep, e2)
   }
 }
 ```
 
-Then we'll populate an environment with functions created this way. The list below isn't comprehensive, but it should give a good flavour of the possibilities
+Using these helpers, we can map a few illustrative examples from R to latex. Note how the lexical scoping rules of R help us: we can easily provide new meanings for standard functions like `+`, `-` and `*`, and even `(` and `{`. 
 
 ```r
 # Binary operators
@@ -483,7 +492,7 @@ fenv$hat <- unary_op("\\hat{", "}")
 fenv$tilde <- unary_op("\\tilde{", "}")
 ```
 
-We again modify `latex_env()` to include this environment. It should be the first environment in which names are looked for (because of R's matching rules wrt functions vs. other objects)
+We again modify `latex_env()` to include this environment. It should be the first environment in which names are looked for, so that `sin(sin)` works. (because of R's matching rules wrt functions vs. other objects)
 
 ```r
 latex_env <- function(expr) {
@@ -500,7 +509,8 @@ latex_env <- function(expr) {
 }
 
 to_math(sin(x + pi))
-to_math(log(x_i^2))
+to_math(log(x_i ^ 2))
+to_math(sin(sin))
 ```
 
 ### Unknown functions
@@ -527,52 +537,9 @@ And we need a closure that will generate the functions for each unknown call
 unknown_op <- function(op) {
   force(op)
   function(...) {
-    contents <- paste(..., collapse=", ")
-    paste0("\\mathrm{", op, "} \\left( ", contents, " \\right )")
+    contents <- paste(..., collapse = ", ")
+    paste0("\\mathrm{", op, "}(", contents, ")")
   }
-}
-```
-
-And again we update `latex_env()`:
-
-```r
-latex_env <- function(expr) {
-  # Default symbols
-  symbols <- all_names(expr)
-  symbol_list <- setNames(as.list(symbols), symbols)
-  symbol_env <- list2env(symbol_list)
-
-  # Known symbols
-  greek_env <- clone_env(greek_env, parent = symbol_env)
-
-  # Default functions
-  calls <- all_calls(expr)
-  call_list <- lapply(calls, unknown_op)
-  call_env <- list2env(call_list, parent = greek_env)
-
-  # Known functions
-  clone_env(f_env, greek_env)
-}
-
-# character vector -> environment
-ceply <- function(x, f, ..., parent = parent.frame()) {
-  l <- lapply(x, f, ...)
-  names(l) <- x
-  list2env(l, parent = parent)
-}
-
-latex_env <- function(expr) {
-  # Default symbols
-  symbol_env <- ceply(all_names(expr), identity, parent = emptyenv())
-
-  # Known symbols
-  greek_env <- clone_env(greek_env, parent = symbol_env)
-
-  # Default functions
-  call_env <- ceply(all_calls(expr), unknown_op, parent = greek_env)
-
-  # Known functions
-  clone_env(f_env, greek_env)
 }
 ```
 
@@ -582,3 +549,4 @@ latex_env <- function(expr) {
 
 * Complete the DSL to support all the functions that `plotmath` supports
 
+* There's a repeating pattern in `latex_env()`: we take a character vector, do something to each piece, then convert it to a list, and then an environment. Write a function to automate this task, and then rewrite `latex_env()`
