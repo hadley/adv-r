@@ -42,9 +42,9 @@ HTML is the language that underlies the majority of the web. It is a special cas
 
 ```html
 <body>
-  <h1 id = 'first'>A heading</h1>
+  <h1 id='first'>A heading</h1>
   <p>Some text &amp; <b>some bold text.</b></p>
-  <img src = 'myimg.png' width = '100' height = '100' />
+  <img src='myimg.png' width='100' height='100' />
 </body>
 ```
 
@@ -52,7 +52,7 @@ Even if you've never seen HTML before, hopefully you can see the key component o
 
 ```html
 <body><h1 id='first'>A heading</h1><p>Some text &amp; <b>some bold
-text.</b></p><img src = 'myimg.png' width = '100' height = '100' />
+text.</b></p><img src='myimg.png' width='100' height='100' />
 </body>
 ```
 
@@ -68,7 +68,7 @@ There are over 100 html tags, but to illustrate HTML we're going to focus on jus
 
 (you probably guessed what these did already!)
 
-Tags can also have named attributes that look like `<tag a = "a" b = "b"></tags>`. Tag values should always be enclosed in either single or double quotes. Two important attributes used on just about every tag are `id` and `class`. These are used in conjunction with CSS (cascading style sheets) in order to control the style of the document.
+Tags can also have named attributes that look like `<tag a="a" b="b"></tags>`. Tag values should always be enclosed in either single or double quotes. Two important attributes used on just about every tag are `id` and `class`. These are used in conjunction with CSS (cascading style sheets) in order to control the style of the document.
 
 Some tags, like `<img>`, can't have any content. These are called __void tags__ and have a slightly different syntax: instead of writing `<img></img>` you write `<img />`. Since they have no content, attributes are more imporant, and `img` has three that are used for almost every image: `src` (where the image lives), `width` and `height`.
 
@@ -80,9 +80,9 @@ Our goal is to make it easy to generate html from R. To give a concrete example,
 
 ```html
 <body>
-  <h1 id = 'first'>A heading</h1>
+  <h1 id='first'>A heading</h1>
   <p>Some text &amp; <b>some bold text.</b></p>
-  <img src = 'myimg.png' width = '100' height = '100' />
+  <img src='myimg.png' width='100' height='100' />
 </body>
 ```
 
