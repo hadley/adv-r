@@ -1,15 +1,8 @@
 # Domain specific languages
 
-The combination of first class environments and lexical scoping gives us a powerful toolkit for creating domain specific languages in R. There's much to be said about domain specific languages, and most of it is said very well by Martin Fowler in his book [Domain Specific Languages](http://amzn.com/0321712943). In this chapter we'll explore how you can new languages that use R's syntax but have different behaviours. Creating new DSLs in R combines many of techniques you have learned about from lexical scoping, to first class environments to computing on the language.  Before you begin, make sure you're familiar with:
+The combination of first class environments and lexical scoping gives us a powerful toolkit for creating embedded domain specific languages (DSLs) in R. Embedded DSLs take advantage of a host language's parsing and execution framework, but adjust the semantics somewhat to make them more suitable for a specific task. 
 
-* scoping rules
-* creating and manipulating functions
-* computing on the language
-* S3 basics
-
-This chapter will develop two simple, but useful, DSLs, one for generating HTML, and one for turning R mathematical expressions into a form suitable for inclusion in latex. They will build up in complexity, and show you how you can adapt R to generate very different kinds of output using rather different semantics to usual. The combination of a small amount of computing on the language, and constructing special evaluation environments is very powerful, and quite efficient.
-
-One package that makes extensive use of these ideas is dplyr, which provides `to_sql()` which converts R expressions into SQL:
+R already has a simple and popular DSL built in: the formula specification, which offers a succinct way of describing the relationship between predictors and the response. Other examples of DSLs include ggplot2 (for visualisation), and plyr (for data manipulation). Another package that makes extensive use of these ideas is dplyr, which provides `to_sql()` to converts R expressions into SQL:
 
 ```R
 library(dplyr)
@@ -22,56 +15,78 @@ to_sql(like == 7)
 
 Once you have read this chapter, you might want to study the source code for dplyr. An important part of the overall structure of the package is `partial_eval()` which helps manage expressions where some of the components refer to variables in the database and some refer to local R objects. You could use very similar ideas if you needed to translate small R expressions into other languages, like javascript or python. Converting complete R programs would be extremely difficult, but often being able to communicate a simple description of computation between languages is very useful.
 
+R is well suited for hosting DSLs because the combination of a small amount of computing on the language and constructing special evaluation environments is very powerful. Creating new DSLs in R uses many techniques that you've learned about elsewhere in the book, including:
+
+* scoping rules
+* creating and manipulating functions
+* computing on the language
+* S3 basics
+
+This chapter will develop two simple, but useful, DSLs, one for generating HTML, and one for turning R mathematical expressions into a form suitable for inclusion in latex. 
+
+DSLs are a very large topic, and this chapter will only scratch the surface, focussing on important techniques and not so much on how you might come up with the language in the first place. If you're interested in learning more, I highly recommend [Domain Specific Languages](http://amzn.com/0321712943) by Martin Fowler: it discusses many options for creating a DSL and provides many examples of different languages.
+
 ## HTML
 
 HTML is the language that underlies the majority of the web. It is a special case of SGML, and similar (but not identical) to XML. HTML looks like this:
 
 ```html
-<h1>This is a heading.</h1>
-<p>This is some text. <b>This sentence is bold</b></p>
+<body>
+  <h1 id = 'first'>A heading</h1>
+  <p>Some text &amp; <b>some bold text.</b></p>
+  <img src = 'myimg.png' width = '100' height = '100' />
+</body>
 ```
 
-Even if you've never looked at raw HTML before, hopefully you can see the key component of the structure: HTML is composed of tags that look like `<tag></tag>`. Tags can be contained inside other tags and intermingled with text. Generally, html ignores whitespace: an sequence of whitespace is equivalent to a single space. You could put the previous example all on online and it would still display the same in the browser:
+Even if you've never seen HTML before, hopefully you can see the key component of the structure: HTML is composed of tags that look like `<tag></tag>`. Tags can be contained inside other tags and intermingled with text. Generally, html ignores whitespace: an sequence of whitespace is equivalent to a single space. You could put the previous example all on online and it would still display the same in the browser:
 
 ```html
-<h1>This is a heading.</h1> <p>This is some text. <b>This sentence is bold</b></p>
+<body><h1 id='first'>A heading</h1><p>Some text &amp; <b>some bold
+text.</b></p><img src = 'myimg.png' width = '100' height = '100' />
+</body>
 ```
 
-There are over 100 html tags, but in case you're not familiar with html, we're going to focus on just a few:
+However, like R code, you usually want to indent HTML to make it more obvious to see the structure.
 
+There are over 100 html tags, but to illustrate HTML we're going to focus on just a few:
+
+* `<body>`: the top-level tag that all content is enclosed within
 * `<h1>`: creates a heading-1, the top level heading
 * `<p>`: creates a paragraph
 * `<b>`: emboldens text
+* `<img>`: embeds an image
 
 (you probably guessed what these did already!)
 
-Tags can also have named attributes that look like `<tag a = "a" b = "b"></tags>`. Tag value should always be enclosed in either single or double quotes. Two important attributes used on just about every tag are `id` and `class`. These are used in conjunction with CSS (cascading style sheets) in order to control the style of the document.
+Tags can also have named attributes that look like `<tag a = "a" b = "b"></tags>`. Tag values should always be enclosed in either single or double quotes. Two important attributes used on just about every tag are `id` and `class`. These are used in conjunction with CSS (cascading style sheets) in order to control the style of the document.
 
-Finally, some tags, like `<img>`, can't have any content and are known as void tags. Instead of writing `<img></img>`, for tags that don't have any content you write `<img />`. Of course, these tags are usually used for their attributes, and `img` has three important attributes `src` (where the image lives), `width` and `height`, so it will often look like `<img src='myimg.png' width='100' height='100' />`
+Some tags, like `<img>`, can't have any content. These are called __void tags__ and have a slightly different syntax: instead of writing `<img></img>` you write `<img />`. Since they have no content, attributes are more imporant, and `img` has three that are used for almost every image: `src` (where the image lives), `width` and `height`.
 
-Because `<` and `>` have special meanings in html, you can't write them directly. Instead you have to use the html escapes `&gt;` and `&lt;` respectively. And since `&` has a special meaning too, you'll need to use `&amp;`
+Because `<` and `>` have special meanings in html, you can't write them directly. Instead you have to use the html escapes `&gt;` and `&lt;`. And since those escapes use `&`, you also have to escape it with `&amp;` if you want a literal ampersand.
 
 ### Goal
 
-Our goal is to make it possible to generate html easily in R using R functions. To give a concrete example, we want to generate the following html:
+Our goal is to make it easy to generate html from R. To give a concrete example, we want to generate the following html:
 
 ```R
-<h1 id='first'>A heading</h1>
-<p>Some text &amp; <b>some bold text.</b>
-<img src="myimg.png" width="100" height = "100"
+<body>
+  <h1 id = 'first'>A heading</h1>
+  <p>Some text &amp; <b>some bold text.</b></p>
+  <img src = 'myimg.png' width = '100' height = '100' />
+</body>
 ```
 
-And we want to generate using code that looks as similar to the html as possible. We will work our way up to the following DSL:
+using code that looks as similar to the html as possible. We will work our way up to the following DSL:
 
 ```R
-with_html(
+with_html(body(
   h1("A heading", id = "first"),
   p("Some text &", b("some bold text."))
   img(src = "myimg.png", width = 100, height = 100)
-)
+))
 ```
 
-Note that the nesting of function calls is the same as the nesting of html tags, unnamed arguments become the content of the tag, and named arguments become the attributes.  Because tags and text are clearly distinct in this api, we can automatically escape `&` and other special characters.
+Note that the nesting of function calls is the same as the nesting of tags, unnamed arguments become the content of the tag, and named arguments become the attributes. Because tags and text are clearly distinct in this api, we can automatically escape `&` and other special characters.
 
 ### Escaping
 
@@ -97,7 +112,6 @@ escape.list <- function(x) {
 # Now we check that it works
 escape("This is some text.")
 escape("x > 1 & y < 2")
-escape(escape("x > 1 & y < 2"))
 
 # Double escaping is not a problem
 escape(escape("This is some text. 1 > 2"))
@@ -106,15 +120,14 @@ escape(escape("This is some text. 1 > 2"))
 escape(html("<hr />"))
 ```
 
+Escaping is an important component for any dsl.
+
 ### Basic tag functions
 
-Next we'll write a few simple tag functions and then figure out how to generalise for all possible html tags.  Let's start with a paragraph tag since that's probably the most commonly used.
-
-HTML tags can have both attributes (e.g. id, or class) and children (like `<b>` or `<i>`). We need some way of separating these in the function call: since attributes are named values and children don't have names, it seems natural to separate using named vs. unnamed arguments. Then a call to `p()` might look like:
+Next we'll write a few simple tag functions and then figure out how to generalise for all possible html tags. Let's start with `<p>`. HTML tags can have both attributes (e.g. id, or class) and children (like `<b>` or `<i>`). We need some way of separating these in the function call: since attributes are named values and children don't have names, it seems natural to separate using named vs. unnamed arguments. Then a call to `p()` might look like:
 
 ```R
-p("Some text.", b("Some bold text"), i("Some italic text"), 
-  class = "mypara")
+p("Some text.", b("some bold text"), class = "mypara")
 ```
 
 We could list all the possible attributes of the p tag in the function definition, but that's hard because there are so many, and it's possible to use [custom attributes](http://html5doctor.com/html5-custom-data-attributes/) Instead we'll just use ... and separate the components based on whether or they are named. To do this correctly, we need to be aware of a "feature" of `names()`:
@@ -138,7 +151,7 @@ unnamed <- function(x) {
 }
 ```
 
-With this in hand, we can create our `p()` function. There's one new function here: `html_attributes()`. This takes a list of name-value pairs and creates the correct html attributes specification from them. It's a little complicated, not that important and doesn't introduce any important new ideas, so I won't discuss it here, but it's described at the end of the chapter.
+We can now create our `p()` function. There's one new function here: `html_attributes()`. This takes a list of name-value pairs and creates the correct html attributes specification from them. It's a little complicated (to deal with some idiosyncracies of html that I haven't mentioned), not that important and doesn't introduce any  new ideas, so I won't discuss it here, but it's included at the end of the chapter.
 
 ```r
 p <- function(...) {
@@ -146,7 +159,11 @@ p <- function(...) {
   attribs <- html_attributes(named(args))
   children <- unlist(escape(unnamed(args)))
   
-  html(paste0("<p", attribs, ">", paste(children, collapse = ""), "</p>"))
+  html(paste0(
+    "<p", attribs, ">", 
+    paste(children, collapse = ""), 
+    "</p>"
+  ))
 }
 
 p("Some text")
@@ -157,7 +174,7 @@ p("Some text", class = "important", "data-value" = 10)
 
 ### Tag functions
 
-With this definition of `p()` it's pretty easy to see what will change for different tags: we just need to replace `p` with a variable.  We'll use a closure to make it easy to generate a tag function given a tag name:
+With this definition of `p()` it's pretty easy to see what will change for different tags: we just need to replace `"p"` with a variable.  We'll use a closure to make it easy to generate a tag function given a tag name:
 
 ```r
 tag <- function(tag) {
@@ -167,9 +184,11 @@ tag <- function(tag) {
     attribs <- html_attributes(named(args))
     children <- unlist(escape(unnamed(args)))
     
-    html(paste0("<", tag, attribs, ">", 
+    html(paste0(
+      "<", tag, attribs, ">", 
       paste(children, collapse = ""), 
-      "</", tag, ">"))
+      "</", tag, ">"
+    ))
   }
 }
 ```
@@ -186,7 +205,7 @@ p("Some text.", b("Some bold text"), i("Some italic text"),
   class = "mypara")
 ```
 
-Before we continue to generate functions for every possible html tag, we need a variant of `tag()` for void tags. It can be very similar to `tag()`, but needs to throw an error is there are any unnamed tags, and the tag itself also looks slightly different.
+Before we continue to generate functions for every possible html tag, we need a variant of `tag()` for void tags. It can be very similar to `tag()`, but needs to throw an error if there are any unnamed tags, and the tag itself looks slightly different:
 
 ```r
 void_tag <- function(tag) {
@@ -205,6 +224,8 @@ void_tag <- function(tag) {
 img <- void_tag("img")
 img(src = "myimage.png", width = 100, height = 100)
 ```
+
+### Processing all tags
 
 Next we need a list of all the html tags:
 
@@ -228,9 +249,7 @@ void_tags <- c("area", "base", "br", "col", "command", "embed",
   "track", "wbr")
 ```
 
-### `with_html`
-
-If you look at this list carefully, you'll see there are quite a few tags that have the same name as base R functions (`body`, `col`, `q`, `source`, `sub`, `summary`, `table`), and others that clash with popular packages (e.g. `map`). So we don't want to make all the functions available (in either the global environment or a package environment) by default.  So what we'll do is put them in a list, and add some additional code to make it easy to use them when desired.
+If you look at this list carefully, you'll see there are quite a few tags that have the same name as base R functions (`body`, `col`, `q`, `source`, `sub`, `summary`, `table`), and others that clash with popular packages (e.g. `map`). That implies we don't want to make all the functions available (in either the global environment or a package environment) by default. Instead, we'll put them in a list, and add some additional code to make it easy to use them when desired. First we make a named list:
 
 ```r
 tag_fs <- c(
@@ -247,10 +266,10 @@ tags$p("Some text.", tags$b("Some bold text"),
   tags$i("Some italic text"))
 ```
 
-We finish off our HTML DSL by creating a function that allows us to evaluate code in the context of that list:
+Then we finish off our HTML DSL by creating a function that allows us to evaluate code in the context of that list:
 
 ```r
-with_html <- function(code) {
+with_html <- function(...) {
   eval(substitute(code), tag_fs)
 }
 ```
@@ -258,7 +277,11 @@ with_html <- function(code) {
 This gives us a succinct API which allows us to write html when we need it without cluttering up the namespace when we don't. Inside `with_html` if you want to access the R function overridden by an html tag of the same name, you can use the full `package::function` specification.
 
 ```R
-with_html(p("Some text", b("Some bold text"), i("Some italic text")))
+with_html(body(
+  h1("A heading", id = "first"),
+  p("Some text &", b("some bold text."))
+  img(src = "myimg.png", width = 100, height = 100)
+))
 ```
 
 ### Code to make html attributes
@@ -271,13 +294,14 @@ html_attributes <- function(list) {
   paste0(" ", unlist(attr), collapse = "")
 }
 html_attribute <- function(name, value = NULL) {
-  if (length(value) == 0) return(name)
+  if (length(value) == 0) return(name) # for attributes with no value
   if (length(value) != 1) stop("value must be NULL or of length 1")
 
   if (is.logical(value)) {
-  value <- tolower(value)
+    # Convert T and F to true and false
+    value <- tolower(value)
   } else {
-  value <- escape_attr(value)
+    value <- escape_attr(value)
   }
   paste0(name, " = '", value, "'")
 }
@@ -306,11 +330,13 @@ escape_attr <- function(x) {
 
   All tags should get `class` and `id` attributes.
 
+* Currently the html doesn't look terribly pretty, and it's hard to see the structure. How could you adapt `tag()` to do be indenting and formatting?
+
 ## Latex
 
 The next DSL we're going to tackle will convert R expression into their latex math equivalents. (This is a bit like `?plotmath`, but for text instead of plots.) Latex is the lingua franca of mathematicians and statisticians: whenever you want to describe an equation in text (e.g. in an email) you write it as a latex equation. Many reports are produced from R using latex, so it might be useful to facilitate the automate conversion from mathematical expressions from one language to the other.
 
-This math expression DSL will be more complicated than the HTML dsl, because not only do we need to convert functions, but we also need to convert symbols.  We'll also create a "default" conversion, so that functions we don't know how to convert get a standard fallback. Like the HTML dsl, we'll also write functionals to make it easier to generate the translators.
+This math expression DSL will be more complicated than the HTML DSL, because not only do we need to convert functions, but we also need to convert symbols.  We'll also create a "default" conversion, so that functions we don't know how to convert get a standard fallback. Like the HTML dsl, we'll also write functionals to make it easier to generate the translators.
 
 Before we begin, let's quickly cover how formulas are expressed in latex.
 
