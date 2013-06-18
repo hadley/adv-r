@@ -87,7 +87,7 @@ Coercion also happens automatically. Most mathematical functions (`+`, `log`, `a
 
 ### Lists
 
-Lists are different from atomic vectors in that they can contain any other type of vector, including lists. You construct them using `list()` instead of `c()`
+Lists are different from atomic vectors in that they can contain any other type of vector, including lists. You construct them using `list()` instead of `c()`.
 
 ```R
 x <- list(1:3, "a", c(T, F, T), c(2.3, 5.9))
@@ -100,6 +100,15 @@ Lists are sometimes called __recursive__ vectors, because a list can contain oth
 x <- list(list(list(list())))
 str(x)
 is.recursive(x)
+```
+
+`c()` will combine several lists into one. If given a combination of atomic vectors and lists, c() will coerce the vectors to list before combining them. Compare the results of `list()` versus `c()`:
+
+```R
+x <- list(list(1,2), list("a","b"), 5:9)
+y <- c(list(1,2), list("a","b"), 5:9)
+str(x)
+str(y)
 ```
 
 The `typeof()` a list is `list`, and you can test and coerce with `is.list()` and `as.list()`.
