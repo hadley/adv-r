@@ -15,7 +15,7 @@ Given an arbitrary object in R, `str()` (short for structure), is probably the m
 Take this short quiz to determine if you need to read this chapter or not:
 
 * What are the three properties of a vector? (apart from its contents)
-* What are the four common atomic vectors? What are the two rarer atomic vectors?
+* What are the four common types of atomic vector? What are the two rarer types?
 * How is a list different to a vector?
 * How is a matrix different to a data frame?
 * Can a data frame have a column that is a list?
@@ -42,6 +42,8 @@ Atomic vectors are flat, and nesting `c()` just creates a flat vector:
 
 ```R
 c(1, c(2, c(3, 4)))
+# is the same as 
+c(1, 2, 3, 4)
 ```
 
 #### Types and tests
@@ -159,6 +161,39 @@ The exceptions are for the most common attributes:
 
 When an accessor function is available, it's usually better to use that: use `names(x)`, `class(x)` and `dim(x)`, not `attr(x, "names")`, `attr(x, "class")`, and `attr(x, "dim")`.
 
+### Factors
+
+The class attribute can be used to make atomic vectors work differently to their defaults. For example, the `factor` is a vector that can contain only predefined values, and is R's structure for dealing with quantitative data. Factors have two key attributes: their `class()`, factor, which controls their behaviour; and their `levels()`, the set of allowed values.
+
+```R
+x <- factor(c("a", "b", "b", "a"))
+x
+class(x)
+levels(x)
+```
+
+While factors look (and often behave) like character vectors, they are actually integers under the hood, and you need to be careful when treating them like strings. Some string methods (like `gsub()` and `grepl()`) will coerce factors to strings, while others (like `nchar()`) will throw an error, and still others will treat like an integer (like `[`). For this reason, it's usually best to explicit convert factors to strings when modifying their levels.
+
+Factors are useful when you know the possible set of values of a variable, even if you don't see them in the dataset. Using a factor instead of a character vector makes it obvious when some groups contain no observations:
+
+```R
+sex_char <- c("m", "m", "m")
+sex_factor <- factor(sex_char, levels = c("m", "f"))
+
+table(sex_char)
+table(sex_factor)
+```
+
+Sometimes due a data loading error, you'll get a factor whose levels are numbers. Be very careful when converting these back to numbers: you need to first coerce to a character vector, or you'll just get the indices of the underlying levels. But generally, instead of coercing, you should figure out what data problem lead to them being turned into a factor the first place (it's often a non-standard coding of missing values.)
+
+```R
+z <- factor(c(12, 1, 9))
+as.numeric(z)
+as.numeric(as.character(z))
+```
+
+Unfortunately, most data loading functions in R automatically convert character vectors to factors. This is suboptimal, because there's no way for those functions to know the set of all possible values, or the optimal order. Instead, use `stringsAsFactors = FALSE` to suppress this behaviour, and then manually convert character vectors to factors using your knowledge. A global option (`options(stringsAsFactors = FALSE`) is available to control this behaviour, but it's not recommended - it may have unexpected consequences when combined other code (either from packages, or that you're `source()`ing.) In early versions of R, there was a memory advantage to using factors; that is no longer the case.
+
 ## Higher dimensions
 
 Atomic vectors and lists are the building blocks for higher dimensional data structures. Atomic vectors extend to matrices and arrays, and lists are used to create data frames.
@@ -217,9 +252,11 @@ dim(l) <- c(2, 2)
 l
 ```
 
+These are relatively esoteric data structures, but can be useful if you want to arrange objects into a grid-like structure. For example, if you're running models on a spatio-temporal grid, it might be natural to preserve the grid structure by storing the models in a 3d array.
+
 ## Data frames
 
-A data frame is a list of equal-length vectors. This makes it a 2d dimensional structure, so it shares the properties of a matrix and a list.  This means that a data frame has `names()`, `colnames()` and `rownames()`, although `names()` and `colnames()` are the same thing. The `length()` of a data frame is the length of the underlying list and so is the same as `ncol()`, `nrow()` gives the number of rows.
+A data frame is the most common way of storing data in R, and if [used systematically](http://vita.had.co.nz/papers/tidy-data.pdf) make data analysis easier. Under the hood, a data frame is a list of equal-length vectors. This makes it a 2d dimensional structure, so it shares properties of both the matrix and the list.  This means that a data frame has `names()`, `colnames()` and `rownames()`, although `names()` and `colnames()` are the same thing. The `length()` of a data frame is the length of the underlying list and so is the same as `ncol()`, `nrow()` gives the number of rows.
 
 ### Creation
 
