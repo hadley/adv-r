@@ -271,12 +271,23 @@ df$y <- list(1:2, 1:3, 1:4)
 df
 ```
 
-But you can't do this in one step because `data.frame()` uses special rules for processing lists:
+However, when a list is given to `data.frame()`, it tries to put each item of the list into its own column, so this fails:
 
 ```R
 data.frame(x = 1:3, y = list(1:2, 1:3, 1:4))
 ```
 
-Note that this is not recommended as many functions that work with data frames assume that you can not have a list in a column. Similarly, it's also possible (although not recommended) to have a column of a data frame that's a matrix or array.
+A workaround is to use `I()` which causes `data.frame` to treat the list as one unit:
+
+```R
+data.frame(x = 1:3, y = I(list(1:2, 1:3, 1:4)))
+```
+Similarly, it's also possible to have a column of a data frame that's a matrix or array, as long as the number of rows matches:
+
+```R
+data.frame(x = 1:3, y = I(matrix(1:9, nrow = 3)))
+df[2,"y"]
+```
+Both list and array columns might be better avoided, since many functions that work with data frames assume that all columns are primitive vectors.
 
 As described in the following chapter, you can subset a data frame like a 1d structure (where it behaves like a list), or a 2d structure (where it behaves like a matrix).
