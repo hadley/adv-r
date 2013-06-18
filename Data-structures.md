@@ -8,7 +8,7 @@ The table below shows the most important R data structures, organised by their d
 | 2d | Matrix     | Data frame   |
 | nd | Array      |              |
 
-Given an arbitrary object in R, `str` (short for structure), is probably the most useful function: it will give a compact human readable description of any R data structure.
+Given an arbitrary object in R, `str()` (short for structure), is probably the most useful function: it will give a compact human readable description of any R data structure.
 
 ## Quiz
 
@@ -24,7 +24,7 @@ Take this short quiz to determine if you need to read this chapter or not:
 
 The basic data structure in R is the vector, which comes in two basic flavours: atomic vectors and lists. Vectors have three properties: their `typeof()` (what it is), `length()` (how long it is) and `attributes()` (additional arbitrary metadata).  The most common attribute is `names()`.
 
-Beware `is.vector()`: for historical reasons returns `TRUE` only if the object is a vector with no attributes apart from names.  Use `is.atomic(x) || is.list(x)` instead.
+Beware `is.vector()`: for historical reasons it returns `TRUE` only if the object is a vector with no attributes apart from names.  Use `is.atomic(x) || is.list(x)` instead.
 
 ### Atomic vectors
 
@@ -48,7 +48,7 @@ c(1, c(2, c(3, 4)))
 
 Given a vector, you can determine what type it is using `typeof()`, or a specific tests: `is.character()`, `is.double()`, `is.integer()`, `is.logical()`, or generically `is.atomic()`.  
 
-Beware `is.numeric()`: it's a general test for the "numberliness" of a vector, not a specific test for double vectors, which are commonly called numeric. `is.numeric()` is an S3 generic.
+Beware `is.numeric()`: it's a general test for the "numberliness" of a vector, not a specific test for double vectors, which are commonly called numeric. `is.numeric()` is an S3 generic, and returns TRUE for integers.
 
 ```R
 typeof(integer)
@@ -81,7 +81,7 @@ sum(mtcars$cyl == 4)
 mean(mtcars$cyl == 4)
 ```
 
-You can also manually force one type of vector to another using a coercion function: `as.character()`, `as.double()`, `as.integer()`, `as.logical()`.
+You can manually force one type of vector to another using a coercion function: `as.character()`, `as.double()`, `as.integer()`, `as.logical()`.
 
 Coercion also happens automatically. Most mathematical functions (`+`, `log`, `abs`, etc.) will coerce to a double or integer, and most logical operations (`&`, `|`, `any`, etc) will coerce to a logical. You will usually get a warning message if the coercion might lose information. If there's any possible confusion, it's usually better to explicitly coerce.
 
