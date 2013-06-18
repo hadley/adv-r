@@ -10,6 +10,16 @@ The table below shows the most important R data structures, organised by their d
 
 Given an arbitrary object in R, `str` (short for structure), is probably the most useful function: it will give a compact human readable description of any R data structure.
 
+## Quiz
+
+Take this short quiz to determine if you need to read this chapter or not:
+
+* What are the three properties of a vector? (apart from its contents)
+* What are the four common atomic vectors? What are the two rarer atomic vectors?
+* How is a list different to a vector?
+* How is a matrix different to a data frame?
+* Can a data frame have a column that is a list?
+
 ## Vectors (1d)
 
 The basic data structure in R is the vector, which comes in two basic flavours: atomic vectors and lists. Vectors have three properties: their `typeof()` (what it is), `length()` (how long it is) and `attributes()` (additional arbitrary metadata).  The most common attribute is `names()`.
