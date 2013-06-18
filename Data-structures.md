@@ -288,6 +288,6 @@ Similarly, it's also possible to have a column of a data frame that's a matrix o
 data.frame(x = 1:3, y = I(matrix(1:9, nrow = 3)))
 df[2,"y"]
 ```
-Both list and array columns might be better avoided, since many functions that work with data frames assume that all columns are primitive vectors.
+Both list and array columns might be better avoided, since many functions that work with data frames assume that all columns are atomic vectors.
 
 As described in the following chapter, you can subset a data frame like a 1d structure (where it behaves like a list), or a 2d structure (where it behaves like a matrix).
