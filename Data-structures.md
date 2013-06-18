@@ -73,11 +73,11 @@ mean(mtcars$cyl == 4)
 
 You can also manually force one type of vector to another using a coercion function: `as.character()`, `as.double()`, `as.integer()`, `as.logical()`.
 
-Coercion also happens automatically. Most mathematical functions (`+`, `log`, `abs`, etc.) will coerce to a double or integer, and most logical operations (`&`, `|`, `any`, etc) will coerce to a logical. You will usually get a warning message if the coercion might lose information.
+Coercion also happens automatically. Most mathematical functions (`+`, `log`, `abs`, etc.) will coerce to a double or integer, and most logical operations (`&`, `|`, `any`, etc) will coerce to a logical. You will usually get a warning message if the coercion might lose information. If there's any possible confusion, it's usually better to explicitly coerce.
 
 ### Lists
 
-Lists are different from atomic vectors in that they can contain any other type of vector. You construct them using `list()` instead of `c()`
+Lists are different from atomic vectors in that they can contain any other type of vector, including lists. You construct them using `list()` instead of `c()`
 
 ```R
 x <- list(1:3, "a", c(T, F, T), c(2.3, 5.9))
@@ -134,11 +134,11 @@ sum(y)
 
 The exceptions are for the most common attributes:
 
-* `names()`
+* `names()`, character vector of element names
 * `class()`, used to implement the S3 object system.
 * `dim()`, used to turn vectors into high-dimensional structures
 
-When an accessor function is available, it's usually better to use that: get the names of the vector using `names(x)`, not `attr(x, "names")`.
+When an accessor function is available, it's usually better to use that: use `names(x)`, `class(x)` and `dim(x)`, not `attr(x, "names")`, `attr(x, "class")`, and `attr(x, "dim")`.
 
 ## Higher dimensions
 
@@ -175,7 +175,9 @@ dimnames(b) <- list(c("one", "two"), c("a", "b", "c"), c("A", "B"))
 b
 ```
 
-You can test if an object is a matrix or array using `is.matrix()` and `is.array()`, or by looking at the length of the `dim()`. Because of the behaviour described above, `is.vector()` will return FALSE for matrices and arrays, but it is not generally a safe test. `as.matrix()` and `as.array()` make it easy to turn an existing vector into a matrix or array.
+`c()` generalises to `cbind()` and `rbind()` for matrices, and to `abind::abind()` for arrays.
+
+You can test if an object is a matrix or array using `is.matrix()` and `is.array()`, or by looking at the length of the `dim()`. Because of the behaviour described above, `is.vector()` will return FALSE for matrices and arrays, even though they are implemented as vectors internally. `as.matrix()` and `as.array()` make it easy to turn an existing vector into a matrix or array.
 
 Becareful of the difference between vectors, row vectors, column vectors, and 1d arrays:
 
@@ -185,6 +187,8 @@ col_vec <- matrix(1:3, ncol = 1)
 row_vec <- matrix(1:3, nrow = 1)
 arr <- array(1:3, 3)
 ```
+
+They may print similarly, but will behave differently.
 
 While atomic vectors are most commonly turned into matrices, the dimension attribute can also be set on lists to make list-matrices or list-arrays:
 
@@ -196,9 +200,58 @@ l
 
 ## Data frames
 
-A data frame is a list of vectors, where each vector represents a column, and must have the same length. This makes it a 2d dimensional structure, so it shares the properties of a matrix and a list. 
+A data frame is a list of equal-length vectors. This makes it a 2d dimensional structure, so it shares the properties of a matrix and a list.  This means that a data frame has `names()`, `colnames()` and `rownames()`, although `names()` and `colnames()` are the same thing. The `length()` of a data frame is the length of the underlying list and so is the same as `ncol()`, `nrow()` gives the number of rows.
 
-This means that a data frame has `names()`, `colnames()` and `rownames()`, although `names()` and `colnames()` are the same thing.  The `length()` of a data frame is the length of the underlying list and so is the same as `ncol()`, `nrow()` gives the number of rows.
+### Creation
+
+You create a data frame using `data.frame()`, which takes named vectors as input:
+
+```R
+df <- data.frame(x = 1:3, y = c("a", "b", "c"))
+str(df)
+```
+
+Beware the default behaviour of `data.frame()` to convert strings into factors. Use `stringAsFactors = FALSE` to suppress this behaviour:
+
+```R
+df <- data.frame(
+  x = 1:3, 
+  y = c("a", "b", "c"), 
+  stringsAsFactors = FALSE)
+str(df)
+```
+
+### Testing and coercion
+
+Because a data frame is an S3 class, the type of a data frame reflects the underlying vector used to build it: `list`. Instead you can look at its `class()` or test for a data frame with `is.data.frame()`:
+
+```R
+typeof(df)
+class(df)
+is.data.frame(df)
+```
+
+### Combining data frames
+
+You can combine data frames using `cbind()` and `rbind()`:
+
+```R
+cbind(df, data.frame(y = 4))
+rbind(df, data.frame(x = 10))
+```
+
+When combining by column, the rows must match (or match with vector recycling), when combining by rows, the columns must match. If you want to combine data frames that may not have all the same rows, see `plyr::rbind.fill()`
+
+It's a common mistake to try and create a data frame by `cbind()`ing vectors together:
+
+```R
+bad <- data.frame(cbind(a = 1:3, b = c("a", "b", "c")))
+str(bad)
+```
+
+But this doesn't work because `cbind()` will create a matrix unless one of the arguments is already a data frame. The conversion rules for `cbind()` are complicated and best avoided by ensuring all the inputs are of the same type.
+
+### Special columns
 
 Since a data frame is a list of vectors, it is possible for a data frame to have a column that is a list:
 
@@ -208,4 +261,12 @@ df$y <- list(1:2, 1:3, 1:4)
 df
 ```
 
-(Note that this is not recommended as many functions that work with data frames assume that you can not have a list in a column.)
+But you can't do this in one step because `data.frame()` uses special rules for processing lists:
+
+```R
+data.frame(x = 1:3, y = list(1:2, 1:3, 1:4))
+```
+
+Note that this is not recommended as many functions that work with data frames assume that you can not have a list in a column. Similarly, it's also possible (although not recommended) to have a column of a data frame that's a matrix or array.
+
+As described in the following chapter, you can subset a data frame like a 1d structure (where it behaves like a list), or a 2d structure (where it behaves like a matrix).
