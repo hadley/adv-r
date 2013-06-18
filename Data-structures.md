@@ -24,7 +24,7 @@ Take this short quiz to determine if you need to read this chapter or not:
 
 The basic data structure in R is the vector, which comes in two basic flavours: atomic vectors and lists. Vectors have three properties: their `typeof()` (what it is), `length()` (how long it is) and `attributes()` (additional arbitrary metadata).  The most common attribute is `names()`.
 
-Beware `is.vector()`: for historical reasons it returns `TRUE` only if the object is a vector with no attributes apart from names.  Use `is.atomic(x) || is.list(x)` instead.
+Beware of `is.vector()`: for historical reasons it returns `TRUE` only if the object is a vector with no attributes apart from names.  Use `is.atomic(x) || is.list(x)` instead.
 
 ### Atomic vectors
 
@@ -46,9 +46,9 @@ c(1, c(2, c(3, 4)))
 
 #### Types and tests
 
-Given a vector, you can determine what type it is using `typeof()`, or a specific tests: `is.character()`, `is.double()`, `is.integer()`, `is.logical()`, or generically `is.atomic()`.  
+Given a vector, you can determine what type it is with `typeof()`, or with the specific tests: `is.character()`, `is.double()`, `is.integer()`, `is.logical()`, or, more generically, `is.atomic()`.  
 
-Beware `is.numeric()`: it's a general test for the "numberliness" of a vector, not a specific test for double vectors, which are commonly called numeric. `is.numeric()` is an S3 generic, and returns TRUE for integers.
+Beware of `is.numeric()`: it's a general test for the "numberliness" of a vector, not a specific test for double vectors, which are commonly called numeric. `is.numeric()` is an S3 generic, and returns TRUE for integers.
 
 ```R
 typeof(integer)
@@ -104,7 +104,7 @@ is.recursive(x)
 
 The `typeof()` a list is `list`, and you can test and coerce with `is.list()` and `as.list()`.
 
-Lists are used to build up most more complicated datastructures in R: both data frames (described below), and linear models are lists:
+Lists are used to build up most more complicated data structures in R: both data frames (described below), and linear models are lists:
 
 ```R
 is.list(mtcars)
@@ -119,7 +119,7 @@ str(mod$qr)
 
 ## Attributes
 
-All object can have additional arbitrary attributes. These can be thought of as a named list (although the names must be unique). Attributes can be accessed individually with `attr()` or all at once (as a list) with `attributes()`.
+All objects can have additional arbitrary attributes. These can be thought of as a named list (although the names must be unique). Attributes can be accessed individually with `attr()` or all at once (as a list) with `attributes()`.
 
 ```R
 y <- 1:10
@@ -128,7 +128,7 @@ attr(y, "comment")
 str(attributes(y))
 ```
 
-The `structure()` returns a new object with modified attributes:
+The `structure()` function returns a new object with modified attributes:
 
 ```R
 structure(1:10, comment = "This is a vector")
@@ -189,7 +189,7 @@ b
 
 You can test if an object is a matrix or array using `is.matrix()` and `is.array()`, or by looking at the length of the `dim()`. Because of the behaviour described above, `is.vector()` will return FALSE for matrices and arrays, even though they are implemented as vectors internally. `as.matrix()` and `as.array()` make it easy to turn an existing vector into a matrix or array.
 
-Becareful of the difference between vectors, row vectors, column vectors, and 1d arrays:
+Be careful of the difference between vectors, row vectors, column vectors, and 1d arrays:
 
 ```R
 vec <- 1:3
