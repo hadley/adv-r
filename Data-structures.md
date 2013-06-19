@@ -362,16 +362,19 @@ data.frame(x = 1:3, y = list(1:2, 1:3, 1:4))
 A workaround is to use `I()` which causes `data.frame` to treat the list as one unit:
 
 ```R
-data.frame(x = 1:3, y = I(list(1:2, 1:3, 1:4)))
+dfl <- data.frame(x = 1:3, y = I(list(1:2, 1:3, 1:4)))
+str(dfl)
+dfl[2, "y"]
 ```
+
+`I()` adds the `AsIs` class to its input, but this additional property can usually be safely ignored.
 
 Similarly, it's also possible to have a column of a data frame that's a matrix or array, as long as the number of rows matches:
 
 ```R
-data.frame(x = 1:3, y = I(matrix(1:9, nrow = 3)))
-df[2,"y"]
+dfm <- data.frame(x = 1:3, y = I(matrix(1:9, nrow = 3)))
+str(dfm)
+dfm[2, "y"]
 ```
 
-Both list and array columns might be better avoided, since many functions that work with data frames assume that all columns are atomic vectors.
-
-As described in the following chapter, you can subset a data frame like a 1d structure (where it behaves like a list), or a 2d structure (where it behaves like a matrix).
+Use list and array columns with caution: many functions that work with data frames assume that all columns are atomic vectors.
