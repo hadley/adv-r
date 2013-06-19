@@ -314,6 +314,12 @@ class(df)
 is.data.frame(df)
 ```
 
+You can coerce an object to a data frame with `as.data.frame()`:
+
+* a vector will yield a one-column data frame
+* a list will yield one column for each element; it's an error if they're not all the same length
+* a matrix will yield a data frame with the same number of columns
+
 ### Combining data frames
 
 You can combine data frames using `cbind()` and `rbind()`:
