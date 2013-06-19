@@ -33,7 +33,6 @@ pandoc --chapters -o programming.pdf --latex-engine xelatex \
   Profiling.md \
   Performance.md \
   Rcpp.md \
-  appendix.md \
   C-interface.md
 
 # pandoc --chapters -o packages.pdf --latex-engine xelatex \
