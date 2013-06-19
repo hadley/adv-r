@@ -12,6 +12,7 @@ pandoc --chapters -o programming.pdf --latex-engine xelatex \
   Subsetting.md \
   Vocabulary.md \
   Functions.md \
+  OO-essentials.md \
   part-fp.md \
   Environments.md \
   Functional-programming.md \
