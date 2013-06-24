@@ -155,7 +155,7 @@ By defining data types we can create special functions,
 called methods that behave differently depending on the type of the object
 passed to the method. For example, let's say that we want to be able 
 to handle the generation of all any type integer sequences with a method, called
-`nextNum`. The `nextNum` function will return a an object, which
+`nextNum`. The `nextNum` function will return an object, which
 could be a `FibonacciData` object, and from the returned object we
 get get the next value in the sequence. This is easily accomplished 
 by creating __generic functions__, which will allow us to define 
