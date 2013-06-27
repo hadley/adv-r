@@ -40,7 +40,7 @@ It will always require a little more work to turn your casual interactive tests 
   have the right value and right class? Does it produce error messages when it
   should? There are 11 types of built in expectations.
 
-* A __test___ groups together multiple expectations to test one function, or
+* A __test__ groups together multiple expectations to test one function, or
   tightly related functionality across multiple functions. A test is created
   with the `test_that` function.
 
