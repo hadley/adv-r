@@ -63,7 +63,7 @@ The functions that you'll use most often are those that facilitate the [[package
   `dev_example()` instead of `help()` and `example()` to preview these files
   without installing the package. More on that in [[documentation]].
 
-* `test()`: runs all unit tests in the `inst/test/` directory and reports the
+* `test()`: runs all unit tests in the `inst/tests/` directory and reports the
   results. More on that in [[testing]].
 
 Other functions mimic standard R commands that you run from the command line:
