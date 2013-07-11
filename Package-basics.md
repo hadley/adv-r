@@ -2,7 +2,7 @@
 
 An R package is the basic unit of reusable code. You need to master the art of making R packages if you want others to use your code. At their heart, packages are quite simple and only have two essential components: 
 
-* a `DESCRIPTION` file that describes the package, what is does, who's allowed
+* a `DESCRIPTION` file that describes the package, what it does, who's allowed
   to use it (the license) and who to contact if you need help
 
 * an `R` directory that contains your R code.
