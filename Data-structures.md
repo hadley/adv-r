@@ -8,7 +8,7 @@ This chapter summarises the most important data structures in base R. I assume y
 | 2d | Matrix        | Data frame   |
 | nd | Array         |              |
 
-Almost other objects in R are built upon these foundations, and in the next chapter you'll see how R's object oriented tools build on top of these basics. There are also a few types of more esoteric objects that I don't describe here, but you'll learn about in depth in other parts of the book:
+Almost all other objects in R are built upon these foundations, and in the next chapter you'll see how R's object oriented tools build on top of these basics. There are also a few types of more esoteric objects that I don't describe here, but you'll learn about in depth in other parts of the book:
 
 * [[functions]], closures and promises
 * [[environments]]
