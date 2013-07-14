@@ -211,7 +211,7 @@ table(sex_char)
 table(sex_factor)
 ```
 
-Sometimes due a data loading error, you'll get a factor whose levels are numbers. Be very careful when converting these back to numbers: you need to first coerce to a character vector, or you'll just get the indices of the underlying levels. However, instead of fixing after the fact, it's better to figure out why it was incorrectly turned into a factor in the first place (it's often caused by non-standard coding of missing values.)
+Sometimes due to a data loading error, you'll get a factor whose levels are numbers. Be very careful when converting these back to numbers: you need to first coerce to a character vector, or you'll just get the indices of the underlying levels. However, instead of fixing after the fact, it's better to figure out why it was incorrectly turned into a factor in the first place (it's often caused by non-standard coding of missing values.)
 
 ```R
 z <- factor(c(12, 1, 9))
