@@ -207,7 +207,8 @@ The following tags apply to all types of documentation
 * `@aliases` - a list of additional topic names that will be mapped to this 
   documentation when the user looks them up from the command line. 
 
-* `@family`
+* `@family` - a family name. All functions that have the same family tag will be linked
+  in the documentation.
 
 ## Documenting S3 generic functions and methods
 
