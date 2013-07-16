@@ -45,7 +45,7 @@ f(x + y ^ 2 / z + exp(a * sin(b)))
 
 We won't worry yet about exactly what sort of object `substitute()` returns (that's the topic of the [[Expressions]] chapter), but we'll call it an expression.  (Note that it's not the same thing as returned by the `expression()` function: we'll call that an expression _object_.)
 
-`substitute()` works because function arguments in R are only evaluated when they are needed, not automatically when the function is called. This means that function arguments are not just a simple value, but instead store both the expression to compute the value and the environment in which to compute it. Together these two things are called a __promise__. Most of the time in R, you don't need to know anything about promises because the first time you access a promise it is seemlessly evaluated, returning its value.
+`substitute()` works because function arguments in R are only evaluated when they are needed, not automatically when the function is called. This means that function arguments are not just a simple value, but instead store both the expression to compute the value and the environment in which to compute it. Together these two things are called a __promise__. Most of the time in R, you don't need to know anything about promises because the first time you access a promise it is seamlessly evaluated, returning its value.
 
 We need one more function if we want to understand how `plot()` and `data.frame()` work: `deparse()`. This function takes an expression and converts it to a character vector.
 
