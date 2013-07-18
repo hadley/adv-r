@@ -97,7 +97,7 @@ There are 11 built in expectations:
       expect_that(model, is_a("glm")) 
 
 * `matches()` matches a character vector against a regular expression. The
-  optional `all` argument controls where all elements or just one element need
+  optional `all` argument controls whether all elements or just one element need
   to match. This code is powered by `str_detect()` from the `stringr`
   package.
 
