@@ -36,7 +36,7 @@ It will always require a little more work to turn your casual interactive tests 
 
 `testthat` has a hierarchical structure made up of expectations, tests and contexts. 
 
-* An __expectation__ describes what expected result of a computation: Does it
+* An __expectation__ describes the expected result of a computation: Does it
   have the right value and right class? Does it produce error messages when it
   should? There are 11 types of built in expectations.
 
