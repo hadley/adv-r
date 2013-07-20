@@ -477,7 +477,7 @@ Sugar functions can be roughly broken down into
 
 ### Arithmetic and logical operators 
 
-All the basic arithmetic and logical operators are vectorised: `+` `*`, `-`, `/`, `pow`, `<`, `<=`, `>`, `>=`, `==`, `!=`, `!`.  For example, we could use sugar to considerably simply the implementation of our `pdistC` function.  (If you don't remember I've included the R version of `pdistC`, `pdistR`, as well.  Note the similarities with the Rcpp sugar version.)
+All the basic arithmetic and logical operators are vectorised: `+` `*`, `-`, `/`, `pow`, `<`, `<=`, `>`, `>=`, `==`, `!=`, `!`.  For example, we could use sugar to considerably simplify the implementation of our `pdistC` function.  (If you don't remember I've included the R version of `pdistC`, `pdistR`, as well.  Note the similarities with the Rcpp sugar version.)
 
 ```r
 pdistR <- function(x, ys) {
