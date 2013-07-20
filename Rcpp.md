@@ -58,7 +58,7 @@ The following section shows the basics of C++ by translating simple R functions 
 
 ### No inputs, scalar output
 
-Let's start with a very simple function. It has no arguments and always returns the the integer 1:
+Let's start with a very simple function. It has no arguments and always returns the integer 1:
 
 ```
 one <- function() 1L
