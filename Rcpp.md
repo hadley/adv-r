@@ -264,6 +264,9 @@ And for each function that you want availble within R, you need to prefix it wit
 
 (Note that the space is mandatory)
 
+(If you are familiar with roxygen2, this is similar to #' @export)
+
+
 Then using `sourceCpp("path/to/file.cpp")` will compile the C++ code, create the matching R functions and add them to your current session.  (Note that these functions will not persist across `save()` and `load()`, such as when you restore your workspace.)
 
 For example, running `sourceCpp` on the following file first compiles the C++ code and then compares it to native equivalent:
