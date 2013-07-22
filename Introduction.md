@@ -1,39 +1,10 @@
 # Introduction
 
-This book has grown out of my 10 years of R programming, and my  constant struggle to understand the best way of doing things. The aim of this book is to help you understand R much much faster than I did, and become an effective R programmer as quickly as possible. 
+This book has grown out of my 10 years of R programming, and my  constant struggle to understand the best way of doing things. The aim of this book is to help you understand R much much faster than I did, and become an effective R programmer as quickly as possible. R, along with its many add-on packages, is a very broad language, so this book focusses on the areas in which I think are important, but that there is relatively little information already available.
 
-This book, particularly the package development part, is opinionated. You might not agree with everything we say, but it is much easier to learn from a cohesive viewpoint. Just because we don't talk about it in the book, doesn't mean it isn't right: there are so many techniques to solve problems in R that we couldn't include them all. There's a big difference between "I wouldn't do it this way", "I don't think that's the right way to do it", and "that's the wrong way to do it", and it's not always easy to capture that in writing. 
+While R has its quirks, I truly believe that at its heart it is an elegant and beautiful language. While R is a fairly mature language, we are still learning how to craft elegant R code: much code seen in the wild is written in haste to solve a pressing problem, and has not been rewritten to aid understanding. 
 
-## Who should read this book
-
-* Have you written a substantial amount of code (perhaps for data analysis), and you now want to learn better techniques for managing all that code, and gain a better understanding of how R works?
-
-* Have you tried to write an R package to distribute your code or data, but given up because the process is so frustrating?
-
-* Have you come to R from another language and been driven up the wall by R's way of doing things?  Do you want to learn why on earth it works the way it does, and how you can be productive in R?
-
-If the answer to any of those questions is yes, then this book is right for you. To get the most out of it, it helps to be familiar with the foundations of R:
-
-* [[data structures]] and [[subsetting]]
-* an intermediate [[vocabulary]]
-* the basics of how [[functions]] work
-* the essentials of [[OO programming||OO-essentials]]
-
-You might be somewhat familiar with the apply family of functions (like `apply()` and `lapply()`), although you may currently struggle to use them effectively.
-
-## What you will get out of this book
-
-This book describes the skills that I think you need to be an advanced R developer, producing reusable code that can be used in a wide variety of circumstances.
-
-After reading this book:
-
-* You will be comfortable reading and understanding the majority of R code.  You'll recognise common idioms (even if you wouldn't use them yourself) and be able to critique other code.
-
-* You will be familiar with the fundamentals of R, so that you can represent complex data types and simplify the operations performed on them. You will have a deep understanding of the language, and know how to override default behaviours when necessary.
-
-* You will be able to produce packages to make your work available to a wider audience, and be able to efficiently program "in the large", so you spend your time solving new problems not struggling with old code.
-
-## What makes R special
+This book is opinionated. You might not agree with everything I say, but it is much easier to learn from a cohesive viewpoint. Just because I don't talk about it in the book, doesn't mean it isn't right or isn't useful: there are so many techniques to solve problems that there's no way to include them all. There's a big difference between "I wouldn't do it this way", "I don't think that's the right way to do it", and "that's the wrong way to do it", and it's not always easy to capture that in writing. 
 
 * R has a massive set of packages for statistical modelling, machine learning, visualisation, data import, data manipulation and so on (over 4,000 at the time of writing). The chances are if you're trying to fit some sort of statistical model standard in your field, someone has already implemented it as an R package. This is probably why you're using R in the first place! 
 
@@ -45,6 +16,27 @@ After reading this book:
 
 * R has a strong ability to compute on the language; not only can functions access the values of their arguments, but they can also access the expressions that computed them. This is a double edged sword: computing on the language gives powerful tools for creating succinct domain specific languages, but if used incorrectly can lead to code that fails in unpredictable ways.
 
+
+## Who should read this book
+
+This book is aimed at two complementary audiences:
+
+* intermediate R programmers who want to dive deeper into R and learn more strategies for solving diverse problems
+
+* programmers from other languages who are learning R, and want to understand why R works the way it does.
+
+To get the most out of this book, you will need to have written a decent amount of code either in R or in other programming languages. You should be familiar with how functions work in R, although you might not know all the details, and you should be somewhat familiar with the apply family of functions (like `apply()` and `lapply()`), although you may currently struggle to use them effectively.
+
+## What you will get out of this book
+
+This book describes the skills that I think you need to be an advanced R developer, producing reusable code that can be used in a wide variety of circumstances.
+
+After reading this book:
+
+* You will be familiar with the fundamentals of R, so that you can represent complex data types and simplify the operations performed on them. You will have a deep understanding of the language, and know how to override default behaviours when necessary.
+
+* You will be comfortable reading and understanding the majority of R code.  You'll recognise common idioms (even if you wouldn't use them yourself) and be able to critique other code.
+
 ## Meta-techniques
 
 There are two meta-techniques that are tremendously helpful for improving your skills as an R programmer: reading the source, and adopting a scientific mindset.
@@ -53,7 +45,7 @@ Reading source code is a tremedously useful technique because it exposes you to 
 
 A scientific mindset is extremely helpful when learning R. If you don't understand how something works, develop a hypothesis, come up with some experiments and then perform them.  This exercise is extremely useful if you can't figure it out and need to get help from others: you can easily show what you tried, and when you learn the right answer, you'll be mentally prepared to update your world view. I often find that whenever I make the effort to explain a problem so that others can understand and help be able to solve it (the art of a [reproducible example](http://stackoverflow.com/questions/5963269)), I figure out the solution myself.
 
-## Recommended readings
+## Recommended reading
 
 R is still a relatively young language, and the resources to help you understand it are still maturing. In my personal journey to understand R, I've found it particularly helpful to refer to resources from other programming languages. R has aspects of both functional and object-oriented (OO) programming languages, and learning how these aspects are expressed in R, will help you translate your existing knowledge from other programming languages, and to help you identify areas where you can improve.
 

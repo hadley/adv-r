@@ -10,9 +10,10 @@ Foundations
   * [[Vocabulary]]
   * [[Functions]]
   * [[OO essentials]]
+  * [[Environments]]
+  * [[Exceptions, debugging and getting help|Exceptions-debugging]]
 
 Functional programming
-  * [[Environments]]
   * [[Functional programming]]
   * [[Functionals]]
   * [[Function operators]]
@@ -24,16 +25,14 @@ Computing on the language
   * [[Computing in special environments|Special-environments]]
   * [[Domain specific languages|dsl]]
 
-Advanced programming techniques
-  * [[Exceptions, debugging and getting help|Exceptions-debugging]]
-
 Performant code
   * [[Profiling and benchmarking|profiling]]
   * [[General performance tips and tricks|performance]]
   * [[High performance functions with Rcpp|Rcpp]]
   * [[R's C interface|C-interface]] 
 
-Objected oriented programming
+### Objected oriented programming
+  
   * [[Software systems|SoftwareSystems]]
   * [[The S3 object system|S3]]
   * [[The S4 object system|S4]]

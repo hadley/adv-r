@@ -1,1 +1,1 @@
-\part{Advanced programming techniques}
+\part{Computing on the language}

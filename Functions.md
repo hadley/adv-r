@@ -791,4 +791,3 @@ because that is parsed as:
 
 ### Exercises
 
-*

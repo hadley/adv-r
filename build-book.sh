@@ -13,23 +13,18 @@ pandoc --chapters -o programming.pdf --latex-engine xelatex \
   Vocabulary.md \
   Functions.md \
   OO-essentials.md \
-  part-fp.md \
   Environments.md \
+  Exceptions-debugging.md \
+  part-fp.md \
   Functional-programming.md \
   Functionals.md \
   Function-operators.md \
-  part-oo.md \
-  SoftwareSystems.md \
-  S3.md \
-  S4.md \
-  R5.md \
   part-adv.md \
   Computing-on-the-language.md \
   Expressions.md \
   Formulas.md \
   Special-environments.md \
   dsl.md \
-  Exceptions-debugging.md \
   part-perf.md \
   Profiling.md \
   Performance.md \
