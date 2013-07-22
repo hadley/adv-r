@@ -8,16 +8,16 @@ This chapter summarises the most important data structures in base R. I assume y
 | 2d | Matrix        | Data frame   |
 | nd | Array         |              |
 
-Almost all other objects in R are built upon these foundations, and in the next chapter you'll see how R's object oriented tools build on top of these basics. There are also a few types of more esoteric objects that I don't describe here, but you'll learn about in depth in other parts of the book:
+Almost all other objects in R are built upon these foundations, and in [[OO essentials]] you'll see how R's object oriented tools build on top of these basics. There are also a few types of more esoteric objects that I don't describe here, but you'll learn about in depth in other parts of the book:
 
-* [[functions]], closures and promises
+* [[functions]], including closures and promises
 * [[environments]]
 * names/symbols, calls and expression objects, for [[computing on the language]]
 * [[formulas]]
 
 When trying to understand the structure of an arbitrary object in R your most important tool is `str()`, short for structure: it gives  a compact human readable description of any R data structure.
 
-The chapter starts by describing R's 1d structures atomic vectors and lists, then detours to discuss attributes (R's flexible metadata specification) and factors, before returning to discussing high-d structures, matrices, arrays and data frames.
+The chapter starts by describing R's 1d structures (atomic vectors and lists), then detours to discuss attributes (R's flexible metadata specification) and factors, before returning to discuss high-d structures (matrices, arrays and data frames).
 
 ## Quiz
 
@@ -201,7 +201,7 @@ c(factor("a"), factor("b"))
 
 While factors look (and often behave) like character vectors, they are actually integers under the hood, and you need to be careful when treating them like strings. Some string methods (like `gsub()` and `grepl()`) will coerce factors to strings, while others (like `nchar()`) will throw an error, and still others will treat use the underlying integer ids (like `[`). For this reason, it's usually best to explicit convert factors to strings when modifying their levels.
 
-Factors are useful when you know the possible set of values of a variable, even if you don't see them in the dataset. Using a factor instead of a character vector makes it obvious when some groups contain no observations:
+Factors are useful when you know the possible values a variable may take, even if you don't see them in the dataset. Using a factor instead of a character vector makes it obvious when some groups contain no observations:
 
 ```R
 sex_char <- c("m", "m", "m")
@@ -211,7 +211,7 @@ table(sex_char)
 table(sex_factor)
 ```
 
-Sometimes due to a data loading error, you'll get a factor whose levels are numbers. Be very careful when converting these back to numbers: you need to first coerce to a character vector, or you'll just get the indices of the underlying levels. However, instead of fixing after the fact, it's better to figure out why it was incorrectly turned into a factor in the first place (it's often caused by non-standard coding of missing values.)
+Sometimes due to a data loading error, you'll get a factor whose levels are numbers. Be very careful when converting these back to numbers: you need to first coerce to a character vector, or you'll just get the indices of the underlying levels. However, instead of fixing after the fact, it's better to figure out why it was incorrectly turned into a factor in the first place: it's often caused by non-standard coding of missing values.
 
 ```R
 z <- factor(c(12, 1, 9))
@@ -219,7 +219,7 @@ as.numeric(z)
 as.numeric(as.character(z))
 ```
 
-Unfortunately, most data loading functions in R automatically convert character vectors to factors. This is suboptimal, because there's no way for those functions to know the set of all possible levels. Instead, use `stringsAsFactors = FALSE` to suppress this behaviour, and then manually convert character vectors to factors using what you know about the data. A global option (`options(stringsAsFactors = FALSE`) is available to control this behaviour, but it's not recommended - it may have unexpected consequences when combined other code (either from packages, or that you're `source()`ing.) In early versions of R, there was a memory advantage to using factors; that is no longer the case.
+Unfortunately, most data loading functions in R automatically convert character vectors to factors. This is suboptimal, because there's no way for those functions to know the set of all possible levels and their optimal order. Instead, use `stringsAsFactors = FALSE` to suppress this behaviour, and then manually convert character vectors to factors using your knowledge of the data. A global option (`options(stringsAsFactors = FALSE`) is available to control this behaviour, but it's not recommended - it may have unexpected consequences when combined other code (either from packages, or that you're `source()`ing.) In early versions of R, there was a memory advantage to using factors; that is no longer the case.
 
 Atomic vectors and lists are the building blocks for higher dimensional data structures. Atomic vectors extend to matrices and arrays, and lists are used to create data frames.
 
@@ -258,7 +258,7 @@ b
 
 You can test if an object is a matrix or array using `is.matrix()` and `is.array()`, or by looking at the length of the `dim()` (NB: `dim()` returns `NULL` when applied to a vector). `is.vector()` will return `FALSE` for matrices and arrays, even though they are implemented as vectors internally. `as.matrix()` and `as.array()` make it easy to turn an existing vector into a matrix or array.
 
-Beware that there are a few different ways to create a 1d datastructure: you can have a vector, row vector, column vector, or a 1d arrays. They may print similarly, but will behave differently. As always, use `str()` to reveal the differences.
+Beware that there are a few different ways to create a 1d datastructure: you can have a vector, row vector, column vector, or a 1d array. They may print similarly, but will behave differently. As always, use `str()` to reveal the differences.
 
 ```R
 list(
@@ -283,7 +283,7 @@ These are relatively esoteric data structures, but can be useful if you want to 
 
 A data frame is the most common way of storing data in R, and if [used systematically](http://vita.had.co.nz/papers/tidy-data.pdf) make data analysis easier. Under the hood, a data frame is a list of equal-length vectors. This makes it a 2d dimensional structure, so it shares properties of both the matrix and the list.  This means that a data frame has `names()`, `colnames()` and `rownames()`, although `names()` and `colnames()` are the same thing. The `length()` of a data frame is the length of the underlying list and so is the same as `ncol()`, `nrow()` gives the number of rows.
 
-As described in the following chapter, you can subset a data frame like a 1d structure (where it behaves like a list), or a 2d structure (where it behaves like a matrix).
+As described in [[subsetting]], you can subset a data frame like a 1d structure (where it behaves like a list), or a 2d structure (where it behaves like a matrix).
 
 ### Creation
 
@@ -331,7 +331,7 @@ rbind(df, data.frame(x = 10))
 
 When combining by column, the rows must match (or match with vector recycling), when combining by rows, the columns must match. If you want to combine data frames that may not have all the same rows, see `plyr::rbind.fill()`
 
-It's a common mistake to try and create a data frame by `cbind()`ing vectors together:
+It's a common mistake to try and create a data frame by `cbind()`ing vectors together. This doesn't work because `cbind()` will create a matrix unless one of the arguments is already a data frame. Instead use `data.frame()` directly:
 
 ```R
 bad <- data.frame(cbind(a = 1:2, b = c("a", "b")))
@@ -341,7 +341,7 @@ good <- data.frame(a = 1:2, b = c("a", "b"),
 str(good)
 ```
 
-But this doesn't work because `cbind()` will create a matrix unless one of the arguments is already a data frame. The conversion rules for `cbind()` are complicated and best avoided by ensuring all the inputs are of the same type. 
+The conversion rules for `cbind()` are complicated and best avoided by ensuring all inputs are of the same type. 
 
 ### Special columns
 
