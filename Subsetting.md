@@ -150,7 +150,7 @@ If the input vector is named, then the names of missing components will be `"<NA
 
 ```R
 x <- 1:5
-x[c(1, 1)] <- 2:3
+x[c(1, 2)] <- 2:3
 x[-1] <- 4:1
 
 x[c(1, NA)] <- c(1, 2)
