@@ -183,7 +183,7 @@ A vector with no names will return `NULL` from `names(x)`; a partially named vec
 
 ### Factors
 
-The class attribute can be used to add new behaviour to atomic vectors. For example, the factor is a vector that can contain only predefined values, and is R's structure for dealing with quantitative data. Factors have two key attributes: their `class()`, "factor", which controls their behaviour; and their `levels()`, the set of allowed values.
+The class attribute can be used to add new behaviour to atomic vectors. For example, the factor is a vector that can contain only predefined values, and is R's structure for dealing with qualitative data. Factors have two key attributes: their `class()`, "factor", which controls their behaviour; and their `levels()`, the set of allowed values.
 
 ```R
 x <- factor(c("a", "b", "b", "a"))
