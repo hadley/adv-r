@@ -8,6 +8,8 @@ This book is opinionated. You might not agree with everything I say, but it is m
 
 * R has a massive set of packages for statistical modelling, machine learning, visualisation, data import, data manipulation and so on (over 4,000 at the time of writing). The chances are if you're trying to fit some sort of statistical model standard in your field, someone has already implemented it as an R package. This is probably why you're using R in the first place! 
 
+* Many deep language features support data analysis: subsetting, missing values, data frames
+
 * Most people writing R code are not programmers, but are interested in solving their problems with data. This makes the R community unlike the community around most programming languages. There is much less of a culture of best practices and more focus on results, no matter how bad the underlying code is.
 
 * At the heart of R is a tension between interactive data analysis and programming. If you recognise and understand this tension, you'll understand why some functions drive you crazy when you're programming. For interactive use, you want functions that require as little typing as possible, and sometimes use a little magic to simplify your life. It's not a problem if they fail silently because you'll notice right away. For programming, you want to trade your time now for users time in the future. You're willing to spend a little more time to be explicit and verbose and spell out exactly what you want if it's going to save time in the future or produce more informative error messages.
