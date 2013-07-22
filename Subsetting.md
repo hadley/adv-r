@@ -238,6 +238,6 @@ Also, remember [De Morgan's laws](http://en.wikipedia.org/wiki/De_Morgan's_laws)
 * `!(X && Y)` is the same as `!X || !Y`
 * `!(X || Y)` is the same as `!X && !Y`
 
-Note that `x[which(y)]` is suboptimal, and should be replaced by `x[y]`. `x[which(!y)]` is especially problematic because if 
+Note that `x[which(y)]` is suboptimal, and should be replaced by `x[y]`. `x[-which(y)]` is especially problematic as an alternative to `x[!y]` because if `y` is all FALSE, `which(y)` will be `integer(0)` and `-integer(0)` is still `integer(0)`, so you'll get no values, instead of all values.  In general, avoid `which()` unless you want a (e.g.) the first or last `TRUE` value.
 
 It is especially problematic if 
