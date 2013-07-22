@@ -79,19 +79,19 @@ vals[select]
 
 |         | Simplifying         | Preserving           |
 |---------|---------------------|----------------------|
-| Vector  | `x[[1]]`            | `x[1]`               |
+| Vector  | `x'[[1]]`           | `x[1]`               |
 | Factor  | `x[1:4, drop = T]`  | `x[1:4]`             |
 | Matrix  | `x[1:4, ]`          | `x[1:4, , drop = F]` |
 
 * For atomic vectors, simplifying means removing names. For lists, simplifying means returning the object inside the list, not a single element list
 
-  "If list x is a train carrying objects, then x[[5]] is the object in car 5; x[4:6] is a train of cars 4-6." --- [@RLangTip](http://twitter.com/#!/RLangTip/status/118339256388304896)
+  "If list `x` is a train carrying objects, then `x'[[5]]` is the object in car 5; `x[4:6]` is a train of cars 4-6." --- [@RLangTip](http://twitter.com/#!/RLangTip/status/118339256388304896)
 
 * For matrices and data frames, simplifying means reducing the dimensionality, if possible
 
 ### "$"
 
-There's one very common used subsetting operator that we haven't mentioned yet: `$`. `$` is a shorthand operator, where `x$y` is basically equivalent to `x[["y"]]` (with one caveat, see below).  It's commonly used to access columns of a dataframe, e.g. `mtcars$cyl`, `diamonds$carat`. 
+There's one very common used subsetting operator that we haven't mentioned yet: `$`. `$` is a shorthand operator, where `x$y` is basically equivalent to `x'[["y"]]` (with one caveat, see below).  It's commonly used to access columns of a dataframe, e.g. `mtcars$cyl`, `diamonds$carat`. 
 
 One common mistake with `$` is to try and use it when you have the name of a column stored in a variable:
 
@@ -104,7 +104,7 @@ mtcars$var
 mtcars[[var]]
 ```
 
-There's one important different between `$` and `[[` - `$` does partial matching:
+There's one important different between `$` and `'[[` - `$` does partial matching:
 
 ```R
 x <- list(abc = 1)
