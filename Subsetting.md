@@ -15,7 +15,7 @@ This chapter briefly reviews these important ideas, and then shows how you can a
 
 ## Data types
 
-It's easiest to explain subsetting first for atomic vectors, and then show how it generalises to higher dimensions and other more complicated objects. We'll start by exploring the use of `[`, as it's the most commonly used operator. The next section will discuss  `[[` and `$`, the two other most important operators.
+It's easiest to explain subsetting first for atomic vectors, and then show how it generalises to higher dimensions and other more complicated objects. We'll start by exploring the use of `[`, as it's the most commonly used operator. The next section will discuss  `'[[` and `$`, the two other most important operators.
 
 ### Atomic vectors
 
