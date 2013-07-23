@@ -266,9 +266,17 @@ If the input vector is named, then the names of missing components will be `"<NA
 ```R
 x <- 1:5
 x[c(1, 2)] <- 2:3
+
+# The length of LHS needs to match the RHS
 x[-1] <- 4:1
 
+# Note that there's no checking for duplicate indices
+x[c(1, 1)] <- 2:3
+
+# You can't combining integer indices with NA
 x[c(1, NA)] <- c(1, 2)
+# But you can combine logical indices with NA
+# (where they're counted as false)
 x[c(T, F, NA)] <- 1
 ```
 
