@@ -153,7 +153,7 @@ S3 objects are all made of atomic vectors, arrays and lists, so you can always p
 
 ### S4
 
-There are also two additional subsetting operators that are needed for S4 objects: `@` (equivalent to `$`), and `slot()` (equivalent to `[[`). `@` is also more restrictive that `$` in that it will return an error if the slot does not exist.  These are described in more detail in [[OO-essentials]].
+There are also two additional subsetting operators that are needed for S4 objects: `@` (equivalent to `$`), and `slot()` (equivalent to `'[[`). `@` is also more restrictive that `$` in that it will return an error if the slot does not exist.  These are described in more detail in [[OO-essentials]].
 
 ### Exercises
 
@@ -172,7 +172,7 @@ There are also two additional subsetting operators that are needed for S4 object
 
 ## Subsetting operators
 
-Apart from `[`, there are two other subsetting operators: `[[` and `$`. `[[` is similar to `[`, except it only ever returns a single value, and it allows you to pull pieces out of a list. `$` is a useful shortcut for `[[` combined with character subsetting.
+Apart from `[`, there are two other subsetting operators: `'[[` and `$`. `'[[` is similar to `[`, except it only ever returns a single value, and it allows you to pull pieces out of a list. `$` is a useful shortcut for `[[` combined with character subsetting.
 
 The key distinction between the types of subsetting operators is whether they are simplifying or preserving.
 
