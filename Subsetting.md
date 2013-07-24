@@ -196,6 +196,8 @@ b[["a"]][["b"]][["c"]][["d"]]
 
 Because data frames are lists of their columns, you can use `'[[` to extract columns from data frames: `mtcars'[[1]]`, `mtcars'[["cyl"]]`.
 
+Note that S3 and S4 objects can override the standard behaviour of `[` and `'[[` so they may behave differently for different types of objects, but generally it's a bad idea to redefine their behaviour.
+
 The key distinction between the types of subsetting operators is whether they are simplifying or preserving.
 
 ### Simplifying vs. preserving subsetting
@@ -335,8 +337,13 @@ x[c(1, 1)] <- 2:3
 # You can't combining integer indices with NA
 x[c(1, NA)] <- c(1, 2)
 # But you can combine logical indices with NA
-# (where they're counted as false)
+# (where they're counted as false). 
 x[c(T, F, NA)] <- 1
+
+# This is mostly useful when modifying data frames
+df <- data.frame(a = c(1, 10, NA))
+df$a[df$a < 5] <- 0
+df$a
 ```
 
 Indexing with a blank can be useful in conjunction with assignment. Compare the following two expressions. In the first, `mtcars` will remain as a dataframe, in the second `mtcars` will become a list.
@@ -400,19 +407,62 @@ x <- c("m", "f", "u", "f", "f", "m", "m")
 lookup <- c("m" = "Male", "f" = "Female", u = NA)
 lookup[x]
 
+# Or with fewer output values
 c("m" = "Known", "f" = "Known", u = "Unknown")[x]
 ```
 
-If you don't want the names, you can use `unname()` to strip them.
+If you don't want names in the result, use `unname()` to remove them.
+
+### Matching and merging by hand
+
+You may have a more complicated look up table which has multiple columns of information.   Assume we have an vector of integer codes, and a table that describes their properties.
+
+```R
+codes <- sample(3, 10, rep = T)
+
+info <- data.frame(
+  code = 1:3,
+  desc = c("Poor", "Good", "Excellent"),
+  fail = c(T, F, F)
+)
+```
+
+We want to duplicate the info table so that we have a row for each value in `codes`. We can do this in two ways, either use `match()` or `rownames()` + character subsetting:
+
+```R
+# Using match
+id <- match(codes, info$code)
+info[id, ]
+
+# Using rownames
+rownames(info) <- info$code
+info[as.character(codes), ]
+```
+
+If you have multiple columns that you need to match on, you'll need to collapse them to a single column (perhaps using `interaction()` or `paste()`) first.  Or you can use `merge()`, which does the same thing for you - read the source code to see how `merge()` is implemented using `paste()` and `match()`.
 
 ### Ordering
+
+`order()` takes a vector as input and returns an integer vector describing how the vector should be subsetted to put it in sorted order. 
+
+```R
+x <- c(2, 3, 1)
+order(x)
+x[order(x)]
+```
+
+This makes it trivial to order either the rows or columns of a data frame:
 
 ```R
 mtcars[order(mtcars$disp), ]
 mtcars[, order(names(mtcars))]
 ```
 
+See `plyr::arrange()` for a function specially designed for reordering the rows of data frames.
+
 ### Random samples/bootstrap
+
+Similarly, you can use integer indices to perform random sampling or bootstrapping of a vector or data frame. You use `sample()` to generate a vector of indices, and then use subsetting to access the values:
 
 ```R
 mtcars[sample(nrow(mtcars), 10), ]
@@ -421,19 +471,17 @@ mtcars[sample(nrow(mtcars), 100, rep = T), ]
 
 ### Expanding aggregated counts
 
+It's also possible to use integer subsetting to un-collapse collapsed counts. The key is to use `rep()` to repeat the row index of the collapsed data frame the appropriate number of times.
+
 ```R
 df <- data.frame(x = c(2, 4, 1), n = c(3, 5, 1))
 rep(1:nrow(df), df$n)
 df[rep(1:nrow(df), df$n), ]
 ```
 
-### Matching and merging by hand
-
-`match()`
-
 ### Boolean algebra vs sets
 
-There's a natural equivalence between sets operations and boolean algebra.
+Logical subsetting is probably the mostly commonly used technique for extracting rows out of a data frame.  It's useful to be aware of the natural equivalence between sets operations (integer subsetting) and boolean algebra (logical subsetting).
 
 ```R
 X <- sample(10) < 4
@@ -445,6 +493,12 @@ X & Y
 intersect(x, y)
 X | Y
 union(x, y)
+
+unwhich <- function(x, n) {
+  out <- rep(FALSE, length = n)
+  out[x] <- TRUE
+  out
+}
 ```
 
 Why choose one or the other:
