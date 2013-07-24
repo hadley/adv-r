@@ -172,41 +172,93 @@ There are also two additional subsetting operators that are needed for S4 object
 
 ## Subsetting operators
 
-Apart from `[`, there are two other subsetting operators: `'[[` and `$`. `'[[` is similar to `[`, except it only ever returns a single value, and it allows you to pull pieces out of a list. `$` is a useful shortcut for `[[` combined with character subsetting.
+Apart from `[`, there are two other subsetting operators: `'[[` and `$`. `'[[` is similar to `[`, except it only ever returns a single value, and it allows you to pull pieces out of a list. `$` is a useful shortcut for `'[[` combined with character subsetting.
+
+`'[[` is most important for working with lists. `[` will only ever give you a list back - it never gives you the contents of the list:
+
+>  "If list `x` is a train carrying objects, then `x'[[5]]` is 
+> the object in car 5; `x[4:6]` is a train of cars 4-6." --- 
+> [@RLangTip](http://twitter.com/#!/RLangTip/status/118339256388304896)
+
+This means that you can only use `'[[` with positive integers and strings:
+
+```R
+a <- list(a = 1, b = 2)
+a[[1]]
+a[["a"]]
+
+# If you do supply a vector it indexes recursively
+b <- list(a = list(b = list(c = list(d = 1))))
+b[[c("a", "b", "c", "d")]]
+# Same as
+b[["a"]][["b"]][["c"]][["d"]]
+```
+
+Because data frames are lists of their columns, you can use `'[[` to extract columns from data frames: `mtcars'[[1]]`, `mtcars'[["cyl"]]`.
 
 The key distinction between the types of subsetting operators is whether they are simplifying or preserving.
 
 ### Simplifying vs. preserving subsetting
 
-It's important to understand the distinction between simplifying and preserving subsetting. Simplifying subsets return the simplest possible data structure that can represent the output. They are useful interactively because they usually give you what you want.  Preserving subsetting keeps the structure of output the same as input, and is generally better for programming, because the result will always be of the same type.
+It's important to understand the distinction between simplifying and preserving subsetting. Simplifying subsets return the simplest possible data structure that can represent the output. They are useful interactively because they usually give you what you want.  Preserving subsetting keeps the structure of output the same as input, and is generally better for programming, because the result will always be of the same type. Omitting `drop = FALSE` when subsetting matrices and data frames is one of the most common sources of programming errors.
 
 Unfortunately, how you switch between subsetting and preserving differs for different data types, as summarised in the table below.
 
-|             | Simplifying         | Preserving           |
-|-------------|---------------------|----------------------|
-| Vector      | `x'[[1]]`           | `x[1]`               | 
-| List        | `x'[[1]]`           | `x[1]`               | 
-| Factor      | `x[1:4, drop = T]`  | `x[1:4]`             | 
-| Array       | `x[1, ]`, `x[, 1`]  | `x[1, , drop = F]`   | 
-| Data frame  | `x[, 1]`            | `x[, 1, drop = F]`   | 
+|             | Simplifying         | Preserving                 |
+|-------------|---------------------|----------------------------|
+| Vector      | `x'[[1]]`           | `x[1]`                     | 
+| List        | `x'[[1]]`           | `x[1]`                     | 
+| Factor      | `x[1:4, drop = T]`  | `x[1:4]`                   | 
+| Array       | `x[1, ]`, `x[, 1`]  | `x[1, , drop = F]`, `x[, 1, drop = F]` | 
+| Data frame  | `x[, 1]`, `x[[1]]`  | `x[, 1, drop = F]`, `x[1]` | 
 
-The meaning of simplifying and preserving also differs a little:
+Preserving is the same for all data types: you get the same output as you do input. Preserving varies a little between data types, as described below:
 
-* __atomic vector__: remove names
+* __atomic vector__: removes names
+
+    ```R
+    x <- c(a = 1, b = 2)
+    x[1]
+    x[[1]]
+    ```
 
 * __list__: return the object inside the list, not a single element list
 
-    "If list `x` is a train carrying objects, then `x'[[5]]` is the object in car 5; `x[4:6]` is a train of cars 4-6." --- [@RLangTip](http://twitter.com/#!/RLangTip/status/118339256388304896)
+    ```R
+    y <- list(a = 1, b = 2)
+    str(y[1])
+    str(y[[1]])
+    ```
 
-* __factor__: drop an unnused levels
+* __factor__: drops any unnused levels
 
-* __matrix__ or __array__: if any of the dimensions has length 1, drop that dimension.
+    ```R
+    z <- factor(c("a", "b"))
+    z[1]
+    z[1, drop = TRUE]
+    ```
 
-* __data frame__: if output is a single column, return a vector instead of a data frame
+* __matrix__ or __array__: if any of the dimensions has length 1, drops that dimension.
+
+    ```R
+    a <- matrix(1:4, nrow = 2)
+    a[1, drop = FALSE]
+    a[1, ]
+    ```
+
+* __data frame__: if output is a single column, returns a vector instead of a data frame
+
+    ```R
+    df <- data.frame(a = 1:2, b = 1:2)
+    str(df[1])
+    str(df[[1]])
+    str(df[, "a", drop = FALSE])
+    str(df[, "a"])
+    ```
 
 ### `$`
 
-`$` is a shorthand operator, where `x$y` is basically equivalent to `x'[["y"]]` (with one caveat, see below).  It's commonly used to access columns of a dataframe, e.g. `mtcars$cyl`, `diamonds$carat`. 
+`$` is a shorthand operator, where `x$y` is equivalent to `x'[["y", exact = FALSE]]`.  It's commonly used to access columns of a dataframe, e.g. `mtcars$cyl`, `diamonds$carat`. 
 
 One common mistake with `$` is to try and use it when you have the name of a column stored in a variable:
 
@@ -231,6 +283,8 @@ If you want to avoid this behaviour you can do `options(warnPartialMatchDollar =
 
 ### Missing/out of bounds indices
 
+`[` and `'[[` also differ slightly in their behaviour when the index is out of bounds (OOB), e.g. trying to extract the fifth element of a length four vector, missing, or `NULL`.  Generally, it's preferable to use a function that throws an error when the input is incorrect so that mistakes aren't silently ignored.
+
 | Operator | Index      | Atomic      | List          |
 |----------|------------|-------------|---------------|
 | `[`      | OOB        | `NA`        | `list(NULL)`  |
@@ -240,28 +294,33 @@ If you want to avoid this behaviour you can do `options(warnPartialMatchDollar =
 | `'[[`    | `NA_real`  | Error       | `NULL`        |
 | `'[[`    | `NULL`     | Error       | Error         |
 
+<!--
 ```R
-x <- 1:2
-y <- as.list(x)
+numeric()[1]
+numeric()[NA_real_]
+numeric()[NULL]
+numeric()[[1]]
+numeric()[[NA_real_]]
+numeric()[[NULL]]
 
-x[3]
-x[NA_real_]
-x[NULL]
-y[3]
-y[NA_real_]
-y[NULL]
-
-x[[3]]
-x[[NA_real_]]
-x[[NULL]]
-y[[3]]
-y[[NA_real_]]
-y[[NULL]]
+list()[1]
+list()[NA_real_]
+list()[NULL]
+list()[[1]]
+list()[[NA_real_]]
+list()[[NULL]]
 ```
+-->
 
-If the input vector is named, then the names of missing components will be `"<NA>"`.
+If the input vector is named, then the names of OOB, missing, or `NULL` components will be `"<NA>"`.
+
+### Exercises
+
+* Given a linear model, e.g. `mod <- lm(mpg ~ wt, data = mtcars)`, extract the residual degrees of freedom. Extract the R squared from the model summary (`summary(mod))`)
 
 ## Subsetting + assignment
+
+All subsetting operators can be combined with assignment to modify selected values of the input vector. 
 
 ```R
 x <- 1:5
@@ -287,6 +346,45 @@ mtcars[] <- lapply(mtcars, as.integer)
 mtcars <- lapply(mtcars, as.integer)
 ```
 
+### Modifying in place vs. modifying a copy
+
+```R
+library(pryr)
+x <- 1:5
+address(x)
+x[2] <- 3L
+address(x)
+
+# Assigning in a real number forces conversion of x to real
+x[2] <- 3
+address(x)
+
+# Modifying class or other attributes modifies in place
+attr(x, "a") <- "a"
+class(x) <- "b"
+address(x)
+
+# But making a reference to x elsewhere, will create a modified
+# copy when you modify x - no longer modifies in place
+y <- x
+x[1] <- 2
+address(x)
+```
+
+### Lists
+
+You can use 
+
+```R
+x <- list(a = 1)
+x[["b"]] <- NULL
+
+y <- list(a = 1)
+y["b"] <- list(NULL)
+
+str(x)
+str(y)
+```
 ## Applications
 
 The basic principles described above give rise to a wide variety of useful applications. Some of the most important are described below.

@@ -48,16 +48,31 @@ Take the following code that subtracts the median from each column of a large da
     })
 
 It's rather slow - we only have 100 columns and 10,000 rows, but it's still taking over second. We can use `address()` to see what's going on. This function returns the memory address that the object occupies:
+
 ```r
+track_x <- track_copy(x)
 system.time({
   for(i in seq_along(medians)) {
     x[, i] <- x[, i] - medians[i]
-    print(address(x))
-    print(address(x[[i]]))
+    track_x()
   }
 })
 ```
+
 Each iteration of the loop prints a different memory address - the complete data frame is being modified and copied for each iteration.
+
+We can make the function substantially more efficient by using a list which can modify in place:
+
+```
+y <- as.list(x)
+track_y <- track_copy(y)
+system.time({
+  for(i in seq_along(medians)) {
+    y[[i]] <- y[[i]] - medians[i]
+    track_y()
+  }
+})
+```
 
 We can rewrite it to be much faster by eliminating all those copies, and instead relying on vectorised data frame subtraction: if you subtract a list from a data frame, the elements of the list are matched up with the elements of the data frame. That loop occurs at the C-level, which means the data frame is only copied once, not many many times.
 
