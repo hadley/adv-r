@@ -1,6 +1,6 @@
 # Data structures
 
-This chapter summarises the most important data structures in base R. I assume you've used many (if not all) of them before, but you may not have thought deeply about how they are interrelated.  It is a brief quick overview: the goal is not to go into deep into individual types, but to show how they fit together as a whole. I also expect that you'll read the documentation if you want more details on any of the specific functions used in the chapter.  R's base data structures are summarised in the table below, organised by their dimensionality and whether they're homogeneous (all contents must be of the same type) or heterogeneous (the contents can be of different types):
+This chapter summarises the most important data structures in base R. I assume you've used many (if not all) of them before, but you may not have thought deeply about how they are interrelated.  It is a brief overview: the goal is not to go into depth into individual types, but to show how they fit together as a whole. I also expect that you'll read the documentation if you want more details on any of the specific functions used in the chapter.  R's base data structures are summarised in the table below, organised by their dimensionality and whether they're homogeneous (all contents must be of the same type) or heterogeneous (the contents can be of different types):
 
 |    | Homogenous    | Heterogenous |
 |----|---------------|--------------|
