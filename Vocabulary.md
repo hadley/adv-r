@@ -84,7 +84,43 @@ next, break
 switch
 ifelse
 ```
-    
+
+
+## Common data structures
+
+```R
+# Date time
+ISOdate, ISOdatetime, strftime, strptime, date
+difftime
+julian, months, quarters, weekdays
+library(lubridate)
+
+# Character manipulation 
+grep, agrep
+gsub
+strsplit
+chartr
+nchar
+tolower, toupper
+substr
+paste
+library(stringr)
+
+# Factors 
+factor, levels, nlevels
+reorder, relevel
+cut, findInterval
+interaction
+options(stringsAsFactors = FALSE)
+
+# Array manipulation
+array
+dim
+dimnames
+aperm
+library(abind)
+```
+
 ## Statistics
 
 ```R
@@ -180,39 +216,4 @@ file.copy, file.create, file.remove, file.rename, dir.create
 file.exists, file.info
 tempdir, tempfile
 download.file, library(downloader)
-```
-
-## Special data
-
-```R
-# Date time
-ISOdate, ISOdatetime, strftime, strptime, date
-difftime
-julian, months, quarters, weekdays
-library(lubridate)
-
-# Character manipulation 
-grep, agrep
-gsub
-strsplit
-chartr
-nchar
-tolower, toupper
-substr
-paste
-library(stringr)
-
-# Factors 
-factor, levels, nlevels
-reorder, relevel
-cut, findInterval
-interaction
-options(stringsAsFactors = FALSE)
-
-# Array manipulation
-array
-dim
-dimnames
-aperm
-library(abind)
 ```
