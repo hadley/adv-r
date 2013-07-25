@@ -1,6 +1,6 @@
 # Subsetting
 
-R's subsetting operators are powerful and fast, and mastering them will give you much power. Subsetting allows you to express common data manipulation operations very succinctly, in a way few other languages can match. Subsetting is a natural complement to `str()`: `str()` shows you the structure of any object, and subsetting allows you to pull out the pieces that you're interested in.
+R's subsetting operators are powerful and fast, and mastering them allows you to succinctly express complex operations. Subsetting allows you to express common data manipulation operations very succinctly, in a way few other languages can match. Subsetting is a natural complement to `str()`: `str()` shows you the structure of any object, and subsetting allows you to pull out the pieces that you're interested in.
 
 Subsetting is a hard to learn because you need to master a number of interrelated concepts:
 
