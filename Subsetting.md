@@ -1,15 +1,15 @@
 # Subsetting
 
-R's subsetting operators are powerful and fast, and mastering them will give you much power. Subsetting operators allow you to express common data manipulation operations very succinctly, in a way few other languages can match (except perhaps APL). Subsetting is a natural complement to `str()`: `str()` shows you the structure of any object, and subsetting allow you to pull out the pieces that you're interested in.
+R's subsetting operators are powerful and fast, and mastering them will give you much power. Subsetting allows you to express common data manipulation operations very succinctly, in a way few other languages can match. Subsetting is a natural complement to `str()`: `str()` shows you the structure of any object, and subsetting allows you to pull out the pieces that you're interested in.
 
-Subsetting is a hard to learn at first because you need to master a number of interrelated concepts:
+Subsetting is a hard to learn because you need to master a number of interrelated concepts:
 
 * the three subsetting operators,
 * the six types of subsetting, 
-* how to extend 1d subsetting to higher dimensions, and
+* important difference in subsetting behaviour for different objects (e.g. vectors, lists, factors, matrices and data frames)
 * using subsetting in conjunction with assignment
 
-This chapter will introduce you to subsetting atomic vectors with `[`, and then gradually extend you knowledge, first to more complicated data types (like arrays and lists), and then to the other subsetting operators.  Finally, you'll see a large number of useful applications of subsetting.
+This chapter starts by introducing you to subsetting atomic vectors with `[`, and then gradually extends your knowledge, first to more complicated data types (like arrays and lists), and then to the other subsetting operators. You'll then learn how subsetting and assignment can be combined, and finally, you'll see a large number of useful applications.
 
 ## Data types
 
@@ -25,9 +25,9 @@ x <- c(2.1, 4.2, 3.3, 5.4)
 
 __NB:__ the number after the decimal point gives the original position in the vector.
 
-There are five different types of vector we can use to subset with:
+There are five ways of subsetting `x`:
 
-* __positive integers__: return elements at those positions.
+* with __positive integers__, which return elements at the specified positions.
 
     ```R
     x[c(3, 1)]
@@ -40,49 +40,57 @@ There are five different types of vector we can use to subset with:
     x[c(2.1, 2.9)]
     ```
 
-* __negative integers__: return all elements except at those positions
+* with __negative integers__, which omit elements at the specified positions
 
     ```R
     x[-c(3, 1)]
     ```
 
-    It's an error to mix positive and negative integers in a single subset
+    It's an error to mix positive and negative integers in a single subset:
 
     ```R
     x[c(-1, 2)]
     ```
 
-* a __logical vector__: return all elements where the corresponding logical value is `TRUE`. This is probably the most useful type of subsetting, because you will usually generate the logical vector with another expression. If the logical vector is shorter than the vector being subsetted, it will be _recycled_ to be the same length.
+* with a __logical vector__, which selects elements where the corresponding logical value is `TRUE`. This is probably the most useful type of subsetting, because you will usually generate the logical vector with another expression.
 
     ```R
     x[c(TRUE, TRUE, FALSE, FALSE)]
     x[x > 3]
     ```
 
+    If the logical vector is shorter than the vector being subsetted, it will be _recycled_ to be the same length.
+
+    ```R
+    x[c(TRUE, FALSE)]
+    # Equivalent to
+    x[c(TRUE, FALSE, TRUE, FALSE)]
+    ```
+
     A missing value in the index always yields a missing value in the output:
 
     ```R
-    x[c(T, T, NA, F)]
+    x[c(TRUE, TRUE, NA, FALSE)]
     ```
 
-* __blank__: return the original vector unchanged. This is not useful in 1d, but we'll see shortly that it's very important for generalisation to 2d and higher. It can also be useful in conjunction with subsetting because it preserves object behaviour.
+* with __nothing__, which returns the original vector unchanged. This is not useful in 1d, but it's very useful in 2d, and is useful in conjunction with assignment.
 
     ```R
     x[]
     ```
 
-* __zero__: returns a zero-length vector. This is not something you'd usually do on purpose, unless you generating test data.
+* with __zero__, which returns a zero-length vector. This is not something you'd usually do on purpose, unless you're generating test data.
 
     ```R
     x[0]
     ```
 
-If the vector is named, you can also subset by:
+If the vector is named, you can also subset with:
 
-* a __character vector__: return elements with matching names
+* a __character vector__, which returns elements with matching names.
 
     ```R
-    y <- setNames(x, letters[1:4])
+    (y <- setNames(x, letters[1:4]))
     y[c("d", "c", "a")]
 
     # Like integer indices, you can repeat indices
@@ -95,11 +103,13 @@ If the vector is named, you can also subset by:
 
 ### Lists
 
-Subsetting a list in works exactly the same way as subsetting an atomic vector. Subsetting a list with `[` will always return a list: see below for the other subsetting operators that will let you pull out the components of the list.
+Subsetting a list in works exactly the same way as subsetting an atomic vector. Subsetting a list with `[` will always return a list: `'[[` and `$`, as described below, let you pull out the components of the list.
 
 ### Matrices and arrays
 
-The most important way of subsetting matrices (2d) and arrays (>2d) is a simple generalisation of 1d subsetting: you supply a 1d index for each dimension, separated by a comma. Blank subsetting now becomes useful, because you use it when (e.g.) you want to return all the rows or all the columns.
+You can subset higher-dimension structures in three ways: with a multiple vectors, with a single vector, or with a matrix.
+
+The most common way of subsetting matrices (2d) and arrays (>2d) is a simple generalisation of 1d subsetting: you supply a 1d index for each dimension, separated by a comma. Blank subsetting now becomes useful, because you use it when you want to return all the rows or all the columns.
 
 ```R
 a <- matrix(1:9, nrow = 3)
@@ -129,10 +139,13 @@ vals[select]
 
 ### Data frames
 
-Data frames possess characteristics of both lists and matrices. If you subset with a single vector, they behave like lists; if you subset with two vectors, they behave like matrices:
+Data frames possess the characteristics of both lists and matrices: if you subset with a single vector, they behave like lists; if you subset with two vectors, they behave like matrices.
 
 ```R
 df <- data.frame(x = 1:3, y = 3:1, z = letters[1:3])
+
+df[df$x == 2, ]
+df[c(1, 3), ]
 
 # There are two ways to select columns from a data frame
 # Like a list:
@@ -156,32 +169,32 @@ There are also two additional subsetting operators that are needed for S4 object
 
 ### Exercises
 
-* Explain the result of `x <- 1:5; x[NA]`.  Hint: why is it different to `x[NA_real_]`
+* Why does `x <- 1:5; x[NA]` yield five missing values? Hint: why is it different to `x[NA_real_]`?
 
-* What does `upper.tri()` return? How does subsetting a matrix with it work? Do we need any additional subsetting rules?  
+* What does `upper.tri()` return? How does subsetting a matrix with it work? Do we need any additional subsetting rules to describe its behaviour?  
 
     ```R
     x <- outer(1:5, 1:5, FUN = "*")
     x[upper.tri(x)]
     ```
 
-* Why does `mtcars[1:20]` return a error?
+* Why does `mtcars[1:20]` return a error? How does it differ from the similar `mtcars[1:20, ]`?
 
-* Implement a function that extracts the diagonal entries from a matrix (it should behave like `diag(x)` when `x` is a matrix)
+* Implement a function that extracts the diagonal entries from a matrix (it should behave like `diag(x)` when `x` is a matrix).
 
 * What does `df[is.na(df)] <- 0` do? How does it work?
 
 ## Subsetting operators
 
-Apart from `[`, there are two other subsetting operators: `'[[` and `$`. `'[[` is similar to `[`, except it only ever returns a single value, and it allows you to pull pieces out of a list. `$` is a useful shortcut for `'[[` combined with character subsetting.
+Apart from `[`, there are two other subsetting operators: `'[[` and `$`. `'[[` is similar to `[`, except it only ever returns a single value, and it allows you to pull pieces out of a list. `$` is a useful shorthand for `'[[` combined with character subsetting.
 
-`'[[` is important for working with lists. `[` will only ever give you a list back - it never gives you the contents of the list:
+You need `'[[` when working with lists. `[` will only ever give you a list back - it never gives you the contents of the list. `'[[` allows you to extract the contents of a list:
 
 >  "If list `x` is a train carrying objects, then `x'[[5]]` is 
 > the object in car 5; `x[4:6]` is a train of cars 4-6." --- 
 > [@RLangTip](http://twitter.com/#!/RLangTip/status/118339256388304896)
 
-Because it returns only a single value, you can only use `'[[` with positive integers and strings:
+Because it can return only a single value, you can must use `'[[` with either a single positive integers and a string:
 
 ```R
 a <- list(a = 1, b = 2)
@@ -197,12 +210,11 @@ b[["a"]][["b"]][["c"]][["d"]]
 
 Because data frames are lists of their columns, you can use `'[[` to extract a column from data frames: `mtcars'[[1]]`, `mtcars'[["cyl"]]`.
 
-S3 and S4 objects can override the standard behaviour of `[` and `'[[` so they may slightly differently for different types of objects. 
-The key difference is usually how you select between simplifying or preserving behaviours, and whether the default is to simplify or preserve.
+S3 and S4 objects can override the standard behaviour of `[` and `'[[` so they behave differently for different types of objects. The key difference is usually how you select between simplifying or preserving behaviours, and what the default is.
 
 ### Simplifying vs. preserving subsetting
 
-It's important to understand the distinction between simplifying and preserving subsetting. Simplifying subsets return the simplest possible data structure that can represent the output. They are useful interactively because they usually give you what you want.  Preserving subsetting keeps the structure of output the same as input, and is generally better for programming, because the result will always be of the same type. Omitting `drop = FALSE` when subsetting matrices and data frames is one of the most common sources of programming errors.
+It's important to understand the distinction between simplifying and preserving subsetting. Simplifying subsets return the simplest possible data structure that can represent the output. They are useful interactively because they usually give you what you want. Preserving subsetting keeps the structure of the output the same as the input, and is generally better for programming, because the result will always be the same type. Omitting `drop = FALSE` when subsetting matrices and data frames is one of the most common sources of programming errors. (It'll work for your test cases, but then someone will pass in a single column data frame and it will fail in an unexpected and unclear way).
 
 Unfortunately, how you switch between subsetting and preserving differs for different data types, as summarised in the table below.
 
@@ -214,7 +226,7 @@ Unfortunately, how you switch between subsetting and preserving differs for diff
 | Array       | `x[1, ]`, `x[, 1`]  | `x[1, , drop = F]`, `x[, 1, drop = F]` | 
 | Data frame  | `x[, 1]`, `x[[1]]`  | `x[, 1, drop = F]`, `x[1]` | 
 
-Preserving is the same for all data types: you get the same output as you do input. Preserving varies a little between data types, as described below:
+Preserving is the same for all data types: you get the same type of output as input. Simplifying behaviour varies a little between different data types, as described below:
 
 * __atomic vector__: removes names
 
@@ -244,7 +256,7 @@ Preserving is the same for all data types: you get the same output as you do inp
 
     ```R
     a <- matrix(1:4, nrow = 2)
-    a[1, drop = FALSE]
+    a[1, , drop = FALSE]
     a[1, ]
     ```
 
@@ -281,11 +293,11 @@ x$a
 x[["a"]]
 ```
 
-If you want to avoid this behaviour you can do `options(warnPartialMatchDollar = TRUE)` - but because this is a global option it will also affect any packages you have loaded.
+If you want to avoid this behaviour you can set `options(warnPartialMatchDollar = TRUE)` - but beware that this is a global option and maybe affect behaviour in other code you have loaded (e.g. pacakges).
 
 ### Missing/out of bounds indices
 
-`[` and `'[[` also differ slightly in their behaviour when the index is out of bounds (OOB), e.g. trying to extract the fifth element of a length four vector, missing, or `NULL`.  Generally, it's preferable to use a function that throws an error when the input is incorrect so that mistakes aren't silently ignored.
+`[` and `'[[` differ slightly in their behaviour when the index is out of bounds (OOB), e.g. trying to extract the fifth element of a length four vector, missing, or `NULL`.  Generally, it's preferable to use a function that throws an error when the input is incorrect so that mistakes aren't silently ignored.
 
 | Operator | Index      | Atomic      | List          |
 |----------|------------|-------------|---------------|
@@ -328,19 +340,19 @@ All subsetting operators can be combined with assignment to modify selected valu
 x <- 1:5
 x[c(1, 2)] <- 2:3
 
-# The length of LHS needs to match the RHS
+# The length of the LHS needs to match the RHS
 x[-1] <- 4:1
 
 # Note that there's no checking for duplicate indices
 x[c(1, 1)] <- 2:3
 
-# You can't combining integer indices with NA
+# You can't combine integer indices with NA
 x[c(1, NA)] <- c(1, 2)
 # But you can combine logical indices with NA
-# (where they're counted as false). 
+# (where they're treated as false). 
 x[c(T, F, NA)] <- 1
 
-# This is mostly useful when modifying data frames
+# This is mostly useful when conditionally modifying vectors
 df <- data.frame(a = c(1, 10, NA))
 df$a[df$a < 5] <- 0
 df$a
@@ -367,7 +379,7 @@ str(y)
 
 ## Applications
 
-The basic principles described above give rise to a wide variety of useful applications. Some of the most important are described below. Many of these basic techniques are wrapped up into more concise functions (e.g. `subset()`, `merge()`, `plyr::arrange()`), nevertheless, it is useful to understand how they are implemented with basic subsetting alone, in case you come across a situation which can not be dealt with using pre-written functions.
+The basic principles described above give rise to a wide variety of useful applications. Some of the most important are described below. Many of these basic techniques are wrapped up into more concise functions (e.g. `subset()`, `merge()`, `plyr::arrange()`), but it is useful to understand how they are implemented with basic subsetting. This will allow you to adapt to new situations that are not dealt with by existing functions.
 
 ### Lookup tables (character subsetting)
 
@@ -377,6 +389,7 @@ Character matching provides a powerful way to make lookup tables.  Say you want 
 x <- c("m", "f", "u", "f", "f", "m", "m")
 lookup <- c("m" = "Male", "f" = "Female", u = NA)
 lookup[x]
+unname(lookup[x])
 
 # Or with fewer output values
 c("m" = "Known", "f" = "Known", u = "Unknown")[x]
@@ -386,35 +399,35 @@ If you don't want names in the result, use `unname()` to remove them.
 
 ### Matching and merging by hand (integer subsetting)
 
-You may have a more complicated look up table which has multiple columns of information. Assume we have an vector of integer codes, and a table that describes their properties:
+You may have a more complicated lookup table which has multiple columns of information. Suppose we have an vector of integer grades, and a table that describes their properties:
 
 ```R
-codes <- sample(3, 10, rep = T)
+grades <- sample(3, 10, rep = T)
 
 info <- data.frame(
-  code = 1:3,
+  grade = 1:3,
   desc = c("Poor", "Good", "Excellent"),
   fail = c(T, F, F)
 )
 ```
 
-We want to duplicate the info table so that we have a row for each value in `codes`. We can do this in two ways, either using `match()` and integer subsetting, or `rownames()` and character subsetting:
+We want to duplicate the info table so that we have a row for each value in `grades`. We can do this in two ways, either using `match()` and integer subsetting, or `rownames()` and character subsetting:
 
 ```R
 # Using match
-id <- match(codes, info$code)
+id <- match(grades, info$grade)
 info[id, ]
 
 # Using rownames
-rownames(info) <- info$code
-info[as.character(codes), ]
+rownames(info) <- info$grade
+info[as.character(grades), ]
 ```
 
-If you have multiple columns that you need to match on, you'll need to collapse them to a single column (with `interaction()`, `paste()`, or `plyr::id()`).  You can also use `merge()` or `plyr::join()`, which does the same thing for you - read the source code to see how.
+If you have multiple columns to match on, you'll need to first collapse them to a single column (with `interaction()`, `paste()`, or `plyr::id()`).  You can also use `merge()` or `plyr::join()`, which do the same thing for you - read the source code to see how.
 
 ### Ordering (integer subsetting)
 
-`order()` takes a vector as input and returns an integer vector describing how the vector should be subset to put it in sorted order: 
+`order()` takes a vector as input and returns an integer vector describing how the vector should be subsetted to put it in sorted order: 
 
 ```R
 x <- c(2, 3, 1)
@@ -438,15 +451,19 @@ More concise, but less flexible, functions are available for sorting vectors, `s
 You can use integer indices to perform random sampling or bootstrapping of a vector or data frame. You use `sample()` to generate a vector of indices, and then use subsetting to access the values:
 
 ```R
+# Randomly reorder
+mtcars[sample(nrow(mtcars)), ]
+# Select 10 random rows
 mtcars[sample(nrow(mtcars), 10), ]
+# Select 100 bootstrap samples
 mtcars[sample(nrow(mtcars), 100, rep = T), ]
 ```
 
-The arguments to `sample()` control the number of samples to extract, and whether or not sampling with replacement is done. If you just want to randomly reorder the rows, index with `sample(nrow(df))`.
+The arguments to `sample()` control the number of samples to extract, and whether or not sampling with replacement is done. 
 
 ### Expanding aggregated counts (integer subsetting)
 
-Sometimes you get a data frame where identical rows have been collapsed into one, and a count column has been added. `rep()` | integer subsetting makes it easy to uncollapse the data, but subsetting with a repeated row index:
+Sometimes you get a data frame where identical rows have been collapsed into one and a count column has been added. `rep()` and integer subsetting makes it easy to uncollapse the data by subsetting with a repeated row index:
 
 ```R
 df <- data.frame(x = c(2, 4, 1), y = c(9, 11, 6), n = c(3, 5, 1))
@@ -470,7 +487,7 @@ df <- data.frame(x = 1:3, y = 3:1, z = letters[1:3])
 df[c("x", "y")]
 ```
 
-If you know only the columns you don't want, use set operations to work out which colums to keep:
+If you know the columns you don't want, use set operations to work out which colums to keep:
 
 ```R
 df[setdiff(names(df), "z")]
@@ -478,21 +495,21 @@ df[setdiff(names(df), "z")]
 
 ### Selecting rows based on a condition (logical subsetting)
 
-Logical subsetting is probably the mostly commonly used technique for extracting rows out of a data frame, because it allows you to easily combine conditions from multiple columns. Remember to use the vector boolean operators `&` and `|`, not the short-circuiting scalar operators `&&` and `||` which are more useful inside if statements.
+Logical subsetting is probably the mostly commonly used technique for extracting rows out of a data frame because it allows you to easily combine conditions from multiple columns. 
 
 ```R
 mtcars[mtcars$cyl == 4, ]
 mtcars[mtcars$cyl == 4 & mtcars$gear == 4, ]
 ```
 
-Don't forget [De Morgan's laws](http://en.wikipedia.org/wiki/De_Morgan's_laws), which can be useful when simplifying negations:
+Remember to use the vector boolean operators `&` and `|`, not the short-circuiting scalar operators `&&` and `||` which are more useful inside if statements. Don't forget [De Morgan's laws](http://en.wikipedia.org/wiki/De_Morgan's_laws), which can be useful to simplify negations:
 
 * `!(X & Y)` is the same as `!X | !Y`
 * `!(X | Y)` is the same as `!X & !Y`
 
-If you have a complicated expression like `!(X & !(Y | Z))` it will simplify to `!X | !!(Y|Z)`, then `!X | Y | Z`.
+For example, `!(X & !(Y | Z))` simplifies to `!X | !!(Y|Z)`, and then to `!X | Y | Z`.
 
-`subset()` is a specialised function for subsetting data frames, and saves some typing because you don't need to repeat the name of the data frame. You'll learn how it works in [[Computing on the language]].
+`subset()` is a specialised shorthand function for subsetting data frames, and saves some typing because you don't need to repeat the name of the data frame. You'll learn how it works in [[Computing on the language]].
 
 ```R
 subset(mtcars, cyl == 4)
