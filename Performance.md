@@ -25,6 +25,32 @@ Caching packages
 
 A special case of caching is memoisation.
 
+### Modifying in place vs. modifying a copy
+
+```R
+library(pryr)
+x <- 1:5
+address(x)
+x[2] <- 3L
+address(x)
+
+# Assigning in a real number forces conversion of x to real
+x[2] <- 3
+address(x)
+
+# Modifying class or other attributes modifies in place
+attr(x, "a") <- "a"
+class(x) <- "b"
+address(x)
+
+# But making a reference to x elsewhere, will create a modified
+# copy when you modify x - no longer modifies in place
+y <- x
+x[1] <- 2
+address(x)
+```
+
+
 ## Byte code compilation
 
 R 2.13 introduced a new byte code compiler which can increase the speed of certain types of code 4-5 fold. This improvement is likely to get better in the future as the compiler implements more optimisations - this is an active area of research.

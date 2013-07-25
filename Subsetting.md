@@ -9,21 +9,21 @@ Subsetting is a hard to learn at first because you need to master a number of in
 * how to extend 1d subsetting to higher dimensions, and
 * using subsetting in conjunction with assignment
 
-This chapter will introduce you to subsetting atomic vectors with `[`, and then gradually extend you knowledge, first to more complicated data types (like arrays and lists), and then to the other subsetting operators.
-
-This chapter briefly reviews these important ideas, and then shows how you can apply them to solve a variety of real problems.
+This chapter will introduce you to subsetting atomic vectors with `[`, and then gradually extend you knowledge, first to more complicated data types (like arrays and lists), and then to the other subsetting operators.  Finally, you'll see a large number of useful applications of subsetting.
 
 ## Data types
 
-It's easiest to explain subsetting first for atomic vectors, and then show how it generalises to higher dimensions and other more complicated objects. We'll start by exploring the use of `[`, as it's the most commonly used operator. The next section will discuss  `'[[` and `$`, the two other most important operators.
+It's easiest to understand how subsetting works for atomic vectors, and then learn how it generalises to higher dimensions and other more complicated objects. We'll start by exploring the use of `[`, the most commonly used operator. The next section will discuss  `'[[` and `$`, the two other main subsetting operators.
 
 ### Atomic vectors
 
-Let's explore the different types of subsetting with a simple vector, `x`. Note that the value after the decimal point gives the original position.
+Let's explore the different types of subsetting with a simple vector, `x`. 
 
 ```R
 x <- c(2.1, 4.2, 3.3, 5.4)
 ```
+
+__NB:__ the number after the decimal point gives the original position in the vector.
 
 There are five different types of vector we can use to subset with:
 
@@ -95,11 +95,11 @@ If the vector is named, you can also subset by:
 
 ### Lists
 
-Subsetting a list in exactly the same way as subsetting an atomic vector. Note that subsetting a list with `[` will always return a list: see below for the other subsetting operators that will let you pull out the components of the list.
+Subsetting a list in works exactly the same way as subsetting an atomic vector. Subsetting a list with `[` will always return a list: see below for the other subsetting operators that will let you pull out the components of the list.
 
 ### Matrices and arrays
 
-Subsetting matrices (2d) and arrays (>2d) is a basic generalisation of 1d subsetting: you supply a 1d index for each dimension separated by a column. Blank now becomes useful, because you use it when (e.g.) you want to return all the rows or all the columns.
+The most important way of subsetting matrices (2d) and arrays (>2d) is a simple generalisation of 1d subsetting: you supply a 1d index for each dimension, separated by a comma. Blank subsetting now becomes useful, because you use it when (e.g.) you want to return all the rows or all the columns.
 
 ```R
 a <- matrix(1:9, nrow = 3)
@@ -109,11 +109,11 @@ a[c(T, F, T), c("B", "A")]
 a[0, -2]
 ```
 
-Note that by default, `[` will simplify the results to their lowest possible dimensional representation. See the section on simplifying vs. preserving subsetting for how to avoid this.
+By default, `[` will simplify the results to the lowest possible dimensionality. See the section below on simplifying vs. preserving subsetting for how to avoid this.
 
 Because matrices and arrays are implemented as vectors with special attributes, you can also subset them with a single vector, in which case they will behave like a vector.
 
-You can also subset high-d data structures with an integer matrix (or if named, a character matrix). Each row in the matrix specifies the location of a value, with each column corresponding to a dimension in the array being subsetted. The result is a vector of values:
+You can also subset high-d data structures with an integer matrix (or, if named, a character matrix). Each row in the matrix specifies the location of a value, with each column corresponding to a dimension in the array being subsetted. The result is a vector of values:
 
 ```R
 vals <- outer(1:5, 1:5, FUN = "paste", sep = ",")
@@ -129,7 +129,7 @@ vals[select]
 
 ### Data frames
 
-Data frames possess characteristics of both lists and matrices. If you subset like a 1d data structure, they behave like lists; if you subset like a 2d data structure, they behave like matrices.
+Data frames possess characteristics of both lists and matrices. If you subset with a single vector, they behave like lists; if you subset with two vectors, they behave like matrices:
 
 ```R
 df <- data.frame(x = 1:3, y = 3:1, z = letters[1:3])
@@ -140,16 +140,15 @@ df[c("x", "z")]
 # Like a matrix
 df[, c("x", "z")]
 
-# There's an important difference if you select a simple column
-# because subsetting matrices simplifies by default, but subsetting
-# lists does not.
+# There's an important difference if you select a simple column:
+# matrix subsetting simplifies by default, list subsetting does not.
 df["x"]
 df[, "x"]
 ```
 
 ### S3 objects
 
-S3 objects are all made of atomic vectors, arrays and lists, so you can always pull apart an S3 object using the knowledge you gain from `str()` and the techniques described above.
+S3 objects are always made up of atomic vectors, arrays and lists, so you can always pull apart an S3 object using the techniques described above and the knowledge you gain from `str()`.
 
 ### S4
 
@@ -170,17 +169,19 @@ There are also two additional subsetting operators that are needed for S4 object
 
 * Implement a function that extracts the diagonal entries from a matrix (it should behave like `diag(x)` when `x` is a matrix)
 
+* What does `df[is.na(df)] <- 0` do? How does it work?
+
 ## Subsetting operators
 
 Apart from `[`, there are two other subsetting operators: `'[[` and `$`. `'[[` is similar to `[`, except it only ever returns a single value, and it allows you to pull pieces out of a list. `$` is a useful shortcut for `'[[` combined with character subsetting.
 
-`'[[` is most important for working with lists. `[` will only ever give you a list back - it never gives you the contents of the list:
+`'[[` is important for working with lists. `[` will only ever give you a list back - it never gives you the contents of the list:
 
 >  "If list `x` is a train carrying objects, then `x'[[5]]` is 
 > the object in car 5; `x[4:6]` is a train of cars 4-6." --- 
 > [@RLangTip](http://twitter.com/#!/RLangTip/status/118339256388304896)
 
-This means that you can only use `'[[` with positive integers and strings:
+Because it returns only a single value, you can only use `'[[` with positive integers and strings:
 
 ```R
 a <- list(a = 1, b = 2)
@@ -194,11 +195,10 @@ b[[c("a", "b", "c", "d")]]
 b[["a"]][["b"]][["c"]][["d"]]
 ```
 
-Because data frames are lists of their columns, you can use `'[[` to extract columns from data frames: `mtcars'[[1]]`, `mtcars'[["cyl"]]`.
+Because data frames are lists of their columns, you can use `'[[` to extract a column from data frames: `mtcars'[[1]]`, `mtcars'[["cyl"]]`.
 
-Note that S3 and S4 objects can override the standard behaviour of `[` and `'[[` so they may behave differently for different types of objects, but generally it's a bad idea to redefine their behaviour.
-
-The key distinction between the types of subsetting operators is whether they are simplifying or preserving.
+S3 and S4 objects can override the standard behaviour of `[` and `'[[` so they may slightly differently for different types of objects. 
+The key difference is usually how you select between simplifying or preserving behaviours, and whether the default is to simplify or preserve.
 
 ### Simplifying vs. preserving subsetting
 
@@ -296,6 +296,8 @@ If you want to avoid this behaviour you can do `options(warnPartialMatchDollar =
 | `'[[`    | `NA_real`  | Error       | `NULL`        |
 | `'[[`    | `NULL`     | Error       | Error         |
 
+If the input vector is named, then the names of OOB, missing, or `NULL` components will be `"<NA>"`.
+
 <!--
 ```R
 numeric()[1]
@@ -314,13 +316,11 @@ list()[[NULL]]
 ```
 -->
 
-If the input vector is named, then the names of OOB, missing, or `NULL` components will be `"<NA>"`.
-
 ### Exercises
 
 * Given a linear model, e.g. `mod <- lm(mpg ~ wt, data = mtcars)`, extract the residual degrees of freedom. Extract the R squared from the model summary (`summary(mod))`)
 
-## Subsetting + assignment
+## Subsetting and assignment
 
 All subsetting operators can be combined with assignment to modify selected values of the input vector. 
 
@@ -346,58 +346,28 @@ df$a[df$a < 5] <- 0
 df$a
 ```
 
-Indexing with a blank can be useful in conjunction with assignment. Compare the following two expressions. In the first, `mtcars` will remain as a dataframe, in the second `mtcars` will become a list.
+Indexing with a blank can be useful in conjunction with assignment, because it will preserve the original object class and structure. Compare the following two expressions. In the first, `mtcars` will remain as a dataframe, in the second `mtcars` will become a list.
 
 ```R
 mtcars[] <- lapply(mtcars, as.integer)
 mtcars <- lapply(mtcars, as.integer)
 ```
 
-### Modifying in place vs. modifying a copy
-
-```R
-library(pryr)
-x <- 1:5
-address(x)
-x[2] <- 3L
-address(x)
-
-# Assigning in a real number forces conversion of x to real
-x[2] <- 3
-address(x)
-
-# Modifying class or other attributes modifies in place
-attr(x, "a") <- "a"
-class(x) <- "b"
-address(x)
-
-# But making a reference to x elsewhere, will create a modified
-# copy when you modify x - no longer modifies in place
-y <- x
-x[1] <- 2
-address(x)
-```
-
-### Lists
-
-You can use 
+With lists, you can use subsetting + assignment + `NULL` to remove components from a list. To add a literal `NULL` to a list, use `[` and `list(NULL)`:
 
 ```R
 x <- list(a = 1)
 x[["b"]] <- NULL
+str(x)
 
 y <- list(a = 1)
 y["b"] <- list(NULL)
-
-str(x)
 str(y)
 ```
 
 ## Applications
 
-The basic principles described above give rise to a wide variety of useful applications. Some of the most important are described below.
-
-Many of these basic techniques are wrapped up into more concise functions (e.g. `subset()`, `merge()`, `plyr::arrange()`), nevertheless, it is useful to understand how they are implemented with basic subsetting alone, in case you come across a situation which can not be dealt with using pre-written functions.
+The basic principles described above give rise to a wide variety of useful applications. Some of the most important are described below. Many of these basic techniques are wrapped up into more concise functions (e.g. `subset()`, `merge()`, `plyr::arrange()`), nevertheless, it is useful to understand how they are implemented with basic subsetting alone, in case you come across a situation which can not be dealt with using pre-written functions.
 
 ### Lookup tables (character subsetting)
 
