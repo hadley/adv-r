@@ -392,13 +392,14 @@ y["b"] <- list(NULL)
 str(x)
 str(y)
 ```
+
 ## Applications
 
 The basic principles described above give rise to a wide variety of useful applications. Some of the most important are described below.
 
 Many of these basic techniques are wrapped up into more concise functions (e.g. `subset()`, `merge()`, `plyr::arrange()`), nevertheless, it is useful to understand how they are implemented with basic subsetting alone, in case you come across a situation which can not be dealt with using pre-written functions.
 
-### Lookup tables
+### Lookup tables (character subsetting)
 
 Character matching provides a powerful way to make lookup tables.  Say you want to convert abbreviations:
 
@@ -413,9 +414,9 @@ c("m" = "Known", "f" = "Known", u = "Unknown")[x]
 
 If you don't want names in the result, use `unname()` to remove them.
 
-### Matching and merging by hand
+### Matching and merging by hand (integer subsetting)
 
-You may have a more complicated look up table which has multiple columns of information.   Assume we have an vector of integer codes, and a table that describes their properties.
+You may have a more complicated look up table which has multiple columns of information. Assume we have an vector of integer codes, and a table that describes their properties:
 
 ```R
 codes <- sample(3, 10, rep = T)
@@ -427,7 +428,7 @@ info <- data.frame(
 )
 ```
 
-We want to duplicate the info table so that we have a row for each value in `codes`. We can do this in two ways, either use `match()` or `rownames()` + character subsetting:
+We want to duplicate the info table so that we have a row for each value in `codes`. We can do this in two ways, either using `match()` and integer subsetting, or `rownames()` and character subsetting:
 
 ```R
 # Using match
@@ -439,11 +440,11 @@ rownames(info) <- info$code
 info[as.character(codes), ]
 ```
 
-If you have multiple columns that you need to match on, you'll need to collapse them to a single column (perhaps using `interaction()` or `paste()`) first.  Or you can use `merge()`, which does the same thing for you - read the source code to see how `merge()` is implemented using `paste()` and `match()`.
+If you have multiple columns that you need to match on, you'll need to collapse them to a single column (with `interaction()`, `paste()`, or `plyr::id()`).  You can also use `merge()` or `plyr::join()`, which does the same thing for you - read the source code to see how.
 
-### Ordering
+### Ordering (integer subsetting)
 
-`order()` takes a vector as input and returns an integer vector describing how the vector should be subsetted to put it in sorted order. 
+`order()` takes a vector as input and returns an integer vector describing how the vector should be subset to put it in sorted order: 
 
 ```R
 x <- c(2, 3, 1)
@@ -451,73 +452,134 @@ order(x)
 x[order(x)]
 ```
 
-This makes it trivial to order either the rows or columns of a data frame:
+To break ties, you can supply additional variables to `order()`, and you can change from ascending to descending order using `decreasing = TRUE`.  By default, any missing values will be put at the end of the vector: you can instead remove with `na.last = NA` or put at the front with `na.last = FALSE`.
+
+For two and higher dimensions, `order()` and integer subsetting makes it easy to order either the rows or columns of an object:
 
 ```R
 mtcars[order(mtcars$disp), ]
 mtcars[, order(names(mtcars))]
 ```
 
-See `plyr::arrange()` for a function specially designed for reordering the rows of data frames.
+More concise, but less flexible, functions are available for sorting vectors, `sort()`, and data frames, `plyr::arrange()`.
 
-### Random samples/bootstrap
+### Random samples/bootstrap (integer subsetting)
 
-Similarly, you can use integer indices to perform random sampling or bootstrapping of a vector or data frame. You use `sample()` to generate a vector of indices, and then use subsetting to access the values:
+You can use integer indices to perform random sampling or bootstrapping of a vector or data frame. You use `sample()` to generate a vector of indices, and then use subsetting to access the values:
 
 ```R
 mtcars[sample(nrow(mtcars), 10), ]
 mtcars[sample(nrow(mtcars), 100, rep = T), ]
 ```
 
-### Expanding aggregated counts
+The arguments to `sample()` control the number of samples to extract, and whether or not sampling with replacement is done. If you just want to randomly reorder the rows, index with `sample(nrow(df))`.
 
-It's also possible to use integer subsetting to un-collapse collapsed counts. The key is to use `rep()` to repeat the row index of the collapsed data frame the appropriate number of times.
+### Expanding aggregated counts (integer subsetting)
+
+Sometimes you get a data frame where identical rows have been collapsed into one, and a count column has been added. `rep()` | integer subsetting makes it easy to uncollapse the data, but subsetting with a repeated row index:
 
 ```R
-df <- data.frame(x = c(2, 4, 1), n = c(3, 5, 1))
+df <- data.frame(x = c(2, 4, 1), y = c(9, 11, 6), n = c(3, 5, 1))
 rep(1:nrow(df), df$n)
 df[rep(1:nrow(df), df$n), ]
 ```
 
-### Boolean algebra vs sets
+### Removing columns from data frame (character subsetting)
 
-Logical subsetting is probably the mostly commonly used technique for extracting rows out of a data frame.  It's useful to be aware of the natural equivalence between sets operations (integer subsetting) and boolean algebra (logical subsetting).
+There are two ways to remove columns from a data frame. You can set individual columns to NULL:
 
 ```R
-X <- sample(10) < 4
-x <- which(x)
-Y <- sample(10) < 4
-x <- which(y)
+df <- data.frame(x = 1:3, y = 3:1, z = letters[1:3])
+df$z <- NULL
+```
 
-X & Y
-intersect(x, y)
-X | Y
-union(x, y)
+Or you can subset to return only the columns you want:
+
+```R
+df <- data.frame(x = 1:3, y = 3:1, z = letters[1:3])
+df[c("x", "y")]
+```
+
+If you know only the columns you don't want, use set operations to work out which colums to keep:
+
+```R
+df[setdiff(names(df), "z")]
+```
+
+### Selecting rows based on a condition (logical subsetting)
+
+Logical subsetting is probably the mostly commonly used technique for extracting rows out of a data frame, because it allows you to easily combine conditions from multiple columns. Remember to use the vector boolean operators `&` and `|`, not the short-circuiting scalar operators `&&` and `||` which are more useful inside if statements.
+
+```R
+mtcars[mtcars$cyl == 4, ]
+mtcars[mtcars$cyl == 4 & mtcars$gear == 4, ]
+```
+
+Don't forget [De Morgan's laws](http://en.wikipedia.org/wiki/De_Morgan's_laws), which can be useful when simplifying negations:
+
+* `!(X & Y)` is the same as `!X | !Y`
+* `!(X | Y)` is the same as `!X & !Y`
+
+If you have a complicated expression like `!(X & !(Y | Z))` it will simplify to `!X | !!(Y|Z)`, then `!X | Y | Z`.
+
+`subset()` is a specialised function for subsetting data frames, and saves some typing because you don't need to repeat the name of the data frame. You'll learn how it works in [[Computing on the language]].
+
+```R
+subset(mtcars, cyl == 4)
+subset(mtcars, cyl == 4 & gear == 4)
+```
+
+### Boolean algebra vs sets (logical & integer subsetting)
+
+It's useful to be aware of the natural equivalence between set operations (integer subsetting) and boolean algebra (logical subsetting). Using set operations is more effective when:
+
+* You want to find the first (or last) `TRUE`
+
+* You have very few `TRUE`s and very many `FALSE`s; a set representation may be faster and require less storage
+
+`which()` allows you to convert from a boolean representation to a logical representation. There's no reverse operation in base R, but we can easily add one:
+
+```R
+x <- sample(10) < 4
+which(x)
 
 unwhich <- function(x, n) {
-  out <- rep(FALSE, length = n)
+  out <- rep_len(FALSE, n)
   out[x] <- TRUE
   out
 }
+unwhich(which(x), 10)
 ```
 
-Why choose one or the other:
+Let's create two logical vectors and their integer equivalents and then explore the relationship between boolean and set operations.
 
-* In set representation, easier to find first (or last)
-* For sparse data (i.e. few `TRUE`s) set representation may be much faster and require much less storage
+```R
+(x1 <- 1:10 %% 2 == 0)
+(x2 <- which(x1))
+(y1 <- 1:10 %% 5 == 0)
+(y2 <- which(y1))
 
-* `X & Y`: `intersect(x, y)`
-* `X | Y`: `union(x, y)`
-* `X & !Y`: `setdiff(x, y)`
+# & <-> intersect
+x1 & y1
+intersect(x2, y2)
 
-* `!X`: `setdiff(u, x)`
-* `xor(X, Y)`: `setdiff(union(x, y), intersect(x, y))`
+# | <-> union
+x1 | y1
+union(x2, y2)
 
-Also, remember [De Morgan's laws](http://en.wikipedia.org/wiki/De_Morgan's_laws), which can be useful when simplifying negations:
+# X & !Y <-> setdiff(x, y)
+x1 & !y1
+setdiff(x2, y2)
 
-* `!(X && Y)` is the same as `!X || !Y`
-* `!(X || Y)` is the same as `!X && !Y`
+# xor(X, Y) <-> setdiff(union(x, y), intersect(x, y))
+xor(x1, x2)
+setdiff(union(x, y), intersect(x, y))    
+```
 
-Note that `x[which(y)]` is suboptimal, and should be replaced by `x[y]`. `x[-which(y)]` is especially problematic as an alternative to `x[!y]` because if `y` is all FALSE, `which(y)` will be `integer(0)` and `-integer(0)` is still `integer(0)`, so you'll get no values, instead of all values.  In general, avoid `which()` unless you want a (e.g.) the first or last `TRUE` value.
+When first learning subsetting, a common mistake is to use `x[which(y)]` instead of `x[y]`.  Here the `which()` achieves nothing: it switches from logical to integer subsetting, but the result will be exactly the same. Also beware that `x[-which(y)]` is __not__ equivalent to `x[!y]`: `y` is all FALSE, `which(y)` will be `integer(0)` and `-integer(0)` is still `integer(0)`, so you'll get no values, instead of all values. In general, avoid switching from logical to integer subsetting unless you want (e.g.) the first or last `TRUE` value.
 
-It is especially problematic if 
+### Examples
+
+* How would you take a random sample from the columns of a data frame? (This is used an important technique in random forests.) Can you simultaneously sample the rows and columns in one step?
+
+* How would you select a random contiguous sample of m rows from a data frame containing n rows?

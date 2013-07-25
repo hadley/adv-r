@@ -181,6 +181,8 @@ You can give a vector names in three ways:
 
 A vector with no names will return `NULL` from `names(x)`; a partially named vector will have entries containing the empty string `""`.  You can remove names from a vector with `unname()`
 
+Names should be unique, but this restriction is not enforced. However, if names are not unique, character subsetting (see [[subsetting]]), will only return the first match.
+
 ### Factors
 
 The class attribute can be used to add new behaviour to atomic vectors. For example, the factor is a vector that can contain only predefined values, and is R's structure for dealing with qualitative data. Factors have two key attributes: their `class()`, "factor", which controls their behaviour; and their `levels()`, the set of allowed values.
