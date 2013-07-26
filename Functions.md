@@ -318,6 +318,15 @@ lapply(1:10, "+", 3)
 
 Note the difference between `` `+` `` and `"+"`.  The first one is the value of the object called `+`, and the second is a string containing the character `+`.  The second version works because `lapply` can be given the name of a function instead of the function itself - if you read the source of `lapply()`, you'll see the first line uses `match.fun()` to find functions given their names.
 
+A more useful application is combining `lapply()` with subsetting:
+
+```R
+x <- list(1:3, 4:9, 10:12)
+lapply(x, "[", 2)
+# equivalent to
+lapply(x, function(x) x[2])
+```
+
 That everything in R is represented as a function call is important to know for [[computing on the language]].
 
 ## Function arguments
