@@ -254,7 +254,7 @@ when it passed a __concrete__ type, in this case a `FibonacciData` object.
 
 S4 was first described in the 1998 'Green Book' (Chambers 1998). It allows
 for more sophisticated handling of method calls and, as a result, 
-it is better at managing more complex class heirarchies. Just as in S3,
+it is better at managing more complex class hierarchies. Just as in S3,
 an S4 class has an associated type along with data members. Returning 
 to our Fibonacci example, an S4 `Sequence` and `Fibonacci` class are 
 defined as follows.
