@@ -1,26 +1,30 @@
 # Functions
 
-Functions are a fundamental building block of R: to master many of the more advanced techniques in this book, you need a solid foundation in how functions work. If you're reading this book, you've probably already created many R functions, and you're familiar with the basics of how they work. The focus of this chapter is to turn your existing, informal, knowledge of functions into a rigorous understanding of what functions are and how they work. You'll see some interesting tricks and techniques in this chapter, but most of what you'll learn is more important as building blocks for more advanced techniques.
+Functions are a fundamental building block of R: to master many of the more advanced techniques in this book, you need a solid foundation in how functions work. You've probably already created many R functions, and you're familiar with the basics of how they work. The focus of this chapter is to turn your existing, informal, knowledge of functions into a rigorous understanding of what functions are and how they work. You'll see some interesting tricks and techniques in this chapter, but most of what you'll learn will be more important as the building blocks for more advanced techniques.
 
-Hopefully most of this chapter will be review and you can skim through it quickly, but you'll clarify your understand of functions as you go.
+The most important thing to understand about R is that functions are objects in their own right. You can work with them exactly the same way you work with any other type of object. 
 
 In this chapter you will learn:
 
 * The three main components of a function.
-* How scoping works, the process that looks up values from names.
-* That everything in R is a function call, even if it doesn't look like it
-* The three ways of supplying arguments to a function, and the impact of lazy evaluation.
-* The two types of special functions: infix and replacement functions.
 
-<!-- Need to mention do.call somewhere in this chapter  -->
+* How scoping works, the process that looks up values from names.
+
+* How everything that happens in R is a result of a function call,  even if it doesn't look like it
+
+* The three ways of supplying arguments to a function, how call a function given a list of arguments, and the impact of lazy evaluation.
+
+* About two types of special functions: infix and replacement functions.
+
+* What a function can return, and how invisible return values work
 
 ## Components of a function
 
-There are three main components of a function:
+There are three properties that all R functions possess:
 
 * the `body()`, the code inside the function.
 
-* the `formals()`, the "formal" arguments list, which controls how you can call the function.
+* the `formals()`, the "formal" argument list, which controls how you can call the function.
 
 * the `environment()` which determines how variables referred to inside the function are found.
 
@@ -35,7 +39,13 @@ body(f)
 environment(f)
 ```
 
-There is an exception to this rule: primitive functions, like `sum`:
+The assignment forms of `body()`, `formals()`, and `environment()` can also be used to modify functions. This is a useful technique which we'll explore in more detail in [[computing on the language]].
+
+Like all other objects in R, functions can also possess any number of additional `attributes()`. One attribute used by base R is "srcref", short for source reference, which points to the source code used to create the funtion. Unlike the `body()`, this contains codes comments and other formatting. You can also add your attributes to a function, for example, you can can set the `class()` and add a custom `print()` method.
+
+### Primitive functions
+
+There is one exception to the rule that functions have three components. Primitive functions, like `sum`, call C code directly with `.Primitive()` and contain no R code. Therefore their `formals()`, `body()` and `environment()` are all `NULL`:
 
 ```R
 sum
@@ -44,21 +54,21 @@ body(sum)
 environment(sum)
 ```
 
-These are functions that call C code directly with `.Primitive()`. Primitive functions contain no R code and exist almost entirely in C, so their `formals()`, `body()` and `environment()` are all `NULL`. They are only found in the `base` package, and since they operate at a lower-level than most functions, they can be more efficient (primitive replacement functions don't have to make copies), and can have different rules for argument matching (e.g. `switch` and `call`). 
-
-The assignment forms of `body()`, `formals()`, and `environment()` can also be used to modify functions. This is a useful technique which we'll explore in more detail in [[computing on the language]].
-
-There are two other components that are possessed by some functions: the source of the function (which includes comments, unlike the `body()`), and if the function has been byte-code compiled, the byte code. 
+Primitive functions are only found in the `base` package, and since they operate at a low level, they can be more efficient (primitive replacement functions don't have to make copies), and can have different rules for argument matching (e.g. `switch` and `call`).  This, however, comes at a cost of behaving differently to all other function in R, and so R core generally avoids creating them unless there is no other option.
 
 ### Exercises
 
-* What function allows you to tell if a function is a primitive function or not?
+* What function allows you to tell if an object is a function? What function allows you to tell if a function is a primitive function or not?
+
+* Create a list of all primitive functions in R. (Hint: use `ls("package:base, all = TRUE)` to get a list of all objects in the base package, `get()` to retrieve an object given its name, and the answer to the question above.)
+
 * What are the three important components of a function?
+
 * When does printing a function not show what environment it was created in?
 
 ## Lexical scoping
 
-Scoping is the set of rules that govern how R looks up the value of a symbol, or name. That is, scoping is the set of rules that R applies to go from the symbol `x`, to its value `10` in the following example.
+Scoping is the set of rules that govern how R looks up the value of a symbol. In other words, scoping is the set of rules that R applies to go from the symbol `x`, to its value `10` in this example:
 
 ```R
 x <- 10
@@ -71,11 +81,11 @@ Understanding scoping allows you to:
 * build tools by composing functions, as described in [[functional programming]]
 * overrule the usual evaluation rules and [[compute on the language|computing-on-the-language]]
 
-R has two types of scoping: __lexical scoping__, implemented automatically at the language level, and __dynamic scoping__, used in select functions to save typing during interactive analysis. We describe lexical scoping here because it is intimately tied to function creation. Dynamic scoping is described in the context of [[controlling evaluation|Evaluation]].
+R has two types of scoping: __lexical scoping__, implemented automatically at the language level, and __dynamic scoping__, used in select functions to save typing during interactive analysis. We describe lexical scoping here because it is intimately tied to function creation. Dynamic scoping is described in the context of [[computing on the language]].
 
-Lexical scoping looks up symbol values using how functions are nested when they were created, not how they are nested when they are called. With lexical scoping, you can figure out where the value of each variable will be looked up only by looking at the definition of the function, you don't need to know anything about how the function is called.
+Lexical scoping looks up symbol values based on functions were nested when they were created, not how they are nested when they are called. With lexical scoping, you can figure out where the value of each variable will be looked up only by looking at the definition of the function, you don't need to know anything about how the function is called.
 
-The "lexical" in lexical scoping doesn't correspond to the usual English definition ("of or relating to words or the vocabulary of a language as distinguished from its grammar and construction") but comes from the computer science term "lexing", which is part of the process that converts code represented as text to meaningful pieces that the programming language understands. It's lexical in this sense, because you only need the definition of the functions, not how they are called.
+The "lexical" in lexical scoping doesn't correspond to the usual English definition ("of or relating to words or the vocabulary of a language as distinguished from its grammar and construction") but comes from the computer science term "lexing", which is part of the process that converts code represented as text to meaningful pieces that the programming language understands. It's lexical scoping is lexical in this sense because you only need the definition of the functions, not how they are called.
 
 There are four basic principles behind R's implementation of lexical scoping:
 
@@ -84,7 +94,7 @@ There are four basic principles behind R's implementation of lexical scoping:
 * a fresh start
 * dynamic lookup
 
-You probably know some of these principles already - test your knowledge by mentally running the code in each block before looking at the answers.
+You probably know many of these principles already, although you might not have thought about them explicitly. Test your knowledge by mentally running the code in each block before looking at the answers.
 
 ### Name masking
 
@@ -100,7 +110,7 @@ f()
 rm(f)
 ```
 
-If a name isn't defined inside a function, it will look one level up.
+If a name isn't defined inside a function, R will look one level up.
 
 ```R
 x <- 2
@@ -112,7 +122,7 @@ g()
 rm(x, g)
 ```
 
-The same rules apply if a function is defined inside another function.  First it looks inside the current function, then where that function was defined, and so on, all the way until the global environment, and then on to packages in the search list. Run the following code in your head, then confirm the output by running the R code.
+The same rules apply if a function is defined inside another function.  First it looks inside the current function, then where that function was defined, and so on, all the way up to the global environment, and then on to other loaded packages. Run the following code in your head, then confirm the output by running the R code.
 
 ```R
 x <- 1
@@ -128,7 +138,7 @@ h()
 rm(x, h)
 ```
 
-The same rules apply to closures, functions created by other functions. The following function, `j()`, returns a function.  What do you think this function will return when we call it?
+The same rules apply to closures, functions created by other functions. Closures will be described in more detail in [[functional programming]]; here we'll just look at how they interact with scoping. The following function, `j()`, returns a function.  What do you think this function will return when we call it?
 
 ```R
 j <- function(x) {
@@ -142,7 +152,7 @@ k()
 rm(j, k)
 ```
 
-This seems a little magical (how does R know what the value of `y` is after the function has been called), but it works because `k` keeps around the environment in which it was defined, which includes the value of `y`.  [[Environments]] gives some pointers on how you can dive in and figure out what some of the values are.
+This seems a little magical (how does R know what the value of `y` is after the function has been called), but it works because `k` keeps around the environment in which it was defined, which includes the value of `y`. [[Environments]] gives some pointers on how you can dive in and figure out what values are stored in the environment associated with each function.
 
 ### Functions vs. variables
 
@@ -158,7 +168,7 @@ m()
 rm(l, m)
 ```
 
-There is one small tweak to the rule for functions. If you are using a name in a context where it's obvious that you want a function (e.g. `f(3)`), R will keep searching up the parent environments until it finds a function.  This means that in the following example `n` takes on a different value depending on whether R is looking for a function or a variable.
+There is one small tweak to the rule for functions. If you are using a name in a context where it's obvious that you want a function (e.g. `f(3)`), R will ignore objects that are not functions while it is searching. In the following example `n` takes on a different value depending on whether R is looking for a function or a variable.
 
 ```R
 n <- function(x) x / 2
@@ -170,7 +180,7 @@ o()
 rm(n, o)
 ```
 
-However, this can make for confusing code, and is generally best avoided.
+However, using the same name for functions and other objects will make for confusing code, and is generally best avoided.
 
 ### A fresh start
 
@@ -187,7 +197,7 @@ j <- function() {
 }
 ```
 
-You might be surprised that it returns the same value, `1`, every time. This is because every time a function is called, a new environment is created to host execution. A function has no way to tell what happened the last time it was run; each invocation is completely independent.
+You might be surprised that it returns the same value, `1`, every time. This is because every time a function is called, a new environment is created to host execution. A function has no way to tell what happened the last time it was run; each invocation is completely independent. (We'll see some ways to get around this in [[functional programming]])
 
 ### Dynamic lookup
 
@@ -234,47 +244,54 @@ replicate(100, (1 + 2))
 rm("(")
 ```
 
-This will introduce a particularly pernicious bug: 10% of the time, 1 will be added to any numeric operation carried out inside parentheses. This is yet another good reason to regularly restart with a clean R session!
+This will introduce a particularly pernicious bug: 10% of the time, 1 will be added to any numeric calculation inside parentheses. This is another good reason to regularly restart with a clean R session!
 
 ### Exercises
 
 * What does the following code return? Why? What does each of the three `c`'s mean?
 
-  ```R
-  c <- 10
-  c(c = c)
-  ```
+    ```R
+    c <- 10
+    c(c = c)
+    ```
 
-* (From the R inferno 8.2.36): If `weirdFun()()()` is a valid command, what does `weirdFun()` return? Write an example.
+* What are the four principles that govern how R looks for values?
 
 * What does the following function return? Make a prediction before running the code yourself.
 
-  ```R
-  f <- function(x) {
+    ```R
     f <- function(x) {
       f <- function(x) {
-        x ^ 2
+        f <- function(x) {
+          x ^ 2
+        }
+        f(x) + 1
       }
-      f(x) + 1
+      f(x) * 2
     }
-    f(x) * 2
-  }
-  f(10)
-  ```
+    f(10)
+    ```
 
 ## Every operation is a function call
 
-The previous example of redefining `(` works because every operation in R is a function call, and even operations with special syntax are just a disguise for ordinary function calls. This includes infix operators like `+`, control flow operators like `for`, `if`, and `while`, subsetting operators like `[]` and `$` and even the curly braces `{`. This means that each of these pairs of statements are exactly equivalent.  Note that `` ` ``, the backtick, lets you refer to functions or variables that have reserved or illegal names:
+> To understand computations in R, two slogans are helpful: 
+> 
+> * Everything that exists is an object.
+> * Everything that happens is a function call.
+> 
+> --- John Chambers
+
+The previous example of redefining `(` works because every operation in R is a function call, whether or not it looks like it. This includes infix operators like `+`, control flow operators like `for`, `if`, and `while`, subsetting operators like `[]` and `$` and even the curly braces `{`. This means that each of pairs of statements in the following example are exactly equivalent.  Note that `` ` ``, the backtick, lets you refer to functions or variables that have otherwise reserved or illegal names:
 
 ```R
 x + y
 `+`(x, y)
 
-for (i in 1:10) print(i)
-`for`(i, 1:10, print(i))
+for (i in 1:3) print(i)
+`for`(i, 1:3, print(i))
 
 if (i == 1) print("yes!") else print("no.")
-`if`(i==1, print("yes"), print("no."))
+`if`(i == 1, print("yes"), print("no."))
 
 x[3]
 `[`(x, 3)
@@ -283,7 +300,7 @@ x[3]
 `{`(print(1), print(2), print(3))
 ```
 
-It is possible to override the definitions of these special functions, but this is almost certainly a bad idea. However, it can occasionally allow you to do something that would have otherwise been impossible. For example, this feature makes it possible for the `dplyr` package to translate R expressions into SQL expressions.
+It is possible to override the definitions of these special functions, but this is almost certainly a bad idea. However, it can occasionally allow you to do something that would have otherwise been impossible. For example, this feature makes it possible for the `dplyr` package to translate R expressions into SQL expressions. The [[dsl]] chapter discusses using this idea to create domain specific languages that allow you to concisely express new concepts using existing R constructs.
 
 It's more often useful to treat special functions as ordinary functions. For example, we could use `lapply` to add 3 to every element of a list by first defining a function `add`, like this:
 
@@ -299,13 +316,13 @@ lapply(1:10, `+`, 3)
 lapply(1:10, "+", 3)
 ```
 
-Note the difference between `` `+` `` and `"+"`.  The first one is the value of the object called `+`, and the second is a string containing the character `+`.  The second version works because `lapply` can be given the name of a function instead of the function itself.
+Note the difference between `` `+` `` and `"+"`.  The first one is the value of the object called `+`, and the second is a string containing the character `+`.  The second version works because `lapply` can be given the name of a function instead of the function itself - if you read the source of `lapply()`, you'll see the first line uses `match.fun()` to find functions given their names.
 
-That everything in R is represented as a function call will be more important to know for [[computing on the language]].
+That everything in R is represented as a function call is important to know for [[computing on the language]].
 
 ## Function arguments
 
-It's useful to distinguish between the formal arguments and the actual arguments to a function. The formal arguments are a property of the function, whereas the actual or calling arguments vary each time you call the function. This section discusses how calling arguments are mapped to formal arguments, how default arguments work and the impact of lazy evaluation.
+It's useful to distinguish between the formal arguments and the actual arguments to a function. The formal arguments are a property of the function, whereas the actual or calling arguments vary each time you call the function. This section discusses how calling arguments are mapped to formal arguments, how you can call a function given a list of argunments, how default arguments work and the impact of lazy evaluation.
 
 ### Calling functions
 
@@ -323,7 +340,7 @@ f(2, 3, a = 1)
 f(1, 3, b = 1)
 ```
 
-Generally, you only want to use positional matching for the first one or two arguments: they will be the mostly commonly used, and most readers will probably know what they are. Avoid using positional matching for less commonly used arguments, and only use readable abbreviations with partial matching. (If you are writing code for a package that you want to publish on CRAN you can not use partial matching.) Named arguments should always come after unnamed arguments. If an function uses `...` (discussed in more detail more), you can only specify arguments listed after `...` with their full name.
+Generally, you only want to use positional matching for the first one or two arguments: they will be the mostly commonly used, and most readers will know what they are. Avoid using positional matching for less commonly used arguments, and only use readable abbreviations with partial matching. (If you are writing code for a package that you want to publish on CRAN you can not use partial matching, and must use complete names.) Named arguments should always come after unnamed arguments. If an function uses `...` (discussed in more detail below), you can only specify arguments listed after `...` with their full name.
 
 These are good calls:
 
@@ -347,6 +364,22 @@ mean(1:10, 0.05)
 mean(, TRUE, x = c(1:10, NA))
 ```
 
+### Calling a function given a list of arguments
+
+Suppose you had a list of function arguments:
+
+```R
+args <- list(1:10, na.rm = TRUE)
+```
+
+How could you then send that list to `mean()`?  You need `do.call()`:
+
+```R
+do.call(mean, list(1:10, na.rm = TRUE))
+# Equivalent to 
+mean(1:10, na.rm = TRUE)
+```
+
 ### Default and missing arguments
 
 Function arguments in R can have default values. 
@@ -368,7 +401,7 @@ g()
 g(10)
 ```
 
-Default arguments can even be defined in terms of variables defined within the function. This is generally bad practice, because it makes it hard to understand what the default values will be without reading the complete source code of the function, and should be avoided.
+Default arguments can even be defined in terms of variables created within the function. This is used frequently in base R functions, but I think it is bad practice, because you can't understand what the default values will be without reading the complete source code.
 
 ```R
 h <- function(a = 1, b = d) {
@@ -391,7 +424,7 @@ i(b = 2)
 i(1, 2)
 ```
 
-However, I generally recommend against using `missing` because it makes it difficult to call programmatically from other functions (without using complicated workarounds). Generally, it's better to set a default value of `NULL` and then check with `is.null()`.
+However, I generally recommend against using `missing` because it makes it difficult to call programmatically from other functions. Generally, it's better to set a default value of `NULL` and then check with `is.null()`.
 
 ```R
 j <- function(a = NULL, b = NULL) {
@@ -449,7 +482,6 @@ adders2[[10]](10)
 
 This code is exactly equivalent to
 
-
 ```R
 add <- function(x) {
   x
@@ -457,7 +489,7 @@ add <- function(x) {
 }
 ```
 
-because the force function is just defined as `force <- function(x) x`. However, using this function serves as a clear indication that you're forcing evaluation, rather than having accidentally typed `x`.
+because the force function is just defined as `force <- function(x) x`. However, using this function indicates clearly that you're forcing evaluation, not that you've accidentally typed `x`.
 
 Default arguments are evaluated inside the function. This means that if the expression depends on the current environment the results will be different depending on whether you use the default value or explicitly provide it.
 
@@ -478,11 +510,9 @@ More technically, an unevaluated argument is called a __promise__, or (less comm
 
 * the environment where the expression was created and where it should be evaluated
 
-The first time a promise is accessed the expression is evaluated in the environment where it was created. This value is cached, so that subsequently access to the evaluted promise does not recompute the value (but the original expression is still associated with the value, so that `substitute` can continue to access it).
+The first time a promise is accessed the expression is evaluated in the environment where it was created. This value is cached, so that subsequently access to the evaluted promise does not recompute the value (but the original expression is still associated with the value, so that `substitute` can continue to access it). You can find more information about a promise using `pryr::promise_info`. This uses some C++ code to extract information about the promise without evaluating it, which is impossible to do in pure R code.
 
-You can find more information about a promise using `langr::promise_info`.  This uses some of R's C api to extract information about the promise without evaluating it (which is otherwise very tricky).
-
-Laziness is useful in if statements - the second statement will be evaluated only if the first is true. (If it wasn't the statement would return an error because `NULL > 0` is a logical vector of length 0)
+Laziness is useful in if statements - the second statement below will be evaluated only if the first is true. If it wasn't, the statement would return an error because `NULL > 0` is a logical vector of length 0 and not a valid input to `if`.
 
 ```R
 x <- NULL
@@ -518,13 +548,11 @@ You could write:
 !is.null(y) || stop("Y is null")
 ```
 
-Functions like `&&` and `||` have to be implemented as special cases in languages that don't support lazy evaluation because otherwise `x` and `y` are evaluated when you call the function, and `y` might be a statement that doesn't make sense unless `x` is true.
-
 ### `...`
 
 There is a special argument called `...`.  This argument will match any arguments not otherwise matched, and can be easily passed on to other functions.  This is useful if you want to collect arguments to call another function, but you don't want to prespecify their possible names. `...` is often used in conjunction with S3 generic functions to allow individual methods to be more flexible.
 
-One relatively sophisticated user of `...` is the base `plot()` function. `plot()` is a generic method with arguments `x`, `y` and `....`. To understand what `...` for a given function we need to read the help: "Arguments to be passed to methods, such as graphical parameters". Most simple invocation of `plot()` end up calling `plot.default()` which has many more arguments, but also has `...`.  Again, reading the documentation reveals that `...` accepts "other graphical parameters", which are listed the help for `par()`.  This allows us to write code like:
+One relatively sophisticated user of `...` is the base `plot()` function. `plot()` is a generic method with arguments `x`, `y` and `....`. To understand what `...` does for a given function we need to read the help: "Arguments to be passed to methods, such as graphical parameters". Most simple invocation of `plot()` ends up calling `plot.default()` which has many more arguments, but also has `...`.  Again, reading the documentation reveals that `...` accepts "other graphical parameters", which are listed the help for `par()`.  This allows us to write code like:
 
 ```R
 plot(1:5, col = "red")
@@ -553,18 +581,17 @@ Using `...` comes with a cost - any misspelled arguments will not raise an error
 sum(1, 2, na.mr = TRUE)
 ```
 
-It's often better to be explicit rather than implicit, so you might instead ask users to supply a list of additional arguments.  And this is certainly easier if you're trying to use `...` with multiple additional functions.
+It's often better to be explicit rather than implicit, so you might instead ask users to supply a list of additional arguments.  That's certainly easier if you're trying to use `...` with multiple additional functions.
 
+### Exercises
 
 ## Special calls
 
-R supports two additional syntaxes for calling functions you create: infix and replacement functions.
+R supports two additional syntaxes for calling special types of functions: infix and replacement functions.
 
 ### Infix functions
 
-Most functions in R are "prefix" operators: the name of the function comes before the arguments. You can also create infix functions where the function name comes in between its arguments, like `+` or `-`.  All infix functions names must start and end with `%` and R comes with the following infix functions predefined: `%%`, `%*%`, `%/%`, `%in%`, `%o%`,  `%x%`. 
-
-(The complete list of built-in infix operators that don't need `%`is: `::, $, @, ^, *, /, +, -, >, >=, <, <=, ==, !=, !, &, &&, |, ||, ~, <-, <<-`)
+Most functions in R are "prefix" operators: the name of the function comes before the arguments. You can also create infix functions where the function name comes in between its arguments, like `+` or `-`.  All user created infix functions names must start and end with `%` and R comes with the following infix functions predefined: `%%`, `%*%`, `%/%`, `%in%`, `%o%`,  `%x%`. (The complete list of built-in infix operators that don't need `%` is: `::, $, @, ^, *, /, +, -, >, >=, <, <=, ==, !=, !, &, &&, |, ||, ~, <-, <<-`)
 
 For example, we could create a new operator that pastes together strings:
 
@@ -573,9 +600,7 @@ For example, we could create a new operator that pastes together strings:
 "new" %+% " string"
 ```
 
-Note that when creating the function, you have to put the name in quotes because it's a special name.
-
-This is just a syntactic sugar for an ordinary function call; as far as R is concerned there is no difference between these two expressions:
+Note that when creating the function, you have to put the name in quotes because it's a special name. This is just a syntactic sugar for an ordinary function call; as far as R is concerned there is no difference between these two expressions:
 
 ```R
 "new" %+% " string"
@@ -604,17 +629,16 @@ The names of infix functions are more flexible than regular R functions: they ca
 R's default precedence rules mean that infix operators are composed from left to right:
 
 ```R
-"%-%" <- function(a, b) paste("(", a, " %-% ", b, ")", sep = "")
+"%-%" <- function(a, b) paste0("(", a, " %-% ", b, ")")
 "a" %-% "b" %-% "c"
 ```
 
-There's one infix function I've created that I use very often. It's inspired by Ruby's `||` logical or operator: it works a little differently to R's because of what objects ruby considers to be true, but it's often used as a way of setting default values.
+There's one infix function that I use very often. It's inspired by Ruby's `||` logical or operator, although it works a little differently in R because ruby has a more flexible definition of what evaluates to `TRUE` in an if statement. It's useful as a way of providing a default value in case the output of another function is `NULL`:
 
 ```R
 "%||%" <- function(a, b) if (!is.null(a)) a else b
 function_that_might_return_null() %||% default value
 ```
-
 
 ### Replacement functions
 
@@ -631,6 +655,25 @@ x
 ```
 
 When R evaluates the assignment `second(x) <- 5`, it notices that the left hand side of the `<-` is not a simple name, so it looks for a function named `second<-` to do the replacement.
+
+I say they "act" like they modifying their arguments in place, because they actually create a modified copy. We can see that by using `pryr::address()` to find the memory address of the underlying object.
+
+```R
+library(pryr)
+address(x)
+second(x) <- 6L
+address(x)
+```
+
+Built in functions that are implemented using `.Primitive` will modify in place
+
+```R
+address(x)
+x[2] <- 7L
+address(x)
+```
+
+It's important to be aware of this behaviour since it has important performance implications.
 
 If you want to supply additional arguments, they go in between `x` and `value`:
 
@@ -652,7 +695,7 @@ x <- `modify<-`(x, 1, 10)
 This means you can't do things like:
 
 ```R
-modify(get("x"), 1) <- 10`
+modify(get("x"), 1) <- 10
 ```
 
 because that gets turned into the invalid code:
@@ -682,7 +725,15 @@ names(x) <- `*tmp*`
 
 ### Exercises
 
-* 
+* Create a list of all the replacement functions found in the base package. Which ones are primitive functions?
+
+* What are valid names for user created infix functions?
+
+* Create an infix `xor()` operator.
+
+* Create infix versions of set functions: `intersect()`, `union()`, `setdiff()`
+
+* Create an replacement function that modifies a random location in vector.
 
 ## Return values
 
@@ -784,10 +835,6 @@ because that is parsed as:
 ```R
 (a <- (b <- (c <- (d <- 2))))
 ```
-
-## Deferred execution
-
-**Caution**: Unfortunately the default in `on.exit()` is `add = FALSE`, so that every time you run it, it overwrites existing exit expressions.  Because of the way `on.exit()` is implemented, it's not possible to create a variant with `add = TRUE`, so you must be careful when using it.
 
 ### Exercises
 

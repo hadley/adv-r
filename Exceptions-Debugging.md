@@ -427,6 +427,11 @@ We can write a simple version of `try` using `tryCatch`. The real version of `tr
       a <- 2
     }, error = function(c) {})
 
+### `on.exit`
+
+**Caution**: Unfortunately the default in `on.exit()` is `add = FALSE`, so that every time you run it, it overwrites existing exit expressions.  Because of the way `on.exit()` is implemented, it's not possible to create a variant with `add = TRUE`, so you must be careful when using it.
+
+
 ### Using `tryCatch`
 
 With the basics in place, we'll next develop some useful tools based the ideas we just learned about.  
