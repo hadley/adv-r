@@ -221,7 +221,7 @@ as.numeric(z)
 as.numeric(as.character(z))
 ```
 
-Unfortunately, most data loading functions in R automatically convert character vectors to factors. This is suboptimal, because there's no way for those functions to know the set of all possible levels and their optimal order. Instead, use `stringsAsFactors = FALSE` to suppress this behaviour, and then manually convert character vectors to factors using your knowledge of the data. A global option (`options(stringsAsFactors = FALSE`) is available to control this behaviour, but it's not recommended - it may have unexpected consequences when combined other code (either from packages, or that you're `source()`ing.) In early versions of R, there was a memory advantage to using factors; that is no longer the case.
+Unfortunately, most data loading functions in R automatically convert character vectors to factors. This is suboptimal, because there's no way for those functions to know the set of all possible levels and their optimal order. Instead, use `stringsAsFactors = FALSE` to suppress this behaviour, and then manually convert character vectors to factors using your knowledge of the data. A global option (`options(stringsAsFactors = FALSE`) is available to control this behaviour, but it's not recommended - it may have unexpected consequences when combined with other code (either from packages, or that you're `source()`ing.) In early versions of R, there was a memory advantage to using factors; that is no longer the case.
 
 Atomic vectors and lists are the building blocks for higher dimensional data structures. Atomic vectors extend to matrices and arrays, and lists are used to create data frames.
 
