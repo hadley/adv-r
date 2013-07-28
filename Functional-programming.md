@@ -325,7 +325,7 @@ Closures are useful for making function factories, and are one way to manage mut
 
 ### Function factories
 
-We've already seen two example of function factories, `missing_remover()` and `power()`. In both these cases using a function factory instead of a single function with multiple arguments has little, if any, benefit. Function factories are most useful when:
+We've already seen two example of function factories, `missing_fixer()` and `power()`. In both these cases using a function factory instead of a single function with multiple arguments has little, if any, benefit. Function factories are most useful when:
 
 * the different levels are more complex, with multiple arguments and complicated bodies
 
