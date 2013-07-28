@@ -193,7 +193,7 @@ We can take advantage of another functional programming technique, storing funct
 
 ```R
 summary <- function(x) {
-  funs <- c(mean, median, sd, mad, iqr)
+  funs <- c(mean, median, sd, mad, IQR)
   lapply(funs, function(f) f(x, na.rm = TRUE))
 }
 ```
