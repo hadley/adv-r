@@ -103,7 +103,7 @@ If the vector is named, you can also subset with:
 
 ### Lists
 
-Subsetting a list in works exactly the same way as subsetting an atomic vector. Subsetting a list with `[` will always return a list: `'[[` and `$`, as described below, let you pull out the components of the list.
+Subsetting a list works in exactly the same way as subsetting an atomic vector. Subsetting a list with `[` will always return a list: `'[[` and `$`, as described below, let you pull out the components of the list.
 
 ### Matrices and arrays
 
