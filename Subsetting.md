@@ -107,7 +107,7 @@ Subsetting a list works in exactly the same way as subsetting an atomic vector. 
 
 ### Matrices and arrays
 
-You can subset higher-dimension structures in three ways: with a multiple vectors, with a single vector, or with a matrix.
+You can subset higher-dimension structures in three ways: with multiple vectors, with a single vector, or with a matrix.
 
 The most common way of subsetting matrices (2d) and arrays (>2d) is a simple generalisation of 1d subsetting: you supply a 1d index for each dimension, separated by a comma. Blank subsetting now becomes useful, because you use it when you want to return all the rows or all the columns.
 
@@ -165,7 +165,7 @@ S3 objects are always made up of atomic vectors, arrays and lists, so you can al
 
 ### S4
 
-There are also two additional subsetting operators that are needed for S4 objects: `@` (equivalent to `$`), and `slot()` (equivalent to `'[[`). `@` is also more restrictive that `$` in that it will return an error if the slot does not exist.  These are described in more detail in [[OO-essentials]].
+There are also two additional subsetting operators that are needed for S4 objects: `@` (equivalent to `$`), and `slot()` (equivalent to `'[[`). `@` is also more restrictive than `$` in that it will return an error if the slot does not exist.  These are described in more detail in [[OO-essentials]].
 
 ### Exercises
 
@@ -194,7 +194,7 @@ You need `'[[` when working with lists. `[` will only ever give you a list back 
 > the object in car 5; `x[4:6]` is a train of cars 4-6." --- 
 > [@RLangTip](http://twitter.com/#!/RLangTip/status/118339256388304896)
 
-Because it can return only a single value, you can must use `'[[` with either a single positive integers and a string:
+Because it can return only a single value, you must use `'[[` with either a single positive integer or a string:
 
 ```R
 a <- list(a = 1, b = 2)
@@ -223,8 +223,8 @@ Unfortunately, how you switch between subsetting and preserving differs for diff
 | Vector      | `x'[[1]]`           | `x[1]`                     | 
 | List        | `x'[[1]]`           | `x[1]`                     | 
 | Factor      | `x[1:4, drop = T]`  | `x[1:4]`                   | 
-| Array       | `x[1, ]`, `x[, 1`]  | `x[1, , drop = F]`, `x[, 1, drop = F]` | 
-| Data frame  | `x[, 1]`, `x[[1]]`  | `x[, 1, drop = F]`, `x[1]` | 
+| Array       | `x[1, ]`, `x[, 1]`  | `x[1, , drop = F]`, `x[, 1, drop = F]` | 
+| Data frame  | `x[, 1]`, `x'[[1]]`  | `x[, 1, drop = F]`, `x[1]` | 
 
 Preserving is the same for all data types: you get the same type of output as input. Simplifying behaviour varies a little between different data types, as described below:
 
@@ -293,7 +293,7 @@ x$a
 x[["a"]]
 ```
 
-If you want to avoid this behaviour you can set `options(warnPartialMatchDollar = TRUE)` - but beware that this is a global option and maybe affect behaviour in other code you have loaded (e.g. pacakges).
+If you want to avoid this behaviour you can set `options(warnPartialMatchDollar = TRUE)` - but beware that this is a global option and maybe affect behaviour in other code you have loaded (e.g. packages).
 
 ### Missing/out of bounds indices
 
@@ -330,7 +330,7 @@ list()[[NULL]]
 
 ### Exercises
 
-* Given a linear model, e.g. `mod <- lm(mpg ~ wt, data = mtcars)`, extract the residual degrees of freedom. Extract the R squared from the model summary (`summary(mod))`)
+* Given a linear model, e.g. `mod <- lm(mpg ~ wt, data = mtcars)`, extract the residual degrees of freedom. Extract the R squared from the model summary (`summary(mod)`)
 
 ## Subsetting and assignment
 
@@ -399,7 +399,7 @@ If you don't want names in the result, use `unname()` to remove them.
 
 ### Matching and merging by hand (integer subsetting)
 
-You may have a more complicated lookup table which has multiple columns of information. Suppose we have an vector of integer grades, and a table that describes their properties:
+You may have a more complicated lookup table which has multiple columns of information. Suppose we have a vector of integer grades, and a table that describes their properties:
 
 ```R
 grades <- sample(3, 10, rep = T)
@@ -559,14 +559,14 @@ x1 & !y1
 setdiff(x2, y2)
 
 # xor(X, Y) <-> setdiff(union(x, y), intersect(x, y))
-xor(x1, x2)
-setdiff(union(x, y), intersect(x, y))    
+xor(x1, y1)
+setdiff(union(x2, y2), intersect(x2, y2))    
 ```
 
-When first learning subsetting, a common mistake is to use `x[which(y)]` instead of `x[y]`.  Here the `which()` achieves nothing: it switches from logical to integer subsetting, but the result will be exactly the same. Also beware that `x[-which(y)]` is __not__ equivalent to `x[!y]`: `y` is all FALSE, `which(y)` will be `integer(0)` and `-integer(0)` is still `integer(0)`, so you'll get no values, instead of all values. In general, avoid switching from logical to integer subsetting unless you want (e.g.) the first or last `TRUE` value.
+When first learning subsetting, a common mistake is to use `x[which(y)]` instead of `x[y]`.  Here the `which()` achieves nothing: it switches from logical to integer subsetting, but the result will be exactly the same. Also beware that `x[-which(y)]` is __not__ equivalent to `x[!y]`: if `y` is all FALSE, `which(y)` will be `integer(0)` and `-integer(0)` is still `integer(0)`, so you'll get no values, instead of all values. In general, avoid switching from logical to integer subsetting unless you want (e.g.) the first or last `TRUE` value.
 
 ### Examples
 
-* How would you take a random sample from the columns of a data frame? (This is used an important technique in random forests.) Can you simultaneously sample the rows and columns in one step?
+* How would you take a random sample from the columns of a data frame? (This is an important technique in random forests). Can you simultaneously sample the rows and columns in one step?
 
 * How would you select a random contiguous sample of m rows from a data frame containing n rows?
