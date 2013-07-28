@@ -12,7 +12,7 @@ In this chapter you will learn:
 
 * How everything that happens in R is a result of a function call,  even if it doesn't look like it
 
-* The three ways of supplying arguments to a function, how call a function given a list of arguments, and the impact of lazy evaluation.
+* The three ways of supplying arguments to a function, how to call a function given a list of arguments, and the impact of lazy evaluation.
 
 * About two types of special functions: infix and replacement functions.
 
@@ -41,7 +41,7 @@ environment(f)
 
 The assignment forms of `body()`, `formals()`, and `environment()` can also be used to modify functions. This is a useful technique which we'll explore in more detail in [[computing on the language]].
 
-Like all other objects in R, functions can also possess any number of additional `attributes()`. One attribute used by base R is "srcref", short for source reference, which points to the source code used to create the funtion. Unlike the `body()`, this contains codes comments and other formatting. You can also add your attributes to a function, for example, you can can set the `class()` and add a custom `print()` method.
+Like all other objects in R, functions can also possess any number of additional `attributes()`. One attribute used by base R is "srcref", short for source reference, which points to the source code used to create the function. Unlike the `body()`, this contains codes comments and other formatting. You can also add your attributes to a function, for example, you can can set the `class()` and add a custom `print()` method.
 
 ### Primitive functions
 
@@ -60,7 +60,7 @@ Primitive functions are only found in the `base` package, and since they operate
 
 * What function allows you to tell if an object is a function? What function allows you to tell if a function is a primitive function or not?
 
-* Create a list of all primitive functions in R. (Hint: use `ls("package:base, all = TRUE)` to get a list of all objects in the base package, `get()` to retrieve an object given its name, and the answer to the question above.)
+* Create a list of all primitive functions in R. (Hint: use `ls("package:base", all = TRUE)` to get a list of all objects in the base package, `get()` to retrieve an object given its name, and the answer to the question above.)
 
 * What are the three important components of a function?
 
@@ -83,7 +83,7 @@ Understanding scoping allows you to:
 
 R has two types of scoping: __lexical scoping__, implemented automatically at the language level, and __dynamic scoping__, used in select functions to save typing during interactive analysis. We describe lexical scoping here because it is intimately tied to function creation. Dynamic scoping is described in the context of [[computing on the language]].
 
-Lexical scoping looks up symbol values based on functions were nested when they were created, not how they are nested when they are called. With lexical scoping, you can figure out where the value of each variable will be looked up only by looking at the definition of the function, you don't need to know anything about how the function is called.
+Lexical scoping looks up symbol values based on how functions were nested when they were created, not how they are nested when they are called. With lexical scoping, you can figure out where the value of each variable will be looked up only by looking at the definition of the function, you don't need to know anything about how the function is called.
 
 The "lexical" in lexical scoping doesn't correspond to the usual English definition ("of or relating to words or the vocabulary of a language as distinguished from its grammar and construction") but comes from the computer science term "lexing", which is part of the process that converts code represented as text to meaningful pieces that the programming language understands. It's lexical scoping is lexical in this sense because you only need the definition of the functions, not how they are called.
 
@@ -214,7 +214,7 @@ f()
 
 You generally want to avoid this behavour because it means the function is no longer self-contained. This is a common error - if you make a spelling mistake in your code, you won't get an error when you create the function, and you might not even get one when you run the function, depending on what variables are defined in the global environment. 
 
-One way to detect this problem is the `findGlobals()` function from `codetools`. This function list all the external dependencies of a function:
+One way to detect this problem is the `findGlobals()` function from `codetools`. This function lists all the external dependencies of a function:
 
 ```R
 f <- function() x + 1
@@ -331,7 +331,7 @@ That everything in R is represented as a function call is important to know for 
 
 ## Function arguments
 
-It's useful to distinguish between the formal arguments and the actual arguments to a function. The formal arguments are a property of the function, whereas the actual or calling arguments vary each time you call the function. This section discusses how calling arguments are mapped to formal arguments, how you can call a function given a list of argunments, how default arguments work and the impact of lazy evaluation.
+It's useful to distinguish between the formal arguments and the actual arguments to a function. The formal arguments are a property of the function, whereas the actual or calling arguments vary each time you call the function. This section discusses how calling arguments are mapped to formal arguments, how you can call a function given a list of arguments, how default arguments work and the impact of lazy evaluation.
 
 ### Calling functions
 
@@ -349,7 +349,7 @@ f(2, 3, a = 1)
 f(1, 3, b = 1)
 ```
 
-Generally, you only want to use positional matching for the first one or two arguments: they will be the mostly commonly used, and most readers will know what they are. Avoid using positional matching for less commonly used arguments, and only use readable abbreviations with partial matching. (If you are writing code for a package that you want to publish on CRAN you can not use partial matching, and must use complete names.) Named arguments should always come after unnamed arguments. If an function uses `...` (discussed in more detail below), you can only specify arguments listed after `...` with their full name.
+Generally, you only want to use positional matching for the first one or two arguments: they will be the mostly commonly used, and most readers will know what they are. Avoid using positional matching for less commonly used arguments, and only use readable abbreviations with partial matching. (If you are writing code for a package that you want to publish on CRAN you can not use partial matching, and must use complete names.) Named arguments should always come after unnamed arguments. If a function uses `...` (discussed in more detail below), you can only specify arguments listed after `...` with their full name.
 
 These are good calls:
 
@@ -642,7 +642,7 @@ R's default precedence rules mean that infix operators are composed from left to
 "a" %-% "b" %-% "c"
 ```
 
-There's one infix function that I use very often. It's inspired by Ruby's `||` logical or operator, although it works a little differently in R because ruby has a more flexible definition of what evaluates to `TRUE` in an if statement. It's useful as a way of providing a default value in case the output of another function is `NULL`:
+There's one infix function that I use very often. It's inspired by Ruby's `||` logical or operator, although it works a little differently in R because Ruby has a more flexible definition of what evaluates to `TRUE` in an if statement. It's useful as a way of providing a default value in case the output of another function is `NULL`:
 
 ```R
 "%||%" <- function(a, b) if (!is.null(a)) a else b
@@ -665,7 +665,7 @@ x
 
 When R evaluates the assignment `second(x) <- 5`, it notices that the left hand side of the `<-` is not a simple name, so it looks for a function named `second<-` to do the replacement.
 
-I say they "act" like they modifying their arguments in place, because they actually create a modified copy. We can see that by using `pryr::address()` to find the memory address of the underlying object.
+I say they "act" like they modify their arguments in place, because they actually create a modified copy. We can see that by using `pryr::address()` to find the memory address of the underlying object.
 
 ```R
 library(pryr)
@@ -742,7 +742,7 @@ names(x) <- `*tmp*`
 
 * Create infix versions of set functions: `intersect()`, `union()`, `setdiff()`
 
-* Create an replacement function that modifies a random location in vector.
+* Create a replacement function that modifies a random location in vector.
 
 ## Return values
 
