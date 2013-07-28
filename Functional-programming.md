@@ -241,7 +241,7 @@ You can call anonymous functions directly, but the code is a little tricky to re
 f <- function(x) x + 3
 f(10)
 
-# Doesn't what you expect
+# Doesn't do what you expect
 function(x) 3()
 ```
 
