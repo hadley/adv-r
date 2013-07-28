@@ -462,7 +462,7 @@ system.time(compute_mean[["manual"]](x))
 If we want to call each functions to check that we've implemented them correctly and they return the same answer, we can use `lapply()`, either with an anonymous function, or an equivalent named function.
 
 ```R
-lapply(compute_mean, function(f, ...) f(...))
+lapply(compute_mean, function(f, ...) f(...), x)
 
 call_fun <- function(f, ...) f(...)
 lapply(compute_mean, call_fun, x)
