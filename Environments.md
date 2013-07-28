@@ -34,15 +34,15 @@ The job of an environment is to associate, or __bind__, a set of names to values
     f$a
     ```
 
-* Environments have parents: if an object is not found in an environment, then R can look in its parent (and so on). There is only one exception: the __empty__ environment does not have a parent.
+* Environments have parent: if an object is not found in an environment, then R can look in its parent (and so on). There is only one exception: the __empty__ environment does not have a parent.
 
-    We use the family metaphor to refer to other environments: the grandparent of a environment would be the parent's parent, and the ancestors include all parent environments all the way up to the empty environment. It's rare to talk about the children of an environment because there are no back links: given an environment we have no way to find its children.
+    We use the family metaphor to refer other environments: the grandparent of a environment would be the parent's parent, and the ancestors include all parent environments all the way up to the empty environment. It's rare to talk about the children of an environment because there are no back links: given an environment we have no way to find its children.
 
 * Every object in an environment must have a name, and the names must be unique.
 
 Technically, an environment is made up of a __frame__, a collection of named objects (like a list), and a reference to a parent environment.  
 
-As well as powering scoping, environments can be also useful data structures because unlike almost every other type of object in R, modification takes place without a copy. This is not something that you should use without thought: it will violate users' expectations about how R code works, but it can sometimes be critical for high performance code.  However, since the addition of [[R5]], you're generally better of using reference classes instead of raw environments. Environments can also be to simulate hashmaps common in other packages, because name lookup is implemented with a hash, which means that lookup is O(1). See the CRAN package hash for an example. 
+As well as powering scoping, environments can be also useful data structures because unlike almost every other type of object in R, modification takes place without a copy. This is not something that you should use without thought: it will violate users expectations about how R code works, but it can sometimes be critical for high performance code.  However, since the addition of [[R5]], you're generally better of using reference classes instead of raw environments. Environments can also be to simulate hashmaps common in other packages, because name lookup is implemented with a hash, which means that lookup is O(1). See the CRAN package hash for an example. 
 
 ### Manipulating and inspecting environments
 
