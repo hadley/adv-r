@@ -1,8 +1,8 @@
 # Vocabulary
 
-An important part of being a competent R programming is having a good working vocabulary. Below, I have listed the functions that I believe consistute such a vocabulary. I don't expect you to be intimately familiar with the details of every function, but you should at least be aware that they all exist. 
+An important part of being a competent R programmer is having a good working vocabulary. Below, I have listed the functions that I believe consistute such a vocabulary. I don't expect you to be intimately familiar with the details of every function, but you should at least be aware that they all exist. 
 
-I came up with this list by looking through all functions in `base`, `stats`, and `utils`, and extracting those those that I think are most useful. The list also included a few pointers to particularly important functions in other packages, some of the more important options.
+I came up with this list by looking through all functions in `base`, `stats`, and `utils`, and extracting those that I think are most useful. The list also includes a few pointers to particularly important functions in other packages, and some of the more important options.
 
 ## The basics
 
@@ -141,7 +141,7 @@ anova, coef, confint, vcov
 contrasts
 
 # Miscellaneous tests
-apropos("\\.test$")
+apropos("\\\.test$")
 
 # Random variables 
 (q, t, d, r) * (beta, binom, cauchy, chisq, exp, f, gamma, geom, 
