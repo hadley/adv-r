@@ -34,7 +34,7 @@ Take this short quiz to determine if you need to read this chapter or not:
 
 The basic data structure in R is the vector, which comes in two basic flavours: atomic vectors and lists. As well as their content, vectors have three properties: `typeof()` (what it is), `length()` (how long it is) and `attributes()` (additional arbitrary metadata).  The most common attribute is `names()`.
 
-Each type of vector comes with a `as.*` coercion function and a `is.*` testing function. But beware `is.vector()`: for historical reasons it returns `TRUE` only if the object is a vector with no attributes apart from names. Use `is.atomic(x) || is.list(x)` to test if an object is a actually vector.
+Each type of vector comes with an `as.*` coercion function and an `is.*` testing function. But beware `is.vector()`: for historical reasons it returns `TRUE` only if the object is a vector with no attributes apart from names. Use `is.atomic(x) || is.list(x)` to test if an object is a actually vector.
 
 ### Atomic vectors
 
