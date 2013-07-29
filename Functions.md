@@ -594,6 +594,14 @@ It's often better to be explicit rather than implicit, so you might instead ask 
 
 ### Exercises
 
+* Clarify the following list of odd function calls:
+
+    ```R
+    x <- sample(replace = TRUE, 20, x = c(1:10, NA))
+    y <- runif(min = 0, max = 1, 20)
+    cor(m = "k", y = y, u = "p", x = x)
+    ```R
+
 ## Special calls
 
 R supports two additional syntaxes for calling special types of functions: infix and replacement functions.
