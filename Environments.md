@@ -42,7 +42,7 @@ The job of an environment is to associate, or __bind__, a set of names to values
 
 Technically, an environment is made up of a __frame__, a collection of named objects (like a list), and a reference to a parent environment.  
 
-As well as powering scoping, environments can be also useful data structures because unlike almost every other type of object in R, modification takes place without a copy. This is not something that you should use without thought: it will violate users' expectations about how R code works, but it can sometimes be critical for high performance code.  However, since the addition of [[R5]], you're generally better of using reference classes instead of raw environments. Environments can also be to simulate hashmaps common in other packages, because name lookup is implemented with a hash, which means that lookup is O(1). See the CRAN package hash for an example. 
+As well as powering scoping, environments can be also useful data structures because unlike almost every other type of object in R, modification takes place without a copy. This is not something that you should use without thought: it will violate users' expectations about how R code works, but it can sometimes be critical for high performance code.  However, since the addition of [[R5]], you're generally better off using reference classes instead of raw environments. Environments can also be used to simulate hashmaps common in other packages, because name lookup is implemented with a hash, which means that lookup is O(1). See the CRAN package hash for an example. 
 
 ### Manipulating and inspecting environments
 
@@ -132,7 +132,7 @@ There are a few special environments that you can access directly:
 
 * `emptyenv()`: the ultimate ancestor of all environments, the only environment without a parent.
 
-The most common environment is the global environment (`globalenv()`) which corresponds to the to your top-level workspace. The parent of the global environment is one of the packages you have loaded (the exact order will depend on which packages you have loaded in which order). The eventual parent will be the base environment, which is the environment of "base R" functionality, which has the empty environment as a parent.
+The most common environment is the global environment (`globalenv()`) which corresponds to the top-level workspace. The parent of the global environment is one of the packages you have loaded (the exact order will depend on which packages you have loaded in which order). The eventual parent will be the base environment, which is the environment of "base R" functionality, which has the empty environment as a parent.
 
 `search()` lists all environments in between the global and base environments. This is called the search path, because any object in these environments can be found from the top-level interactive workspace. It contains an environment for each loaded package and for each object (environment, list or Rdata file) that you've `attach()`ed. It also contains a special environment called `Autoloads` which is used to save memory by only loading package objects (like big datasets) when needed. You can access the environments of any environment on the search list using `as.environment()`.  
 
@@ -233,7 +233,7 @@ The following sections will explain why each of these environments are important
 
 ### The environment where the function was created
 
-When a function is created, it gains a reference to the environment where it was made. This is the parent, or enclosing, enviroment of the function used by lexical scoping. You can access this environment with the `environment()` function:
+When a function is created, it gains a reference to the environment where it was made. This is the parent, or enclosing, environment of the function used by lexical scoping. You can access this environment with the `environment()` function:
 
 ```R
 x <- 1
