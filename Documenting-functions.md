@@ -265,7 +265,7 @@ Since S3 classes have no formal structure, you should document the constructor f
 
 ### Documenting a S4 class
 
-Typically you should the `setClass` call, and if present, the constructor function.  Unless you want to separate out internal documentation for the class and the public interface (for the constructor), I recommend using `@rdname` to document both in the same file.  This will mean that `?classname` and `class?classname` go to the same place.
+Typically you should document the `setClass` call, and if present, the constructor function.  Unless you want to separate out internal documentation for the class and the public interface (for the constructor), I recommend using `@rdname` to document both in the same file.  This will mean that `?classname` and `class?classname` go to the same place.
 
 Export the class if you want other developers to be able to write subclasses of your class.  Export the constructor if you want users to be able to use it.
 
