@@ -121,15 +121,18 @@ a[0, -2]
 
 By default, `[` will simplify the results to the lowest possible dimensionality. See the section below on simplifying vs. preserving subsetting for how to avoid this.
 
-Because matrices and arrays are implemented as vectors with special attributes, you can also subset them with a single vector, in which case they will behave like a vector.
+Because matrices and arrays are implemented as vectors with special attributes, you can also subset them with a single vector, in which case they will behave like a vector. Arrays in R are stored in row major order:
+
+```R
+(vals <- outer(1:5, 1:5, FUN = "paste", sep = ","))
+vals[c(4, 15)]
+```
 
 You can also subset high-d data structures with an integer matrix (or, if named, a character matrix). Each row in the matrix specifies the location of a value, with each column corresponding to a dimension in the array being subsetted. The result is a vector of values:
 
 ```R
 vals <- outer(1:5, 1:5, FUN = "paste", sep = ",")
-vals
-
-select <- matrix(ncol = 2, byrow = 2, c(
+select <- matrix(ncol = TRUE, byrow = 2, c(
   1, 1,
   3, 1,
   2, 4
@@ -163,11 +166,20 @@ df[, "x"]
 
 S3 objects are always made up of atomic vectors, arrays and lists, so you can always pull apart an S3 object using the techniques described above and the knowledge you gain from `str()`.
 
-### S4
+### S4 objects
 
 There are also two additional subsetting operators that are needed for S4 objects: `@` (equivalent to `$`), and `slot()` (equivalent to `'[[`). `@` is also more restrictive than `$` in that it will return an error if the slot does not exist.  These are described in more detail in [[OO-essentials]].
 
 ### Exercises
+
+* Fix each of the following common data frame subsetting errors:
+
+    ```R
+    mtcars[mtcars$cyl = 4, ]
+    mtcars[-1:4, ]
+    mtcars[mtcars$cyl <= 5]
+    mtcars[mtcars$cyl == 4 | 6, ]
+    ```
 
 * Why does `x <- 1:5; x[NA]` yield five missing values? Hint: why is it different to `x[NA_real_]`?
 
@@ -368,7 +380,7 @@ mtcars <- lapply(mtcars, as.integer)
 With lists, you can use subsetting + assignment + `NULL` to remove components from a list. To add a literal `NULL` to a list, use `[` and `list(NULL)`:
 
 ```R
-x <- list(a = 1)
+x <- list(a = 1, b = 2)
 x[["b"]] <- NULL
 str(x)
 
@@ -524,7 +536,7 @@ It's useful to be aware of the natural equivalence between set operations (integ
 
 * You have very few `TRUE`s and very many `FALSE`s; a set representation may be faster and require less storage
 
-`which()` allows you to convert from a boolean representation to a logical representation. There's no reverse operation in base R, but we can easily add one:
+`which()` allows you to convert from a boolean representation to a integer representation. There's no reverse operation in base R, but we can easily add one:
 
 ```R
 x <- sample(10) < 4
