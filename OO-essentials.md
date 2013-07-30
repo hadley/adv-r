@@ -58,6 +58,20 @@ RC$new()
 new("RC")
 ```
 
+### Is class?
+
+* base: `is.double`, `is.character` etc, or `typename() ==`
+* S3: `inherits`
+* S4: `is`
+* RC: `is` (also inherits from `refClass`)
+
+### List class
+
+* base: `typename`
+* S3: `class`
+* S4: `is`
+* RC: `is`
+
 ### New generic function
 
 * base: N/A
