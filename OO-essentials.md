@@ -22,26 +22,110 @@ If you are creating more complicated systems of interrelated objects, S4 may be 
 
 * [S4 system development in Bioconductor](http://www.bioconductor.org/help/course-materials/2010/AdvancedR/S4InBioconductor.pdf)
 
-Reference classes differ from S3 and S4 in two important ways: 
+Reference classes differ from S3 and S4 in two important ways: these properties makes this object system behave much more like Java and C#. Surprisingly, the implementation of reference classes is almost entirely in R code - they are a combination of S4 methods and environments. Note that when using reference based classes we want to minimise side effects, and use them only where mutable state is absolutely required. The majority of functions should still be "functional", and side effect free. This makes code easier to reason about (because you don't need to worry about methods changing things in surprising ways), and easier for other R programmers to understand.
 
-These properties makes this object system behave much more like Java and C#. Surprisingly, the implementation of reference classes is almost entirely in R code - they are a combination of S4 methods and environments.
+## Comparison
 
-Note that when using reference based classes we want to minimise side effects, and use them only where mutable state is absolutely required. The majority of functions should still be "functional", and side effect free. This makes code easier to reason about (because you don't need to worry about methods changing things in surprising ways), and easier for other R programmers to understand.
+### New class
+
+```R
+## Base: none, already predefined
+## S3: none, just applied class attribute
+## S4
+setClass("classname", contains = c("classes", "to", "inherit", "from"))
+## Ref class
+RC <- setRefClass("classname", contains = , methods = )
+```
+
+### New object
+
+```R
+# Object creation
+## Base: vector(), list(), ...
+## S3: apply class attribute
+b <- structure(list(), class = "S3")
+# or
+b <- list()
+class("b") <- "S3"
+
+## S4
+c <- new("S4")
+
+## Ref class
+# Best: save object returned by setRefClass and call new method
+RC$new()
+# or create like S4
+new("RC")
+```
+
+### New generic function
+
+* base: N/A
+* S3: `UseMethod`
+* S4: `setGeneric` + `standardGeneric` or existing function.
+* R5: no generic functions, classes have methods.
+
+### New method
+
+* base: N/A can't create new user methods (e.g. `identical`, `unique`)
+* S3: `generic.class <- function() {}`
+* S4: `setMethod`
+* R5: on creation, or call `$methods` function on class object
+
+### Method dispatch
+
+* base: occurs at C-level. Switch statement based on `typename()`. Most also do S3/S4 dispatch.
+
+* S3: find first matching method from `paste0(generic, ".", c(class(x), "default"))`
+
+* S4: First look for exact match between signature and methods. If not found, calculate distance based on inheritance graph. If unique closest, use that, otherwise use first lexographically with warning.
+
+* R5: look for method in class; if not found recurse up inheritance.
+
+### Call parent method
+
+* base: usually not possible. Sometimes special function available e.g. `.subset2` is the default for `[[`
+
+* S3: `NextMethod()`
+
+* S4: `callNextMethod()`
+
+* R5: `$callSuper(...)`
 
 ## S3
+
+```R
+source("4-s3.r")
+prob <- function(x) minmax(x, 0, 1)
+likert <- function(x) minmax(x, 1, 5)
+
+df <- data.frame(
+  x = prob(runif(10, 0.2, 0.9)),
+  y = likert(sample(1:4, 10, rep = T)))
+
+range(df$x)
+range(df$y)
+```
 
 ### Object class
 
 The class of an object is determined by its `class` attribute, a character vector of class names. The following example shows how to create an object of class `foo`: 
 
 ```R
-x <- 1
-attr(x, "class") <- "foo"
-x
+# Structure function takes vector and adds attributes
+# class attribute determines S3 class
+structure(1:10, min = 0, max = 10, 
+  class = "minmax")
 
-# Or in one line
-x <- structure(1, class = "foo")
-x
+# Customary to create convenience function to create
+# objects of specific class
+minmax <- function(x, minx = min(x), maxx = max(x)) {
+  stopifnot(is.numeric(x))
+  
+  structure(x, min = minx, max = maxx, 
+    class = "minmax")
+}
+minmax(1:10)
 ```
 
 Class is stored as an attribute, but it's better to modify it using the `class()` function, since this communicates your intent more clearly:
@@ -82,26 +166,41 @@ myclass <- function(a, b) {
 You should also provide a function that tests for your class:
 
 ```R
-is.myclass <- function(x) inherits(x, "myclass")
+is.minmax <- function(x) {
+  inherits(x, "minmax")
+  # "minmax" %in% attr(x, "class")
+}
+is.minmax(minmax(1:10))
 ```
 
 ### Generic functions and method dispatch
 
-Method dispatch starts with a generic function that decides which specific method to dispatch to. Generic functions all have the same form: a call to `UseMethod` that specifies the generic name and the object to dispatch on. This means that generic functions are usually very simple, like `mean`:
+Method dispatch starts with a generic function that decides which specific method to dispatch to. Generic functions all have the same form: a call to `UseMethod` that specifies the generic name and the object to dispatch on. 
+
+The first method method that most classes implemented is `print()`. Methods are ordinary functions that use a special naming convention: `generic.class`:
 
 ```R
- mean <- function (x, ...) {
-   UseMethod("mean", x)
- }
+print.minmax <- function(x, ...) {
+  print(as.numeric(x))
+  cat("Range: [", attr(x, "min"), ", ", 
+    attr(x, "max"), "]\n", sep = "")  
+}
+minmax(1:10)
 ```
 
-Methods are ordinary functions that use a special naming convention: `generic.class`:
+There are no checks for correctness, so this is easy to abuse:
 
 ```R
-mean.numeric <- function(x, ...) sum(x) / length(x)
-mean.data.frame <- function(x, ...) sapply(x, mean, ...)
-mean.matrix <- function(x, ...) apply(x, 2, mean)
+mod <- glm(log(mpg) ~ log(disp), data = mtcars)
+class(mod)
+class(mod) <- "lm"
+mod
+
+class(mod) <- "table"
+mod
 ```
+
+If you've used other stricter object oriented languages, you're probably feeling a little queasy with how fast and loose R plays. But surprisingly, this doesn't cause that many problems - instead of the language enforcing certain properties you need to do it yourself.
 
 (These are somewhat simplified versions of the real code).  
 
@@ -142,36 +241,23 @@ methods("t")
 
 Non-visible functions are functions that haven't been exported by a package, so you'll need to use the `getAnywhere` function to access them if you want to see the source.
 
-### Internal generics
-
-Some internal C functions are also generic, which means that the method dispatch is not performed by R function, but is instead performed by special C functions. It's important to know which functions are internally generic, so you can write methods for them, and so you're aware of the slight differences in method dispatch. It's not easy to tell if a function is internally generic, because it just looks like a typical call to a C:
-
-```R
-length <- function (x)  .Primitive("length")
-cbind <- function (..., deparse.level = 1) 
-  .Internal(cbind(deparse.level, ...))
-```
-
-As well as `length` and `cbind`, internal generic functions include `dim`, `c`, `as.character`, `names` and `rep`. A complete list can be found in the global variable `.S3PrimitiveGenerics`, and more details are given in `?InternalMethods`.
-
-Internal generic have a slightly different dispatch mechanism to other generic functions: before trying the default method, they will also try dispatching on the __mode__ of an object, i.e. `mode(x)`. The following example shows the difference:
-
-```R
-x <- structure(as.list(1:10), class = "myclass")
-length(x)
-# [1] 10
-
-mylength <- function(x) UseMethod("mylength", x)
-mylength.list <- function(x) length(x)
-mylength(x)
-# Error in UseMethod("mylength", x) : 
-#  no applicable method for 'mylength' applied to an object of class
-#  "myclass"
-```
-
 ### Inheritance
 
 The `NextMethod` function provides a simple inheritance mechanism, using the fact that the class of an S3 object is a vector. This is very different behaviour to most other languages because it means that it's possible to have different inheritance hierarchies for different objects:
+
+```R
+"[.minmax" <- function(x, ...) {
+  minmax(NextMethod(), minx = attr(x, "min"), 
+    maxx = attr(x, "max"))
+}
+
+# Basically equivalent to
+"[.minmax" <- function(x, ...) {
+  class(x) <- class(x)[-1]
+  minmax("["(x, ...), minx = attr(x, "min"), 
+    maxx = attr(x, "max"))
+}
+```
 
 ```R
 baz <- function(x) UseMethod("baz", x)
@@ -224,6 +310,35 @@ baz.c(1)
 ```
 
 (Contents adapted from the [R language definition](http://cran.r-project.org/doc/manuals/R-lang.html#Object_002doriented-programming).  This document is licensed with the GPL-2 license.)
+
+
+### Internal generics
+
+Some internal C functions are also generic, which means that the method dispatch is not performed by R function, but is instead performed by special C functions. It's important to know which functions are internally generic, so you can write methods for them, and so you're aware of the slight differences in method dispatch. It's not easy to tell if a function is internally generic, because it just looks like a typical call to a C:
+
+```R
+length <- function (x)  .Primitive("length")
+cbind <- function (..., deparse.level = 1) 
+  .Internal(cbind(deparse.level, ...))
+```
+
+As well as `length` and `cbind`, internal generic functions include `dim`, `c`, `as.character`, `names` and `rep`. A complete list can be found in the global variable `.S3PrimitiveGenerics`, and more details are given in `?InternalMethods`.
+
+Internal generic have a slightly different dispatch mechanism to other generic functions: before trying the default method, they will also try dispatching on the __mode__ of an object, i.e. `mode(x)`. The following example shows the difference:
+
+```R
+x <- structure(as.list(1:10), class = "myclass")
+length(x)
+# [1] 10
+
+mylength <- function(x) UseMethod("mylength", x)
+mylength.list <- function(x) length(x)
+mylength(x)
+# Error in UseMethod("mylength", x) : 
+#  no applicable method for 'mylength' applied to an object of class
+#  "myclass"
+```
+
 
 ### Best practices
 
