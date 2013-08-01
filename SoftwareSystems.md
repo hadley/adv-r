@@ -101,7 +101,7 @@ that will work within our sequence framework.
 
 ## S3
 
-S3 is R's first system for class system. It was first described in the
+S3 was R's first class system. It was first described in the
 1992 "White Book" (Chambers & Hastie, 1991) and it is the only object
 system used by the base R installation. In this system, new data types or 
 classes are built from native types (vector, list, etc.) but they are given 
