@@ -154,10 +154,10 @@ also of type `SequenceData`.
 By defining data types we can create special functions,
 called methods that behave differently depending on the type of the object
 passed to the method. For example, let's say that we want to be able 
-to handle the generation of all any type integer sequences with a method, called
+to handle the generation of integer sequences with a method, called
 `nextNum`. The `nextNum` function will return an object, which
 could be a `FibonacciData` object, and from the returned object we
-get get the next value in the sequence. This is easily accomplished 
+get the next value in the sequence. This is easily accomplished 
 by creating __generic functions__, which will allow us to define 
 a `nextNum` and `value` method for different types of sequences. 
 
@@ -178,7 +178,7 @@ The second argument to UseMethod says that specific methods will be called,
 or __dispatched__, based on the type of the variable `x`.
 Now that the generic function has been defined we can define methods, 
 called `nextNum` and `value` which each take an object of type 
-`SequenceData` or `FibonacciData` and performs the appropriate operation.
+`SequenceData` or `FibonacciData` and perform the appropriate operation.
 
     nextNum.SequenceData <- function(x) {
       stop("You can't call nextNum on an abstract SequenceData type")
