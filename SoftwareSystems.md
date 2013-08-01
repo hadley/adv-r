@@ -17,7 +17,7 @@ and allows other users to extend your new capabilities.
 Data structures are generally associated with a set of functions that
 are created to work with them. The data structures and their functions
 can be encapsulated to create classes. Classes help us to compartmentalize
-conceptually coherent pieces of software. For example, an R vector is
+conceptually coherent pieces of software. For example, an R vector is a
 class holding a sequence of atomic types in R. We can create an instance 
 of a vector using one of R's vector creation routines.
 
