@@ -1,8 +1,8 @@
 # OO field guide
 
-This chapter provides a field guide for recognising and working with R's objects in the wild. R has three object oriented systems (plus the base data structures), so it can be a bit intimidating. The goal of this guide is not to make you an expert in all three systems, but to help you identify what system you're working with, and ensure you know the basics of that system.
+This chapter provides a field guide for recognising and working with R's objects in the wild. R has three object oriented systems (plus the base data structures), so it can be a bit intimidating. The goal of this guide is not to make you an expert in all three systems, but to help you identify what system you're working with, and ensure you know the basics of that system. The systems are organised by their abundance in the wild.
 
-Central to any object-oriented system are the concepts of class and method. A __class__ defines a type of __object__, describing what properties it possesses, how it behaves, and how it relates to other classes. Every object must be an instance of some class. A __method__ is a function associated with a particular type of object.
+Central to any object-oriented system are the concepts of class and method. A __class__ defines the bevahiour on of __object__, describing the data fields that it possesses, how function calls are specialised for it and how it behaves, and how it relates to other classes. Every object must be an instance of some class. A __method__ is a function associated with a particular type of object.  Classes are usually organised in a hierarchy: a parent class, defines default behaviour not otherwise overriden by the child class.
 
 R's three OO systems differ in how objects and methods are defined:
 
@@ -17,6 +17,10 @@ There's also one other system that's not quite OO, but it's important to mention
 * __primitive__: implemented at C-level and switches between different types of base data structures. Not user extensible. This is basically equivalent to writing an R function that uses `switch(typeof(x))`
 
 This leads to four types of object in R: base objects (no OO), S3, S4 and ref classes. It's most important to understand what sort of object you have, and how method dispatch works for each type.
+
+## Base objects
+
+We discussed the base objects in 
 
 ## S3
 
@@ -80,7 +84,7 @@ methods("t")
 
 ### Defining classes and creating objects
 
-S3 is a very simple and adhoc system: there is no formal definition of a class and to make an object an instance of a class, you just set the class attribute. You can do that `attr()`, `class()`, or during creation with `structure()`:
+S3 is a very simple and adhoc system: there is no formal definition of a class and to make an object an instance of a class, you just take an existing base object and set the class attribute. You can do that `attr()`, `class()`, or during creation with `structure()`:
 
 ```R
 foo <- list()
@@ -89,6 +93,8 @@ class(foo) <- "foo"
 
 foo <- structure(list(), class = "foo")
 ```
+
+(You can do this for any object described in [[data-strutures]], and for functions. Other more exotic objects (like symbols and environments) will need to be wrapped in a list.)
 
 While class is stored as an attribute, but it's better to modify it using the `class()` function, since this communicates your intent more clearly. Most S3 classes will provide a constructor function:
 
@@ -131,7 +137,7 @@ bar(z)
 
 Once `UseMethod` has found the correct method, it's invoked in a special way. Rather than creating a new evaluation environment, it uses the environment of the current function call (the call to the generic), so any assignments or evaluations that were made before the call to UseMethod will be accessible to the method. The arguments that were used in the call to the generic are passed on to the method in the same order they were received.
 
-Because methods are normal R functions, you can call them directly. However, this is just as dangerous as changing the class of an object so you shouldn't do it: please don't point a loaded gun at your foot!
+Because methods are normal R functions, you can call them directly. However, this is just as dangerous as changing the class of an object so you shouldn't do it: please don't point the loaded gun at your foot!
 
 ```R
 bar.x <- function(x) "x"
@@ -142,20 +148,50 @@ bar.x(z)
 
 ## S4
 
-S4 works in a very similar way to S3, but it is much more formal and ad-hoc. Methods still belong to functions, not classes, but:
+S4 works in a very similar way to S3, but it is much more formal and rigorous. Methods still belong to functions, not classes, but:
 
-* Classes have a formal definition of their fields, and their superclasses (classes from which behaviour is inherited)
-
-* There is a specific operator, `@`, for extracting fields out of an S4 object
+* Classes have a formal definition of their fields, and their parent classes
 
 * Method dispatch can be based on multiple objects, not just one.
 
+* There is a specific operator, `@`, for extracting fields out of an S4 object
+
+There aren't any S4 classes in the commonly used base packages (stats, graphics, utils, datasets, and base), so we'll start by creating an S4 from the built-in stats4 package, which provides some S4 classes and methods associated with maximum likelihood estimation:
+
+```R
+library(stats4)
+
+# From example(mle)
+y <- c(26, 17, 13, 12, 20, 5, 9, 8, 5, 4, 8)
+nLL <- function(lambda) -sum(dpois(y, lambda, log = TRUE))
+fit <- mle(nLL, start = list(lambda = 5), nobs = length(y))
+```
+
 ### Recognising objects, generic functions and methods
 
+Recognising S4 objects, generics and methods is easy. You can identify an S4 object because `str()` describes it as a "formal" class, `isS4()` is true, and `pryr::otype()` returns "S4". S4 generics and methods are also easy to identify because they are S4 objects with well defined classes:
+
+```R
+isS4(fit)
+class(fit)
+otype(fit)
+
+isS4(nobs)
+class(nobs)
+ftype(nobs)
+
+# Retrieve an S4 method using getMethod
+mle_nobs <- getMethod("nobs", "mle")
+isS4(mle_nobs)
+class(mle_nobs)
+ftype(mle_nobs)
+```
+
+You can recognise the creation of S4 classes, generics and methods in code by the use of `setClass()`, `setGeneric()` and `setMethod()` respectively.
 
 ### Defining classes and creating objects
 
-In S3, you can turn any object into an object of a particular class just by setting the class attribute.  S4 is much stricter: you must define the representation of the call using `setClass`, and the only way to create it is through the constructer function `new`.
+In S3, you can turn any object into an object of a particular class just by setting the class attribute.  S4 is much stricter: you must define the representation of the call using `setClass()`, and the only way to create it is through the constructer function `new()`.
 
 An S4 class has three key properties:
 
@@ -168,33 +204,23 @@ An S4 class has three key properties:
 * a character vector of classes that it inherits from, or in 
   S4 terminology, __contains__. 
 
-You create a class with `setClass`:
+You create a class with `setClass()` and create an instance of a class with `new()`
 
 ```R
 setClass("Person", 
   representation(name = "character", age = "numeric"))
 setClass("Employee", 
   representation(boss = "Person"), contains = "Person")
-```
 
-and create an instance of a class with `new`:
-
-```R
-hadley <- new("Person", name = "Hadley", age = 31)
-```
-
-You can usually find the documentation for a class with `class?className`
-
-To access slots of an S4 object you use `@`:
-
-```R
 hadley <- new("Person", name = "Hadley", age = 33)
-hadley@age
 ```
 
-Or if you have a character string giving a slot name, you use the `slot` function:
+You can find the documentation for a class with `class?className`, and often S4 classes provide a constructor function with the same name as the class. Compare `class?mle` to `?mle`.
+
+To access slots of an S4 object you use `@` or `slot()`:
 
 ```R
+hadley@age
 slot(hadley, "age")
 ```
 
@@ -207,28 +233,31 @@ Note that there's some tension between the usual interactive functional style of
 
 ### Method dispatch
 
-This section describes the strategy for matching a call to a generic function to the correct method. If there's an exact match between the class of the objects in the call, and the signature of a method, it's easy - the generic function just calls that method.  Otherwise, R will figure out the method using the following method:
+S4 method dispatch is considerably more complicated than S3 dispatch because in S4, methods can dispatch on any number of arguments. The following is a somewhat simplified description of how it works.
+
+If there's an exact match between the class of the objects in the call, and the signature of a method, it's easy - the generic function just calls that method.  Otherwise, R will figure out the method using the following method:
 
 * For each argument to the function, calculate the distance between the class in the class, and the class in the signature. If they are the same, the distance is zero. If the class in the signature is a parent of the class in the call, then the distance is 1. If it's a grandparent, 2, and so on. Compute the total distance by adding together the individual distances.
 
-* Calculate this distance for every method. If there's a method with a unique smallest distance, use that. Otherwise, give a warning and call one of the matching methods as described below.
-
-Note that it's possible to create methods that are ambiguous - i.e. it's not clear which method the generic should pick. In this case R will pick the method that is first alphabetically and return a warning message about the situation. In this case, it's up to the class author to fix the problem by providing more specific methods.
+* Calculate this distance for every method. If there's a method with a unique smallest distance, use that. Otherwise, give a warning and call the matching method that comes first alphabetically. In this case, it's up to the class author to fix the problem by providing more specific methods.
 
 There are two special classes that can be used in the signature: `missing` and `ANY`. `missing` matches the case where the argument is not supplied, and `ANY` is used for setting up default methods.  `ANY` has the lowest possible precedence in method matching.
 
 You can also use basic classes like `numeric`, `character` and `matrix`. A matrix of (e.g.) characters will have class `matrix`. You can also dispatch on S3 classes provided that you have made S4 aware of them by calling `setOldClass`. It's also possible to dispatch on `...` under special circumstances.  See `?dotsMethods` for more details.
 
-## R5
+## RC
 
-Reference Classes (or refclasses) are new in R 2.12. They fill a long standing need for mutable objects that had previously been filled by non-core packages like `R.oo`, `proto` and `mutatr`. While the core functionality is solid, reference classes are still under active development and some details will change.  The most up-to-date documentation for Reference Classes can always be found in `?ReferenceClasses`.
+Reference classes (or RC for short) are new in R 2.12. They fill a long standing need for mutable objects that had previously been filled by contributed packages like `R.oo`, `proto` and `mutatr`. While the core functionality is solid, reference classes are still under active development and some details will change. The most up-to-date documentation for Reference Classes can always be found in `?ReferenceClasses`.
 
-There are two main differences between reference classes and S3 and S4:
+There are two main differences between RC and S3/S4:
 
-  * Refclass objects use message-passing OO
-  * Refclass objects are mutable: the usual R copy on modify semantics do not apply
+* RC methods belong to objects, not functions.
 
-These properties makes this object system behave much more like Java and C#. Surprisingly, the implementation of reference classes is almost entirely in R code - they are a combination of S4 methods and environments.  This is a testament to the flexibility of S4.
+* RC objects are mutable: the usual R copy on modify semantics do not apply
+
+These properties make RC behave much more like python/ruby/java/C#/... 
+
+Surprisingly, the implementation of reference classes is almost entirely in R code - they are a combination of S4 methods and environments.  This is a testament to the flexibility of S4.
 
 ### Recognising objects and methods
 
