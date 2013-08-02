@@ -1,10 +1,10 @@
-# OO essentials
+# OO field guide
 
-Central to any object-oriented system are the concepts of class and method. A __class__ defines a type of object, describing what properties it possesses, how it behaves, and how it relates to other types of objects. Every object must be an instance of some class. A __method__ is a function associated with a particular type of object.
+This chapter provides a field guide for recognising and working with R's objects in the wild. R has three object oriented systems (plus the base data structures), so it can be a bit intimidating. The goal of this guide is not to make you an expert in all three systems, but to help you identify what system you're working with, and ensure you know the basics of that system.
 
-R has four object oriented systems:
+Central to any object-oriented system are the concepts of class and method. A __class__ defines a type of __object__, describing what properties it possesses, how it behaves, and how it relates to other classes. Every object must be an instance of some class. A __method__ is a function associated with a particular type of object.
 
-* __base__: implemented at C-level and switches between different types of base data structures. Not user extensible.
+R's three OO systems differ in how objects and methods are defined:
 
 * __S3__, which implements a style of object oriented programming called generic-function OO. This is different to most programming languages, like Java, C++ and C#, which implement message-passing OO. In message-passing style, messages (methods) are sent to objects and the object determines which function to call. Typically this object has a special appearance in the method call, usually appearing before the name of the method/message: e.g. `canvas.drawRect("blue")`. S3 is different. While computations are still carried out via methods, a  special type of function called a __generic function__ decides which method to call, and calls look like `drawRect(canvas, "blue")`. S3 is a very casual system, and has no formal definition of classes.
 
@@ -12,89 +12,287 @@ R has four object oriented systems:
 
 * __RefClasses__, sometimes called R5 for short, is quite different to S3 and S4. In ref classes, methods belong to classes (not functions, like in S3 and S4), and objects are mutable.  Ref classes implements message-passing OO, using `$` to separate object and method: `canvas$drawRect("blue")`, and are built on top of environments and S4.
 
+There's also one other system that's not quite OO, but it's important to mention here, and that's 
+
+* __primitive__: implemented at C-level and switches between different types of base data structures. Not user extensible. This is basically equivalent to writing an R function that uses `switch(typeof(x))`
+
 This leads to four types of object in R: base objects (no OO), S3, S4 and ref classes. It's most important to understand what sort of object you have, and how method dispatch works for each type.
 
-### Picking a system
+## S3
 
-Three OO systems is a lot for one language, but for most R programming, S3 suffices. In R you usually create fairly simple objects, and use OO programming to add special behaviour to generic functions like `print()`, `summary()` and `plot()`. S3 is well suited to this domain, and the majority of OO code that I have written in R is S3. S3 is also a little quirky, and relatively poorly documented elsewhere so this capture will focus on S3, only providing a broad overview of the details of S4 and reference classes. Once you have mastered S3, S4 is relatively easy to pickup - the ideas are all the same, it is just more formal, and more verbose. If you've programmed in another language, ref classes will be natural.
+S3 is R's first and most simple OO system. Its age means it's the only OO system used in the base and stats packages, and its simplicity means that it's the most commonly used system in packages.
 
-If you are creating more complicated systems of interrelated objects, S4 may be more appropriate. S4 is used extensively by Bioconductor. The `Matrix` package by Douglas Bates and Martin Maechler is another package for which S4 is particularly well suited. It is designed to efficiently store and compute with many different special types of sparse matrix. As at version 0.999375-50 it defines 130 classes and 24 generic functions. The package is well written, well commented and fairly easy to read. The accompanying [vignette](http://cran.r-project.org/web/packages/Matrix/vignettes/Intro2Matrix.pdf) gives a good overview of the structure of the package.
+### Recognising objects, generic functions and methods
 
-* [S4 system development in Bioconductor](http://www.bioconductor.org/help/course-materials/2010/AdvancedR/S4InBioconductor.pdf)
-
-Reference classes differ from S3 and S4 in two important ways: these properties makes this object system behave much more like Java and C#. Surprisingly, the implementation of reference classes is almost entirely in R code - they are a combination of S4 methods and environments. Note that when using reference based classes we want to minimise side effects, and use them only where mutable state is absolutely required. The majority of functions should still be "functional", and side effect free. This makes code easier to reason about (because you don't need to worry about methods changing things in surprising ways), and easier for other R programmers to understand.
-
-## Comparison
-
-### New class
+Most objects you encounter in R are likely to be S3 objects, but unfortunately you can only confirm that a process of elimination: it has a class attribute (`attr(x, "class")`) but it's not a S4 object (`!is.S4(x)`). This check is automated by `pryr::otype()`, which provides an easy way to determine the OO system of an object:
 
 ```R
-## Base: none, already predefined
-## S3: none, just applied class attribute
-## S4
-setClass("classname", contains = c("classes", "to", "inherit", "from"))
-## Ref class
-RC <- setRefClass("classname", contains = , methods = )
+library(pryr)
+
+df <- data.frame(x = 1:10, y = letters[1:10])
+otype(df)    # A data frame is an S3 class
+otype(df$x)  # A numeric vector isn't
+otype(df$y)  # A factor is
 ```
 
-### New object
+In S3, methods are associated with functions, called generics, not objects or classes. (NB: This is different from pretty much every other modern programming language, so be aware.) To determine if a function is an S3 generic function, you can look at its source code:
 
 ```R
-# Object creation
-## Base: vector(), list(), ...
-## S3: apply class attribute
-b <- structure(list(), class = "S3")
-# or
-b <- list()
-class("b") <- "S3"
-
-## S4
-c <- new("S4")
-
-## Ref class
-# Best: save object returned by setRefClass and call new method
-RC$new()
-# or create like S4
-new("RC")
+mean
 ```
 
-### Is class?
+Any function that includes a call to `UseMethod()` is an S3 generic: It's the job of `UseMethod()` to finds the correct method given the input and call it. Some functions functions that don't call `UseMethod()` are also S3 generics. For example, the following three functions are also S3 generics:
 
-* base: `is.double`, `is.character` etc, or `typename() ==`
-* S3: `inherits`
-* S4: `is`
-* RC: `is` (also inherits from `refClass`)
+```R
+`[`
+sum
+cbind
+```
 
-### List class
+These functions are implemented in C, not R, and some functions do S3 dispatch in C code. If you looked at the C source code for these functions you'd see a call to `DispatchGroup` or `DispatchOrEval`, but there's an easier way to figure it out: `pryr::ftype()`:
 
-* base: `typename`
-* S3: `class`
-* S4: `is`
-* RC: `is`
+```R
+ftype(`[`)
+ftype(sum)
+ftype(cbind)
+```
 
-### New generic function
+Functions where method dispatch is handled in C code are called "internal generics" and you can read more about them in the documentation, `?"internal generic"`.
 
-* base: N/A
-* S3: `UseMethod`
-* S4: `setGeneric` + `standardGeneric` or existing function.
-* R5: no generic functions, classes have methods.
+S3 methods use a special naming scheme: `generic.class`. For example, the mean method for Date objects is called `mean.Date`, and the print method for factors is called `print.frame`. This is the reason that most modern style guides discourage the use of `.` in function names: it makes them look like S3 methods. For example, is `t.test` the `test` method for `t`? Similarly, the use of `.` in class names can also be confusing: is `print.data.frame` the `print` method for `data.frames`, or the `print.data` method for `frames`.
 
-### New method
+`pryr::ftype()` knows all about these exceptions so you can use it to reliable figure out if a function is an S3 method:
 
-* base: N/A can't create new user methods (e.g. `identical`, `unique`)
-* S3: `generic.class <- function() {}`
-* S4: `setMethod`
-* R5: on creation, or call `$methods` function on class object
+```R
+ftype(t.test)       # generic function for t tests
+ftype(t.data.frame) # data frame method for t()
+
+ftype(is.numeric)   # naming convention for testing and coercion
+ftype(as.numeric)   # there are not S3 generics for is and as
+```
+
+You can see all the methods of a generic using the `methods()` function:
+
+```R
+methods("mean")
+methods("t")
+```
+
+### Defining classes and creating objects
+
+S3 is a very simple and adhoc system: there is no formal definition of a class and to make an object an instance of a class, you just set the class attribute. You can do that `attr()`, `class()`, or during creation with `structure()`:
+
+```R
+foo <- list()
+attr(foo, "class") <- "foo"
+class(foo) <- "foo"
+
+foo <- structure(list(), class = "foo")
+```
+
+While class is stored as an attribute, but it's better to modify it using the `class()` function, since this communicates your intent more clearly. Most S3 classes will provide a constructor function:
+
+```R
+foo <- function(x) {
+  structure(list(x), class = "foo")
+}
+```
+
+and if that exists, like for `factor()` and `data.frame()`, you should use it: it will make sure you're creating the class with the correct components. The convention is that constructor functions have the same name as the class, which is usually lower case.
+
+Apart from developer supplied constructor functions, S3 has no checks for correctness. This means you can change the class of existing objects:
+
+```R
+# Create a linear model
+mod <- lm(log(mpg) ~ log(disp), data = mtcars)
+class(mod)
+
+# Turn it into a table (?!)
+class(mod) <- "table"
+# But unsurprisingly this doesn't work very well
+print(mod)
+```
+
+If you've used other object oriented languages, this probably makes you feel a little queasy. But surprisingly, this doesn't cause many problems: while you _can_ change the type of an object, you never should. R doesn't protect you from yourself: you can easily shoot yourself in the foot, but if you don't aim the gun at your foot and pull the trigger, you won't have a problem.
+
+You can determine the class of any object using `class(x)`, and check if an object inherits from a specific class using `inherits(x, "classname")`.  The class of an S3 object can be a vector, which describes behaviour from most specific to least specific. For example, the class of the `glm()` object is `c("glm", "lm")` indicating that it inherits behaviour from `"lm"`.
 
 ### Method dispatch
 
-* base: occurs at C-level. Switch statement based on `typename()`. Most also do S3/S4 dispatch.
+Method dispatch in S3 is relatively simple, and most of the components are described above. S3 generics look at the class of one argument, usually the first (if not, it will be listed as the second argument to `UseMethod()`). If `x` had more than one class, e.g. `c("foo","bar")`, `UseMethod` would look for `mean.foo` and if not found, it would then look for `mean.bar`. As a final fallback, `UseMethod` will look for a default method, `mean.default`, and if that doesn't exist it will raise an error. The same approach applies regardless of how many classes an object has:
 
-* S3: find first matching method from `paste0(generic, ".", c(class(x), "default"))`
+```R
+# An object with 26 classes, from "a" to "z"
+z <- structure(1, class = letters)
+bar <- function(x) UseMethod("bar", x)
+bar.z <- function(x) "z"
+bar(z)
+```
 
-* S4: First look for exact match between signature and methods. If not found, calculate distance based on inheritance graph. If unique closest, use that, otherwise use first lexographically with warning.
+Once `UseMethod` has found the correct method, it's invoked in a special way. Rather than creating a new evaluation environment, it uses the environment of the current function call (the call to the generic), so any assignments or evaluations that were made before the call to UseMethod will be accessible to the method. The arguments that were used in the call to the generic are passed on to the method in the same order they were received.
 
-* R5: look for method in class; if not found recurse up inheritance.
+Because methods are normal R functions, you can call them directly. However, this is just as dangerous as changing the class of an object so you shouldn't do it: please don't point a loaded gun at your foot!
+
+```R
+bar.x <- function(x) "x"
+# You can call methods directly, but you shouldn't!
+bar.x(z)
+# [1] "x"
+```
+
+## S4
+
+S4 works in a very similar way to S3, but it is much more formal and ad-hoc. Methods still belong to functions, not classes, but:
+
+* Classes have a formal definition of their fields, and their superclasses (classes from which behaviour is inherited)
+
+* There is a specific operator, `@`, for extracting fields out of an S4 object
+
+* Method dispatch can be based on multiple objects, not just one.
+
+### Recognising objects, generic functions and methods
+
+
+### Defining classes and creating objects
+
+In S3, you can turn any object into an object of a particular class just by setting the class attribute.  S4 is much stricter: you must define the representation of the call using `setClass`, and the only way to create it is through the constructer function `new`.
+
+An S4 class has three key properties:
+
+* a __name__: an alpha-numeric string that identifies the class
+
+* __representation__: a list of __slots__ (fields), giving
+  their names and classes. For example, a person class might be represented by a character name and a numeric age, as follows: 
+  `representation(name = "character", age = "numeric")`
+
+* a character vector of classes that it inherits from, or in 
+  S4 terminology, __contains__. 
+
+You create a class with `setClass`:
+
+```R
+setClass("Person", 
+  representation(name = "character", age = "numeric"))
+setClass("Employee", 
+  representation(boss = "Person"), contains = "Person")
+```
+
+and create an instance of a class with `new`:
+
+```R
+hadley <- new("Person", name = "Hadley", age = 31)
+```
+
+You can usually find the documentation for a class with `class?className`
+
+To access slots of an S4 object you use `@`:
+
+```R
+hadley <- new("Person", name = "Hadley", age = 33)
+hadley@age
+```
+
+Or if you have a character string giving a slot name, you use the `slot` function:
+
+```R
+slot(hadley, "age")
+```
+
+S4 classes have two other commonly defined properties:
+
+* validity method
+* prototype
+
+Note that there's some tension between the usual interactive functional style of R and the global side-effect causing S4 class definitions. In most programming languages, class definition occurs at compile-time, while object instantiation occurs at run-time - it's unusual to be able to create new classes interactively. In particular, note that the examples rely on the fact that multiple calls to `setClass` with the same class name will silently override the previous definition unless the first definition is sealed with `sealed = TRUE`. 
+
+### Method dispatch
+
+This section describes the strategy for matching a call to a generic function to the correct method. If there's an exact match between the class of the objects in the call, and the signature of a method, it's easy - the generic function just calls that method.  Otherwise, R will figure out the method using the following method:
+
+* For each argument to the function, calculate the distance between the class in the class, and the class in the signature. If they are the same, the distance is zero. If the class in the signature is a parent of the class in the call, then the distance is 1. If it's a grandparent, 2, and so on. Compute the total distance by adding together the individual distances.
+
+* Calculate this distance for every method. If there's a method with a unique smallest distance, use that. Otherwise, give a warning and call one of the matching methods as described below.
+
+Note that it's possible to create methods that are ambiguous - i.e. it's not clear which method the generic should pick. In this case R will pick the method that is first alphabetically and return a warning message about the situation. In this case, it's up to the class author to fix the problem by providing more specific methods.
+
+There are two special classes that can be used in the signature: `missing` and `ANY`. `missing` matches the case where the argument is not supplied, and `ANY` is used for setting up default methods.  `ANY` has the lowest possible precedence in method matching.
+
+You can also use basic classes like `numeric`, `character` and `matrix`. A matrix of (e.g.) characters will have class `matrix`. You can also dispatch on S3 classes provided that you have made S4 aware of them by calling `setOldClass`. It's also possible to dispatch on `...` under special circumstances.  See `?dotsMethods` for more details.
+
+## R5
+
+Reference Classes (or refclasses) are new in R 2.12. They fill a long standing need for mutable objects that had previously been filled by non-core packages like `R.oo`, `proto` and `mutatr`. While the core functionality is solid, reference classes are still under active development and some details will change.  The most up-to-date documentation for Reference Classes can always be found in `?ReferenceClasses`.
+
+There are two main differences between reference classes and S3 and S4:
+
+  * Refclass objects use message-passing OO
+  * Refclass objects are mutable: the usual R copy on modify semantics do not apply
+
+These properties makes this object system behave much more like Java and C#. Surprisingly, the implementation of reference classes is almost entirely in R code - they are a combination of S4 methods and environments.  This is a testament to the flexibility of S4.
+
+### Recognising objects and methods
+
+### Defining classes and creating objects
+
+Creating a new reference based class is straightforward: you use `setRefClass`. Unlike `setClass` from S4, you want to keep the results of that function around, because that's what you use to create new objects of that type:
+
+    # Or keep reference to class around.
+    Person <- setRefClass("Person")
+    Person$new()
+
+A reference class has three main components, given by three arguments to `setRefClass`:
+
+* `contains`, the classes which the class inherits from. These should be other
+  reference class objects:
+
+        setRefClass("Polygon")
+        setRefClass("Regular")
+
+        # Specify parent classes
+        setRefClass("Triangle", contains = "Polygon")
+        setRefClass("EquilateralTriangle", 
+          contains = c("Triangle", "Regular"))
+
+* `fields` are the equivalent of slots in `S4`. They can be specified as a
+  vector of field names, or a named list of field types:
+
+        setRefClass("Polygon", fields = c("sides"))
+        setRefClass("Polygon", fields = list(sides = "numeric"))
+
+  The most important property of refclass objects is that they are mutable, or
+  equivalently they have reference semantics:
+  
+        Polygon <- setRefClass("Polygon", fields = c("sides"))
+        square <- Polygon$new(sides = 4)
+        
+        triangle <- square
+        triangle$sides <- 3
+        
+        square$sides        
+
+* `methods` are functions that operate within the context of the object and
+  can modify its fields. These can also be added after object creation, as
+  described below.
+
+        setRefClass("Dist")
+        setRefClass("DistUniform", c("a", "b"), "Dist", methods = list(
+          mean <- function() {
+            (a + b) / 2
+          }
+        ))
+
+
+### Method dispatch
+
+Refclass methods are associated with objects, not with functions, and are called using the special syntax `obj$method(arg1, arg2, ...)`. (You might recall we've seen this construction before when we called functions stored in a named list). Methods are also special because they can modify fields. This is different
+
+We've also seen this construct before, when we used closures to create mutable state. Reference classes work in a similar manner but give us some extra functionality:
+
+* inheritance
+* a way of documenting methods
+* a way of specifying fields and their types
+
+## Comparison
 
 ### Call parent method
 
@@ -106,298 +304,12 @@ new("RC")
 
 * R5: `$callSuper(...)`
 
-## S3
+## Picking a system
 
-```R
-source("4-s3.r")
-prob <- function(x) minmax(x, 0, 1)
-likert <- function(x) minmax(x, 1, 5)
+Three OO systems is a lot for one language, but for most R programming, S3 suffices. In R you usually create fairly simple objects, and use OO programming to add special behaviour to generic functions like `print()`, `summary()` and `plot()`. S3 is well suited to this domain, and the majority of OO code that I have written in R is S3. S3 is also a little quirky, and relatively poorly documented elsewhere so this capture will focus on S3, only providing a broad overview of the details of S4 and reference classes. Once you have mastered S3, S4 is relatively easy to pickup - the ideas are all the same, it is just more formal, and more verbose. If you've programmed in another language, ref classes will be natural.
 
-df <- data.frame(
-  x = prob(runif(10, 0.2, 0.9)),
-  y = likert(sample(1:4, 10, rep = T)))
+If you are creating more complicated systems of interrelated objects, S4 may be more appropriate. S4 is used extensively by Bioconductor. The `Matrix` package by Douglas Bates and Martin Maechler is another package for which S4 is particularly well suited. It is designed to efficiently store and compute with many different special types of sparse matrix. As at version 0.999375-50 it defines 130 classes and 24 generic functions. The package is well written, well commented and fairly easy to read. The accompanying [vignette](http://cran.r-project.org/web/packages/Matrix/vignettes/Intro2Matrix.pdf) gives a good overview of the structure of the package.
 
-range(df$x)
-range(df$y)
-```
+* [S4 system development in Bioconductor](http://www.bioconductor.org/help/course-materials/2010/AdvancedR/S4InBioconductor.pdf)
 
-### Object class
-
-The class of an object is determined by its `class` attribute, a character vector of class names. The following example shows how to create an object of class `foo`: 
-
-```R
-# Structure function takes vector and adds attributes
-# class attribute determines S3 class
-structure(1:10, min = 0, max = 10, 
-  class = "minmax")
-
-# Customary to create convenience function to create
-# objects of specific class
-minmax <- function(x, minx = min(x), maxx = max(x)) {
-  stopifnot(is.numeric(x))
-  
-  structure(x, min = minx, max = maxx, 
-    class = "minmax")
-}
-minmax(1:10)
-```
-
-Class is stored as an attribute, but it's better to modify it using the `class()` function, since this communicates your intent more clearly:
-
-```R
-class(x) <- "foo"
-class(x)
-# [1] "foo"
-```
-
-You can use this approach to turn any object into an object of class "foo", whether it makes sense or not.
-
-Objects are not limited to a single class, and can have many classes:
-
-```R
-class(x) <- c("A", "B")
-class(x) <- LETTERS
-```
-
-As discussed in the next section, R looks for methods in the order in which they appear in the class vector. So in this example, it would be like class A inherits from class B - if a method isn't defined for A, it will fall back to B. However, if you switched the order of the classes, the opposite would be true! This is because S3 doesn't define any formal relationship between classes, or even any definition of what an individual class is. If you're coming from a strict environment like Java, this will seem pretty frightening (and it is!) but it does give your users a tremendous amount of freedom. While it's very difficult to stop someone from doing something you don't want them to do, your users will never be held back because there is something you haven't implemented yet.
-
-### Creating a new class
-
-Two basic ways to create an object in S3: with a list or with attributes.  With attributes is best if your object behaves like a vector, list if you're starting from scratch.
-
-If you're creating a new class, it's customary to also provide a constructor function that checks that the inputs are of the correct type and then creates the object.
-
-```R
-myclass <- function(a, b) {
-  stopifnot(is.numeric(a))
-  stopifnot(is.character(b))
-
-  structure(list(a = a, b = b), class = "myclass")
-}
-
-```
-
-You should also provide a function that tests for your class:
-
-```R
-is.minmax <- function(x) {
-  inherits(x, "minmax")
-  # "minmax" %in% attr(x, "class")
-}
-is.minmax(minmax(1:10))
-```
-
-### Generic functions and method dispatch
-
-Method dispatch starts with a generic function that decides which specific method to dispatch to. Generic functions all have the same form: a call to `UseMethod` that specifies the generic name and the object to dispatch on. 
-
-The first method method that most classes implemented is `print()`. Methods are ordinary functions that use a special naming convention: `generic.class`:
-
-```R
-print.minmax <- function(x, ...) {
-  print(as.numeric(x))
-  cat("Range: [", attr(x, "min"), ", ", 
-    attr(x, "max"), "]\n", sep = "")  
-}
-minmax(1:10)
-```
-
-There are no checks for correctness, so this is easy to abuse:
-
-```R
-mod <- glm(log(mpg) ~ log(disp), data = mtcars)
-class(mod)
-class(mod) <- "lm"
-mod
-
-class(mod) <- "table"
-mod
-```
-
-If you've used other stricter object oriented languages, you're probably feeling a little queasy with how fast and loose R plays. But surprisingly, this doesn't cause that many problems - instead of the language enforcing certain properties you need to do it yourself.
-
-(These are somewhat simplified versions of the real code).  
-
-As you might guess from this example, `UseMethod` uses the class of x to figure out which method to call. If `x` had more than one class, e.g. `c("foo","bar")`, `UseMethod` would look for `mean.foo` and if not found, it would then look for `mean.bar`. As a final fallback, `UseMethod` will look for a default method, `mean.default`, and if that doesn't exist it will raise an error. The same approach applies regardless of how many classes an object has:
-
-```R
-x <- structure(1, class = letters)
-bar <- function(x) UseMethod("bar", x)
-bar.z <- function(x) "z"
-bar(x)
-# [1] "z"
-```
-
-Once `UseMethod` has found the correct method, it's invoked in a special way. Rather than creating a new evaluation environment, it uses the environment of the current function call (the call to the generic), so any assignments or evaluations that were made before the call to UseMethod will be accessible to the method. The arguments that were used in the call to the generic are passed on to the method in the same order they were received.
-
-Because methods are normal R functions, you can call them directly. However, you shouldn't do this because you lose the benefits of having a generic function:
-
-```R
-bar.x <- function(x) "x"
-# You can call methods directly, but you shouldn't!
-bar.x(x)
-# [1] "x"
-bar.z(x)
-# [1] "z"
-```
-
-### Methods
-
-To find out which classes a generic function has methods for, you can use the `methods` function. Remember, in R, that methods are associated with functions (not objects), so you pass in the name of the function, rather than the class, as you might expect:
-
-```R
-methods("bar")
-# [1] bar.x bar.z
-methods("t")
-# [1] t.data.frame t.default    t.ts*       
-# Non-visible functions are asterisked
-```
-
-Non-visible functions are functions that haven't been exported by a package, so you'll need to use the `getAnywhere` function to access them if you want to see the source.
-
-### Inheritance
-
-The `NextMethod` function provides a simple inheritance mechanism, using the fact that the class of an S3 object is a vector. This is very different behaviour to most other languages because it means that it's possible to have different inheritance hierarchies for different objects:
-
-```R
-"[.minmax" <- function(x, ...) {
-  minmax(NextMethod(), minx = attr(x, "min"), 
-    maxx = attr(x, "max"))
-}
-
-# Basically equivalent to
-"[.minmax" <- function(x, ...) {
-  class(x) <- class(x)[-1]
-  minmax("["(x, ...), minx = attr(x, "min"), 
-    maxx = attr(x, "max"))
-}
-```
-
-```R
-baz <- function(x) UseMethod("baz", x)
-baz.A <- function(x) "A"
-baz.B <- function(x) "B"
-
-ab <- structure(1, class = c("A", "B"))
-ba <- structure(1, class = c("B", "A"))
-baz(ab)
-baz(ba)
-```
-
-`NextMethod()` works like `UseMethod` but instead of dispatching on the first element of the class vector, it will dispatch based on the second (or subsequent) element:
-
-```R
-baz.C <- function(x) c("C", NextMethod())
-ca <- structure(1, class = c("C", "A"))
-cb <- structure(1, class = c("C", "B"))
-baz(ca)
-baz(cb)
-```
-
-The exact details are a little tricky: `NextMethod` doesn't actually work with the class attribute of the object, it uses a global variable (`.Class`) to keep track of which class to call next. This means that manually changing the class of the object will have no impact on the inheritance:
-
-```R
-# Turn object into class A - doesn't work!
-baz.D <- function(x) {
-  class(x) <- "A"
-  NextMethod()
-}
-da <- structure(1, class = c("D", "A"))
-db <- structure(1, class = c("D", "B"))
-baz(da)
-baz(db)
-```
-
-Methods invoked as a result of a call to `NextMethod` behave as if they had been invoked from the previous method. The arguments to the inherited method are in the same order and have the same names as the call to the current method, and are therefore are the same as the call to the generic. However, the expressions for the arguments are the names of the corresponding formal arguments of the current method. Thus the arguments will have values that correspond to their value at the time NextMethod was invoked. Unevaluated arguments remain unevaluated. Missing arguments remain missing.
-
-If `NextMethod` is called in a situation where there is no second class it will return an error. A selection of these errors are shown below so that you know what to look for.
-
-```R
-c <- structure(1, class = "C")
-baz(c)
-# Error in UseMethod("baz", x) : 
-#   no applicable method for 'baz' applied to an object of class "C"
-baz.c(c)
-# Error in NextMethod() : generic function not specified
-baz.c(1)
-# Error in NextMethod() : object not specified
-```
-
-(Contents adapted from the [R language definition](http://cran.r-project.org/doc/manuals/R-lang.html#Object_002doriented-programming).  This document is licensed with the GPL-2 license.)
-
-
-### Internal generics
-
-Some internal C functions are also generic, which means that the method dispatch is not performed by R function, but is instead performed by special C functions. It's important to know which functions are internally generic, so you can write methods for them, and so you're aware of the slight differences in method dispatch. It's not easy to tell if a function is internally generic, because it just looks like a typical call to a C:
-
-```R
-length <- function (x)  .Primitive("length")
-cbind <- function (..., deparse.level = 1) 
-  .Internal(cbind(deparse.level, ...))
-```
-
-As well as `length` and `cbind`, internal generic functions include `dim`, `c`, `as.character`, `names` and `rep`. A complete list can be found in the global variable `.S3PrimitiveGenerics`, and more details are given in `?InternalMethods`.
-
-Internal generic have a slightly different dispatch mechanism to other generic functions: before trying the default method, they will also try dispatching on the __mode__ of an object, i.e. `mode(x)`. The following example shows the difference:
-
-```R
-x <- structure(as.list(1:10), class = "myclass")
-length(x)
-# [1] 10
-
-mylength <- function(x) UseMethod("mylength", x)
-mylength.list <- function(x) length(x)
-mylength(x)
-# Error in UseMethod("mylength", x) : 
-#  no applicable method for 'mylength' applied to an object of class
-#  "myclass"
-```
-
-
-### Best practices
-
-* When implementing a vector class, you should implement these methods: `length`, `[`, `[<-`, `[[`, `[[<-`, `c`.  (If `[` is implemented `rev`, `head`, and `tail` should all work). 
-
-* When implementing anything mathematical, implement `Ops`, `Math` and `Summary`.
-
-* When implementing a matrix/array class, you should implement these methods: `dim` (gets you nrow and ncol), `t`, `dimnames` (gets you rownames and colnames), `dimnames<-` (gets you colnames<-, rownames<-), `cbind`, `rbind`.
-
-* If you're implementing more complicated `print()` methods, it's a better idea to implement `format()` methods that return a string, and then implement `print.class <- function(x, ...) cat(format(x, ...), "\n"`. This makes for methods that are much easier to compose, because the side-effects are isolated to a single place.
-
-
-## S4
-
-S3 and S4 basically work the same way.
-
-Is a rigorous re-write of S3. Adds formal class, multiple inheritance and multiple dispatch. 
-
-Useful for large problems. Used extensively by Bioconductor. No evidence that it will replace S3.
-
-I use S3 95% of the time. Occassionally for more complicated problems I'll use S4. 
-
-## RefClasses
-
-Works like Java OO. Useful for truly mutable objects, e.g. GUIs or connecting to other programming languages. If you're coming from another programming language, this is likely to feel the most natural, but you will get more out of R if you understand why S3 and S4 work the way they do.
-
-## What does a function call
-
-How to find the code:
-
-* Regular function (including ref class methods)
-* S3 generic: `methods(f)`, `getS3method()`
-* S4 generic: `showMethods(f)`, `findMethod()`
-* Internal generic (may be S3 or S4): 
-* Internal or primitive function: `names.c`
-
-## What type of object?
-
-```R
-pryr::otype
-a <- 1
-b <- factor(letters)
-
-setClass("C", contains = "list")
-c <- new("C")
-setRefClass("D")
-d <- new("D")
-```
+Reference classes differ from S3 and S4 in two important ways: these properties makes this object system behave much more like Java and C#. Surprisingly, the implementation of reference classes is almost entirely in R code - they are a combination of S4 methods and environments. Note that when using reference based classes we want to minimise side effects, and use them only where mutable state is absolutely required. The majority of functions should still be "functional", and side effect free. This makes code easier to reason about (because you don't need to worry about methods changing things in surprising ways), and easier for other R programmers to understand.
