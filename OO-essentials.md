@@ -45,7 +45,7 @@ In S3, methods are associated with functions, called generics, not objects or cl
 mean
 ```
 
-Any function that includes a call to `UseMethod()` is an S3 generic: It's the job of `UseMethod()` to finds the correct method given the input and call it. Some functions functions that don't call `UseMethod()` are also S3 generics. For example, the following three functions are also S3 generics:
+Any function that includes a call to `UseMethod()` is an S3 generic: It's the job of `UseMethod()` to finds the correct method given the input and call it. Some functions that don't call `UseMethod()` are also S3 generics. For example, the following three functions are also S3 generics:
 
 ```R
 `[`
