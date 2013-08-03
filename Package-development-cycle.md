@@ -80,7 +80,7 @@ For this paradigm, you might also want to use `testthat::auto_test()` which will
 
 ### Exploratory programming
 
-Exploratory programming is the complement of confirmatory programming, when you have some idea of what you want to achieve, but you're not sure about the details. You're not sure what the functions should look like, what arguments they should have and what they should return. You may not even be sure how you are going to break down the problem into pieces. In exploratory programming, you're exploring the solution space by writing functions, and you need to freedom to rewrite large chunks of the code as you understand the problem domain better.
+Exploratory programming is the complement of confirmatory programming, when you have some idea of what you want to achieve, but you're not sure about the details. You're not sure what the functions should look like, what arguments they should have and what they should return. You may not even be sure how you are going to break down the problem into pieces. In exploratory programming, you're exploring the solution space by writing functions, and you need the freedom to rewrite large chunks of the code as you understand the problem domain better.
 
 The exploratory programming cycle is similar to confirmatory, but it's not usually worth writing the tests before writing the code, because the interface will change so much:
 
