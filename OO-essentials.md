@@ -28,7 +28,7 @@ S3 is R's first and most simple OO system. Its age means it's the only OO system
 
 ### Recognising objects, generic functions and methods
 
-Most objects you encounter in R are likely to be S3 objects, but unfortunately you can only confirm that a process of elimination: it has a class attribute (`attr(x, "class")`) but it's not a S4 object (`!is.S4(x)`). This check is automated by `pryr::otype()`, which provides an easy way to determine the OO system of an object:
+Most objects you encounter in R are likely to be S3 objects, but unfortunately you can only confirm that a process of elimination: it has a class attribute (`attr(x, "class")`) but it's not a S4 object (`!isS4(x)`). This check is automated by `pryr::otype()`, which provides an easy way to determine the OO system of an object:
 
 ```R
 library(pryr)
