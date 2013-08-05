@@ -702,7 +702,7 @@ Partial function application is straightforward in many functional programming l
 
 Instead of a minor change to the function's inputs, it's also possible to make a function work with a fundamentally different type of data. There are a few existing functions along these lines:
 
-* `base::Vectorise` converts a scalar function to a vector function. `Vectorize` takes a non-vectorised function and vectorises with respect to the arguments given in the `vectorise.args` parameter. This doesn't give you any magical performance improvements, but it is useful if you want a quick and dirty way of making a vectorised function.
+* `base::Vectorize` converts a scalar function to a vector function. `Vectorize` takes a non-vectorised function and vectorises with respect to the arguments given in the `vectorise.args` parameter. This doesn't give you any magical performance improvements, but it is useful if you want a quick and dirty way of making a vectorised function.
 
     A mildly useful extension of `sample` would be to vectorize it with respect to size: this would allow you to generate multiple samples in one call.
 
