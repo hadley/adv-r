@@ -158,7 +158,7 @@ download <- dot_every(delay_by(download.file, 1), 10)
 ```
 
 
-which is a little harder to follow because the argument to `dot_every()` is far away from the its call.  That's sometimes called the [Dagwood sandwhich](http://en.wikipedia.org/wiki/Dagwood_sandwich) problem: you have too much filling (too many long arguments) between your slices of bread (parentheses).  I've also tried to give my FOs names that you can read easily: delay by 1 (second), (print a) dot every 10 (invocations). The more clearly your code expresses your interent through function names, the easier it is for others (and future you) to understand the code.
+which is a little harder to follow because the argument to `dot_every()` is far away from the its call.  That's sometimes called the [Dagwood sandwich](http://en.wikipedia.org/wiki/Dagwood_sandwich) problem: you have too much filling (too many long arguments) between your slices of bread (parentheses).  I've also tried to give my FOs names that you can read easily: delay by 1 (second), (print a) dot every 10 (invocations). The more clearly your code expresses your interent through function names, the easier it is for others (and future you) to understand the code.
 
 Two other tasks that you can solve with a behaviour FO are:
 
