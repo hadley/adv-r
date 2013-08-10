@@ -188,7 +188,7 @@ call_tree(a)
 call_tree(b)
 ```
 
-In `a`, the first argument to mean is a integer vector containing the numbers 1 to 10, and in `b` the first argument is a call to `:`.  You can put any R object into a expression, but the printing of expression objects will not always show the difference.  
+In `a`, the first argument to mean is a integer vector containing the numbers 1 to 10, and in `b` the first argument is a call to `:`.  You can put any R object into an expression, but the printing of expression objects will not always show the difference.  
 
 The key difference is where/when evaluation occurs:
 
