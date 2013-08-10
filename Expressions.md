@@ -48,7 +48,7 @@ z
 
 `quote()` gives us back an __expression__, an object that represents an action that can be performed by R. (Confusingly the `expression()` function produces expression lists, but since you'll never need to use that function we can safely ignore it).
 
-An expression is also called an abstract syntax tree (AST) because it represents the abstruct structure of the code in a tree form. We can use `pryr::call_tree()` to see the hierarchy more clearly:
+An expression is also called an abstract syntax tree (AST) because it represents the abstract structure of the code in a tree form. We can use `pryr::call_tree()` to see the hierarchy more clearly:
 
 ```R
 library(pryr)
