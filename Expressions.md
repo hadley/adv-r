@@ -202,7 +202,7 @@ eval(b); Sys.sleep(1); eval(b)
 The first element of a call doesn't have to be the name of a function, and instead can be a call that generates a function:
 
 ```R
-(function(x) x + 1)(10))
+(function(x) (x + 1)(10))
 add <- function(y) function(x) x + y
 add(1)(10)
 
