@@ -45,7 +45,7 @@ In S3, methods are associated with functions, called generics, not objects or cl
 mean
 ```
 
-Any function that includes a call to `UseMethod()` is an S3 generic: It's the job of `UseMethod()` to finds the correct method given the input and call it. Some functions that don't call `UseMethod()` are also S3 generics. For example, the following three functions are also S3 generics:
+Any function that includes a call to `UseMethod()` is an S3 generic: It's the job of `UseMethod()` to find the correct method (given the input) and call it. There are also some S3 generic functions don't call `UseMethod()`. For example, the following three functions are S3 generics:
 
 ```R
 `[`
@@ -53,7 +53,7 @@ sum
 cbind
 ```
 
-These functions are implemented in C, not R, and some functions do S3 dispatch in C code. If you looked at the C source code for these functions you'd see a call to `DispatchGroup` or `DispatchOrEval`, but there's an easier way to figure it out: `pryr::ftype()`:
+These functions are implemented in C (instead of R) and do their S3 dispatch in C code. If you looked at the C source code for these functions you'd see a call to `DispatchGroup` or `DispatchOrEval`. You can also figure out if a function is an S3 generic without opening the C source code by using `pryr::ftype()`:
 
 ```R
 ftype(`[`)
