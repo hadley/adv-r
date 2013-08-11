@@ -2,7 +2,7 @@
 
 This chapter provides a field guide for recognising and working with R's objects in the wild. R has three object oriented systems (plus the base data structures), so it can be a bit intimidating. The goal of this guide is not to make you an expert in all three systems, but to help you identify what system you're working with, and ensure you know the basics of that system. The systems are organised by their abundance in the wild.
 
-Central to any object-oriented system are the concepts of class and method. A __class__ defines the bevahiour on of __object__, describing the data fields that it possesses, how function calls are specialised for it and how it behaves, and how it relates to other classes. Every object must be an instance of some class. A __method__ is a function associated with a particular type of object.  Classes are usually organised in a hierarchy: a parent class, defines default behaviour not otherwise overriden by the child class.
+Central to any object-oriented system are the concepts of class and method. A __class__ defines the bevahiour of an __object__, describing the data fields that it possesses, function calls that are specialised for it , and how it relates to other classes. Every object must be an instance of some class. A __method__ is a function associated with a particular type of object.  Classes are usually organised in a hierarchy: a parent class, defines default behaviour not otherwise overriden by the child class.
 
 R's three OO systems differ in how objects and methods are defined:
 
