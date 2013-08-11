@@ -84,7 +84,7 @@ methods("t")
 
 ### Defining classes and creating objects
 
-S3 is a very simple and adhoc system: there is no formal definition of a class and to make an object an instance of a class, you just take an existing base object and set the class attribute. You can do that `attr()`, `class()`, or during creation with `structure()`:
+S3 is a very simple and adhoc system: there is no formal definition of a class. To make an object an instance of a class, you just take an existing base object and set the class attribute. You can do that with `attr()`, `class()`, or during creation of the object with `structure()`:
 
 ```R
 foo <- list()
@@ -94,9 +94,9 @@ class(foo) <- "foo"
 foo <- structure(list(), class = "foo")
 ```
 
-(You can do this for any object described in [[data-strutures]], and for functions. Other more exotic objects (like symbols and environments) will need to be wrapped in a list.)
+You can do this for any object described in [[data-strutures]] and for functions. More exotic objects (like symbols and environments) will need to be wrapped in a list.
 
-While class is stored as an attribute, but it's better to modify it using the `class()` function, since this communicates your intent more clearly. Most S3 classes will provide a constructor function:
+While class is stored as an attribute, it's better to modify it using the `class()` function, since this communicates your intent more clearly. Most S3 classes will provide a constructor function:
 
 ```R
 foo <- function(x) {
@@ -104,7 +104,7 @@ foo <- function(x) {
 }
 ```
 
-and if that exists, like for `factor()` and `data.frame()`, you should use it: it will make sure you're creating the class with the correct components. The convention is that constructor functions have the same name as the class, which is usually lower case.
+If a constructor exists for the class, like it does for `factor()` and `data.frame()`, you should use it. This ensures that you're creating the class with the correct components. The convention is that constructor functions have the same name as the class, which is usually lower case.
 
 Apart from developer supplied constructor functions, S3 has no checks for correctness. This means you can change the class of existing objects:
 
@@ -119,7 +119,7 @@ class(mod) <- "table"
 print(mod)
 ```
 
-If you've used other object oriented languages, this probably makes you feel a little queasy. But surprisingly, this doesn't cause many problems: while you _can_ change the type of an object, you never should. R doesn't protect you from yourself: you can easily shoot yourself in the foot, but if you don't aim the gun at your foot and pull the trigger, you won't have a problem.
+If you've used other object oriented languages, this probably makes you feel a little queasy. Surprisingly, this doesn't cause many problems: while you _can_ change the type of an object, you never should. R doesn't protect you from yourself: you can easily shoot yourself in the foot, but if you don't aim the gun at your foot and pull the trigger, you won't have a problem.
 
 You can determine the class of any object using `class(x)`, and check if an object inherits from a specific class using `inherits(x, "classname")`.  The class of an S3 object can be a vector, which describes behaviour from most specific to least specific. For example, the class of the `glm()` object is `c("glm", "lm")` indicating that it inherits behaviour from `"lm"`.
 
