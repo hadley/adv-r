@@ -305,7 +305,7 @@ x$a
 x[["a"]]
 ```
 
-If you want to avoid this behaviour you can set `options(warnPartialMatchDollar = TRUE)` - but beware that this is a global option and maybe affect behaviour in other code you have loaded (e.g. packages).
+If you want to avoid this behaviour you can set `options(warnPartialMatchDollar = TRUE)` - but beware that this is a global option and may affect behaviour in other code you have loaded (e.g. packages).
 
 ### Missing/out of bounds indices
 
