@@ -331,7 +331,7 @@ cbind(df, data.frame(y = 4))
 rbind(df, data.frame(x = 10))
 ```
 
-When combining column-wise, only the number of rows needs to match, and rownames are ignored. When combining row-wise, the column names must match. If you want to combine rdata frames that may not have all the same variables, use `plyr::rbind.fill()`
+When combining column-wise, only the number of rows needs to match, and rownames are ignored. When combining row-wise, the column names must match. If you want to combine data frames that may not have all the same variables, use `plyr::rbind.fill()`
 
 It's a common mistake to try and create a data frame by `cbind()`ing vectors together. This doesn't work because `cbind()` will create a matrix unless one of the arguments is already a data frame. Instead use `data.frame()` directly:
 
