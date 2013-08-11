@@ -63,9 +63,9 @@ ftype(cbind)
 
 Functions where method dispatch is handled in C code are called "internal generics" and you can read more about them in the documentation, `?"internal generic"`.
 
-S3 methods use a special naming scheme: `generic.class`. For example, the mean method for Date objects is called `mean.Date`, and the print method for factors is called `print.frame`. This is the reason that most modern style guides discourage the use of `.` in function names: it makes them look like S3 methods. For example, is `t.test` the `test` method for `t`? Similarly, the use of `.` in class names can also be confusing: is `print.data.frame` the `print` method for `data.frames`, or the `print.data` method for `frames`.
+S3 methods use a special naming scheme: `generic.class`. For example, the mean method for Date objects is called `mean.Date`, and the print method for factors is called `print.frame`. This is the reason that most modern style guides discourage the use of `.` in function names: it makes them look like S3 methods. For example, is `t.test` the `test` method for `t`? Similarly, the use of `.` in class names can also be confusing: is `print.data.frame` the `print` method for `data.frames`, or the `print.data` method for `frames`?
 
-`pryr::ftype()` knows all about these exceptions so you can use it to reliable figure out if a function is an S3 method:
+`pryr::ftype()` knows all about these exceptions, so you can use it to reliably figure out if a function is an S3 method:
 
 ```R
 ftype(t.test)       # generic function for t tests
