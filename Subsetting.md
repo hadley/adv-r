@@ -132,7 +132,7 @@ You can also subset high-d data structures with an integer matrix (or, if named,
 
 ```R
 vals <- outer(1:5, 1:5, FUN = "paste", sep = ",")
-select <- matrix(ncol = 2, byrow = 2, c(
+select <- matrix(ncol = 2, byrow = TRUE, c(
   1, 1,
   3, 1,
   2, 4
