@@ -14,7 +14,7 @@ R's three OO systems differ in how objects and methods are defined:
 
 There's also one other system that's not quite OO, but it's important to mention here, and that's 
 
-* __primitive__: implemented at C-level and switches between different types of base data structures. Not user extensible. This is basically equivalent to writing an R function that uses `switch(typeof(x))`
+* __primitive__: implemented at C-level and switches between different types of base data structures. Not user extensible. This is basically equivalent to writing an R function that uses `switch(typeof(x))`. Everything else is built on top of this system: S3 objects are primitive objects with a special attributes, S4 objects are a special type of primitive object, and RC are a combination of S4 and environments (another primitive type). Base objects are discussed in [[data structures]]
 
 This leads to four types of object in R: base objects (no OO), S3, S4 and ref classes. It's most important to understand what sort of object you have, and how method dispatch works for each type.
 
@@ -72,7 +72,7 @@ ftype(t.test)       # generic function for t tests
 ftype(t.data.frame) # data frame method for t()
 
 ftype(is.numeric)   # naming convention for testing and coercion
-ftype(as.numeric)   # there are not S3 generics for is and as
+ftype(as.numeric)   # there are no S3 generics for is and as
 ```
 
 You can see all the methods of a generic using the `methods()` function:
@@ -81,6 +81,14 @@ You can see all the methods of a generic using the `methods()` function:
 methods("mean")
 methods("t")
 ```
+
+You can also list all generics that have a method for a given class:
+
+```R
+methods(class = "ts")
+```
+
+Since there's no central repository of information about S3 classes, there's no way to get a list of them all.
 
 ### Defining classes and creating objects
 
@@ -148,15 +156,15 @@ bar.x(z)
 
 ## S4
 
-S4 works in a very similar way to S3, but it is much more formal and rigorous. Methods still belong to functions, not classes, but:
+S4 works in a similar way to S3, but it is more formal and rigorous. Methods still belong to functions, not classes, but:
 
-* Classes have a formal definition of their fields, and their parent classes
+* Classes have a formal definition, describing their fields and inheritance structure (parent classes).
 
-* Method dispatch can be based on multiple objects, not just one.
+* Method dispatch can be based on multiple arguments to a generic function, not just one.
 
 * There is a specific operator, `@`, for extracting fields out of an S4 object
 
-There aren't any S4 classes in the commonly used base packages (stats, graphics, utils, datasets, and base), so we'll start by creating an S4 from the built-in stats4 package, which provides some S4 classes and methods associated with maximum likelihood estimation:
+There aren't any S4 classes in the commonly used base packages (stats, graphics, utils, datasets, and base), so we'll start by creating an S4 object from the built-in stats4 package, which provides some S4 classes and methods associated with maximum likelihood estimation:
 
 ```R
 library(stats4)
@@ -187,7 +195,19 @@ class(mle_nobs)
 ftype(mle_nobs)
 ```
 
-You can recognise the creation of S4 classes, generics and methods in code by the use of `setClass()`, `setGeneric()` and `setMethod()` respectively.
+In source code, you can recognise the creation of S4 classes, generics and methods by the use of `setClass()`, `setGeneric()` and `setMethod()` respectively.
+
+Given an S4 generic, you can find all methods with `findMethods()` or `showMethods()`.  You can get a list of all S4 classes with `getClasses()` - but note these also include some S3 and base classes.
+
+```R
+class_names <- getClasses()
+classes <- lapply(class_names, function(x) getClass(x))
+
+old <- Filter(isXS3Class, classes)
+
+```
+
+(There are additional complications in the intersection of S4 classes and packages: different packages may define different classes with the same name, and this can be distinguished based on the environment in which )
 
 ### Defining classes and creating objects
 
@@ -224,7 +244,7 @@ hadley@age
 slot(hadley, "age")
 ```
 
-S4 classes have two other commonly defined properties:
+S4 classes have two other optional defined properties:
 
 * validity method
 * prototype
@@ -233,17 +253,21 @@ Note that there's some tension between the usual interactive functional style of
 
 ### Method dispatch
 
-S4 method dispatch is considerably more complicated than S3 dispatch because in S4, methods can dispatch on any number of arguments. The following is a somewhat simplified description of how it works.
+S4 method dispatch is considerably more complicated than S3 dispatch because in S4, methods can dispatch on any number of arguments. The following is a somewhat simplified description of how it works. More details can be found in `?Methods`.
 
 If there's an exact match between the class of the objects in the call, and the signature of a method, it's easy - the generic function just calls that method.  Otherwise, R will figure out the method using the following method:
 
-* For each argument to the function, calculate the distance between the class in the class, and the class in the signature. If they are the same, the distance is zero. If the class in the signature is a parent of the class in the call, then the distance is 1. If it's a grandparent, 2, and so on. Compute the total distance by adding together the individual distances.
+* For each argument to the function, calculate the distance between the class in the class, and the class in the signature. If they are the same, the distance is zero. If the class in the signature is a parent of the class in the call, then the distance is 1. If it's a grandparent, 2, and so on. Compute the total distance between a method and a set of formal arguments by adding together the individual distances.
 
 * Calculate this distance for every method. If there's a method with a unique smallest distance, use that. Otherwise, give a warning and call the matching method that comes first alphabetically. In this case, it's up to the class author to fix the problem by providing more specific methods.
 
 There are two special classes that can be used in the signature: `missing` and `ANY`. `missing` matches the case where the argument is not supplied, and `ANY` is used for setting up default methods.  `ANY` has the lowest possible precedence in method matching.
 
 You can also use basic classes like `numeric`, `character` and `matrix`. A matrix of (e.g.) characters will have class `matrix`. You can also dispatch on S3 classes provided that you have made S4 aware of them by calling `setOldClass`. It's also possible to dispatch on `...` under special circumstances.  See `?dotsMethods` for more details.
+
+Given a generic name, and a vector of object, you can find the matching method with `selectMethod`
+
+
 
 ## RC
 
