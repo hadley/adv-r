@@ -20,26 +20,9 @@ This leads to four types of object in R: base objects (no OO), S3, S4 and ref cl
 
 ## Primitive types
 
-We discussed base objects are discussed in [[data structures]].  Only R core can create new types of base object, and they do this very very rarely. 
+The primitive type of an object is the type of the underlying C structure. [[Data structures]] explained the most common primitive types (atomic vectors and lists), but primitive types also encompass functions, environments and other more exotic objects. Primitive types are not really an object system, because only R core can create new types and it requires substantial work. New types are added very rarely: the most recent change in 2011 was to add two exotic types that you never see at the R level, but are useful for diagnosing memory problems in C code (`NEWSXP` and `FREESXP`), the last change before that was in 2005, where a special primitive type for S4 objects was added. Functions that have different behaviour for different primitive types are almost always written in C, where dispatch occurs using switch statements (`switch(TYPEOF(x))`).
 
-Everything else is built on top of this system: S3 objects are primitive objects with a special attributes, S4 objects are a special type of primitive object, and RC objects are a combination of S4 and environments (another primitive type). 
-
-In R code you can get the primitive type using `typeof()`, but the names are used terribly consistently through the documentation (and in the names of `is.*()` functions - for example `is.numeric()` doesn't test only for numeric type.) An alternative is `pryr::typename()` which returns the type name used in C code.  You can find out more about these types in [[C-interface]].
-
-Primitive dispatch is written in C code, and it looks like
-
-```R
-switch(TYPEOF(a)) {
-  case LGLSXP:
-    ...
-    break
-  case INTSXP:
-    ...
-    break
-  default:
-    ...
-}
-```
+It's important to understand primitive types because everything else is built on top of them: an S3 objects is any primitive type with a special attribute, S4 objects are a special primitive type, and RC objects are a combination of S4 and environments (another primitive type). You can find out the the primitive type of any object using `typeof()`, but be aware that the names are not consistently. Pay particular attention to the documentation for the `is.*()` function - unless otherwise specified, don't assume that `is.y(x)` is the same as `typeof(x) == y`. Another option is `pryr::typename()`, which returns the type name used in C code. You can find out more about these types in [[C-interface]].
 
 ## S3
 
