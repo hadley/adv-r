@@ -568,7 +568,7 @@ I recommend the first option because it makes it very clear what's going on, and
 
 * Implement a summary function that works like `base::summary()`, but takes a list of functions to use to compute the summary. Modify the function so it returns a closure, making it possible to use it as a function factory.
 
-* Create a named list of all base functions.  Use `ls()`, `get()` and `is.fucntion()`. Use that list of functions to answer the following questions:
+* Create a named list of all base functions.  Use `ls()`, `get()` and `is.function()`. Use that list of functions to answer the following questions:
 
     * Which base function has the most arguments? 
     * How many base functions have no arguments?
