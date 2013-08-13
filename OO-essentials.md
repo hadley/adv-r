@@ -14,15 +14,17 @@ R's three OO systems differ in how objects and methods are defined:
 
 There's also one other system that's not quite OO, but it's important to mention here, and that's 
 
-* __primitive__: implemented at C-level and switches between different types of base data structures. Not user extensible. This is basically equivalent to writing an R function that uses `switch(typeof(x))`. 
+* __base__: implemented at C-level and switches between different types of base data structures. Not user extensible. This is basically equivalent to writing an R function that uses `switch(typeof(x))`. 
 
 This leads to four types of object in R: base objects (no OO), S3, S4 and ref classes. It's most important to understand what sort of object you have, and how method dispatch works for each type.
 
-## Primitive types
+## Base types
 
-The primitive type of an object is the type of the underlying C structure. [[Data structures]] explained the most common primitive types (atomic vectors and lists), but primitive types also encompass functions, environments and other more exotic objects. Primitive types are not really an object system, because only R core can create new types and it requires substantial work. New types are added very rarely: the most recent change in 2011 was to add two exotic types that you never see at the R level, but are useful for diagnosing memory problems in C code (`NEWSXP` and `FREESXP`), the last change before that was in 2005, where a special primitive type for S4 objects was added. Functions that have different behaviour for different primitive types are almost always written in C, where dispatch occurs using switch statements (`switch(TYPEOF(x))`).
+Underlying every R object is a C "struct" that describes how the object is stored in memory. The struct includes the contents of the object, information needed for memory management, and most importantly for this section, a __type__.  This is the __base type__ of an R object. Base types are not really an object system, because only R core can create new types and it requires substantial work. New types are added very rarely: the most recent change in 2011 was to add two exotic types that you never see at the R level, but are useful for diagnosing memory problems in C code (`NEWSXP` and `FREESXP`), the last change before that was in 2005, where a special base type for S4 objects was added. 
 
-It's important to understand primitive types because everything else is built on top of them: an S3 objects is any primitive type with a special attribute, S4 objects are a special primitive type, and RC objects are a combination of S4 and environments (another primitive type). You can find out the the primitive type of any object using `typeof()`, but be aware that the names are not consistently. Pay particular attention to the documentation for the `is.*()` function - unless otherwise specified, don't assume that `is.y(x)` is the same as `typeof(x) == y`. Another option is `pryr::typename()`, which returns the type name used in C code. You can find out more about these types in [[C-interface]].
+[[Data structures]] explained the most common base types (atomic vectors and lists), but base types also encompass functions, environments and other more exotic objects that you'll learn about later in the book, likes names, calls and promises. Functions that behave differently for different base types are almost always written in C, where dispatch occurs using switch statements (`switch(TYPEOF(x))`).
+
+Even if you never write C code, it's important to understand base types because everything else is built on top of them: S3 objects can be built on top of any base type, S4 objects use a special base type, and RC objects are a combination of S4 and environments (another base type). You can find out the the base type of any object using `typeof()`, but be aware that the names are not consistently. Pay particular attention to the documentation for the `is.*()` function - unless otherwise specified, don't assume that `is.y(x)` is the same as `typeof(x) == y`. Another option is `pryr::typename()`, which returns the type name used in C code. You can find out more about these types in [[C-interface]].
 
 ## S3
 
@@ -96,7 +98,7 @@ There's no way to get a list of all S3 classes, because there's no central repos
 
 ### Defining classes and creating objects
 
-S3 is a simple and adhoc system: there is no formal definition of a class. To make an object an instance of a class, you just take an existing primitive object and set the class attribute. You can do that with `attr()`, `class()`, or during creation of the object with `structure()`:
+S3 is a simple and adhoc system: there is no formal definition of a class. To make an object an instance of a class, you just take an existing base object and set the class attribute. You can do that with `attr()`, `class()`, or during creation of the object with `structure()`:
 
 ```R
 foo <- list()
@@ -164,6 +166,22 @@ bar.x(z)
 
 (The only exception is when you're writing OO code, not using someone else's, sometimes you can get considerably performance improvements by skipping regular method lookup and directly calling the correct method)
 
+As well as S3 objects, S3 generics also dispatch on the __implicit class__ of primitive types. It's easier to write a function that computes the implicit class than it is to describe it in words.
+
+```R
+iclass <- function(x) {
+  c(
+    if (is.matrix(x)) "matrix" else if (is.array(x)) "array",
+    switch(mode(x), 
+      "numeric" = c("double", "numeric"), 
+      "integer" = c("integer", "numeric"),
+      mode(x))
+  )
+}
+iclass(matrix(1:5))
+iclass(array(1.5))
+```
+
 ## S4
 
 S4 works in a similar way to S3, but it is more formal and rigorous. Methods still belong to functions, not classes, but:
@@ -209,7 +227,7 @@ ftype(mle_nobs)
 
 In source code, you can recognise the creation of S4 classes, generics and methods by the use of `setClass()`, `setGeneric()` and `setMethod()` respectively.  If a function already exists, `setGeneric()` will turn it into a S4 generic, preserving an existing behaviour: most packages that use S4 well convert existing generics into S4 generics in this way.
 
-You can get a list of all S4 generics with `getGenerics()`. Similarly, you can see all classes with `getClasses()`, but note that this list includes shim classes for some S3 and primitive classes. Also note that different packages may define different classes with the same name, so functions that list generics, classes or methods will also say which package they're defined in.
+You can get a list of all S4 generics with `getGenerics()`. Similarly, you can see all classes with `getClasses()`, but note that this list includes shim classes for some S3 classes and base types. Also note that different packages may define different classes with the same name, so functions that list generics, classes or methods will also say which package they're defined in.
 
 You can list all S4 methods with `showMethods()`, optionally restricting either by generic or by class (or both).  It's also a good idea to supply `where = search()` to restrict to methods defined by attached packages, not all packages loaded by other packages. 
 
@@ -241,14 +259,14 @@ hadley <- new("Person", name = "Hadley", age = 33)
 
 You can find the documentation for a class with `class?className`: compare `class?mle` to `?mle`. Most S4 classes also come with a constructor function with the same name as the class - if that exists, use it instead of calling `new()` directly. 
 
-Unlike S3 objects, which can be built on top of any primitive type, S4 objects are all built on top of a special S4 type. To access slots of an S4 object you use `@` or `slot()`:
+Unlike S3 objects, which can be built on top of any base type, S4 objects are all built on top of a special S4 type. To access slots of an S4 object you use `@` or `slot()`:
 
 ```R
 hadley@age
 slot(hadley, "age")
 ```
 
-If an S4 object contains (inherits) from another primitive, S3, or S4 class, you can get that object using the special `.Data` slot. This is equivalent to `unclass()`ing an S3 object.
+If an S4 object contains (inherits) from another base type, S3 class, or S4 class, you can get that object using the special `.Data` slot. This is equivalent to `unclass()`ing an S3 object.
 
 S4 classes have two other optional defined properties, a __validity method__ which tests to see if the values of an object are valid, and a __prototype__ object, which defines default values for fields not supplied when `new()` is called.
 
