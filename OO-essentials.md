@@ -154,6 +154,8 @@ If you've used other object oriented languages, this probably makes you feel que
 
 You can determine the class of any object using `class(x)`, and check if an object inherits from a specific class using `inherits(x, "classname")`.  The class of an S3 object can be a vector, which describes behaviour from most specific to least specific. For example, the class of the `glm()` object is `c("glm", "lm")` indicating that it inherits behaviour from `"lm"`.
 
+### Creating new methods and generics
+
 ### Method dispatch
 
 Method dispatch in S3 is relatively simple. S3 generics look at the class of one argument, usually the first (if not, it will be listed as the second argument to `UseMethod()`). If `x` has more than one class, e.g. `c("foo","bar")`, `UseMethod` would look for `mean.foo` and if not found, it would then look for `mean.bar`. As a final fallback, `UseMethod` will look for a default method, `mean.default`, and if that doesn't exist it will raise an error. The same approach applies regardless of how many classes an object has:
@@ -226,6 +228,8 @@ In source code, you can recognise the creation of S4 classes, generics and metho
 
 You can get a list of all S4 generics with `getGenerics()`. Similarly, you can see all classes with `getClasses()`, but note that this list includes shim classes for some S3 and primitive classes. Also note that different packages may define different classes with the same name, so functions that list generics, classes or methods will also say which package they're defined in.
 
+You can list all S4 methods with `showMethods()`, optionally restricting either by generic or by class (or both).  It's also a good idea to supply `where = search()` to restrict to methods defined by attached packages, not all packages loaded by other packages. 
+
 ### Defining classes and creating objects
 
 In S3, you can turn any object into an object of a particular class just by setting the class attribute.  S4 is much stricter: you must define the representation of the call using `setClass()`, and the only way to create it is through the constructer function `new()`.
@@ -275,22 +279,25 @@ setClass("A", list(x = "character"))
 a2 <- new("A", x = "a")
 ```
 
-This can sometimes be a problem when you're interactively experimenting - after you redefine the class, make sure you recreate the objects. It's not normally a problem otherwise, since typically you'll define the classes once, and then create the objects. (This is especially true if your classes are in a package.)
+This can be a problem when you're interactively experimenting: make sure to recreate objects whenever you modify a class, otherwise you'll end up with invalid or out-of-date objects. 
+
+### Creating new methods and generics
 
 ### Method dispatch
 
-S4 method dispatch is considerably more complicated than S3 dispatch because in S4, methods can dispatch on any number of arguments. The following is a somewhat simplified description of how it works. More details can be found in `?Methods`.
+S4 method dispatch is the same as S3 dispatch if your classes only inherit from a single parent, and you only dispatch on one class. The main difference is how you set up default values: S4 uses the special classes "ANY" and "missing" to match any class, or a missing value respectively.
 
-There are three inputs to method dispatch:
+Things get more complicated when you dispatch on multiple arguments, or you have multiple parents. It's not important to know all the details, but you should understand the broad picture so that you have some ability to predict what method will get called. More details can be found in `?Methods` and in [Software for data analysis](http://amzn.com/0387759352?tag=hadlwick-20).
 
-* the name of the generic
-* all methods of the generic, along with their signatures
-* the actual arguments supplied to the class
+As well as understanding the principles yourself, there are two functions which will tell you exactly which method will get called:
 
-To make the ideas concrete, lets create a simple class structure. We have three classes, C which inherits from a character vector, B inherits from B and A inherits from B.
+*  `pryr::method_from_call()` takes an unevaluated function call: `method_from_call(nobs(fit))`
+
+* `selectMethod()` takes the name of the generic and a named vector of class names: `selectMethod("nobs", "mle4")`
+
+To make the ideas in this section concrete, we'll create a simple class structure. We have three classes, C which inherits from a character vector, B inherits from C and A inherits from B. We then instantiate an object from each class.
 
 ```R
-# Example
 setClass("C", contains = "character")
 setClass("B", contains = "C")
 setClass("A", contains = "B")
@@ -300,15 +307,25 @@ b <- new("B", "b")
 c <- new("C", "c")
 ```
 
+This creates a class graph that looks like this:
+
+![](diagrams/class-graph-1.png)
+
 Next, we create a generic f, which will dispatch on two arguments: `x` and `y`.
 
 ```R
 setGeneric("f", function(x, y) standardGeneric("f"))
 ```
 
-The simplest type of dispatch occurs if there's an exact match between the class of arguments and the signature of a method:
+To predict which method a generic will dispatch to, you need to know:
 
-```
+* the name and arguments to the generic
+* the signatures of the methods
+* the class of arguments supplied to the generic
+
+The simplest type of method dispatch occurs if there's an exact match between the class of arguments (arg-classes) and the signature of (sig-classes). In the following example, we define methods with sig-classes `c("C", "C")` and `c("A", "A")`, and then call them with arg classes `c("C", "C")` and `c("A", "A")`.
+
+```R
 setMethod("f", signature("C", "C"), function(x, y) "c-c")
 setMethod("f", signature("A", "A"), function(x, y) "a-a")
 
@@ -316,17 +333,21 @@ f(c, c)
 f(a, a)
 ```
 
-Otherwise R follows a set of systematic rules to find the closest method signature to the argument classes:
+If there isn't an exact match, R looks for the closest method. The distance between the sig-class and arg-class is the sum of the distances between each class (matched by named and excluding ...). The distance between classes is the shortest distance between them in the class graph. For example, the distance A -> B is 1, A -> C is 2 and B -> C is 1. The distances C -> B, C -> A and B -> A are all infinite. That means that of the following two calls will dispatch to the same method:
 
 ```R
 f(b, b)
 f(a, c)
 ```
 
-The distance between a method and an argument class is the sum of the distances between each argument. The distance between arguments is the distance between the classes:  If the class in the signature is a parent of the class in the call, then the distance is 1. If it's a grandparent, 2, and so on.
+If we added another class, BC, that inherited from both B and C, then this class would have distance one to both B and C, and distance two to A. As you can imagine, this can get quite tricky if you have a complicated class graph: for this reason it's better to avoid multiple inheritance unless absolutely necessary.
 
-* c-c: C is the parent of B, so the total distance is 2
-* a-a: A is not a parent of B, so the total distance is infinite
+![](diagrams/class-graph-2.png)
+
+```R
+setClass("BC", contains = c("B", "C"))
+bc <- new("BC", "bc")
+```
 
 Let's add a more complicated case:
 
@@ -334,15 +355,9 @@ Let's add a more complicated case:
 setMethod("f", signature("B", "C"), function(x, y) "b-c")
 setMethod("f", signature("C", "B"), function(x, y) "c-b")
 f(b, b)
-f(a, c)
 ```
 
-* c-c: the total distance is still 2
-* b-c: the total distance is 1
-* c-b: the total distance is 1
-* a-a: the total distance is Inf
-
-Otherwise, give a warning and call the matching method that comes first alphabetically. In this case, it's up to the class author to fix the problem by providing more specific methods.
+Now we have two signatures that have the same distance (1 = 1 + 0 = 0 + 1), and there is not unique closest method. In this situation R gives a warning and calls the method that comes first alphabetically.
 
 There are two special classes that can be used in the signature: `missing` and `ANY`. `missing` matches the case where the argument is not supplied, and `ANY` is used for setting up default methods. `ANY` has the lowest possible precedence in method matching - in other words, it has a distance value higher than any other parent class.
 
@@ -357,9 +372,11 @@ f(c)
 f(c, d)
 ```
 
-It's also possible to dispatch on `...` under special circumstances.  See `?dotsMethods` for more details.
+It's also possible to dispatch on `...` under special circumstances. See `?dotsMethods` for more details.
 
-You can list all S4 methods with `showMethods()`, optionally restricting either by generic or by class (or both).  It's also a good idea to supply `where = search()` to restrict to methods defined by attached packages, not all packages loaded by other packages. Given a generic and a the classes of its arguments, you can find which method will be called with `selectMethod()`. `pryr::method_from_call` takes a call to an S4 method and will return which method will be called.
+### Exercises
+
+* Imagine we added a class `AC`, which inherited from `A` and `C`. What would the distance between `AC` and `A`, `B` and `C` be? What about the distance between `AC` and `AB`?
 
 ## RC
 
