@@ -23,7 +23,7 @@ You'll also (obviously) need a working C compiler. Windows users can use Duncan 
 
 ## Differences between R and C
 
-Even if you've never used C before, you should be able to read C code because the basic structure is similar to R. If you want to learn it more formally [The C programming language](http://amzn.com/0131101633?tag=hadlwick-20) by Kernigan and Ritchie is a classic.
+Even if you've never used C before, you should be able to read C code because the basic structure is similar to R. If you want to learn it more formally [The C programming language](http://amzn.com/0131101633?tag=devtools-20) by Kernigan and Ritchie is a classic.
 
 Important differences from R include:
 

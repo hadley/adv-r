@@ -1055,11 +1055,11 @@ I strongly recommend keeping an eye on the [Rcpp homepage](http://dirk.eddelbuet
 
 ### More C++
 
-Writing performant code may also require you to rethink your basic approach: a solid understand of basic data structures and algorithms is very helpful here.  That's beyond the scope of this book, but I'd suggest the ["algorithm design manual"](http://amzn.com/0387948600?tag=hadlwick-20) or MIT's [Introduction to Algorithms](http://ocw.mit.edu/courses/electrical-engineering-and-computer-science/6-046j-introduction-to-algorithms-sma-5503-fall-2005/).
+Writing performant code may also require you to rethink your basic approach: a solid understand of basic data structures and algorithms is very helpful here.  That's beyond the scope of this book, but I'd suggest the ["algorithm design manual"](http://amzn.com/0387948600?tag=devtools-20) or MIT's [Introduction to Algorithms](http://ocw.mit.edu/courses/electrical-engineering-and-computer-science/6-046j-introduction-to-algorithms-sma-5503-fall-2005/).
 
 Other resources I've found helpful in learning C++ are:
 
-* [Effective C++](http://amzn.com/0321334876?tag=hadlwick-20) and [Effective STL](http://amzn.com/0201749629?tag=hadlwick-20) by Scott Meyers.
+* [Effective C++](http://amzn.com/0321334876?tag=devtools-20) and [Effective STL](http://amzn.com/0201749629?tag=devtools-20) by Scott Meyers.
 
 * [C++ Annotations](http://www.icce.rug.nl/documents/cplusplus/cplusplus.html), aimed at" knowledgeable users of C (or any other language using a C-like grammar, like Perl or Java) who would like to know more about, or make the transition to, C++"
 

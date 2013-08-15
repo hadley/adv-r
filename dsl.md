@@ -34,7 +34,7 @@ R is well suited for hosting DSLs because the combination of a small amount of c
 
 This chapter will develop two simple, but useful, DSLs, one for generating HTML, and one for turning R mathematical expressions into a form suitable for inclusion in latex. 
 
-DSLs are a very large topic, and this chapter will only scratch the surface, focussing on important techniques and not so much on how you might come up with the language in the first place. If you're interested in learning more, I highly recommend [Domain Specific Languages](http://amzn.com/0321712943?tag=hadlwick-20) by Martin Fowler: it discusses many options for creating a DSL and provides many examples of different languages.
+DSLs are a very large topic, and this chapter will only scratch the surface, focussing on important techniques and not so much on how you might come up with the language in the first place. If you're interested in learning more, I highly recommend [Domain Specific Languages](http://amzn.com/0321712943?tag=devtools-20) by Martin Fowler: it discusses many options for creating a DSL and provides many examples of different languages.
 
 ## HTML
 

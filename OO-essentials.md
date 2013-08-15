@@ -273,7 +273,7 @@ S4 is a rich and complex system, and there's no way to explain it fully in a few
 
 * [S4 system development in Bioconductor](http://www.bioconductor.org/help/course-materials/2010/AdvancedR/S4InBioconductor.pdf)
 
-* [Software for data analysis](http://amzn.com/0387759352?tag=hadlwick-20)
+* [Software for data analysis](http://amzn.com/0387759352?tag=devtools-20)
 
 ### Recognising objects, generic functions and methods
 
