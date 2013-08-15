@@ -16,7 +16,7 @@ There's also one other system that's not quite OO, but it's important to mention
 
 * __base types__, the internal C-level types that underlie the other OO systems. Base types distinguish between 
 
-The following sections describes each system in turn, starting with base types. You'll learn how to recognise the OO system that an object belongs to, how method dispatch works, and how to create new objects, classes, generics and methods for that system. 
+The following sections describes each system in turn, starting with base types. You'll learn how to recognise the OO system that an object belongs to, how method dispatch works, and how to create new objects, classes, generics and methods for that system.  The chapter concludes with a few remarks on when to use each system.
 
 ## Base types
 
@@ -275,6 +275,8 @@ S4 is a rich and complex system, and there's no way to explain it fully in a few
 
 * [Software for data analysis](http://amzn.com/0387759352?tag=devtools-20)
 
+* [Martin Morgan's answers to S4 questions on stackoverflow](http://stackoverflow.com/search?tab=votes&q=user%3a547331%20%5bs4%5d%20is%3aanswe)
+
 ### Recognising objects, generic functions and methods
 
 Recognising S4 objects, generics and methods is easy. You can identify an S4 object because `str()` describes it as a "formal" class, `isS4()` is true, and `pryr::otype()` returns "S4". S4 generics and methods are also easy to identify because they are S4 objects with well defined classes.
@@ -486,4 +488,4 @@ Three OO systems is a lot for one language, but for most R programming, S3 suffi
 
 If you are creating more complicated systems of interrelated objects, S4 may be more appropriate. S4 is used extensively by Bioconductor. The `Matrix` package by Douglas Bates and Martin Maechler is another package for which S4 is particularly well suited. It is designed to efficiently store and compute with many different special types of sparse matrix. As at version 0.999375-50 it defines 130 classes and 24 generic functions. The package is well written, well commented and fairly easy to read. The accompanying [vignette](http://cran.r-project.org/web/packages/Matrix/vignettes/Intro2Matrix.pdf) gives a good overview of the structure of the package.
 
-If you've programmed in another language, ref classes will be natural. But because they introduce side-effects through mutable state, they can be much harder to reason about. Note that when using reference based classes we want to minimise side effects, and use them only where mutable state is absolutely required. The majority of functions should still be "functional", and side effect free. This makes code easier to reason about (because you don't need to worry about methods changing things in surprising ways), and easier for other R programmers to understand.
+If you've programmed in another language, ref classes will be natural. But because they introduce side-effects through mutable state, they can be much harder to reason about. When using reference based classes you want to minimise side effects, and use them only where mutable state is absolutely required. The majority of functions should still be "functional", and side effect free. This makes code easier to reason about (because you don't need to worry about methods changing things in surprising ways), and easier for other R programmers to understand.
