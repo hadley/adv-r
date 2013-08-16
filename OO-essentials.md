@@ -409,72 +409,89 @@ Reference classes (or RC for short) are new in R 2.12. They are fundamentally di
 
 * RC objects are mutable: the usual R copy on modify semantics do not apply
 
-These properties make RC behave more like the style of OO found in most other programming languages like python, ruby, java and C#.Surprisingly, reference classes are implemented in R, not code: they are special S4 class that wraps around an environment.
-
-### Recognising objects and methods
-
-You can recognise RC objects because they are S4 classes (`isS4(x)`) that inherit from "refClass" (`is(x, "refClass")`).
+These properties make RC behave more like the style of OO found in most other programming languages like python, ruby, java and C#.Surprisingly, reference classes are implemented in R, not code: they are a special S4 class that wraps around an environment.
 
 ### Defining classes and creating objects
 
-Creating a new reference based class is straightforward: you use `setRefClass()`. While you can use `new()` to create new reference classes, it's good style to use the object returned by `setRefClass()` to generate new objects:
+Since there aren't any reference classes provided by the base R packages, we'll start by creating one. RC classes are best used for creating stateful objects - modelling things that change over time. We'll create a simple class to model a bank account. Creating a new reference based class is straightforward and similar to creating a new S4 class: you use `setRefClass()`. The first, and only required argument, is an alpha-numeric __name__:
 
 ```R
-Person <- setRefClass("Person")
-Person$new()
+Account <- setRefClass("Account")
+Account$new()
 ```
 
-A reference class has four main components, given by three arguments to `setRefClass`:
+While you can use `new()` to create new RC objects, it's good style to use the object generator returned by `setRefClass()` to generate new objects.
 
-* a __name__: an alpha-numeric string that identifies the class
+We can also provide a named list of __fields__. Fields are equivalent to slots in S4, and can be can be RC, S4, S3 (if made available with `setOldClass()`) or implicit base classes. Additional named arguments passed to `new()` will set initial values of the fields, and you can retrieve field values using `$`.
 
-  ```R
-  setRefClass("Distribution")
-  ```
+```R
+Account <- setRefClass("Account", 
+  fields = list(balance = "numeric"))
 
-* the class which __contains__ or inherits. This should be the name
-  of another references class.  (Again, like S4 reference classes
-  can inherit from multiple parents, but it's not a good idea.)
+a <- Account$new(balance = 100)
+a$balance
+```
 
-  ```R
-  DistributionUniform <- setRefClass("DistributionUniform", 
-    contains = "Distribution")
-  ```
+Instead of supplying a class name for the field, you can provide a single argument function which will act as an accessor method, allowing you to add custom behaviour when getting or setting a field. See `?setRefClass` for more details.
 
-* the __fields__, which are equivalent to slots in S4, and should 
-  be a named list:
-
-  ```R
-  DistributionUniform <- setRefClass("DistributionUniform", 
-    contains = "Distribution",
-    fields = list(a = "numeric", b = "numeric"))
-  ```
-
-  Note that RC objects are __mutable__, i.e. they have reference semantics, and are not copied-on-modify:
+An object is not very useful without some behaviour defined by __methods__: functions that operate within the context of the object and can modify its fields.  The following example illustrates one important tool for methods: within methods, you access the value of fields with the bare field name, and you modify them using `<<-`. (You'll learn more about `<<-` in [[Environments]])
   
+```R
+Account <- setRefClass("Account", 
+  fields = list(balance = "numeric"),
+  methods = list(
+    withdraw = function(x) balance <<- balance - x,
+    deposit = function(x) balance <<- balance + x
+  )
+)
+```
+
+Calling an RC method uses the same principle as retrieving a field value:
+
+```Recognising
+a <- Account$new(balance = 100)
+a$deposit(100)
+a$balance
+```
+
+Note that RC objects are __mutable__, i.e. they have reference semantics, and are not copied-on-modify:
+
+```R
+b <- a
+b$balance
+a$widthdraw(100)
+b$balance
+```
+
+For this reason, all reference classes provide `clone()` method
+
+* a class to inherit from (or in S4 language __contain__). This
+  can be any class name, but it's not obvious what behaviour it
+  will inherit if it's not a reference class. Like in S4, RC can 
+  inherit from multiple parents: it's not as confusing with RC because it only has single dispatch. Unlike in S4, you don't 
+  have to supply a parent class to create a non-virtual class.
+
   ```R
-  a <- DistributionUniform(a = 0, b = 1)
-  b <- a
-
-  b$a <- 10
-  a$a
-  ```
-
-* a set of __methods__, functions that operate within the context of 
-  the object and can modify its fields. These can also be added 
-  after object creation, as described below.
-
-  ```R
-  DistributionUniform <- setRefClass("DistributionUniform", 
-    contains = "Distribution",
-    fields = list(a = "numeric", b = "numeric"),
+  NoOverdraft <- setRefClass("NoOverdraft", 
+    contains = "Account",
     methods = list(
-      mean = function() (a + b) / 2
+      withdraw = function(x) {
+        if (balance < x) stop("Not enough money")
+        balance <<- balance - x
+      }
     )
-  ) 
-  a <- DistributionUniform(a = 0, b = 1)
-  a$mean()
+  )
+  accountJohn <- NoOverdraft$new(balance = 100)
+  accountJohn$deposit(50)
+  accountJohn$balance
+  accountJohn$widthdraw(200)
   ```
+
+
+
+### Recognising objects and methods
+
+You can recognise RC objects because they are S4 classes (`isS4(x)`) that inherit from "refClass" (`is(x, "refClass")`).  `pryr::otype()` will return "RC".
 
 ### Method dispatch
 
