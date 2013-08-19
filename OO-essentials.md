@@ -1,8 +1,8 @@
 # OO field guide
 
-This chapter provides a field guide for recognising and working with R's objects in the wild. R has three object oriented systems (plus the base types), so it can be a bit intimidating. The goal of this guide is not to make you an expert in all four systems, but to help you identify what system you're working with, and ensure you know the basics of how it works.
+This chapter provides a field guide for recognising and working with R's objects in the wild. R has three object oriented systems (plus the base types), so it can be a bit intimidating. The goal of this guide is not to make you an expert in all four systems, but to help you identify what system you're working with, and ensure you know how to use it effectively.
 
-Central to any object-oriented system are the concepts of class and method. A __class__ defines the behaviour of an __object__, describing the attributes that it possesses and how it relates to other classes. The class is also used when selecting __methods__, functions that behaviour differently depending on the class of their input. Classes are usually organised in a hierarchy: a parent class defines default behaviour not otherwise overriden by the child class.
+Central to any object-oriented system are the concepts of class and method. A __class__ defines the behaviour __objects__, describing the attributes that they possess and how they relates to other classes. The class is also used when selecting __methods__, functions that behave differently depending on the class of their input. Classes are usually organised in a hierarchy: a parent class defines default behaviour not otherwise overriden by the child class.
 
 R's three OO systems differ in how classes and methods are defined:
 
@@ -10,19 +10,19 @@ R's three OO systems differ in how classes and methods are defined:
 
 * __S4__ works simiarly to S3, but is more formal. There are two major differences to S3. S4 has formal class definitions, which describe the representation and inheritance for each class, and has special helper functions for defining generics and methods. S4 also has multiple dispatch, which means that generic functions can pick method based on the class of any number of arguments, not just one.
 
-* __Reference classes__, called RC for short, are quite different to S3 and S4. RC implements message passing OO, so that methods belong to classes not functions. `$` is used to separate objects and method, so method calls look like `canvas$drawRect("blue")`. RC objects are also mutable: they don't use R's usual copy-on-modify semantics, and are modified in place. This makes them harder to reason about, but allows them to solve problems that are difficult to solve without mutability.
+* __Reference classes__, called RC for short, is quite different to S3 and S4. RC implements message passing OO, so that methods belong to classes, not functions. `$` is used to separate objects and methods, so method calls look like `canvas$drawRect("blue")`. RC objects are also mutable: they don't use R's usual copy-on-modify semantics, but are modified in place. This makes them harder to reason about, but allows them to solve problems that are difficult to solve with S3 or S4.
 
 There's also one other system that's not quite OO, but it's important to mention here, and that's 
 
-* __base types__, the internal C-level types that underlie the other OO systems. Base types distinguish between 
+* __base types__, the internal C-level types that underlie the other OO systems. Base types are mostly manipulated using C code, but they're important to know about because they provide the building blocks for the other OO systems.
 
-The following sections describes each system in turn, starting with base types. You'll learn how to recognise the OO system that an object belongs to, how method dispatch works, and how to create new objects, classes, generics and methods for that system.  The chapter concludes with a few remarks on when to use each system.
+The following sections describes each system in turn, starting with base types. You'll learn how to recognise the OO system that an object belongs to, how method dispatch works, and how to create new objects, classes, generics and methods for that system. The chapter concludes with a few remarks on when to use each system.
 
 ## Base types
 
-Underlying every R object is a C "struct" that describes how the object is stored in memory. The struct includes the contents of the object, information needed for memory management, and most importantly for this section, a __type__.  This is the __base type__ of an R object. Base types are not really an object system, because only R core can create new types and every new type makes base R a little more complicated. New base types are added very rarely: the most recent change in 2011 was to add two exotic types that you never see in R, but are useful for diagnosing memory problems (`NEWSXP` and `FREESXP`). Before that the last change was made in 2005, where a special base type for S4 objects (`S4SXP`) was added. 
+Underlying every R object is a C "struct" (short for structure) that describes how the object is stored in memory. The struct includes the contents of the object, information needed for memory management, and most importantly for this section, a __type__.  This is the __base type__ of an R object. Base types are not really an object system, because only R core can create new types and every new type makes base R a little more complicated. New base types are added very rarely: the most recent change in 2011 was to add two exotic types that you never see in R, but are useful for diagnosing memory problems (`NEWSXP` and `FREESXP`), and last change before that was in 2005, where a special base type for S4 objects (`S4SXP`) was added. 
 
-[[Data structures]] explained the most common base types (atomic vectors and lists), but base types also encompass functions, environments and other more exotic objects that you'll learn about later in the book, likes names, calls and promises. You can find out the the base type of an object with `typeof()`, or see a complete list of types in `?typeof()`. Beware that the names of base types are are not used consistently throughout R: the type, and the corresponding "is" function may have different names. 
+[[Data structures]] explained the most common base types (atomic vectors and lists), but base types also encompass functions, environments and other more exotic objects that you'll learn about later in the book, likes names, calls and promises. You can find out the the base type of an object with `typeof()`, or see a complete list of types in `?typeof()`. Beware that the names of base types are are not used consistently throughout R: the type and the corresponding "is" function may have different names. 
 
 ```R
 # The type of a function is "closure", and the
@@ -37,15 +37,15 @@ is.primitive(sum)
 
 Another option is `pryr::typename()` which returns the type name used in C code. You can find out more about these types in [[C-interface]]. You may have also heard of `mode()` and `storage.mode()`. I recommend ignoring them: they just alias some of the names returned by `typeof()` for S compatibility. Read their sources to see exactly what they do.
 
-Functions that behave differently for different base types are almost always written in C, where dispatch occurs using switch statements (`switch(TYPEOF(x))`). Even if you never write C code, it's important to understand base types because everything else is built on top of them: S3 objects can be built on top of any base type, S4 objects use a special base type, and RC objects are a combination of S4 and environments (another base type). To figure out if an object is a pure primitive type (i.e. doesn't also have S3, S4 or RC behaviour), use `is.object()` - it will return `FALSE` for primitive objects.
+Functions that behave differently for different base types are almost always written in C, where dispatch occurs using switch statements (e.g. `switch(TYPEOF(x))`). Even if you never write C code, it's important to understand base types because everything else is built on top of them: S3 objects can be built on top of any base type, S4 objects use a special base type, and RC objects are a combination of S4 and environments (another base type). To figure out if an object is a pure base type (i.e. doesn't also have S3, S4 or RC behaviour), use `is.object()` - it will return `FALSE` for primitive objects.
 
 ## S3
 
-S3 is R's first and simplest OO system. It is the only OO system used in the base and stats packages, and it's the most commonly used system in packages. S3 is informal and adhoc, but it has a certain elegance in it's minimalism: it does the bare minimum necessary for a useful OO system.
+S3 is R's first and simplest OO system. It is the only OO system used in the base and stats packages, and it's the most commonly used system in packages. S3 is informal and adhoc, but it has a certain elegance in it's minimalism: it implements the bare minimum necessary for a useful OO system.
 
 ### Recognising objects, generic functions and methods
 
-Most objects that you encounter are probably S3 objects. You can check by testing that it's an object (`is.object(x)`) but it's not S4 (`!isS4(x)`). This check is automated by `pryr::otype()`, which provides an easy way to determine the OO system of an object:
+Most objects that you encounter are probably S3 objects. You can check by testing that it's an object (`is.object(x)`), but it's not an S4 object (`!isS4(x)`). This check is automated by `pryr::otype()`, which provides an easy way to determine the OO system of an object:
 
 ```R
 library(pryr)
@@ -56,32 +56,16 @@ otype(df$x)  # A numeric vector isn't
 otype(df$y)  # A factor is
 ```
 
-In S3, methods are associated with functions, called __generic functions__, or generics for short, not objects or classes. This is different from most other programming languages, but is a legimitate OO style. To determine if a function is an S3 generic function, you can look at its source code for a call to `UseMethod()`. It's the job of `UseMethod()` to find the correct method and call it: this is called __method dispatch__.
+In S3, methods are associated with functions, called __generic functions__, or generics for short, not objects or classes. This is different from most other programming languages, but is a legimitate OO style. To determine if a function is an S3 generic function, you can look at its source code for a call to `UseMethod()`: it's the job of `UseMethod()` to find the correct method and call it, the process of __method dispatch__. Similar to `otype()`, pryr also provides `ftype()` which describes the object system (if any associated) with a function:
 
 ```R
 mean
-```
-
-Some S3 generic functions don't call `UseMethod()`. For example, the following three functions are also S3 generics:
-
-```R
-`[`
-sum
-cbind
-```
-
-These functions are implemented in C, and hence can't call `UseMethod()`. Instead they call the C functions `DispatchGroup()` or `DispatchOrEval()`. Functions that do method dispatch in C code are called __internal generics__ and are documented in `?"internal generic"`. Instead of reading the source code to determine if a function is an internal generic, you can use `pryr::ftype()`:
-
-```R
 ftype(mean)
-ftype(`[`)
-ftype(sum)
-ftype(cbind)
 ```
 
-S3 methods use a special naming scheme: `generic.class`. For example, the Date method for the `mean()` generic is called `mean.Date()`, and the factor method for `print()` is called `print.factor()`. Most modern style guides discourage the use of `.` in function names because it makes them look like S3 methods. For example, is `t.test()` the `test` method for `t` objects? Similarly, the use of `.` in class names can also be confusing: is `print.data.frame()` the `print()` method for `data.frames`, or the `print.data()` method for `frames`?
+Some S3 generics, like `[`, `sum` and `cbind`, don't call `UseMethod()` because they are implemented in C. Instead, they call the C functions `DispatchGroup()` or `DispatchOrEval()`. Functions that do method dispatch in C code are called __internal generics__ and are documented in `?"internal generic"`. `ftype()` knows about these special cases too.
 
-`pryr::ftype()` knows about these exceptions, so you can use it to figure out if a function is an S3 method or generic:
+The job of an S3 generic is to find the right method to call. You can recognise an S3 method beacause they have special names: `generic.class`. For example, the Date method for the `mean()` generic is called `mean.Date()`, and the factor method for `print()` is called `print.factor()`. Most modern style guides discourage the use of `.` in function names because it makes them look like S3 methods. For example, is `t.test()` the `test` method for `t` objects? Similarly, the use of `.` in class names can also be confusing: is `print.data.frame()` the `print()` method for `data.frames`, or the `print.data()` method for `frames`? `pryr::ftype()` knows about these exceptions, so you can use it to figure out if a function is an S3 method or generic:
 
 ```R
 ftype(t.data.frame) # data frame method for t()
@@ -108,7 +92,7 @@ There's no way to get a list of all S3 classes, because there's no central repos
 
 ### Defining classes and creating objects
 
-S3 is a simple and adhoc system: there is no formal definition of a class. To make an object an instance of a class, you just take an existing base object and set the class attribute. You can do that during creation with `structure()`, or after the fact with `attr<-()`.  However, if you're modifying an existing object, it's better to use `class()` since this communicates your intent more clearly. 
+S3 is a simple and adhoc system: there is no formal definition of a class. To make an object an instance of a class, you just take an existing base object and set the class attribute. You can do that during creation with `structure()`, or after the fact with `attr<-()`.  However, if you're modifying an existing object, using `class<-()` will more clearly communicate your intent: 
 
 ```R
 # Create and assign class in one step
@@ -119,9 +103,16 @@ foo <- list()
 class(foo) <- "foo"
 ```
 
-S3 objects are usually built on top of lists, or atomic vectors with other attributes. You can also turn functions in to S3 objects. Other base types are either rarely seen in R, or have unusual semantics that don't work well with attributes - but you can always wrap the object in a list, and set the class of the list.
+S3 objects are usually built on top of lists, or atomic vectors with attributes. You can also turn functions into S3 objects. Other base types are either rarely seen in R, or have unusual semantics that don't work well with attributes.
 
-You can determine the class of any object using `class(x)`, and see if an object inherits from a specific class using `inherits(x, "classname")`.  The class of an S3 object can be a vector, which describes behaviour from most specific to least specific. For example, the class of the `glm()` object is `c("glm", "lm")` indicating that generalised linear models inherit behaviour from linear models. Class names are usually lower case, and you should avoid `.`. Otherwise, opinion is mixed whether to use underscores (`my_class`) or upper camel case (`MyClass`) for multiword class names.
+You can determine the class of any object using `class(x)`, and see if an object inherits from a specific class using `inherits(x, "classname")`.
+
+```R
+class(foo)
+inhertits(foo, "foo")
+```
+
+The class of an S3 object can be a vector, which describes behaviour from most specific to least specific. For example, the class of the `glm()` object is `c("glm", "lm")` indicating that generalised linear models inherit behaviour from linear models. Class names are usually lower case, and you should avoid `.`. Otherwise, opinion is mixed whether to use underscores (`my_class`) or upper camel case (`MyClass`) for multiword class names.
 
 Most S3 classes provide a constructor function:
 
@@ -156,7 +147,7 @@ To add a new generic, create a function that calls `UseMethod()`. `UseMethod()` 
 f <- function(x) UseMethod("f")
 ```
 
-A generic isn't useful without some methods. An S3 method is just a regular function name with the `generic.class` naming convention:
+A generic isn't useful without some methods. To add a method, you just create a regular function with the correct (`generic.class`) name:
 
 ```R
 f.a <- function(x) "Class a"
@@ -172,21 +163,32 @@ mean.a <- function(x) "a"
 mean(a)
 ```
 
-As you can see, there's no check to make sure that the method returns a class compatible with the generic. However, while you can do this, you shouldn't, as it will violate the expectations of existing code.
+As you can see, there's no check to make sure that the method returns a class compatible with the generic. But while you can do this, you _shouldn't_, as it will violate the expectations of existing code.
 
 ### Method dispatch
 
-S3 method dispatch is relatively simple. S3 generics look at the class of one argument, usually the first. If `x` has more than one class, e.g. `c("foo", "bar")`, `UseMethod()` would look for `mean.foo()` and if not found, it would then look for `mean.bar()`. As a final fallback, `UseMethod` will look for a default method, `mean.default()`, and if that doesn't exist it will raise an error. The same approach applies regardless of how many classes an object has:
+S3 method dispatch is relatively simple. `UseMethod()` creates a vector of function names, like `paste0(generic, ".", c(class(x), "default")` and looks for each in turn. The "default" class makes it possible to set up a fall back methods for otherwise unknown classes.
 
 ```R
-# An object with 26 classes, from "a" to "z"
-z <- structure(list(), class = letters)
-bar <- function(x) UseMethod("bar", x)
-bar.z <- function(x) "z"
-bar(z)
+f <- function(x) UseMethod("f")
+f.a <- function(x) "Class a"
+f.default <- function(x) "Unknown class"
+
+f(structure(list(), class = "a"))
+f(structure(list(), class = c("b", "a")))
+f(structure(list(), class = "c"))
 ```
 
-There is one more complication: the group generics, Math, Ops, Complex and Summary. These generics make it possible to define the behaviour of multiple methods simultaneously. They are a relatively advanced feature typically used in conjunction with `NextMethod()`, the syntax for calling the parent method directly. You can read about the details in `?groupGeneric` and `?NextMethod`
+Group generic methods add a little bit more complexity. There are four group generics which make it possible to implement methods for multiple generics at once. The four group generics and the functions they include are:
+
+* Math: `abs`, `sign`, `sqrt`, `floor`, `cos`, `sign`, `log`, `exp`, ...
+* Ops: `+`, `-`, `*`, `/`, `^`, `%%`, `%/%`, `&`, `|`, `!`, `==`, `!=`, `<`, `<=`, `>=`, `>`
+* Summary: `all`, `any`, `sum`, `prod`, `min`, `max`, `range`
+* Complex: `Arg`, `Conj`, `Im`, `Mod`, `Re`
+
+Group generics are a relatively advanced technique so I won't discuss them further here - the most important thing is to recognise that `Math`, `Ops`, `Summary` and `Complex` aren't real functions, but represent groups of functions. A discussion of group generics is beyond the scope of this book, but you can find out more information in `?groupGeneric`. Note that inside a group generic function a special variable `.Generic` provides the actual generic function called.
+
+If you have complex class hierarchies it's sometimes useful to call the "parent" method. It's a little bit tricky to define exactly what that means, but it's basically the method that would have been called if the current method did not exist. Again, this is an advanced technique and you can read about it in `nextMethod()`.
 
 Because methods are normal R functions, you can call them directly. However, this is just as dangerous as changing the class of an object, so you shouldn't do it: please don't point the loaded gun at your foot! (The only reason to call the method directly is that sometimes when you're writing OO code, not using someone else's, you can get considerable speedups by skipping regular method dispatch).
 
@@ -197,7 +199,7 @@ bar.x(z)
 # [1] "x"
 ```
 
-You can also call an S3 generics with a non-S3 object. Non-internal S3 generics will dispatch on the __implicit class__ of base types. (Internal generics don't do that for performance reasons.) The rules to determine the implicit class of a primitive type are somewhat complex, but are shown in the function below:
+You can also call an S3 generic with a non-S3 object. Non-internal S3 generics will dispatch on the __implicit class__ of base types. (Internal generics don't do that for performance reasons.) The rules to determine the implicit class of a primitive type are somewhat complex, but are shown in the function below:
 
 ```R
 iclass <- function(x) {
@@ -217,9 +219,13 @@ iclass(array(1.5))
 
 ### Exercises
 
+* Read the source code for `t` and `t.test` and confirm for yourself that `t.test` is an S3 generic, and not an S3 method. But what would happen if you called `t` on an object with class `test`?
+
+* What classes have a method for the `Math` group generic in base R? How do the methods work?
+
 * R has two classes for representing date time data, `POSIXct` and `POSIXlt` which both inherit from `POSIXt`. Which generics have different behaviour for the two classes? Which generics share the same behaviour?
 
-* Which generic defined in the base package has the most methods defined for it?
+* Which base generic has the most methods defined for it?
 
 * `UseMethod()` calls methods in a special way. Predict what the following code will return, then run it and read the help for `UseMethod()` to figure out what's going on. Write down the rules in the simplest form possible.
 
@@ -259,7 +265,7 @@ iclass(array(1.5))
 
 ## S4
 
-S4 works in a similar way to S3, but it is formal and rigorous. Methods still belong to functions, not classes, but:
+S4 works in a similar way to S3, but it adds formality and rigour. Methods still belong to functions, not classes, but:
 
 * Classes have a formal definition, describing their fields and inheritance structure (parent classes).
 
@@ -310,25 +316,27 @@ class(fit)
 is(fit, "mle")
 ```
 
-You can get a list of all S4 generics with `getGenerics()`, and all S4 classes with `getClasses()`, but note that this list includes shim classes for S3 classes and base types. Different packages may define different classes with the same name, so functions that list generics, classes or methods will also say which package they're defined in. You can list all S4 methods with `showMethods()`, optionally restricting either by generic or by class (or both).  It's also a good idea to supply `where = search()` to restrict to methods defined by attached packages, not by packages loaded by attached packages. 
+You can get a list of all S4 generics with `getGenerics()`, and all S4 classes with `getClasses()`, but note that this list includes shim classes for S3 classes and base types. You can list all S4 methods with `showMethods()`, optionally restricting either by generic or by class (or both).  It's also a good idea to supply `where = search()` to restrict to methods available from the global environment. 
 
 ### Defining classes and creating objects
 
-In S3, you can turn any object into an object of a particular class just by setting the class attribute.  S4 is much stricter: you must define the representation of the call using `setClass()`, and the only way to create it is through the constructer function `new()`. An S4 class has three key properties:
+In S3, you can turn any object into an object of a particular class just by setting the class attribute.  S4 is much stricter: you must define the representation of the call using `setClass()`, and create an new object with `new()`. An S4 class has three key properties:
 
-* a __name__: an alpha-numeric string that identifies the class
+* a __name__: an alpha-numeric class identifier
 
 * a named list of __slots__ (fields), providing slot names and 
   permitted classes. For example, a person class might be represented by a character name and a numeric age: 
   `list(name = "character", age = "numeric")`
 
 * a string giving the class it inherits from, or in S4 terminology, 
-  __contains__. You can provide multiple classes to get multiple 
-  inheritance, but this is best avoided because it's 
+  __contains__. You can provide multiple classes for multiple 
+  inheritance, but this is best avoided as it adds much complexity.
 
-The representation and contains classes can S4 classes, S3 classes registered with `setOldClass()`, or the the implicit class of a base type. You can also use the special class "ANY" which allows any type as input.
+S4 classes have two other optional properties, a __validity method__, which tests if an object is valid, and a __prototype__ object, which defines default values for fields not supplied when `new()` is called. See `?setClass` for more details.
 
-The following example creates a Person class with fields name and age, and an Employee class that inherits from person. The Employee class inherits the slots and methods from the Person, and adds an additional slot, boss.
+In `slots` and `contains` you can provide S4 classes, S3 classes registered with `setOldClass()`, or the the implicit class of a base type. In `slots` you can also use the special class "ANY" which does not restrict the input.
+
+The following example creates a Person class with fields name and age, and an Employee class that inherits from person. The Employee class inherits the slots and methods from the Person, and adds an additional slot, boss. To create objects we call `new()` with the name of the call, and name-value pairs of slot values.
 
 ```R
 setClass("Person", 
@@ -337,44 +345,44 @@ setClass("Employee",
   slots = list(boss = "Person"), 
   contains = "Person")
 
-john <- new("Person", name = "John", age = 40)
+alice <- new("Person", name = "Alice", age = 40)
+john <- new("Employee", name = "John", age = 20, boss = alice)
 ```
 
-You can find the documentation for a class with a special help syntax: `class?className`, e.g. `class?mle`. Most S4 classes also come with a constructor function with the same name as the class - if that exists, use it instead of calling `new()` directly. 
-
-Unlike S3 objects, which can be built on top of any base type, S4 objects are all built on top of a special S4 type. To access slots of an S4 object you use `@` or `slot()`:
+To access slots of an S4 object you use `@` or `slot()`:
 
 ```R
-hadley@age
-slot(hadley, "age")
+alice@age
+slot(john, "boss")
 ```
 
-If an S4 object contains (inherits) from an S3 class or a base type, you can get the value of that object using the special `.Data` slot. This is equivalent to `unclass()`ing an S3 object to get at the underlying base type.
+If an S4 object contains (inherits) from an S3 class or a base type, it will have a special `.Data` slot which contains the underlying base type or S3 object:
 
 ```R
-setClass("minmax", 
+setClass("RangedNumeric", 
   contains = "numeric", 
   slots = list(min = "numeric", max = "numeric"))
-mm <- new("minmax", 1:10, min = 1, max = 10)
-mm@min
-mm@.Data
+rn <- new("RangedNumeric", 1:10, min = 1, max = 10)
+rn@min
+rn@.Data
 ```
 
-S4 classes have two other important optional properties, a __validity method__ which tests to see if the values of an object are valid, and a __prototype__ object, which defines default values for fields not supplied when `new()` is called.  See `?setClass` for more details.
+You can find the documentation for a class with a special syntax: `class?className`, e.g. `class?mle`. Most S4 classes also come with a constructor function with the same name as the class - if that exists, use it instead of calling `new()` directly. 
 
-Since R is an interactive programming language, it's possible to create new classes or redefine existing classes at any time. This can be a problem when you're interactively experimenting with S4. If you modify a class, make sure you also recreate any objects of that class you'll end up with invalid or out-of-date objects. 
+Since R is an interactive programming language, it's possible to create new classes or redefine existing classes at any time. This can be a problem when you're interactively experimenting with S4. If you modify a class, make sure you also recreate any objects of that class you'll end up with invalid objects. 
 
 ### Creating new methods and generics
 
-S4 provides special functions for creating new generics and methods. `setGeneric()` allows you to create a new generic, or turn an existing function into a generic. `setMethod()` takes the name of the generic, a specification for the classes and a function.
-
-For example, we could take `union()`, which usually just works on vectors, and make it work with data frames:
+S4 provides special functions for creating new generics and methods. `setGeneric()` will create a new generic or convert an existing function into a generic. `setMethod()` takes the name of the generic, a specification for the classes and a function. For example, we could take `union()`, which usually just works on vectors, and make it work with data frames:
 
 ```R
 setGeneric("union")
-setMethod("union", c(x = "data.frame", y = "data.frame"), function(x, y) {
-  unique(rbind(x, y))
-})
+setMethod("union", 
+  c(x = "data.frame", y = "data.frame"), 
+  function(x, y) {
+    unique(rbind(x, y))
+  }
+)
 ```
 
 If you create a new generic from scratch, the function needs to call `standardGeneric`:
@@ -387,19 +395,23 @@ setGeneric("myGeneric", function(x) {
 
 ### Method dispatch
 
-S4 method dispatch is the same as S3 dispatch if your classes only inherit from a single parent, and you only dispatch on one class. The main difference is how you set up default values: S4 uses the special classes "ANY" match any class and "missing" to match a missing argument. Things get more considerably more complicated when you dispatch on multiple arguments, or you have multiple parents. The rules are described in `?Methods`, but when I've created more complicated class inheritance graphs I've found it very difficult to predict which method will be called. I strongly recommend you avoid multiple inheritance in S4.
+S4 method dispatch is the same as S3 dispatch if your classes only inherit from a single parent, and you only dispatch on one class. The main difference is how you set up default values: S4 uses the special classes "ANY" match any class and "missing" to match a missing argument. Things get more considerably more complicated when you dispatch on multiple arguments, or you have multiple parents. The rules are described in `?Methods`, but when I've created more complicated class inheritance graphs I've found it very difficult to predict which method will be called. I strongly recommend you avoid multiple inheritance and multiple dispatch.
 
-Instead of trying to figure it out yourself, you can use an existing R function:
+Instead of trying to figure it out yourself, you can a function to do it for you:
 
 *  `pryr::method_from_call()` takes an unevaluated function call: `method_from_call(nobs(fit))`
 
 * `selectMethod()` takes the name of the generic and a named vector of class names: `selectMethod("nobs", "mle4")`
 
-You can call the parent method directly with `callNextMethod()`
+Like S3, S4 also has group generics, documented in `?S4groupGeneric`. To call the parent method use `callNextMethod()`.
 
 ### Exercises
 
 * Which S4 generic has the most methods defined for it? Which S4 class has the most methods associated with it?
+
+* What happens if you define a new S4 class that doesn't contain an existing class?  (Hint: read about virtual classes in `?Classes`)
+
+* What happens if you pass an S4 object to an S3 generic? What happens if you pass an S3 object to an S4 generic? (Hint: read `?setOldClass` for the second case)
 
 ## RC
 
@@ -413,16 +425,16 @@ These properties make RC behave more like the style of OO found in most other pr
 
 ### Defining classes and creating objects
 
-Since there aren't any reference classes provided by the base R packages, we'll start by creating one. RC classes are best used for creating stateful objects - modelling things that change over time. We'll create a simple class to model a bank account. Creating a new reference based class is straightforward and similar to creating a new S4 class: you use `setRefClass()`. The first, and only required argument, is an alpha-numeric __name__:
+Since there aren't any reference classes provided by the base R packages, we'll start by creating one. RC classes are best used for creating stateful objects, objects change over time, so we'll create a simple class to model a bank account. Creating a new RC class is similar to creating a new S4 class but you use `setRefClass()` instead of `setClass()`. The first, and only required argument, is an alpha-numeric __name__:
 
 ```R
 Account <- setRefClass("Account")
 Account$new()
 ```
 
-While you can use `new()` to create new RC objects, it's good style to use the object generator returned by `setRefClass()` to generate new objects.
+While you can use `new()` to create new RC objects, it's good style to use the object returned by `setRefClass()` to generate new objects. (You can also do that with S4 classes, but it's less common)
 
-We can also provide a named list of __fields__. Fields are equivalent to slots in S4, and can be can be RC, S4, S3 (if made available with `setOldClass()`) or implicit base classes. Additional named arguments passed to `new()` will set initial values of the fields, and you can retrieve field values using `$`.
+`setRefClass()` also accepts a list of __fields__ (equivalent to S4 slots), represented by name-class pairs. Additional named arguments passed to `new()` will set initial values of the fields, and you can get and set field values with `$`:
 
 ```R
 Account <- setRefClass("Account", 
@@ -430,9 +442,29 @@ Account <- setRefClass("Account",
 
 a <- Account$new(balance = 100)
 a$balance
+a$balance <- 200
+a$balance
 ```
 
 Instead of supplying a class name for the field, you can provide a single argument function which will act as an accessor method, allowing you to add custom behaviour when getting or setting a field. See `?setRefClass` for more details.
+
+Note that RC objects are __mutable__, i.e. they have reference semantics, and are not copied-on-modify:
+
+```R
+b <- a
+b$balance
+a$balance <- 0
+b$balance
+```
+
+For this reason, all reference classes provide a `clone()` method which will make a copy of the object.
+
+```R
+b <- a$clone()
+b$balance
+a$balance <- 0
+b$balance
+```
 
 An object is not very useful without some behaviour defined by __methods__: functions that operate within the context of the object and can modify its fields.  The following example illustrates one important tool for methods: within methods, you access the value of fields with the bare field name, and you modify them using `<<-`. (You'll learn more about `<<-` in [[Environments]])
   
@@ -454,55 +486,52 @@ a$deposit(100)
 a$balance
 ```
 
-Note that RC objects are __mutable__, i.e. they have reference semantics, and are not copied-on-modify:
-
+The important argument to `setRefClass()` is `contains`, a parent class to inherit behaviour from. 
+      
 ```R
-b <- a
-b$balance
-a$widthdraw(100)
-b$balance
-```
-
-For this reason, all reference classes provide `clone()` method
-
-* a class to inherit from (or in S4 language __contain__). This
-  can be any class name, but it's not obvious what behaviour it
-  will inherit if it's not a reference class. Like in S4, RC can 
-  inherit from multiple parents: it's not as confusing with RC because it only has single dispatch. Unlike in S4, you don't 
-  have to supply a parent class to create a non-virtual class.
-
-  ```R
-  NoOverdraft <- setRefClass("NoOverdraft", 
-    contains = "Account",
-    methods = list(
-      withdraw = function(x) {
-        if (balance < x) stop("Not enough money")
-        balance <<- balance - x
-      }
-    )
+NoOverdraft <- setRefClass("NoOverdraft", 
+  contains = "Account",
+  methods = list(
+    withdraw = function(x) {
+      if (balance < x) stop("Not enough money")
+      balance <<- balance - x
+    }
   )
-  accountJohn <- NoOverdraft$new(balance = 100)
-  accountJohn$deposit(50)
-  accountJohn$balance
-  accountJohn$widthdraw(200)
-  ```
-
-
+)
+accountJohn <- NoOverdraft$new(balance = 100)
+accountJohn$deposit(50)
+accountJohn$balance
+accountJohn$widthdraw(200)
+```
 
 ### Recognising objects and methods
 
-You can recognise RC objects because they are S4 classes (`isS4(x)`) that inherit from "refClass" (`is(x, "refClass")`).  `pryr::otype()` will return "RC".
+You can recognise RC objects because they are S4 objects (`isS4(x)`) that inherit from "refClass" (`is(x, "refClass")`).  `pryr::otype()` will return "RC".  RC methods are also S4 objects, with class `refMethodDef`.
 
 ### Method dispatch
 
-RC methods are associated with objects, not with functions, and are called using the special syntax `obj$method(arg1, arg2, ...)`. Method dispatch is straightforward: if the method is not found for the base class, then the parent is tried, and so on up.
+Method dispatch is very simple in RC because methods are associated with classes, not function. When you call `x$f()`, R will look for a method f in the class of x, then in its parent, then its parent's parent, and so on.
 
-You can call the parent method directly with `$callSuper(...)`
+From within a method, you can call the parent method directly with `callSuper(...)`.
+
+### Examples
+
+* Use a field function to prevent the account balance from being manipulated directly. (Hint: create a "hidden" `.balance` field)
+
 
 ## Picking a system
 
 Three OO systems is a lot for one language, but for most R programming, S3 suffices. In R you usually create fairly simple objects, and use OO programming to add special behaviour to generic functions like `print()`, `summary()` and `plot()`. S3 is well suited to this domain, and the majority of OO code that I have written in R is S3. S3 is a little quirky, but once you've mastered it S4 is relatively easy to pickup: the ideas are all the same, it is just more formal, more strict and more verbose. 
 
-If you are creating more complicated systems of interrelated objects, S4 may be more appropriate. S4 is used extensively by Bioconductor. The `Matrix` package by Douglas Bates and Martin Maechler is another package for which S4 is particularly well suited. It is designed to efficiently store and compute with many different special types of sparse matrix. As at version 0.999375-50 it defines 130 classes and 24 generic functions. The package is well written, well commented and fairly easy to read. The accompanying [vignette](http://cran.r-project.org/web/packages/Matrix/vignettes/Intro2Matrix.pdf) gives a good overview of the structure of the package.
+<!-- library(Matrix)
+packageVersion("Matrix")
 
-If you've programmed in another language, ref classes will be natural. But because they introduce side-effects through mutable state, they can be much harder to reason about. When using reference based classes you want to minimise side effects, and use them only where mutable state is absolutely required. The majority of functions should still be "functional", and side effect free. This makes code easier to reason about (because you don't need to worry about methods changing things in surprising ways), and easier for other R programmers to understand.
+gs <- getGenerics("package:Matrix")
+sum(gs@package == "Matrix")
+
+length(getClasses("package:Matrix", FALSE))
+ -->
+
+If you are creating more complicated systems of interrelated objects, S4 may be more appropriate. A good example is the `Matrix` package by Douglas Bates and Martin Maechler. It is designed to efficiently store and compute with many different special types of sparse matrix. As at version 1.0.12 it defines 110 classes and 18 generic functions. The package is well written, well commented and fairly easy to read. The accompanying [vignette](http://cran.r-project.org/web/packages/Matrix/vignettes/Intro2Matrix.pdf) gives a good overview of the structure of the package. S4 is also used extensively by Bioconductor packages, which need to model complicated interrelationships of biological objects. Bioconductor provides many [good resources](https://www.google.com/search?q=bioconductor+s4) for learning S4.
+
+If you've programmed in another mainstream OO language, RC will seem very natural. But because they can introduce side-effects through mutable state, they are harder to understand. For example, when you usually call `f(a, b)` you can assume that `a` and `b` will not be modified; but if `a` and `b` are RC objects, they might be. Generally, when using RC objects you want to minimise side effects as much as possible, and use them only where mutable state is absolutely required. The majority of functions should still be "functional", and side effect free. This makes code easier to reason about and easier for other R programmers to understand.
