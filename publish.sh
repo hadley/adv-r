@@ -1,3 +1,3 @@
 # ./build-book.sh
 jekyll build
-jekyll-s3
+jekyll-s3 --headless
