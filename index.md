@@ -1,3 +1,8 @@
+---
+layout: default
+title: Function operators
+---
+
 This is the in-progress book site for __"Advanced R development: making reusable code"__.  It is broken into two sections:
 
 * __Advanced R programming__: learn all about how the R language works and how you can use it to solve real problems. 
