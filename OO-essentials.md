@@ -425,7 +425,7 @@ These properties make RC behave more like the style of OO found in most other pr
 
 ### Defining classes and creating objects
 
-Since there aren't any reference classes provided by the base R packages, we'll start by creating one. RC classes are best used for creating stateful objects, objects change over time, so we'll create a simple class to model a bank account. Creating a new RC class is similar to creating a new S4 class but you use `setRefClass()` instead of `setClass()`. The first, and only required argument, is an alpha-numeric __name__:
+Since there aren't any reference classes provided by the base R packages, we'll start by creating one. RC classes are best used for creating stateful objects, objects that change over time, so we'll create a simple class to model a bank account. Creating a new RC class is similar to creating a new S4 class but you use `setRefClass()` instead of `setClass()`. The first, and only required argument, is an alpha-numeric __name__:
 
 ```R
 Account <- setRefClass("Account")
@@ -457,7 +457,7 @@ a$balance <- 0
 b$balance
 ```
 
-For this reason, all reference classes provide a `clone()` method which will make a copy of the object.
+For this reason, RC objects come with a `clone()` method that will make a copy of the object.
 
 ```R
 b <- a$clone()
@@ -486,7 +486,7 @@ a$deposit(100)
 a$balance
 ```
 
-The important argument to `setRefClass()` is `contains`, a parent class to inherit behaviour from. 
+The important argument to `setRefClass()` is `contains`, a parent class to inherit behaviour from. RC classes can only inherit from other RC classes. If not specified, contains defaults to 
       
 ```R
 NoOverdraft <- setRefClass("NoOverdraft", 
@@ -504,20 +504,21 @@ accountJohn$balance
 accountJohn$widthdraw(200)
 ```
 
+All reference classes eventually inherit from `envRefClass`, which provides methods useful methods like `callSuper()`, `copy()`, `field()` (for finding the value of a field given its name), `export()` (equivalent to `as`) and `show()` (usually overriden to control printing). See the inheritance section in `setRefClass()` for more details.
+
 ### Recognising objects and methods
 
 You can recognise RC objects because they are S4 objects (`isS4(x)`) that inherit from "refClass" (`is(x, "refClass")`).  `pryr::otype()` will return "RC".  RC methods are also S4 objects, with class `refMethodDef`.
 
 ### Method dispatch
 
-Method dispatch is very simple in RC because methods are associated with classes, not function. When you call `x$f()`, R will look for a method f in the class of x, then in its parent, then its parent's parent, and so on.
+Method dispatch is very simple in RC because methods are associated with classes, not functions. When you call `x$f()`, R will look for a method f in the class of x, then in its parent, then its parent's parent, and so on. From within a method, you can call the parent method directly with `callSuper(...)`.
 
-From within a method, you can call the parent method directly with `callSuper(...)`.
+### Exercises
 
-### Examples
+* Use a field function to prevent the account balance from being manipulated directly. (Hint: create a "hidden" `.balance` field, and read the help for the fields argument in `setRefClass()`)
 
-* Use a field function to prevent the account balance from being manipulated directly. (Hint: create a "hidden" `.balance` field)
-
+* I claimed that there aren't any RC classes in base R, but that was a bit of a simplification. Use `getClasses()` and find which classes `extend()` from `envRefClass`. What are the classes used for? (Hint: recall how to look up the documentation for a class)
 
 ## Picking a system
 
