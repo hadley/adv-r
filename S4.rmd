@@ -1,0 +1,469 @@
+---
+title: S4
+layout: default
+---
+
+# The S4 object system
+
+R has three object oriented (OO) systems: [[S3]], [[S4]] and [[R5]]. This page describes S4.
+
+<!-- 
+http://www.ci.tuwien.ac.at/Conferences/useR-2004/Keynotes/Leisch.pdf
+Need to use consistent example throughout - work on car inspection a la Dylan?
+-->
+
+Compared to S3, the S4 object system is much stricter, and much closer to other OO systems. I recommend you familiarise yourself with the way that [[S3]] works before reading this document - many of underlying ideas are the same, but the implementation is much stricter. There are two major differences from S3:
+
+* formal class definitions: unlike S3, S4 formally defines the
+  representation and inheritance for each class
+
+* multiple dispatch: the generic function can be dispatched to a method
+  based on the class of any number of argument, not just one
+
+Here we introduce the basics of S4, trying to stay away from the esoterica and focussing on the ideas that you need to understand and write the majority of S4 code. 
+
+<!-- This document will hopefully give you the scaffolding to make better sense of documentation and other detailed resources such as: ... -->
+
+## Classes and instances
+
+In S3, you can turn any object into an object of a particular class just by setting the class attribute.  S4 is much stricter: you must define the representation of the call using `setClass`, and the only way to create it is through the constructer function `new`.
+
+A class has three key properties:
+
+  * a __name__: an alpha-numeric string that identifies the class
+
+  * __representation__: a list of __slots__ (or attributes), giving their
+    names and classes. For example, a person class might be represented by a
+    character name and a numeric age, as follows: 
+    `representation(name = "character", age = "numeric")`
+
+  * a character vector of classes that it inherits from, or in S4 terminology,
+    __contains__.  Note that S4 supports multiple inheritance, but this should
+    be used with extreme caution as it makes method lookup extremely
+    complicated.
+
+You create a class with `setClass`:
+
+    setClass("Person", representation(name = "character", age = "numeric"))
+    setClass("Employee", representation(boss = "Person"), contains = "Person")
+
+and create an instance of a class with `new`:
+
+    hadley <- new("Person", name = "Hadley", age = 31)
+
+Unlike S3, S4 checks that all of the slots have the correct type:
+    
+    hadley <- new("Person", name = "Hadley", age = "thirty")
+    # invalid class "Person" object: invalid object for slot "age" in class
+    #  "Person": got class "character", should be or extend class "numeric"
+    
+    hadley <- new("Person", name = "Hadley", sex = "male")
+    # invalid names for slots of class "Person": sex
+    
+If you omit a slot, it will initiate it with the default object of the class.  
+
+To access slots of an S4 object you use `@`, not `$`:
+
+    hadley <- new("Person", name = "Hadley")
+    hadley@age
+    # numeric(0)
+
+Or if you have a character string giving a slot name, you use the `slot` function:
+
+    slot(hadley, "age")
+
+This is the equivalent of `[[`.
+
+An empty value for `age` is probably not what you want, so you can also assign a default __prototype__ for the class:
+
+    setClass("Person", representation(name = "character", age = "numeric"), 
+      prototype(name = NA_character_, age = NA_real_))
+    hadley <- new("Person", name = "Hadley")
+    hadley@age
+    # [1] NA
+
+`getSlots` will return a description of all the slots of a class:
+
+    getSlots("Person")
+    #        name         age 
+    # "character"   "numeric" 
+
+You can find out the class of an object with `is`.
+
+Note that there's some tension between the usual interactive functional style of R and the global side-effect causing S4 class definitions. In most programming languages, class definition occurs at compile-time, while object instantiation occurs at run-time - it's unusual to be able to create new classes interactively. In particular, note that the examples rely on the fact that multiple calls to `setClass` with the same class name will silently override the previous definition unless the first definition is sealed with `sealed = TRUE`. 
+
+### Checking validity
+
+You can also provide an optional method that applies additional restrictions. This function should have a single argument called `object` and should return `TRUE` if the object is valid, and if not it should return a character vector giving all reasons it is not valid.
+
+    check_person <- function(object) {
+      errors <- character()
+      length_age <- length(object@age)
+      if (length_age != 1) {
+        msg <- paste("Age is length ", length_age, ".  Should be 1", sep = "")
+        errors <- c(errors, msg)
+      }
+
+      length_name <- length(object@name)
+      if (length_name != 1) {
+        msg <- paste("Name is length ", length_name, ".  Should be 1", sep = "")
+        errors <- c(errors, msg)
+      }
+      
+      if (length(errors) == 0) TRUE else errors
+    }
+    setClass("Person", representation(name = "character", age = "numeric"), 
+      validity = check_person)
+    
+    new("Person", name = "Hadley")
+    # invalid class "Person" object: Age is length 0.  Should be 1
+    new("Person", name = "Hadley", age = 1:10)
+    Error in validObject(.Object) : 
+      invalid class "Person" object: Age is length 10.  Should be 1
+      
+    # But note that the check is not automatically applied when we modify 
+    # slots directly
+    hadley <- new("Person", name = "Hadley", age = 31)
+    hadley@age <- 1:10
+    
+    # Can force check with validObject:
+    validObject(hadley)
+    # invalid class "Person" object: Age is length 10.  Should be 1
+
+## Generic functions and methods
+
+Generic functions and methods work similarly to S3, but dispatch is based on the class of all arguments, and there is a special syntax for creating both generic functions and new methods.  
+
+The `setGeneric` function provides two main ways to create a new generic.  You can either convert an existing function to a generic function, or you can create a new one from scratch.
+
+    sides <- function(object) 0
+    setGeneric("sides")
+
+If you create your own, the second argument to `setGeneric` should be a function that defines all the arguments that you want to dispatch on and contains a call to `standardGeneric`:
+
+    setGeneric("sides", function(object) {
+      standardGeneric("sides")
+    })
+
+The following example sets up a simple hierarchy of shapes to use with the sides function.
+
+    setClass("Shape")
+    setClass("Polygon", representation(sides = "integer"), contains = "Shape")
+    setClass("Triangle", contains = "Polygon")
+    setClass("Square", contains = "Polygon")
+    setClass("Circle", contains = "Shape")
+
+Defining a method for polygons is straightforward: we just use the sides slot.  The `setMethod` function takes three arguments: the name of the generic function, the signature to match for this method and a function to compute the result.  Unfortunately R doesn't offer any syntactic sugar for this task so the code is a little verbose and repetitive.
+
+    setMethod("sides", signature(object = "Polygon"), function(object) {
+      object@sides
+    })
+
+For the others we supply exact values. Note that that for generics with few arguments you can simplify the signature without giving the argument names. This saves spaces at the expense of having to remember which position corresponds to which argument - not a problem if there's only one argument.
+
+    setMethod("sides", signature("Triangle"), function(object) 3)
+    setMethod("sides", signature("Square"),   function(object) 4)
+    setMethod("sides", signature("Circle"),   function(object) Inf)
+
+You can optionally also specify `valueClass` to define the expected output of the generic. This will raise a run-time error if a method returns output of the wrong class.
+
+    setGeneric("sides", valueClass = "numeric", function(object) {
+      standardGeneric("sides")
+    })
+    setMethod("sides", signature("Triangle"), function(object) "three")
+    sides(new("Triangle"))
+    # invalid value from generic function "sides", class "character", expected
+    # "numeric"
+
+Note that arguments that the generic dispatches on can't be lazily evaluated - otherwise how would R know which class the object was?  This also means that you can use `substitute` to access the unevaluated expression.
+
+To find what methods are already defined for a generic function, use `showMethods`:
+
+    showMethods("sides")
+    # Function: sides (package .GlobalEnv)
+    # object="Circle"
+    # object="Polygon"
+    # object="Square"
+    # object="Triangle"
+    
+    showMethods(class = "Polygon")
+    # Function: initialize (package methods)
+    # .Object="Polygon"
+    #    (inherited from: .Object="ANY")
+    # 
+    # Function: sides (package .GlobalEnv)
+    # object="Polygon"
+
+### Method dispatch
+
+<!-- http://www.opendylan.org/books/drm/Method_Dispatch -->
+
+This section describes the strategy for matching a call to a generic function to the correct method. If there's an exact match between the class of the objects in the call, and the signature of a method, it's easy - the generic function just calls that method.  Otherwise, R will figure out the method using the following method:
+
+ * For each argument to the function, calculate the distance between the class
+   in the class, and the class in the signature. If they are the same, the
+   distance is zero. If the class in the signature is a parent of the class in
+   the call, then the distance is 1. If it's a grandparent, 2, and so on.
+   Compute the total distance by adding together the individual distances.
+
+ * Calculate this distance for every method. If there's a method with a unique
+   smallest distance, use that. Otherwise, give a warning and call one of the
+   matching methods as described below.
+
+Note that it's possible to create methods that are ambiguous - i.e. it's not clear which method the generic should pick. In this case R will pick the method that is first alphabetically and return a warning message about the situation:
+
+    setClass("A")
+    setClass("A1", contains = "A")
+    setClass("A2", contains = "A1")
+    setClass("A3", contains = "A2")
+
+    setGeneric("foo", function(a, b) standardGeneric("foo")) 
+    setMethod("foo", signature("A1", "A2"), function(a, b) "1-2")
+    setMethod("foo", signature("A2", "A1"), function(a, b) "2-1")
+    
+    foo(new("A2"), new("A2"))
+    # Note: Method with signature "A2#A1" chosen for function "foo",
+    # target signature "A2#A2". "A1#A2" would also be valid
+
+Generally, you should avoid this ambiguity by providing a more specific method:
+
+    setMethod("foo", signature("A2", "A2"), function(a, b) "2-2")
+    foo(new("A2"), new("A2"))
+
+(The computation is cached for this combination of classes so that it doesn't have to be done again.)
+
+There are two special classes that can be used in the signature: `missing` and `ANY`. `missing` matches the case where the argument is not supplied, and `ANY` is used for setting up default methods.  `ANY` has the lowest possible precedence in method matching.
+
+You can also use basic classes like `numeric`, `character` and `matrix`. A matrix of (e.g.) characters will have class `matrix`.
+
+    setGeneric("type", function(x) standardGeneric("type"))
+    setMethod("type", signature("matrix"), function(x) "matrix")
+    setMethod("type", signature("character"), function(x) "character")
+    
+    type(letters)
+    type(matrix(letters, ncol = 2))
+
+You can also dispatch on S3 classes provided that you have made S4 aware of them by calling `setOldClass`.
+
+    foo <- structure(list(x = 1), class = "foo")
+    type(foo)
+
+    setOldClass("foo")
+    setMethod("type", signature("foo"), function(x) "foo")
+    
+    type(foo)
+    
+    setMethod("+", signature(e1 = "foo", e2 = "numeric"), function(e1, e2) {
+      structure(list(x = e1$x + e2), class = "foo")
+    })
+    foo + 3
+
+It's also possible to dispatch on `...` under special circumstances.  See `?dotsMethods` for more details.
+
+### Inheritance
+
+Let's develop a fuller example. This is inspired by an example from the [Dylan language reference](http://www.opendylan.org/gdref/tutorial.html), one of the languages that inspired the S4 object system. In this example we'll develop a simple model of vehicle inspections that vary depending on the type of vehicle (car or truck) and type of inspector (normal or state). 
+
+In S4, it's the `callNextMethod` that (surprise!) is used to call the next method. It figures out which method to call by pretending the current method doesn't exist, and looking for the next closest match.
+
+First we set up the classes: two types of vehicle (car and truck), and two types of inspect.
+
+    setClass("Vehicle")
+    setClass("Truck", contains = "Vehicle")
+    setClass("Car", contains = "Vehicle")
+
+    setClass("Inspector", representation(name = "character"))
+    setClass("StateInspector", contains = "Inspector")
+
+Next we define the generic function for inspecting a vehicle. It has two arguments: the vehicle being inspected and the person doing the inspection.
+
+    setGeneric("inspect.vehicle", function(v, i) {
+       standardGeneric("inspect.vehicle")
+     })
+
+All vehicle must be checked for rust by all inspectors, so we'll add the first.  Cars also need to have working seatbelts.
+
+    setMethod("inspect.vehicle", 
+     signature(v = "Vehicle", i = "Inspector"), 
+     function(v, i) {
+       message("Looking for rust")
+     })
+
+    setMethod("inspect.vehicle", 
+     signature(v = "Car", i = "Inspector"),
+     function(v, i) {  
+       callNextMethod() # perform vehicle inspection
+       message("Checking seat belts")
+     })
+
+     inspect.vehicle(new("Car"), new("Inspector"))
+     # Looking for rust
+     # Checking seat belts
+
+Note that it's the most specific method that's responsible for ensuring that the more generic methods are called.  
+
+We'll next add methods for trucks (cargo attachments need to be ok), and the special task that the state inspected performs on cars: checking for insurance.
+
+    setMethod("inspect.vehicle", 
+      signature(v = "Truck", i = "Inspector"),
+      function(v, i) {
+        callNextMethod() # perform vehicle inspection
+        message("Checking cargo attachments")
+      })
+
+    inspect.vehicle(new("Truck"), new("Inspector"))
+    # Looking for rust
+    # Checking cargo attachments
+
+    setMethod("inspect.vehicle", 
+      signature(v = "Car", i = "StateInspector"),
+      function(v, i) {
+        callNextMethod() # perform car inspection
+        message("Checking insurance")
+    })
+
+    inspect.vehicle(new("Car"), new("StateInspector"))
+    # Looking for rust
+    # Checking seat belts
+    # Checking insurance
+
+This set up ensures that when a state inspector checks a truck, they perform all of the checks a regular inspector would:
+
+     inspect.vehicle(new("Truck"), new("StateInspector"))
+     # Looking for rust
+     # Checking cargo attachments
+
+## Method dispatch 2
+
+
+To make the ideas in this section concrete, we'll create a simple class structure. We have three classes, C which inherits from a character vector, B inherits from C and A inherits from B. We then instantiate an object from each class.
+
+```R
+setClass("C", contains = "character")
+setClass("B", contains = "C")
+setClass("A", contains = "B")
+
+a <- new("A", "a")
+b <- new("B", "b")
+c <- new("C", "c")
+```
+
+This creates a class graph that looks like this:
+
+![](diagrams/class-graph-1.png)
+
+Next, we create a generic f, which will dispatch on two arguments: `x` and `y`.
+
+```R
+setGeneric("f", function(x, y) standardGeneric("f"))
+```
+
+To predict which method a generic will dispatch to, you need to know:
+
+* the name and arguments to the generic
+* the signatures of the methods
+* the class of arguments supplied to the generic
+
+The simplest type of method dispatch occurs if there's an exact match between the class of arguments (arg-classes) and the signature of (sig-classes). In the following example, we define methods with sig-classes `c("C", "C")` and `c("A", "A")`, and then call them with arg classes `c("C", "C")` and `c("A", "A")`.
+
+```R
+setMethod("f", signature("C", "C"), function(x, y) "c-c")
+setMethod("f", signature("A", "A"), function(x, y) "a-a")
+
+f(c, c)
+f(a, a)
+```
+
+If there isn't an exact match, R looks for the closest method. The distance between the sig-class and arg-class is the sum of the distances between each class (matched by named and excluding ...). The distance between classes is the shortest distance between them in the class graph. For example, the distance A -> B is 1, A -> C is 2 and B -> C is 1. The distances C -> B, C -> A and B -> A are all infinite. That means that of the following two calls will dispatch to the same method:
+
+```R
+f(b, b)
+f(a, c)
+```
+
+If we added another class, BC, that inherited from both B and C, then this class would have distance one to both B and C, and distance two to A. As you can imagine, this can get quite tricky if you have a complicated class graph: for this reason it's better to avoid multiple inheritance unless absolutely necessary.
+
+![](diagrams/class-graph-2.png)
+
+```R
+setClass("BC", contains = c("B", "C"))
+bc <- new("BC", "bc")
+```
+
+Let's add a more complicated case:
+
+```
+setMethod("f", signature("B", "C"), function(x, y) "b-c")
+setMethod("f", signature("C", "B"), function(x, y) "c-b")
+f(b, b)
+```
+
+Now we have two signatures that have the same distance (1 = 1 + 0 = 0 + 1), and there is not unique closest method. In this situation R gives a warning and calls the method that comes first alphabetically.
+
+There are two special classes that can be used in the signature: `missing` and `ANY`. `missing` matches the case where the argument is not supplied, and `ANY` is used for setting up default methods. `ANY` has the lowest possible precedence in method matching - in other words, it has a distance value higher than any other parent class.
+
+```R
+setMethod("f", signature("C", "ANY"), function(x,y) "C-*")
+setMethod("f", signature("C", "missing"), function(x,y) "C-?")
+
+setClass("D", contains = "character")
+d <- new("D", "d")
+
+f(c)
+f(c, d)
+```
+
+It's also possible to dispatch on `...` under special circumstances. See `?dotsMethods` for more details.
+
+
+## In the wild
+
+To conclude, lets look at some S4 code in practice. The Bioconductor `EBImage`, by Oleg Sklyar, Gregoire Pau, Mike Smith and Wolfgang Huber, package is a good place to start because it's so simple.  It has only one class, an `Image`, which represents a image as an array of pixel values.
+
+    setClass ("Image",
+      representation (colormode="integer"),
+      prototype (colormode=Grayscale),
+      contains = "array"
+    )
+
+    imageData = function (y) {
+      if (is(y, 'Image')) y@.Data
+      else y
+    }    
+    
+The author wrote the `imageData` convenience method to extract the underlying S3 object, the array.  They could have also used the `S3Part` function to extract this.  
+
+Methods are used to define numeric operations for combining two images, or an image with a constant. Here the author is using the `Ops` group generic which will match all calls to `+`, `-`, `*`, `^`, `%%`, `%/%`, `/`, `==`, `>`, `<`, `!=`, `<=`, `>=`, `&`, and `|`.  The `callGeneric` function then passed on this call to the generic method for arrays.  Finally, each method checks that the modified object is valid, before returning it.
+
+    setMethod("Ops", signature(e1="Image", e2="Image"),
+    	function(e1, e2) {
+              e1@.Data=callGeneric(imageData(e1), imageData(e2))
+               validObject(e1)
+              return(e1)
+    	}
+    )
+    setMethod("Ops", signature(e1="Image", e2="numeric"),
+    	function(e1, e2) {
+              e1@.Data=callGeneric(imageData(e1), e2)
+              validObject(e1)
+              return(e1)
+    	}
+    )
+    setMethod("Ops", signature(e1="numeric", e2="Image"),
+    	function(e1, e2) {
+              e2@.Data=callGeneric(e1, imageData(e2))
+              validObject(e2)
+              return(e2)
+    	}
+    )
+
+The `Matrix` package by Douglas Bates and Martin Maechler is a great example of a more complicated setup. It is designed to efficiently store and compute with many different special types of matrix. As at version 0.999375-50 it defines 130 classes and 24 generic functions. The package is well written, well commented and fairly easy to read. The accompanying [vignette](http://cran.r-project.org/web/packages/Matrix/vignettes/Intro2Matrix.pdf) gives a good overview of the structure of the package. I'd highly recommend downloading the source and then skimming the following R files:
+
+* `AllClass.R`: where all classes are defined
+
+* `AllGenerics.R`: where all generics are defined
+
+* `Ops.R`: where pairwise operators are defined, including automatic
+  conversion of standard S3 matrices
+
+Most of the hard work is done in C for efficiency, but it's still useful to look at the other R files to see how the code is arranged.
