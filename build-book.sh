@@ -7,7 +7,7 @@
 pandoc --chapters -o programming.pdf --latex-engine xelatex \
   -V papersize:oneside -V links-as-notes --toc \
   Introduction.md \
-  part-foundations.md \
+  pandoc/part-foundations.md \
   Data-structures.md \
   Subsetting.md \
   Vocabulary.md \
@@ -15,17 +15,17 @@ pandoc --chapters -o programming.pdf --latex-engine xelatex \
   OO-essentials.md \
   Environments.md \
   Exceptions-debugging.md \
-  part-fp.md \
+  pandoc/part-fp.md \
   Functional-programming.md \
   Functionals.md \
   Function-operators.md \
-  part-adv.md \
+  pandoc/part-adv.md \
   Computing-on-the-language.md \
   Expressions.md \
   Formulas.md \
   Special-environments.md \
   dsl.md \
-  part-perf.md \
+  pandoc/part-perf.md \
   Profiling.md \
   Performance.md \
   Rcpp.md \
