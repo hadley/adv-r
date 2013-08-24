@@ -12,7 +12,15 @@ rmd2md <- function(in_path, out_path = tempfile(fileext = ".md")) {
     error = function(x, options) x, 
     message = function(x, options) x,
     inline = function(x) x,
-    plot = hook_plot_md,
+    plot = function(x, options) {
+      url <- paste(x, collapse = ".")
+      img <- paste0("<img src='", url, "' ",  
+        "width = '", options$out.width %||% 300, "' ", 
+        "height = '", options$out.height %||% 300, "' ", 
+        "title = '", options$caption, "' ", 
+        "/>\n")
+      paste0("```\n", img, "\n```R\n")
+    },
     chunk = function(x, options) {
       ind <- options$indent
       out <- paste0("```R\n", x, "```")
@@ -27,7 +35,8 @@ rmd2md <- function(in_path, out_path = tempfile(fileext = ".md")) {
     tidy = FALSE,
     cache.path = "_cache/",
     fig.width = 4,
-    fig.height = 4
+    fig.height = 4,
+    dev = "png"
   )
   opts_knit$set(
     stop_on_error = 0L
@@ -78,3 +87,5 @@ clear_cache <- function() {
   caches <- dir("_cache", pattern = "\\.html$", full.names = TRUE)
   file.remove(caches)
 }
+
+"%||%" <- function(a, b) if (is.null(a)) b else a
