@@ -55,23 +55,28 @@ md2html <- function(in_path, out_path = tempfile(fileext = ".html")) {
 }
 
 rmd2html <- function(path, cache = FALSE) {
+  
   if (cache) {
-    hash <- digest::digest(path, file = TRUE)
-    cache_path <- paste0("_cache/", hash, ".html")
+    md_path <- cache_file(path, rmd2md)
+    cache_file(md_path, md2html)
+  } else {
+    md_path <- rmd2md(path)
+    md2html(md_path)
+  }
+  
+}
+
+#' @param f A function with two input arguments: in_path and out_path
+cache_file <- function(in_path, f) {
+  hash <- digest::digest(in_path, file = TRUE)
+  cache_path <- paste0("_cache/", hash, ".html")
     
-    if (file.exists(cache_path)) {
-      if (interactive()) message("Use cache for ", path)
-      return(cache_path)
-    }
+  if (file.exists(cache_path)) {
+    if (interactive()) message("Using cache for ", in_path)
+    return(cache_path)
   }
   
-  md_path <- rmd2md(path)
-  html_path <- md2html(md_path)
-  
-  if (cache) {
-    file.copy(html_path, cache_path)
-  }
-  html_path
+  f(in_path, cache_path)
 }
 
 read_file <- function(path) {
