@@ -5,8 +5,6 @@ layout: default
 
 # Exceptions and debugging
 
-<!-- http://www.noamross.net/blog/2013/4/18/r-debug-tools.html -->
-
 This chapter describes techniques to use when things go wrong:
 
 * Debugging: figuring out what went wrong.
@@ -15,29 +13,60 @@ This chapter describes techniques to use when things go wrong:
 
 * Defensive programming: writing 
 
-As with many other parts of R, the approach to dealing with errors and exceptions comes from a LISP-heritage, and is quite different (although some of the terminology is the same) from that of languages like Java.
+As with many other parts of R, the approach to dealing with errors and exceptions comes from a LISP-heritage, and is quite different (although some of the terminology is the same) from that of languages like Java. 
 
-## Debugging
+## Debugging tools
 
-This section discusses how to debug from the command-line.  Modern R guis, like Rstudio, also provide built in debugging tools. These are built on top of the tools I'll describe below but may be exposed in a more user friendly way that requires less typing.
+This section discusses how to debug from the command-line. Generally these are tools of last resort and if you find you're using them very frequently you may want to reconsider your approach to writing functions: it's much easier to start simple and test as you go, than right something big and complicated and then figure out exactly where the problem is.
+
+Three cases: function fails with an error, generates an unexpected warning, or simply gives the wrong result.
+
+Unlike the rest of the book, this chapter describes a specific interface for working with R: RStudio. This is becuase debugging benefits so much from editor support. It's possible to debug code in R in a completely reproducible way, where every debugging action has a corresponding line in the code. Using Rstudio is less reproducible, but generally easier.
+
+R functions have three main ways to communicate to the user:
+
+* By sending a `message()`, which usually is printed in bold font.
+  Messages can be suppressed with `suppressMessages()`
+
+* By generating a `warning()`, which is prefixed by "Warning message".
+  Multiple errors are aggregate together by default. You can see them all
+  with `warnings()` or force to display individually with `options(warn = 1)`.
+  Warnings can be suppressed with `suppressWarnings()`
+
+* By raising a fatal error with `stop()`. Errors force all execution to stop, 
+  and are displayed like messages with an additional "Error" prefix.
+
+Debugging is the art of determining what code raised the error or warning, why it was raised, and what you need to do to fix it. This section will introduce you to the three most important tools for debugging:
+
+* Finding out the sequence of calls that lead to the error with `traceback()`
+
+* Entering an interactive session in an arbitrary code location with 
+  `browser()` or breakpoints.
+
+* Entering an interactive session in the middle of a sequence of calls with
+  `recover()`.
 
 ### Traceback
 
-The key function for performing a post-mortem on an error is `traceback`, which shows all the calls leading up to the error.  Here's an example:
+The most important function to start with `traceback()`, which displays the __call stack__, the sequence of functions calls leading up to the error.  Here's an example:
 
-```{r, eval = TRUE}
-f <- function() g()
-g <- function() h()
-h <- function() i()
-i <- function() "a" + 1
-f()
-# Error in "a" + 1 : non-numeric argument to binary operator
+```{r, eval = FALSE}
+f <- function(a) g(a)
+g <- function(b) h(b)
+h <- function(c) i(c)
+i <- function(d) "a" + d
+f(10)
+# Error in "a" + d : non-numeric argument to binary operator
 traceback()
-# 4: i() at #1
-# 3: h() at #1
-# 2: g() at #1
-# 1: f()
+# 4: i(c)
+# 3: h(b)
+# 2: g(a)
+# 1: f(10)
 ```
+
+You read the call stack from bottom to top: `f()` calls `g()` calls `h()` calls `i()`.  If you're calling your own code that you've `source()`d into R, the traceback will also include filenames and line numbers in the form `filename.r#linenumber`, to make it easier to jump to where the error occured. 
+
+If you're using RStudio, you don't need to call `traceback()` explicitly. Whenever you encounter an error, one of the options will be "Show Traceback". This will display a traceback as described above, and any source refernces will be clickable, so you can jump to exactly where the error occured.
 
 This is very helpful to determine exactly where in a stack of calls an error occured.  However, it's not so helpful if you have a recursive function, or other situations where the same function is called in multiple places:
 
@@ -77,6 +106,8 @@ Trackback can help you figure out where the error occurred, but to understand wh
   `traceback`)
 
 Don't forget that you can combine `if` statements with `browser()` to only debug when a certain situation occurs.
+
+In Rstudio, there's another alternative to using `browser()`: breakpoints. You can set a breakpoint in R code by clicking to the left of the line number in an R script, or pressing `Shift + F9`. Breakpoints are effectively equivalent to `browser()` but they are easier to set (one click instead of nine key presses), and you don't run the risk of accidentally including a `browser()` statement in your source code. There are few places that breakpoints are not equivalent to `browser()`: read [breakpoint troubleshooting](http://www.rstudio.com/ide/docs/debugging/breakpoint-troubleshooting) for more details.
 
 ### Browsing arbitrary R code
 
@@ -120,6 +151,65 @@ It's also possible to  start `browser` automatically when an error occurs, by se
   Use this to reset back to the regular behaviour.
 
 Warnings are harder to track down because they don't provide any information about where they occured. Currently, the best way to debug them into turn them into errors using `options(warn = 2)`: then you can apply any of the techniques described above. 
+
+### The call stack: `traceback(), `where` and `recover()`.
+
+Unfortunately the call stacks printed by `traceback()`, `browser()` + `where` and recover are not consistent. Using the simple nested set of calls below, the call backs look like this table. Note that the numbering is different between `traceback()` and `where`, and `recover()` displays in the opposite order, and omits the call to `stop()`.
+
+`traceback()`     `where`                 `recover()`
+----------------  ----------------------- ------------
+4: stop("Error")  where 1: stop("Error")   1: f()  
+3: h(x)           where 2: h(x)            2: #1: g(x)
+2: g(x)           where 3: g(x)            3: #1: h(x)
+1: f()            where 4: f() 
+
+```{r, eval = FALSE}
+f <- function(x) g(x)
+g <- function(x) h(x)
+h <- function(x) stop("Error")
+f(); traceback()
+options(error = browser); f()
+options(error = recover); f()
+options(error = NULL)
+```
+
+## Debugging techniques
+
+> Finding your bug is a process of confirming the many things
+> that you believe are true --- until you find one which is not
+> true.
+> --- Norm Matloff
+
+Binary search
+
+
+http://en.wikibooks.org/wiki/Computer_Programming_Principles/Maintaining/Debugging
+
+1. Recognize that a bug exists
+2. Isolate the source of the bug
+3. Identify the cause of the bug
+4. Determine a fix for the bug
+5. Apply the fix and test it
+
+
+http://cm.bell-labs.com/cm/cs/tpop/debugging.html
+
+Make the bug reproducible.
+Divide and conquer.
+Study the numerology of failures.
+Draw a picture.
+Keep records.
+
+http://www.et.byu.edu/~rhelps/eet340/html/debugging_principles.htm: Strict debugging sequence 
+
+- Testing (design a test program) 
+
+- Stabilization (bug repeatability) 
+
+- Localization (hypothesize, analyze) 
+
+- Correction (errors in implementation and design) 
+
 
 ## Exceptions
 
@@ -496,3 +586,41 @@ col_means <- function(df) {
 
 We use `vapply` instead of `sapply`, remember to use `drop = FALSE`.  It still doesn't check that the input is correct, or coerce it to the correct format.
 
+## Example ideas
+
+```{r}
+insert <- function(x, value, pos) {
+  before <- x[1:pos]
+  after <- x[pos:length(x)]
+  
+  c(before, value, after)
+}
+insert(1:5, 10, 3)
+insert(1:5, 10, 1)
+
+insert <- function(x, value, pos) {
+  before <- x[1:(pos - 1)]
+  after <- x[(pos - 1):length(x)]
+  
+  c(before, value, after)
+}
+insert(1:5, 10, 3)
+insert(1:5, 10, 1)
+insert(1:5, 10, 5)
+
+larger <- function(x, y) {
+  y.is.bigger <- y > x
+  x[y.is.bigger] <- y[y.is.bigger]
+  y
+}
+
+factorial1 <- function(x) {
+  x * factorial1(x - 1)
+}
+greetings <- function(name) {
+  first <- substr(name, 1, 1)
+  capital <- toupper(first)
+  name <- gsub(first, capital, names)
+  paste("Hello", name, "!")
+}
+```
