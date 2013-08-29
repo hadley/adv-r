@@ -180,6 +180,98 @@ Finally, despite what you might have read elsewhere, there's never any point in 
 
 Generally, any primitive replacement function will modify in place, provided that the object is not referred to elsewhere.
 
+```R
+library(pryr)
+x <- 1:5
+address(x)
+x[2] <- 3L
+address(x)
+
+# Assigning in a real number forces conversion of x to real
+x[2] <- 3
+address(x)
+
+# Modifying class or other attributes modifies in place
+attr(x, "a") <- "a"
+class(x) <- "b"
+address(x)
+
+# But making a reference to x elsewhere, will create a modified
+# copy when you modify x - no longer modifies in place
+y <- x
+x[1] <- 2
+address(x)
+```
+
+
+In R, it's easy to think that you're modifying an object in place, but you're actually creating a new copy each time. 
+
+It's not that loops are slow, it's that if you're not careful every time you modify an object inside a list it makes a complete copy. C functions are usually faster not just because the loop is written in C, but because C's default behaviour is to modify in place, not make a copy. This is less safe, but much more efficient. If you're modifying a data structure in a loop, you can often get big performance gains by switching to the vectorised equivalent.  When working with matrices and data frames, this often means creating a large object that you can combine with a single operation.
+
+Take the following code that subtracts the median from each column of a large data.frame:
+
+```{r, cache = TRUE}
+x <- data.frame(matrix(runif(100 * 1e4), ncol = 100))
+medians <- vapply(x, median, numeric(1))
+
+system.time({
+  for(i in seq_along(medians)) {
+    x[, i] <- x[, i] - medians[i]
+  }
+})
+```
+
+It's rather slow - we only have 100 columns and 10,000 rows, but it's still taking over second. We can use `address()` to see what's going on. This function returns the memory address that the object occupies:
+
+```{r, results = 'hide'}
+library(pryr)
+track_x <- track_copy(x)
+system.time({
+  for(i in seq_along(medians)) {
+    x[, i] <- x[, i] - medians[i]
+    track_x()
+  }
+})
+```
+
+Each iteration of the loop prints a different memory address - the complete data frame is being modified and copied for each iteration.
+
+We can make the function substantially more efficient by using a list which can modify in place:
+
+```{r}
+y <- as.list(x)
+track_y <- track_copy(y)
+system.time({
+  for(i in seq_along(medians)) {
+    y[[i]] <- y[[i]] - medians[i]
+    track_y()
+  }
+})
+```
+
+We can rewrite it to be much faster by eliminating all those copies, and instead relying on vectorised data frame subtraction: if you subtract a list from a data frame, the elements of the list are matched up with the elements of the data frame. That loop occurs at the C-level, which means the data frame is only copied once, not many many times.
+
+```{r}
+z <- as.data.frame(x)
+system.time({
+  z <- z - as.list(medians)
+})
+```
+
+The art of R performance improvement is to build up a good intuitions for what operations incur a copy, and what occurs in place. Each version of R usually implements a few performance improvements that eliminates copies, so it's impossible to give an up-to-date list, but some rules of thumb are:
+
+* `structure(x, class = "c")` makes a copy.  `class(x) <- c` does not.
+
+* Modifying a vector in place with `[<-` or `[[<-` does not make a copy.  Modifying a data frame in place does make a copy. Modifying a list in place makes a copy, but it's a shallow copy: each individual component of the list is not copied. 
+
+* `names<-`, `attr<-` and `attributes<-` don't make a copy
+
+* Avoid modifying complex objects (like data frames) repeatedly and instead pull out the component you want to modify, modify it, and then put it back in.  If that doesn't work, converting it to a simpler object type and then converting back might help
+
+Generally, building up a rich vocabulaory of vectorised functions will help you write performant code.  Vectorisation basically means pushing a for-loop from R in C so that only one copy of the data structure is made.
+
+If you thinking copying is causing a bottleneck in your program, then I recommend running some small experiments using `address()` and `microbenchmark` as described below. 
+
 ## Memory profiling
 
 Memory profiling is a little tricky, because looking at total memory is not that useful - some of that memory may be used unreferenced objects that haven't yet been removed by the garbage collector. Additionally, R's memory profiler is timer based - R regular stops the execution of the script and records memory information. This has two consequences: firstly, enabling profiling will slow down the execution of your script, and secondly the timer has only limited resolution so it's not able to capture expressions that happen quickly. (Fortunately however, big memory allocations are relatively expensive so they're likely to be caught).

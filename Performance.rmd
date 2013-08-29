@@ -5,7 +5,143 @@ layout: default
 
 # Performance
 
-General techniques for improving performance
+General techniques for improving performance.  
+
+Find out what is slow. Then make it fast.
+
+## Micro-benchmarking
+
+Once you have identified the performance bottleneck in your code, you'll want to try out many variant approaches.
+
+The [microbenchmark][microbenchmark] package is much more precise than `system.time()` with nanosecond rather than millisecond precision. This makes it much easier to compare operations that only take a small amount of time. For example, we can determine the overhead of calling a function: (for an example in the package)
+
+```{r}
+library(microbenchmark)
+
+f <- function() NULL
+microbenchmark(
+  NULL,
+  f()
+)
+```
+
+It's about ~150 ns on my computer (that's the time taken to set up the new environment for the function etc). 
+
+It's hard to accurately compute this difference with `system.time` because we need to repeat the operation about a million times, and we get no information about the variability of the estimate.  The results may also be systematically biased if some other computation is happening in the background during one of the runs.
+  
+```{r, cache = TRUE}
+x <- 1:1e6
+system.time(for (i in x) NULL) * 1e3
+system.time(for (i in x) f()) * 1e3
+```
+
+Running both examples on my computer a few times reveals that the estimate from `system.time` is about 20 nanoseconds higher than the median from `microbenchmark`.
+
+By default, microbenchmark evaluates each expression 100 times, and in random order to control for any systematic variability. It also provides times each expression individually, so you get a distribution of times, which helps estimate error.  You can also display the results visually using either `boxplot`, or if you have `ggplot2` loaded, `autoplot`:
+
+```{r}
+f <- function() NULL
+g <- function() f()
+h <- function() g()
+i <- function() h()
+m <- microbenchmark(
+  NULL,
+  f(), 
+  g(),
+  h(),
+  i())
+boxplot(m)
+library(ggplot2)
+autoplot(m)
+```
+
+Microbenchmarking allows you to take the very small parts of a program that profiling has identified as being bottlenecks and explore alternative approaches.  It is easier to do this with very small parts of a program because you can rapidly try out alternatives without having to worry too much about correctness (i.e. you are comparing alternatives that are so simple it's obvious whether they're correct or not.)
+
+Useful to think about the first part of the process, generating possible alternatives as brainstorming.  You want to come up with as many different approaches to the problem as possible.  Don't worry if some of the approaches seem like they will _obviously_ be slow: you might be wrong, or that approach might be one step towards a better approach.  To get out of a local maxima, you must go down hill.
+
+When doing microbenchmarking, you not only need to figure out what the best method is now, but you need to make sure that fact is recorded somewhere so that when you come back to the code in the future, you remember your reasoning and don't have to redo it again. I find it really useful to write microbenchmarking code as Rmarkdown documents so that I can easily integrate the benchmarking code as well as text describing my hypotheses about why one method is better than another, and listing things that I tried that weren't so effective.
+
+Microbenchmarking is also a powerful tool to improve your intuition about what operations in R are fast and what are slow. The following XXX examples show how to use microbenchmarking to determine the costs of some common R actions, but I really recommend setting up some experiments for the R functions that you use most commonly.
+
+* What's the cost of function vs S3 or S4 method dispatch? 
+* What's the fastest way to extract a column out of data.frame?
+
+### Method dispatch
+
+The following microbenchmark compares the cost of generating one uniform number directly, with a function, with a S3 method, with a S4 method and a R5 
+
+
+```{r}
+f <- function(x) NULL
+
+s3 <- function(x) UseMethod("s3")
+s3.integer <- function(x) NULL
+
+A <- setClass("A", representation(a = "list"))
+setGeneric("s4", function(x) standardGeneric("s4"))
+setMethod(s4, "A", function(x) NULL)
+
+B <- setRefClass("B")
+B$methods(r5 = function(x) NULL)
+
+a <- A()
+b <- B$new()
+
+microbenchmark(
+  bare = NULL,
+  fun = f(),
+  s3 = s3(1L),
+  s4 = s4(a),
+  r5 = b$r5()
+)
+```
+
+On my computer, the bare call takes about 40 ns. Wrapping it in a function adds about an extra 200 ns - this is the cost of creating the environment where the function execution happens. S3 method dispatch adds around 3 µs and S4 around 12 µs.
+
+However, it's important to notice the units: microseconds. There are a million microseconds in a second, so it will take hundreds of thousands of calls before the cost of S3 or S4 dispatch appreciable. Most problems don't involve hundreds of thousands of function calls, so it's unlikely to be a bottleneck in practice.This is why microbenchmarks can not considering in isolation: they must be  carefully considered in the context of your real problem.
+
+### Extracting variables out of a data frame
+
+For the plyr package, I did a lot of experimentation to figure out the fastest way of extracting data out of a data frame.
+
+```{r}
+n <- 1e5
+df <- data.frame(matrix(runif(n * 100), ncol = 100))
+x <- df[[1]]
+x_ran <- sample(n, 1e3)
+
+microbenchmark(
+  x[x_ran],
+  df[x_ran, 1],
+  df[[1]][x_ran],
+  df$X1[x_ran],
+  df[["X1"]][x_ran],
+  .subset2(df, 1)[x_ran],
+  .subset2(df, "X1")[x_ran]
+)
+```
+Again, the units are in microseconds, so you only need to care if you're doing hundreds of thousands of data frame subsets - but for plyr I am doing that so I do care.
+
+### Vectorised operations on a data frame
+
+
+```{r}
+df <- data.frame(a = 1:10, b = -(1:10))
+l <- list(0, 10)
+l_2 <- list(rep(0, 10), rep(10, 10))
+m <- matrix(c(0, 10), ncol = 2, nrow = 10, byrow = TRUE)
+df_2 <- as.data.frame(m)
+v <- as.numeric(m)
+
+microbenchmark(
+  df + v,
+  df + l,
+  df + l_2,
+  df + m,
+  df + df_2
+)
+```
+
 
 ## Brainstorming
 
@@ -29,32 +165,6 @@ Caching packages
 ### Memoisation
 
 A special case of caching is memoisation.
-
-### Modifying in place vs. modifying a copy
-
-```R
-library(pryr)
-x <- 1:5
-address(x)
-x[2] <- 3L
-address(x)
-
-# Assigning in a real number forces conversion of x to real
-x[2] <- 3
-address(x)
-
-# Modifying class or other attributes modifies in place
-attr(x, "a") <- "a"
-class(x) <- "b"
-address(x)
-
-# But making a reference to x elsewhere, will create a modified
-# copy when you modify x - no longer modifies in place
-y <- x
-x[1] <- 2
-address(x)
-```
-
 
 ## Byte code compilation
 
@@ -85,3 +195,5 @@ Read the source code - implementation in C is usually correlated with high perfo
 ## Rewrite in a lower-level language
 
 C, C++ and Fortran are easy. C++ easiest, recommended, and described in the following chapter.
+
+[microbenchmark]: http://cran.r-project.org/web/packages/microbenchmark/index.html
