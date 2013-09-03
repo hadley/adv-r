@@ -5,7 +5,7 @@ layout: default
 
 It's important to understand memory usage in R, firstly because you might be running out, and secondly because efficiently managing memory can make your code faster. The goals of this chapter are:
 
-* to give you a basic understanding of how memory works in R
+* to give you a basic understanding of how memory works in R, by explaining `object.size()`
 
 * to help you predict when a object will be copied, show you how to test your prediction, and give you some tips for avoiding copies
 
@@ -17,9 +17,9 @@ Unfortunately the details of memory management in R is not documented in one pla
 
 ## `object.size()`
 
-One of the most useful tools for understand memory usage in R is `object.size()`: it tells you how large an object is, and places a similar role to `system.time()` for understanding time usage. This section explores the usage of `object.size()` and by explaining some unusual findings, will along the way help you understand some important aspects of memory allocation.
+One of the most useful tools for understanding memory usage in R is `object.size()`. It's analogous to `system.time()`, and tells you how much memory an R object occupies. This section explores the usage of `object.size()` and by explaining some unusual findings, will help you understand some important aspects of memory allocation.
 
-We'll start with a suprising plot: a plot of vector length vs. the number of bytes of memory it occupies. You might have expected that the size of an empty vector would be 0 and that the memory usage would grow proportionately with length. Neither of those things are true!
+We'll start with a suprising plot:  a plot of vector length vs. the number of bytes of memory it occupies. You might have expected that the size of an empty vector would be 0 and that the memory usage would grow proportionately with length. Neither of those things are true!
 
 ```{r size-q}
 sizes <- sapply(0:50, function(n) object.size(seq_len(n)))
@@ -35,9 +35,9 @@ object.size(raw())
 object.size(list())
 ```
 
-What is that 40 bytes of memory used for? There are four components that every object in R has:
+What are those 40 bytes of memory used for? There are four components that every object in R has:
 
-* 4 bytes: information about the object, called the sxpinfo). This includes its base type,  and information used for debugging and memory management.
+* 4 bytes: object metadata, the _sxpinfo_. This metadata includes the base type, and information used for debugging and memory management.
 
 * 2 * 8 bytes: two pointers needed for memory management. Objects in R are stored in a doubly-linked list, so that R can easily iterate through every object stored in memory.
 
@@ -45,15 +45,15 @@ What is that 40 bytes of memory used for? There are four components that every o
 
 And three components possessed by all vector types:
 
-* 4 bytes: the length of the vector. This gave rise to the previous limitation in R of only supporting vectors up to 2 ^ 31 - 1 (about two billion) elements long. You can read in R-internals about how support for [long vectors](http://cran.r-project.org/doc/manuals/R-ints.html#Long-vectors) was added, without changing this number.
+* 4 bytes: the length of the vector. Using 4 bytes means that R could previously only support vectors up to 2 ^ 31 - 1 (about two billion) elements long. You can read in R-internals about how support for [long vectors](http://cran.r-project.org/doc/manuals/R-ints.html#Long-vectors) was added in R 3.0.0, without changing the size of this field.
 
 * 4 bytes: the "true" length, which is basically never used (the exception is for environments with hastables, where the hashtable is a list, and the truelength represents the allocated space and length represents the space)
 
-* 0 bytes: the data. That's not used for an empty vector, but is obviously very important otherwise!
+* ?? bytes: the data. An empty vector has 0 bytes of data, but it's obviously very important otherwise!
 
-If you're counting closely you'll note that only this adds up to 36 bytes. The other 4 bytes are needed because 36 is not divisable by 8. This is important because when using a 64-bit architecture you're best off aligning objects to the nearest 8 byte (=64 bit) boundary.
+If you're counting closely you'll note that only this adds up to 36 bytes. The other 4 bytes are needed as padding after the sxpinfo, so the pointers start on 8 bytes (=64-bit) boundaries, which is needed by most architectures (and for the ones it's not required, accessing non-aligned pointers tends to be rather slow). 
 
-So that explains the intercept on the graph. But why does the memory size grow in irregular jumps? To understand that, you need to know a little bit about how R requests memory from the operating system. Requesting memory, using the `malloc()` function is a relatively expensive operation, and it would make R slow if it had to request memory every time you create a little vector.  Instead, it asks for a big block of memory and then manages it itself: this is called the small vector pool. R uses this pool for vectors less than 128 bytes long, and for efficiency and simplicitly reasons, only allocates vectors that are 8, 16, 32, 48, 64 or 128 bytes long. If we adjust our previous plot by removing the 40 bytes of overhead we can see that those values correspond to the jumps.
+That explains the intercept on the graph. But why does the memory size grow in irregular jumps? To understand that, you need to know a little bit about how R requests memory from the operating system. Requesting memory, using the `malloc()` function, is a relatively expensive operation, and it would make R slow if it had to request memory every time you created a little vector.  Instead, it asks for a big block of memory and then manages it itself: this is called the small vector pool. R uses this pool for vectors less than 128 bytes long, and for efficiency and simplicitly reasons, only allocates vectors that are 8, 16, 32, 48, 64 or 128 bytes long. If we adjust our previous plot by removing the 40 bytes of overhead we can see that those values correspond to the jumps.
 
 ```{r size-a}
 plot(0:50, sizes - 40, xlab = "Length", ylab = "Bytes excluding overhead", type = "n")
@@ -63,17 +63,41 @@ abline(a = 0, b = 4, col = "grey90", lwd = 4)
 lines(sizes - 40, type = "s")
 ```
 
-It only remains to explain the jumps after the 128 limit: when R has moved into the large storage pool, and asks the operating system for memory every time it needs a new vector. R always asks for memory in multiples of 8 bytes: this is partly to make internal code simpler when used across very different operating systems, partly for legacy reasons and partly for performance reasons.
+It only remains to explain the jumps after the 128 limit. While it makes sense for R to manage it's own memory for small vectors, it doesn't make sense to manage it for large vectors: allocating big chunks of memory is something that operating systems are very good at. R always asks for memory in multiples of 8 bytes: this ensures good alignment for the data, in the same way we needed good alignment for the pointers described above.
+
+There are a few other subtleties to `object.size()`: it only promises to give an estimate of the memory usage, not the actual usage. This is because for more complex objects it's not immediately obvious what memory memory usage means. Take environments for example, using `object.size()` on an environment tells you the size of the environment, not the total size of its contents. It would be easy to create a function that did this:
+
+```{r}
+env_size <- function(env) {
+  objs <- ls(env, all = TRUE) 
+  sizes <- vapply(objs, function(x) object.size(get(x, env)), double(1))
+  sum(sizes)
+}
+object.size(environment())
+env_size(environment())
+```
+
+There's a good reason for this - it's not immediately obvious how much space an environment takes up because environment objects are reference based.  In the following example, what is the size of `a1`? What is the size of `a2`? 
+
+```{r}
+e <- new.env()
+e$x <- 1:1e6
+
+a1 <- list(e)
+object.size(a1)
+a2 <- list(e)
+object.size(a2)
+```
 
 ## Total memory use
 
-`object.size()` allows you to determine the size of a single object, and you can use `gc()` to determine how much memory you're currently using:
+`object.size()` tells you the size of a single object; `gc()` tells you total size of all objects in memory:
 
 ```{r}
 gc()
 ```
 
-R breaks down memory usage into Vcells (vector memory usage) and Ncells (everything else), but this distinction usually doesn't matter, and neither do the gc trigger and max used columns. The function below wraps around `gc()` to just return the number of megabytes of memory you're currently using.
+R breaks down memory usage into Vcells (vector memory usage) and Ncells (everything else), but this distinction isn't usually important, and neither are the gc trigger and max used columns. What you should be most interested in is just the total memory currently used. The function below wraps up `gc()` to just return the number of megabytes of memory you're currently using.
 
 ```{r}
 mem <- function() {
@@ -82,7 +106,7 @@ mem <- function() {
     stop("Unknown architecture", call. = FALSE)
   }
   
-  node_size <- if (bit == 32) 28L else 56L
+  node_size <- if (bit == 32L) 28L else 56L
   
   usage <- gc()
   sum(usage[, 1] * c(node_size, 8)) / (1024 ^ 2)
@@ -90,9 +114,9 @@ mem <- function() {
 mem()
 ```
 
-Don't expect this number to agree with the amount of memory reported by your operating system. There is some overhead associated with the R interpreter that is not captured by these numbers, and both R and the operating system are lazy: they won't try and reclaim memory until it's actually needed. Another problem is memory fragmentation: R counts the memory occupied by objects, but not the memory occupied by the gaps between objects where old objects used to live.
+Don't expect this number to agree with the amount of memory that your operating system reports that R is using. There is some overhead associated with the R interpreter that is not captured by these numbers, and both R and the operating system are lazy: they won't try and reclaim memory until it's actually needed. Another problem is memory fragmentation: R counts the memory occupied by objects; there may be gaps that R is not using because previously used objects have been deleted.
 
-We can use `mem()` to create a handy function for telling us how much memory a particularly operation needs:
+We can build a function of top of `mem()` that tells us how memory changes during the execution of a block of code. We need a little special evaluation to make the code behave as similarly as possible to running it at the top level.
 
 ```{r}
 mem_change <- function(code) {
@@ -104,11 +128,17 @@ mem_change <- function(code) {
   
   round(mem() - start, 3)
 }
+# Need about 4 mb to store 1 million integers
+mem_change(x <- 1:1e6)
+# We get that memory back when we delete it
+mem_change(rm(x))
 ```
+
+Next, we'll use `mem_change()` to explore in more depth how memory is allocated and free'd by R, and how the garbage collector works lazily to release memory when needed.
 
 ## Garbarge collection
 
-The job of the garbage collector is to reclaim the memory from objects that are no available. There are two ways to remove objects:
+The job of the garbage collector is to reclaim the memory from objects that are no longer used. There are two ways to remove objects:
 
 * manually, with `rm()`
 
@@ -120,14 +150,19 @@ The job of the garbage collector is to reclaim the memory from objects that are 
     mem_change(rm(big))
     ```
 
-* automatically, when the environment in which they were defined is no longer used.
+* automatically, when the environment in which they were defined is no longer used.  In the following code, the million vectors are allocated inside the function, but are automatically cleaned up when the function terminates, resulting in a net change of zero.
 
     ```{r}
-    # Notice that there's no net memory change 
     mem_change(f())
     ```
 
-However, you need to be careful with anything that captures the enclosing environment, like formulas or closures:
+Unfortunately we're not seeing a completely accurate picture of memory usage, because in order to find out how much memory is available, we need to call `gc()`. `gc()` does two things: it returns the amount of memory used, but it also triggers garbage collection. Garbage collection (GC) is the process where R figures out which objects are no longer used, and releases the memory that they used to use. Garbage collection normally happens lazily: whenever R needs more space, it will call `gc()` for you. So in reality, that R might hold onto the memory after the function has terminated, but it will release it as soon as it's needed.
+
+Despite what you might have read elsewhere, there's never any point in calling `gc()` yourself, apart to see how much memory is in use. R will automatically call run garbage collection whenever it needs more space; if you want to see when that is, call `gcinfo(TRUE)`. The only reason you _might_ want to call `gc()` is that it will instruct R to return memory to the operating system. (And even then it wouldn't necessary do anything - older versions of windows had no way for a program to return memory to the OS)
+
+Generally, GC takes care of releasing previously used memory. However, you do need to be aware of situations that can cause memory leaks: when you think you've removed all references to an object, but some are still hanging around so the object never gets used. In R, the two main causes of memory leaks are formulas and closures.  They both capture the enclosing environment, so any objects in that environment will not be reclaimed.
+
+The following code illustrates the problem. `f1()` just returns the object `10`, so the large vector allocated inside the function will go out of scope and get reclaimed, so the net memory effect is 0. `f2()` and `f3()` both return things that capture the environment where they are created, and so the memory is not reclaimed until those objects are removed.
 
 ```{r}
 f1 <- function() {
@@ -143,42 +178,29 @@ f3 <- function() {
   function() 10
 }
 mem_change(x <- f1())
+x
+mem_change(rm(x))
 mem_change(y <- f2())
+y
+mem_change(rm(y))
 mem_change(z <- f3())
-rm(x, y, z)
+z
+mem_change(rm(z))
 ```
 
-They prevent the environment from going out of scope and so the memory is never reclaimed.
+## Memory profiling
 
-Also note that using `object.size()` on an environment tells you the size of the environment, not the total size of its contents.
+(Note this section is subject to change: while memory profiling has been available since 2006, there has been relatively little work done to summarise the output in an accessible fashion. This section represents the best of my knowledge, but it is likely to change rapidly.)
 
-```{r}
-env_size <- function(env) {
-  objs <- ls(env, all = TRUE) 
-  sizes <- vapply(objs, function(x) object.size(get(x, env)), double(1))
-  sum(sizes)
-}
-object.size(environment())
-object.size(env_size())
-```
+As well as using `mem_change()` to explicitly capture the change in memory caused by running some code, we can use memory profiling to automatically record memory usage every few milliseconds during code execution. This gives us slightly different data because it does not trigger a GC, and it's a little easier to use when trying to understand the memory usage of a large block of code. R's memory profiler is timer based - R regular stops the execution of the script and records memory information. This means that the timer has limited resolution so it's not able to capture expressions that happen quickly (fortunately big memory allocations are relatively expensive so they're likely to be caught).
 
-There's a good reason for this - it's not immediately obvious how much space you say an environment takes up because environment objects are reference based.  In the following example, what is the size of `a1`? What is the size of `a2`? 
+Memory profiling provides a lot of data: it gives the amount of memory allocated in the small vector pool, the large vector pool and in the node pool. However, the total memory usage seems most useful, and in particular looking at memory allocations seems to be most useful for understand where memory is being used. Memory releasing is general less useful as it only occurs on GC.
 
-```{r}
-e <- new.env()
-e$x <- 1:1e6
-
-a1 <- list(e)
-object.size(a1)
-a2 <- list(e)
-object.size(a2)
-```
-
-Finally, despite what you might have read elsewhere, there's never any point in calling `gc()` yourself, apart to see how much memory is in use. R will automatically call run garbage collection whenever it needs more space; if you want to see when that is, call `gcinfo(TRUE)`. The only reason you _might_ want to call `gc()` is that it will instruct R to return memory to the operating system. (And even then it wouldn't necessary do anything - older versions of windows had no way for a program to return memory to the OS)
+Another option is to use `gctorture(TRUE)`: this forces R to run after every allocation. This helps with both problems because memory is freed as soon as possible, and R runs much more slowly (10-100x in my experience), so the resolution of the timer effectively becomes much greater. So only run this once you've isolated a small part of your code that you want to understand the memory usage of, or if you're very patient. In my experience, it helps largely with smaller allocations and associating allocations with exactly the right line of code. It also helps you see when objects would be reclaimed if absolutely necessary.
 
 ## Modification in place
 
-Generally, any primitive replacement function will modify in place, provided that the object is not referred to elsewhere.
+Generally, any primitive replacement function will modify in place, provided that the object is not referred to elsewhere.  We can use the `address()` function from pryr to see this more easily.
 
 ```R
 library(pryr)
@@ -203,6 +225,7 @@ x[1] <- 2
 address(x)
 ```
 
+You can use `pryr::refs()` to determine how many references an object has. 
 
 In R, it's easy to think that you're modifying an object in place, but you're actually creating a new copy each time. 
 
@@ -272,10 +295,3 @@ Generally, building up a rich vocabulaory of vectorised functions will help you 
 
 If you thinking copying is causing a bottleneck in your program, then I recommend running some small experiments using `address()` and `microbenchmark` as described below. 
 
-## Memory profiling
-
-Memory profiling is a little tricky, because looking at total memory is not that useful - some of that memory may be used unreferenced objects that haven't yet been removed by the garbage collector. Additionally, R's memory profiler is timer based - R regular stops the execution of the script and records memory information. This has two consequences: firstly, enabling profiling will slow down the execution of your script, and secondly the timer has only limited resolution so it's not able to capture expressions that happen quickly. (Fortunately however, big memory allocations are relatively expensive so they're likely to be caught).
-
-Despite these caveats, memory profiling is still useful. Rather than looking at total memory use, we focus on allocations; and we bear in mind that the attributions of memory allocation might be a few lines off.
-
-Another option is to use `gctorture(TRUE)`: this forces R to run after every allocation. This helps with both problems because memory is freed as soon as possible, and R runs much more slowly (10-100x in my experience), so the resolution of the timer effectively becomes 10x greater. So only run this once you've isolated a small part of your code that you want to understand the memory usage of, or if you're very patient. In my experience, it helps largely with smaller allocations and associating allocations with exactly the right line of code. It also helps you see when objects would be reclaimed if absolutely necessary.
