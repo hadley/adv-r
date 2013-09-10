@@ -91,7 +91,7 @@ object.size(a2)
 
 ## Total memory use
 
-`object.size()` tells you the size of a single object; `gc()` tells you total size of all objects in memory:
+`object.size()` tells you the size of a single object; `gc()` (among other things) tells you total size of all objects in memory:
 
 ```{r}
 gc()
@@ -138,54 +138,49 @@ Next, we'll use `mem_change()` to explore in more depth how memory is allocated 
 
 ## Garbarge collection
 
-The job of the garbage collector is to reclaim the memory from objects that are no longer used. There are two ways to remove objects:
+In some languages you have to explicitly delete unnused objects so that their memory can be returned. R uses an alternative approach, called garbage collection, which figures out when an object is no longer available and frees the memory automatically. It does this based on environments: when an environment goes out of scope (for example, when a function finishes executing), all of the contents of that environment are deleted and the memory free.
 
-* manually, with `rm()`
+For example, in the following code, the million vectors are allocated inside the function, but are automatically cleaned up when the function terminates, resulting in a net change of zero.
 
-    ```{r}
-    f <- function() {
-      1:1e6
-    }
-    mem_change(big <- f())
-    mem_change(rm(big))
-    ```
+```{r}
+f <- function() {
+  1:1e6
+}
+mem_change(f())
+```
 
-* automatically, when the environment in which they were defined is no longer used.  In the following code, the million vectors are allocated inside the function, but are automatically cleaned up when the function terminates, resulting in a net change of zero.
-
-    ```{r}
-    mem_change(f())
-    ```
-
-Unfortunately we're not seeing a completely accurate picture of memory usage, because in order to find out how much memory is available, we need to call `gc()`. `gc()` does two things: it returns the amount of memory used, but it also triggers garbage collection. Garbage collection (GC) is the process where R figures out which objects are no longer used, and releases the memory that they used to use. Garbage collection normally happens lazily: whenever R needs more space, it will call `gc()` for you. So in reality, that R might hold onto the memory after the function has terminated, but it will release it as soon as it's needed.
+Unfortunately we're not seeing a completely accurate picture of normally memory usage, because in order to find out how much memory is available, we need to call `gc()`. As well as returning the amount of memory currently used, `gc()` also triggers garbage collection. Garbage collection normally happens lazily: R calls `gc()` when it needs more space. So in reality, that R might hold onto the memory after the function has terminated, but it will release it as soon as it's needed.
 
 Despite what you might have read elsewhere, there's never any point in calling `gc()` yourself, apart to see how much memory is in use. R will automatically call run garbage collection whenever it needs more space; if you want to see when that is, call `gcinfo(TRUE)`. The only reason you _might_ want to call `gc()` is that it will instruct R to return memory to the operating system. (And even then it wouldn't necessary do anything - older versions of windows had no way for a program to return memory to the OS)
 
-Generally, GC takes care of releasing previously used memory. However, you do need to be aware of situations that can cause memory leaks: when you think you've removed all references to an object, but some are still hanging around so the object never gets used. In R, the two main causes of memory leaks are formulas and closures.  They both capture the enclosing environment, so any objects in that environment will not be reclaimed.
+Generally, GC takes care of releasing previously used memory. However, you do need to be aware of situations that can cause memory leaks: when you think you've removed all references to an object, but some are still hanging around so the object never gets freed. In R, the two main causes of memory leaks are formulas and closures. They both capture the enclosing environment, so any objects in that environment will not be reclaimed.
 
-The following code illustrates the problem. `f1()` just returns the object `10`, so the large vector allocated inside the function will go out of scope and get reclaimed, so the net memory effect is 0. `f2()` and `f3()` both return things that capture the environment where they are created, and so the memory is not reclaimed until those objects are removed.
+The following code illustrates the problem. `f1()` just returns the object `10`, so the large vector allocated inside the function will go out of scope and get reclaimed, and the net memory change is 0. `f2()` and `f3()` both return objects that environments, and so the net memory change is almost 4 megabytes.
 
 ```{r}
 f1 <- function() {
   x <- 1:1e6
   10
 }
+mem_change(x <- f1())
+x
+rm(x)
+
 f2 <- function() {
   x <- 1:1e6
   a ~ b
 }
+mem_change(y <- f2())
+object.size(y)
+rm(y)
+
 f3 <- function() {
   x <- 1:1e6
   function() 10
 }
-mem_change(x <- f1())
-x
-mem_change(rm(x))
-mem_change(y <- f2())
-y
-mem_change(rm(y))
 mem_change(z <- f3())
-z
-mem_change(rm(z))
+object.size(z)
+rm(z)
 ```
 
 ## Memory profiling
@@ -200,38 +195,101 @@ Another option is to use `gctorture(TRUE)`: this forces R to run after every all
 
 ## Modification in place
 
-Generally, any primitive replacement function will modify in place, provided that the object is not referred to elsewhere.  We can use the `address()` function from pryr to see this more easily.
+What happens in the following code?
 
-```R
-library(pryr)
-x <- 1:5
-address(x)
-x[2] <- 3L
-address(x)
-
-# Assigning in a real number forces conversion of x to real
-x[2] <- 3
-address(x)
-
-# Modifying class or other attributes modifies in place
-attr(x, "a") <- "a"
-class(x) <- "b"
-address(x)
-
-# But making a reference to x elsewhere, will create a modified
-# copy when you modify x - no longer modifies in place
-y <- x
-x[1] <- 2
-address(x)
+```{r}
+x <- 1:10
+x[5] <- 10
+x
 ```
 
-You can use `pryr::refs()` to determine how many references an object has. 
+There's two possibilities:
 
-In R, it's easy to think that you're modifying an object in place, but you're actually creating a new copy each time. 
+1. R modifies the existing `x` in place
 
-It's not that loops are slow, it's that if you're not careful every time you modify an object inside a list it makes a complete copy. C functions are usually faster not just because the loop is written in C, but because C's default behaviour is to modify in place, not make a copy. This is less safe, but much more efficient. If you're modifying a data structure in a loop, you can often get big performance gains by switching to the vectorised equivalent.  When working with matrices and data frames, this often means creating a large object that you can combine with a single operation.
+2. R makes a copy of `x` in a new location, modifies that new vector, and then then changes the name `x` to point to the new location.
 
-Take the following code that subtracts the median from each column of a large data.frame:
+It turns out that R can do either depending on the circumstances. In the example above, it will modify in place, but if another variable also points to x, then it will copy it to a new location:
+
+```{r}
+x <- 1:10
+y <- x
+x[5] <- 10
+y[5]
+```
+
+To explore what's going on in more detail we need some new tools provided by the `pryr` package. Given a binding name, `address()` tells us the memory location of the SEXP it's bound to, and `refs()` tells us how many bindings point to that location.
+
+```{r}
+library(pryr)
+x <- 1:10
+c(address(x), refs(x))
+
+y <- x
+c(address(y), refs(y))
+```
+
+(Note that if you're using Rstudio this `refs()` will always return two: the environment browser makes a reference to every object you create.)
+
+Note that refs is only an estimate and it can only distinguish between 1 and more than 1 references. This means that `refs()` returns 2 in both of the following cases:
+
+```{r}
+x <- 1:5
+y <- x
+rm(y)
+# Is actually one, because we've deleted y
+refs(x)
+
+x <- 1:5
+y <- x
+z <- x
+# Is actually three
+refs(x)
+```
+
+When `refs(x)` is one, modification will occur in place; when `refs(x)` is two, it will make a copy (so that the other pointers to the object contined unchanged).  Note that in the following example, `y` keeps pointing to the same location while `x` changes.
+
+```{r}
+x <- 1:10
+y <- x
+c(address(x), address(y))
+
+x[5] <- 6L
+c(address(x), address(y))
+```
+
+Non-primitive functions that touch the object always increment the ref count. Primitive functions are usually written in such a way that they don't increment the ref count. (The reasons are a little complicated, but see the R-devel thread [confused about NAMED](http://r.789695.n4.nabble.com/Confused-about-NAMED-td4103326.html))
+
+```{r}
+x <- 1:10
+refs(x)
+mean(x)
+refs(x)
+
+# Touching the object forces an increment
+f <- function(x) x
+x <- 1:10
+refs(x); f(x); refs(x)
+
+# Sum is primitive
+x <- 1:10
+refs(x); sum(x); refs(x)
+
+# These never evaluated x so don't increment refs
+f <- function(x) 10
+x <- 1:10; refs(x); f(x); refs(x)
+
+g <- function(x) substitute(x)
+x <- 1:10; refs(x); g(x); refs(x)
+```
+
+The rules are sufficiently complicated that there's not a lot of point in trying to memorise them; instead approach the problem practically; inserting `refs()` calls into your code to verify whether or not an operation increments the `refs()`.
+
+Generally, any primitive replacement function will modify in place, provided that the object is not referred to elsewhere. This includes `[[<-`, `[<-`, `@<-`, `$<-`, `attr<-`, `attributes<-`, `class<-`, `dim<-`, `dimnames<-`, `names<-`, and `levels<-`.
+
+### Loops
+
+For loops in R have a reputation for being slow, but often this slowness is because instead of modifying in place, you're modifying a copy. Take the following code that subtracts the median from each column of a large data.frame:
 
 ```{r, cache = TRUE}
 x <- data.frame(matrix(runif(100 * 1e4), ncol = 100))
@@ -244,54 +302,32 @@ system.time({
 })
 ```
 
-It's rather slow - we only have 100 columns and 10,000 rows, but it's still taking over second. We can use `address()` to see what's going on. This function returns the memory address that the object occupies:
+It's rather slow - we only have 100 columns and 10,000 rows, but it's still taking over second. We can use `address()` and `refs()` to see what's going on for a small sample of the loop:
 
 ```{r, results = 'hide'}
-library(pryr)
-track_x <- track_copy(x)
-system.time({
-  for(i in seq_along(medians)) {
-    x[, i] <- x[, i] - medians[i]
-    track_x()
-  }
-})
+for(i in 1:10) {
+  x[, i] <- x[, i] - medians[i]
+  print(c(address(x), refs(x)))
+}
 ```
 
-Each iteration of the loop prints a different memory address - the complete data frame is being modified and copied for each iteration.
-
-We can make the function substantially more efficient by using a list which can modify in place:
+In each iteration `x` is moved to a new location (copying the complete matrix) and `refs(x)` is always 2. This is because `[<-.data.frame` is not a primitive function, so it always increments the refs. We can make the function substantially more efficient by using a list instead of a data frame. Modifying a list uses `[[<-`, a primitive function, so does not increment refs. Therefore all modifications are in place, and the function is much much faster.
 
 ```{r}
-y <- as.list(x)
-track_y <- track_copy(y)
 system.time({
   for(i in seq_along(medians)) {
     y[[i]] <- y[[i]] - medians[i]
-    track_y()
   }
 })
 ```
 
-We can rewrite it to be much faster by eliminating all those copies, and instead relying on vectorised data frame subtraction: if you subtract a list from a data frame, the elements of the list are matched up with the elements of the data frame. That loop occurs at the C-level, which means the data frame is only copied once, not many many times.
+### Exercises
 
-```{r}
-z <- as.data.frame(x)
-system.time({
-  z <- z - as.list(medians)
-})
-```
+* Saying that the code below didn't make any duplications is actually a slight simplification - it makes one duplication. Where does it occur and why? (Hint: look at `refs(y)`)
 
-The art of R performance improvement is to build up a good intuitions for what operations incur a copy, and what occurs in place. Each version of R usually implements a few performance improvements that eliminates copies, so it's impossible to give an up-to-date list, but some rules of thumb are:
-
-* `structure(x, class = "c")` makes a copy.  `class(x) <- c` does not.
-
-* Modifying a vector in place with `[<-` or `[[<-` does not make a copy.  Modifying a data frame in place does make a copy. Modifying a list in place makes a copy, but it's a shallow copy: each individual component of the list is not copied. 
-
-* `names<-`, `attr<-` and `attributes<-` don't make a copy
-
-* Avoid modifying complex objects (like data frames) repeatedly and instead pull out the component you want to modify, modify it, and then put it back in.  If that doesn't work, converting it to a simpler object type and then converting back might help
-
-Generally, building up a rich vocabulaory of vectorised functions will help you write performant code.  Vectorisation basically means pushing a for-loop from R in C so that only one copy of the data structure is made.
-
-If you thinking copying is causing a bottleneck in your program, then I recommend running some small experiments using `address()` and `microbenchmark` as described below. 
-
+  ```{r}
+  y <- as.list(x)
+  for(i in seq_along(medians)) {
+    y[[i]] <- y[[i]] - medians[i]
+  }
+  ```
