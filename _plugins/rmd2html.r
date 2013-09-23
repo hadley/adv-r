@@ -6,12 +6,13 @@ rmd2md <- function(in_path, out_path = tempfile(fileext = ".md")) {
   set.seed(1410)
   options(digits = 3)
   knit_hooks$set(
-    source = function(x, options) x, 
-    output = function(x, options) x,
-    warning = function(x, options) x, 
-    error = function(x, options) x, 
-    message = function(x, options) x,
-    inline = function(x) x,
+    source = function(x, options) paste(x, collapse = "\n"), 
+    output = function(x, options) {
+      paste0("\n", paste0(x, collapse = "\n"))
+    }, 
+    warning = function(x, options) paste(x, collapse = "\n"), 
+    error = function(x, options) paste(x, collapse = "\n"), 
+    message = function(x, options) paste(x, collapse = "\n"), 
     plot = function(x, options) {
       url <- paste(x, collapse = ".")
       img <- paste0("<img src='", url, "' ",  
@@ -19,14 +20,21 @@ rmd2md <- function(in_path, out_path = tempfile(fileext = ".md")) {
         "height = '", options$out.height %||% 300, "' ", 
         "title = '", options$caption, "' ", 
         "/>\n")
-      paste0("```\n", img, "\n```R\n")
+      paste0("\n```\n", img, "\n```R\n")
     },
     chunk = function(x, options) {
       ind <- options$indent
+      x <- add_trailing_nl(x)
       out <- paste0("```R\n", x, "```")
 
       if (is.null(ind)) return(out)
       paste0(ind, gsub("\n", paste0("\n", ind), out))
+    }, 
+    document = function(x, options) {
+      x <- paste0(x, collapse = "\n")
+      # Remove empty blocks (produced by plot)
+      x <- gsub("\n```R\n```\n", "", x)
+      x
     }
   )
   opts_chunk$set(
@@ -38,9 +46,9 @@ rmd2md <- function(in_path, out_path = tempfile(fileext = ".md")) {
     fig.height = 4,
     dev = "png"
   )
-  opts_knit$set(
-    stop_on_error = 0L
-  )
+#   opts_knit$set(
+#     stop_on_error = 0L
+#   )
   
   knit(in_path, out_path, quiet = TRUE)
   out_path
@@ -77,6 +85,13 @@ cache_file <- function(in_path, f, ext) {
   }
   
   f(in_path, cache_path)
+}
+
+add_trailing_nl <- function(x) {
+  last <- nchar(x)
+  if (substr(x, last, last) == "\n") return(x)
+  
+  paste0(x, "\n")
 }
 
 read_file <- function(path) {
