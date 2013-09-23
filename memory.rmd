@@ -68,14 +68,18 @@ It only remains to explain the jumps after the 128 limit. While it makes sense f
 There are a few other subtleties to `object.size()`: it only promises to give an estimate of the memory usage, not the actual usage. This is because for more complex objects it's not immediately obvious what memory memory usage means. Take environments for example, using `object.size()` on an environment tells you the size of the environment, not the total size of its contents. It would be easy to create a function that did this:
 
 ```{r}
-env_size <- function(env) {
-  objs <- ls(env, all = TRUE) 
-  sizes <- vapply(objs, function(x) object.size(get(x, env)), double(1))
-  sum(sizes)
+obj_size <- function(x) {
+  if (!is.environment(x)) return(object.size(x))
+  
+  objs <- ls(x, all = TRUE) 
+  sizes <- vapply(objs, function(o) obj_size(get(o, x)), double(1))
+  structure(sum(sizes), class = "object_size")
 }
 object.size(environment())
-env_size(environment())
+obj_size(environment())
 ```
+
+However, it's difficult to do this correctly using R code, because there are a lot of special cases that you need to recurse through (for example, you might have an object with an attribute that's a function with an environment that contains a large object.)
 
 There's a good reason for this - it's not immediately obvious how much space an environment takes up because environment objects are reference based.  In the following example, what is the size of `a1`? What is the size of `a2`? 
 
@@ -97,7 +101,7 @@ object.size(a2)
 gc()
 ```
 
-R breaks down memory usage into Vcells (vector memory usage) and Ncells (everything else), but this distinction isn't usually important, and neither are the gc trigger and max used columns. What you should be most interested in is just the total memory currently used. The function below wraps up `gc()` to just return the number of megabytes of memory you're currently using.
+R breaks down memory usage into Vcells (vector memory usage) and Ncells (everything else), but this distinction isn't usually important, and neither are the gc trigger and max used columns. What you're usually most interested in is the total memory used. The function below wraps up `gc()` to just return the number of megabytes of memory you're currently using.
 
 ```{r}
 mem <- function() {
@@ -114,7 +118,7 @@ mem <- function() {
 mem()
 ```
 
-Don't expect this number to agree with the amount of memory that your operating system reports that R is using. There is some overhead associated with the R interpreter that is not captured by these numbers, and both R and the operating system are lazy: they won't try and reclaim memory until it's actually needed. Another problem is memory fragmentation: R counts the memory occupied by objects; there may be gaps that R is not using because previously used objects have been deleted.
+Don't expect this number to agree with the amount of memory that your operating system says that R is using. There is some overhead associated with the R interpreter that is not captured by these numbers, and both R and the operating system are lazy: they won't try and reclaim memory until it's actually needed. Another problem is memory fragmentation: R counts the memory occupied by objects; there may be gaps from objects that have been deleted.
 
 We can build a function of top of `mem()` that tells us how memory changes during the execution of a block of code. We need a little special evaluation to make the code behave as similarly as possible to running it at the top level.
 
@@ -285,7 +289,7 @@ x <- 1:10; refs(x); g(x); refs(x)
 
 The rules are sufficiently complicated that there's not a lot of point in trying to memorise them; instead approach the problem practically; inserting `refs()` calls into your code to verify whether or not an operation increments the `refs()`.
 
-Generally, any primitive replacement function will modify in place, provided that the object is not referred to elsewhere. This includes `[[<-`, `[<-`, `@<-`, `$<-`, `attr<-`, `attributes<-`, `class<-`, `dim<-`, `dimnames<-`, `names<-`, and `levels<-`.
+Generally, any primitive replacement function will modify in place, provided that the object is not referred to elsewhere. This includes `[[<-`, `[<-`, `@<-`, `$<-`, `attr<-`, `attributes<-`, `class<-`, `dim<-`, `dimnames<-`, `names<-`, and `levels<-`. To be precise, all non-primitive functions increment refs, but a primitive function may be written in such a way that it doesn't increment refs.
 
 ### Loops
 
@@ -311,12 +315,20 @@ for(i in 1:10) {
 }
 ```
 
-In each iteration `x` is moved to a new location (copying the complete matrix) and `refs(x)` is always 2. This is because `[<-.data.frame` is not a primitive function, so it always increments the refs. We can make the function substantially more efficient by using a list instead of a data frame. Modifying a list uses `[[<-`, a primitive function, so does not increment refs. Therefore all modifications are in place, and the function is much much faster.
+In each iteration `x` is moved to a new location (copying the complete data frame) and `refs(x)` is always 2. This is because `[<-.data.frame` is not a primitive function, so it always increments the refs. We can make the function substantially more efficient by using either a list or matrix instead of a data frame. Modifying a lists and matrices uses `[[<-`, a primitive function, so does not increment refs. Therefore all modifications are in place, and the function is much much faster.
 
 ```{r}
+y <- as.list(x)
 system.time({
   for(i in seq_along(medians)) {
     y[[i]] <- y[[i]] - medians[i]
+  }
+})
+
+z <- as.matrix(x)
+system.time({
+  for(i in seq_along(medians)) {
+    z[[i]] <- z[[i]] - medians[i]
   }
 })
 ```
