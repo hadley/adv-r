@@ -39,16 +39,13 @@ rmd2md <- function(in_path, out_path = tempfile(fileext = ".md")) {
   )
   opts_chunk$set(
     comment = "#",
-    error = TRUE,
+    error = FALSE,
     tidy = FALSE,
     cache.path = "_cache/",
     fig.width = 4,
     fig.height = 4,
     dev = "png"
   )
-#   opts_knit$set(
-#     stop_on_error = 0L
-#   )
   
   knit(in_path, out_path, quiet = TRUE)
   out_path
@@ -109,3 +106,20 @@ clear_cache <- function() {
 }
 
 "%||%" <- function(a, b) if (is.null(a)) b else a
+
+check_all <- function(start = NULL) {
+  
+  files <- dir(pattern = "\\.rmd$")
+  if (!is.null(start)) {
+    match <- grep(start, files)[1]
+    if (length(match) > 0) {
+      files <- files[match:length(files)]
+    }
+  }
+  
+  for (file in files) {
+    message("Knitting ", file)
+    message("----------------------------------------------------")
+    rmd2md(file)
+  }
+}
