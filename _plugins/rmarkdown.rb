@@ -14,16 +14,20 @@ module Jekyll
     end
 
     def convert(content)
-      Tempfile.open(['knitr', '.Rmd']) do |f|
-        f.write(content)
-        f.write("\n")
-        f.flush
+      f = File.new("temp.Rmd", "w")
+      f.write(content)
+      f.write("\n")
+      f.flush
 
-        # http://rubyquicktips.com/post/5862861056/execute-shell-commands
-        content = `_plugins/knit.r #{f.path}`
-        raise "Knitting failed" if $?.exitstatus != 0
-        content
+      # http://rubyquicktips.com/post/5862861056/execute-shell-commands
+      content = `_plugins/knit.r temp.Rmd`
+      
+      if $?.exitstatus != 0
+        raise "Knitting failed" 
       end
+      
+      content
+      # File.unlink f.path
     end
   end
 end
