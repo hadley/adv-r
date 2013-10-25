@@ -26,10 +26,11 @@ pandoc --chapters -o book/programming.pdf --latex-engine xelatex \
   book/chapters/Special-environments.md \
   book/chapters/dsl.md \
   book/part-perf.md \
-  book/chapters/Profiling.md \
   book/chapters/Performance.md \
-  book/chapters/C-interface.md \
-  book/chapters/Rcpp.md
+  book/chapters/Profiling.md \
+  book/chapters/Memory.md \
+  book/chapters/Rcpp.md \
+  book/chapters/C-interface.md
 
 # pandoc --chapters -o packages.pdf --latex-engine xelatex \
 #   -V papersize:oneside -V links-as-notes --toc \
