@@ -204,15 +204,85 @@ object.size(z)
 rm(z)
 ```
 
-## Memory profiling
+## Memory profiling with lineprof
 
-(Note this section is subject to change: while memory profiling has been available since 2006, there has been relatively little work done to summarise the output in an accessible fashion. This section represents the best of my knowledge, but it is likely to change rapidly.)
+As well as using `mem_change()` to explicitly capture the change in memory caused by running a block of code, we can use memory profiling to automatically capture memory usage every few milliseconds. This functionality is provided by the built in `Rprof()` function, but it doesn't provide a very useful visualisation of the output. Instead, we'll use the [lineprof](https://github.com/hadley/lineprof) package to explore the output.
 
-As well as using `mem_change()` to explicitly capture the change in memory caused by running some code, we can use memory profiling to automatically record memory usage every few milliseconds during code execution. This gives us slightly different data because it does not trigger a GC, and it's a little easier to use when trying to understand the memory usage of a large block of code. R's memory profiler is timer based - R regular stops the execution of the script and records memory information. This means that the timer has limited resolution so it's not able to capture expressions that happen quickly (fortunately big memory allocations are relatively expensive so they're likely to be caught).
+To demonstrate lineprof, we're going to explore a minimal implementation of `read.delim` with only has three arguments:
 
-Memory profiling provides a lot of data: it gives the amount of memory allocated in the small vector pool, the large vector pool and in the node pool. However, the total memory usage seems most useful, and in particular looking at memory allocations seems to be most useful for understand where memory is being used. Memory releasing is general less useful as it only occurs on GC.
+```{r}
+read_delim <- function(file, header = TRUE, sep = ",") {
+  # Determine number of fields by reading first line
+  first <- scan(file, what = character(1), nlines = 1, sep = sep, quiet = TRUE)
+  p <- length(first)
+  
+  # Load all fields as character vectors
+  all <- scan(file, what = as.list(rep("character", p)), sep = sep, 
+    skip = if (header) 1 else 0, quiet = TRUE)
+  
+  # Convert from strings to appropriate types (never to factors)
+  all[] <- lapply(all, type.convert, as.is = TRUE)
+  
+  # Set column names
+  if (header) {
+    names(all) <- first
+  } else {
+    names(all) <- paste0("V", seq_along(all))
+  }
+  
+  # Convert list into data frame
+  as.data.frame(all)
+}
+```
 
-Another option is to use `gctorture(TRUE)`: this forces R to run after every allocation. This helps with both problems because memory is freed as soon as possible, and R runs much more slowly (10-100x in my experience), so the resolution of the timer effectively becomes much greater. So only run this once you've isolated a small part of your code that you want to understand the memory usage of, or if you're very patient. In my experience, it helps largely with smaller allocations and associating allocations with exactly the right line of code. It also helps you see when objects would be reclaimed if absolutely necessary.
+We'll also create a sample csv file to load in:
+
+```{r}
+library(ggplot2)
+write.csv(diamonds, "diamonds.csv", row.names = FALSE)
+```
+
+Using lineprof is straightforward:
+
+```{r, eval = FALSE}
+library(lineprof)
+
+source("code/read-delim.R")
+prof <- lineprof(read_delim("diamonds.csv", sep = ","))
+shine(prof)
+```
+
+This opens a web page that shows your source code annotated with information about memory usage:
+
+![line profiling](memory-lineprof.png)
+
+As well as your original source code, there are four columns:
+
+* t, the time (in seconds) spent on that line of code
+
+* a, the amount of memory (in megabytes), allocated by that line of code.
+
+* r, the amount of memory (in megabytes), released by that line of code. While memory allocation is deterministic, memory release is stochastic: it depends on when the GC was run. This means memory release is not totally accurate: all it really tells you is that memory stopped being using somewhere before this line.
+
+* d, the number of vector duplications that occured. A vector duplication occurs when R copies a vector to preserve its copy-on-modify semantics.
+
+You can hover over any of the bars to get the exact numbers.  For this example, looking at the allocations tells us most of the story:
+
+* `scan()` allocates about 2.5 MB of memory, which is very close to the 2.8 MB of space that file takes up on disk. You wouldn't expect the numbers to be exactly equal because R doesn't need to store the commas, and the global string pool will save some memory.
+
+* Converting the columns to types allocates another 0.6 MB of memory. You'd expect this to also free some memory because we've converted string columns into integer and numeric columns (which should occupy less space), but we can't see those releases because we don't know when `gc()` is called.
+
+* Finally, calling `as.data.frame()` on a list allocates about 1.6 megabytes of memory and performs over 600 duplicates. This is because `as.data.frame()` isn't terribly efficient and ends up copying the input multiple times.
+
+There are two downsides to this display. Firstly, `read_delim()` only takes around half a second, and the resolution of the profiler is around 1ms, so we only get about 500 samples. Secondly, since GC is lazy, we can never tell exactly when memory is released. Both of these things make it harder to understand 
+
+This makes it harder to figure exactly what's going on.  One way to work around this is to use `torture = TRUE`: this forces R to run GC after every allocation. This helps with both problems because memory is freed as soon as possible, and R runs much more slowly (10-100x in my experience), so the resolution of the timer effectively becomes much greater. So only run this once you've isolated a small part of your code that you want to understand the memory usage of, or if you're very patient. In my experience, it helps largely with smaller allocations and associating allocations with exactly the right line of code. It also helps you see when objects would be reclaimed if absolutely necessary.
+
+```{r, eval = FALSE}
+prof <- lineprof(read_delim("diamonds.csv", sep = ","), torture = TRUE)
+shine(prof)
+```
+
 
 ## Modification in place
 
