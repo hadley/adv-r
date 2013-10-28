@@ -1,3 +1,4 @@
+# ---- read_delim
 read_delim <- function(file, header = TRUE, sep = ",") {
   # Determine number of fields by reading first line
   first <- scan(file, what = character(1), nlines = 1, sep = sep, quiet = TRUE)
