@@ -6,6 +6,7 @@
 
 pandoc --chapters -o book/programming.pdf --latex-engine xelatex \
   -V papersize:oneside -V links-as-notes --toc \
+  book/title.md \
   book/chapters/Introduction.md \
   book/part-foundations.md \
   book/chapters/Data-structures.md \
