@@ -3,6 +3,10 @@ title: Memory usage
 layout: default
 ---
 
+```{r, message = FALSE, echo = FALSE}
+library(pryr)
+```
+
 # Memory
 
 It's important to understand memory usage in R, firstly because you might be running out, and secondly because efficiently managing memory can make your code faster. The goals of this chapter are:
@@ -102,7 +106,20 @@ object.size("banana")
 object.size(rep("banana", 100))
 ```
 
-On my 64-bit computer, the size of a vector containing "banana" is 96 bytes, but the size of a vector containing 100 "banana"s is 888 bytes. Why the difference? The key is 888 = 96 + 99 * 8. R has a global string pool, which means that every unique string is only stored once in memory. Every other instance of that string is just a pointer, and only needs 8 bytes of storage.
+On my 64-bit computer, the size of a vector containing "banana" is 96 bytes, but the size of a vector containing 100 "banana"s is 888 bytes. Why the difference? The key is 888 = 96 + 99 * 8. R has a global string pool, which means that every unique string is only stored once in memory. Every other instance of that string is just a pointer, and only needs 8 bytes of storage. `object.size()` does it's best to take this into account, but can only do so much.
+
+### Exercises
+
+* Compare the sizes of the elements of the following two lists. Each contains basically the same data, but one contains vectors of small strings and the other is a single long string.
+
+    ```{r}
+    vec <- lapply(0:50, function(i) c("ba", rep("na", i)))
+    str <- lapply(vec, paste0, collapse = "")
+    ```
+
+* Which takes up more memory: a factor or a character vector? Why?
+
+* Explain the difference in size between `1:5` and `list(1:5)`.
 
 ## Total memory use
 
@@ -172,7 +189,7 @@ f <- function() {
 mem_change(f())
 ```
 
-Unfortunately we're not seeing a completely accurate picture of normally memory usage, because in order to find out how much memory is available, we call `gc()`. As well as returning the amount of memory currently used, `gc()` also triggers garbage collection. Garbage collection normally happens lazily: R calls `gc()` when it needs more space. In reality, that R might hold onto the memory after the function has terminated, but it will release it as soon as it's needed.
+Unfortunately we're not seeing a completely accurate picture of normal memory usage, because in order to find out how much memory is available, we call `gc()`. As well as returning the amount of memory currently used, `gc()` also triggers garbage collection. Garbage collection normally happens lazily: R calls `gc()` when it needs more space. In reality, that R might hold onto the memory after the function has terminated, but it will release it as soon as it's needed.
 
 Despite what you might have read elsewhere, there's never any point in calling `gc()` yourself, apart to see how much memory is in use. R will automatically call run garbage collection whenever it needs more space; if you want to see when that is, call `gcinfo(TRUE)`. The only reason you _might_ want to call `gc()` is that it also requests that R should return memory to the operating system. Even that might not have any effect: older versions of Windows had no way for a program to return memory to the OS.
 
@@ -272,9 +289,9 @@ You can hover over any of the bars to get the exact numbers.  For this example, 
 
 * `scan()` allocates about 2.5 MB of memory, which is very close to the 2.8 MB of space that file takes up on disk. You wouldn't expect the numbers to be exactly equal because R doesn't need to store the commas, and the global string pool will save some memory.
 
-* Converting the columns to types allocates another 0.6 MB of memory. You'd expect this to also free some memory because we've converted string columns into integer and numeric columns (which should occupy less space), but we can't see those releases because we don't know when `gc()` is called.
+* Converting the columns allocates another 0.6 MB of memory. You'd also expect this step to free some memory because we've converted string columns into integer and numeric columns (which should occupy less space), but we can't see those releases because GC hasn't been triggered yet.
 
-* Finally, calling `as.data.frame()` on a list allocates about 1.6 megabytes of memory and performs over 600 duplicates. This is because `as.data.frame()` isn't terribly efficient and ends up copying the input multiple times.
+* Finally, calling `as.data.frame()` on a list allocates about 1.6 megabytes of memory and performs over 600 duplication. This is because `as.data.frame()` isn't terribly efficient and ends up copying the input multiple times.
 
 There are two downsides to this display. Firstly, `read_delim()` only takes around half a second, and the resolution of the profiler is around 1ms, so we only get about 500 samples. Secondly, since GC is lazy, we can never tell exactly when memory is released. Both of these things make it harder to understand 
 
@@ -291,11 +308,34 @@ The basic messages remain the same, but we now get a bit more detail:
 
 * We see a big memory release on line 14, because that's the first line after the type conversion, and it represents the memory saved by converting strings to numbers.
 
-Using line profiling takes a little bit of experience, but the tools in this chapter should get you started on your way to understanding what's going on.
+When using `lineprof()` on your own code, you _must_ use `source()` to load it - you can not create it on the command line. This is because lineprof uses srcrefs to match up the code and run times, and srcrefs are only reliably created when you load code from disk.  
+
+### Exercises
+
+* We can make a more efficient `as.data.frame()` when the input is a list by using special knowledge of about the structure of a data frame. A data frame is a list with class `data.frame` and special attribute `row.names`. `row.names` is either a character vector with length matching the columns, or when the row names are sequential integers, the row names are stored in a special format created by `.set_row_names()`. This leads to an alternative `as.data.frame()`:
+
+    ```{r}
+    to_df <- function(x) {
+      class(x) <- "data.frame"
+      attr(x, "row.names") <- .set_row_names(length(x[[1]]))
+      x
+    }
+    ```
+    
+    What impact does using this function have on `read_delim()`?  What are the downsides of this function?
+    
+* Line profile the following very simple function with `torture = TRUE`. What is surprising? Read the source code of `gc()` to figure out what's going on.
+
+  ```{r}
+  f <- function(n = 1e5) {
+    x <- rep(1, n)
+    rm(x)
+  }
+  ```
 
 ## Modification in place
 
-What happens in the following code?
+What happens to `x` in the following code?
 
 ```{r}
 x <- 1:10
@@ -309,27 +349,20 @@ There's two possibilities:
 
 2. R makes a copy of `x` in a new location, modifies that new vector, and then then changes the name `x` to point to the new location.
 
-It turns out that R can do either depending on the circumstances. In the example above, it will modify in place, but if another variable also points to x, then it will copy it to a new location:
+It turns out that R can do either depending on the circumstances. In the example above, it will modify in place, but if another variable also points to x, then it will copy it to a new location: To explore what's going on in more detail we need some new tools found in the `pryr` package. Given the name of a variable, `address()` tells us its location in memory, and `refs()` tells us how many names point to that same location.
 
-```{r}
-x <- 1:10
-y <- x
-x[5] <- 10
-y[5]
-```
-
-To explore what's going on in more detail we need some new tools provided by the `pryr` package. Given a binding name, `address()` tells us the memory location of the SEXP it's bound to, and `refs()` tells us how many bindings point to that location.
-
-```{r}
+```{r, eval = FALSE}
 library(pryr)
 x <- 1:10
 c(address(x), refs(x))
+# [1] "0x103100060" "1" 
 
 y <- x
 c(address(y), refs(y))
+# [1] "0x103100060" "2" 
 ```
 
-(Note that if you're using Rstudio this `refs()` will always return two: the environment browser makes a reference to every object you create.)
+(Note that if you're using Rstudio this `refs()` will always return two: the environment browser makes a reference to every object you create on the command line, but not inside a function.)
 
 Note that refs is only an estimate and it can only distinguish between 1 and more than 1 references. This means that `refs()` returns 2 in both of the following cases:
 
@@ -337,13 +370,13 @@ Note that refs is only an estimate and it can only distinguish between 1 and mor
 x <- 1:5
 y <- x
 rm(y)
-# Is actually one, because we've deleted y
+# Should really be one, because we've deleted y
 refs(x)
 
 x <- 1:5
 y <- x
 z <- x
-# Is actually three
+# Should really be three
 refs(x)
 ```
 
@@ -360,32 +393,36 @@ c(address(x), address(y))
 
 Non-primitive functions that touch the object always increment the ref count. Primitive functions are usually written in such a way that they don't increment the ref count. (The reasons are a little complicated, but see the R-devel thread [confused about NAMED](http://r.789695.n4.nabble.com/Confused-about-NAMED-td4103326.html))
 
-```{r}
+```{r, eval = FALSE}
 x <- 1:10
 refs(x)
+# [1] 1
 mean(x)
 refs(x)
+# [1] 2
 
 # Touching the object forces an increment
 f <- function(x) x
-x <- 1:10
-refs(x); f(x); refs(x)
+x <- 1:10; f(x); refs(x)
+# [1] 2
 
-# Sum is primitive
-x <- 1:10
-refs(x); sum(x); refs(x)
+# Sum is primitive, so doesn't increment
+x <- 1:10; sum(x); refs(x)
+# [1] 1
 
-# These never evaluated x so don't increment refs
+# f() and g() never evaluate x so refs doesn't increment
 f <- function(x) 10
-x <- 1:10; refs(x); f(x); refs(x)
+x <- 1:10; f(x); refs(x)
+# [1] 1
 
 g <- function(x) substitute(x)
-x <- 1:10; refs(x); g(x); refs(x)
+x <- 1:10; g(x); refs(x)
+# [1] 1
 ```
 
-The rules are sufficiently complicated that there's not a lot of point in trying to memorise them; instead approach the problem practically; inserting `refs()` calls into your code to verify whether or not an operation increments the `refs()`.
-
 Generally, any primitive replacement function will modify in place, provided that the object is not referred to elsewhere. This includes `[[<-`, `[<-`, `@<-`, `$<-`, `attr<-`, `attributes<-`, `class<-`, `dim<-`, `dimnames<-`, `names<-`, and `levels<-`. To be precise, all non-primitive functions increment refs, but a primitive function may be written in such a way that it doesn't increment refs.
+
+The rules are sufficiently complicated that there's not a lot of point in trying to memorise them; instead approach the problem practically; inserting `refs()` calls into your code to verify whether what an operation does.
 
 ### Loops
 
@@ -402,16 +439,16 @@ system.time({
 })
 ```
 
-It's rather slow - we only have 100 columns and 10,000 rows, but it's still taking over second. We can use `address()` and `refs()` to see what's going on for a small sample of the loop:
+It's rather slow - we only have 100 columns and 10,000 rows, but it's taking almost five seconds. We can use `address()` and `refs()` to see what's going on for a small sample of the loop:
 
-```{r, results = 'hide'}
+```{r}
 for(i in 1:5) {
   x[, i] <- x[, i] - medians[i]
   print(c(address(x), refs(x)))
 }
 ```
 
-In each iteration `x` is moved to a new location (copying the complete data frame) and `refs(x)` is always 2. This is because `[<-.data.frame` is not a primitive function, so it always increments the refs. We can make the function substantially more efficient by using either a list or matrix instead of a data frame. Modifying a lists and matrices uses `[[<-`, a primitive function, so does not increment refs. Therefore all modifications are in place, and the function is much much faster.
+In each iteration `x` is moved to a new location (copying the complete data frame) and `refs(x)` is always 2. This is because `[<-.data.frame` is not a primitive function, so it always increments the refs. We can make the function substantially more efficient by using either a list or matrix instead of a data frame. Modifying a lists and matrices uses primitive functions, so the refs are not incremented and all modifications are in place.
 
 ```{r}
 y <- as.list(x)
@@ -424,7 +461,7 @@ system.time({
 z <- as.matrix(x)
 system.time({
   for(i in seq_along(medians)) {
-    z[[i]] <- z[[i]] - medians[i]
+    z[, i] <- z[, i] - medians[i]
   }
 })
 ```
@@ -439,3 +476,4 @@ system.time({
       y[[i]] <- y[[i]] - medians[i]
     }
     ```
+* The implementation of `as.data.frame()` in the previous section has one big downside. What is it and how could you avoid it?
