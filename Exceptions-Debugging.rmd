@@ -18,18 +18,12 @@ This chapter describes tools and techniques to use when things go wrong:
 * Defensive programming: writing programs that are less likely to fail,
   and when they do fail, produce useful error messages.
 
-R functions have three main ways to communicate to the user:
+R offers an exceptionally powerful exception system based on ideas from common lisp, but it's currently not very well documented or often used. In this chapter, I have focussed most on the tools that are commonly used, not on illustrating all of the options. If you want to learn more about the possibilities, I recommend the following two primary sources:
 
-* By sending a `message()`, which usually is printed in bold font.
-  Messages can be suppressed with `suppressMessages()`
+* [A prototype of a condition system for R](http://homepage.stat.uiowa.edu/~luke/R/exceptions/simpcond.html) by Robert Gentleman and Luke Tierney. This is describes an early version of R's condition system. The implementation changed somewhat since this was written, but it provides a good overview of how the pieces fit together, and some motivation for the design.
 
-* By generating a `warning()`, which is prefixed by "Warning message".
-  Multiple errors are aggregate together by default. You can see them all
-  with `warnings()` or force to display individually with `options(warn = 1)`.
-  Warnings can be suppressed with `suppressWarnings()`
-
-* By raising a fatal error with `stop()`. Fatal errors force all execution to stop, 
-  and are displayed like messages with an additional "Error" prefix.
+* [Beyond Exception Handling: Conditions and Restarts](http://www.gigamonkeys.com/book/beyond-exception-handling-conditions-and-restarts.html) by Peter Seibel. This describes exception handling in LISP, but the ideas are basically
+the same in R, and it provides some more complicated use cases.
 
 ## Debugging techniques
 
@@ -46,11 +40,7 @@ Debugging code is challenging. R provides some useful tools which we'll discuss 
 
 2. Make it repeatable. 
 
-<<<<<<< HEAD
-We'll start by discussing debugging tools, and then discuss strategies by which you can deploy them.
-=======
    This can be the most frustrating parts of debugging, but it you can't make the bug consistently repeatable, then it's extremely difficult to isolate why it's occuring, and it's impossible to verify that you've actually fixed it.  It's often best to start with a big block of code that you know causes the error and slowly whittle it down to the smallest possible error cases (this is also very useful if you're reporting a bug in someone elses code). As you do this, you'll also discover similar inputs that don't cause the bug. Make a note of those: they will be helpful when you're trying to figure out what's causing the bug.  If it takes a long time to generate the bug, it's also worthwhile figuring how to make it faster. It may be worthwhile to use a caching strategy to save incremental results (but be careful that you don't create new bugs by doing that)
->>>>>>> working on debugging
 
 3. Figure out where it is. 
 
@@ -186,8 +176,6 @@ It's also possible to  start `browser` automatically when an error occurs, by se
 
 In RStudio, you can control these options from the Debug | On error menu.
 
-Warnings are harder to track down because they don't provide any information about where they occured. Currently, the best way to debug them into turn them into errors using `options(warn = 2)`: then you can apply any of the techniques described above. 
-
 ### The call stack: `traceback(), `where` and `recover()`.
 
 Unfortunately the call stacks printed by `traceback()`, `browser()` + `where` and `recover()` are not consistent. Using the simple nested set of calls below, the call backs look like this table. Note that the numbering is different between `traceback()` and `where`, and `recover()` displays in the opposite order, and omits the call to `stop()`.
@@ -211,24 +199,35 @@ options(error = recover); f()
 options(error = NULL)
 ```
 
-## Other types of failure
+### Other types of failure
 
-* generate an unexpected warning or other message
-* never return
-* crash R
+There are other ways for a function to fail apart from throwing an error or returning an incorrect result. 
 
+* A function may generate an unexpected warning. Track them down by turning them into warnings with `options(warn = 2)` then using the regular debugging tools. When you do this you'll see some extra calls in `traceback()`:  `doWithOneRestart()`, `withOneRestart()`, `withRestarts()` and `.signalSimpleWarning()` - these are internal functions used to turn warnings into errors and can be ignored.
+
+* Unexpected messages. There is no built in tool to help solve this problem like for warnings, but it's easy to create one (you'll see exactly how this works in the next section):
+
+    ```{r}
+    message2error <- function(code) {
+      withCallingHandlers(code, message = function(e) stop(e))  
+    }
+    message2error(f())
+    traceback()
+    ```
+  
+  As with warnings, you'll need to ignore some of the calls on the tracback (i.e. the first two and the last 7).
+
+* A function might never return. This is particularly hard to debug automatically, but sometimes terminating the function and running `traceback()` can be informative. Otherwise you'll need to use the basic strategies described in the debugging techniques section.
+
+* The worst scenario is that your code might crash R altogether, leaving you no way to interactively debug your code. This typically indicates a bug with underlying C code, and the tools are much harder to use.  Sometimes an interative debugger like gdb can be useful, but describing how to use one is beyond the scope of this book.  If it's in base R code, positing a reproducible example to R-help is a good idea. If it's your own C or C++ code, you'll  need to use numerous `print()` statements to narrow down the location of the bug, and then you'll need to use many more print statements to figure out which data structure doesn't have the properties that you expect.
 
 ## Exceptions
 
-Sometimes when a function you know that there are 
+Error handling is performed with the `try()` (simple) and `tryCatch()` (complex) functions. 
 
-### Creation
+### Basic error handling with try()
 
-You create errors in R with `stop()`.
-
-### Basic error handling
-
-Error handling is performed with the `try()` (simple) and `tryCatch()` (complex) functions. `try()` allows execution to continue even after an exception has occured. For example, normally if you run a function that throws an error, it terminates immediately and doesn't return a value:
+`try()` allows execution to continue even after an exception has occured. For example, normally if you run a function that throws an error, it terminates immediately and doesn't return a value:
 
 ```{r, error = TRUE}
 f1 <- function(x) {
@@ -299,7 +298,7 @@ default <- NULL
 try(default <- read.csv("possibly-bad-input.csv"), silent = TRUE)
 ```
 
-### Advanced error handling
+### Advanced error handling with `tryCatch()`
 
 `tryCatch` gives more control than `try`, because it can take different actions depending on the type of error (or more generally the condition) that was raised. The `tryCatch()` call has three arguments:
 
@@ -344,20 +343,6 @@ tryCatch(
   error = function(c) "b"
 )
 
-# The first handler that matches a class of the condition is used, 
-# not the "best" match:
-a <- structure(list(message = "my error", call = quote(a)), 
-  class = c("a", "error", "condition"))
-
-tryCatch(stop(a), 
-  error = function(c) "error",
-  a = function(c) "a"
-)
-tryCatch(stop(a), 
-  a = function(c) "a",
-  error = function(c) "error"
-)
-
 # No matter what happens, finally is run:
 tryCatch(stop("error"), 
   finally = print("Done."))
@@ -382,9 +367,7 @@ while(i < 5) {
 }
 ```
 
-A handler function can do anything, but typically it will either return a value, or pass the condition along, by re-signalling the error with `stop(c)`, or `signalCondition(c)` for non-error conditions. 
-
-We can write a simple version of `try` using `tryCatch`. The real version of `try` is considerably more complicated to preserve the usual error behaviour.
+A handler function can do anything, but typically it will either return a value, or pass the condition along. For example, we can write a simple version of `try` using `tryCatch`. 
 
 ```{r}
 try <- function(code, silent = FALSE) {
@@ -400,93 +383,58 @@ try(stop("Hi"), silent = TRUE)
 rm(try)
 ```
 
-### Using `tryCatch`
+The real version of `try` is considerably more complicated to preserve the usual error behaviour.
 
-With the basics in place, we'll next develop some useful tools based the ideas we just learned about.  
+## Communicating to the user
 
-The `finally` argument to `tryCatch` is particularly useful for clean up, because it is always called, regardless of whether the code executed successfully or not. This is useful when you have:
+R functions have three main ways to communicate to the user:
 
-* modified `options`, `par` or locale
-* opened connections, or created temporary files and directories
-* opened graphics devices
-* changed the working directory
-* modified environment variables
+* By sending a `message()`, which usually is printed in bold font.
+  Messages can be suppressed with `suppressMessages()`
 
-The following function changes the working directory, executes some code, and always resets the working directory back to what it was before, even if the code raises an error.
+* By generating a `warning()`, which is prefixed by "Warning message".
+  Multiple errors are aggregate together by default. You can see them all
+  with `warnings()` or force to display individually with `options(warn = 1)`.
+  Warnings can be suppressed with `suppressWarnings()`
 
-```{r, error = TRUE}
-in_dir <- function(path, code) {
-  cur_dir <- getwd()
-  tryCatch({
-    setwd(path)
-    force(code)
-  }, finally = setwd(cur_dir))
+* By raising a fatal error with `stop()`. Errors force all execution to stop, 
+  and are displayed like messages with an additional "Error" prefix.
+
+Collectively, these three types of communcations are called __conditions__, represented by an S3 class built on top of a list containing `message` and `call` elements. There is one class of conditions that can't be generated directly by the programmer: the `interrupt`, which occur when the user presses Ctrl + Break, Escape, or Ctrl + C (depending on the platform) to terminate execution.
+
+Each function, `stop()`, `warning()` and `message()` can be given either a list of strings, or a custom S3 condition object. Custom condition objects are not used very often, but are very useful because they make it possible for the user to respond to different errors in different ways. For example, "expected" (like a model failing to converge for some input datasets) can be silently ignored, while unexpected errors (like no disk space available) can be propagated to the user. 
+
+R doesn't come with a built-in constructer function for conditions, but we can easily add one. Conditions must contain a `message` and `call` components, but can contain anything else that is useful for  When creating a new condition, it should always inherit from `condition` and one of `error`, `warning` and `message`.
+
+```{r}
+condition <- function(subclass, message, call = sys.call(-1), ...) {
+  structure(
+    class = c(subclass, "condition"),
+    list(message = message, call = call),
+    ...
+  )
 }
+is.condition <- function(x) inheritis(x, "condition")
 
-getwd()
-in_dir(R.home(), dir())
-getwd()
-in_dir(R.home(), stop("Error!"))
-getwd()
+condition(c("my_error"), "error", message = "This is an error")
 ```
-
-Another more casual way of cleaning up is the `on.exit` function, which is called when the function terminates.  It's not as fine grained as `tryCatch`, but it's a bit less typing.
 
 ```{r}
-in_dir <- function(path, code) {
-  cur_dir <- getwd()
-  on.exit(setwd(cur_dir))
 
-  force(code)
-}
+# The first handler that matches a class of the condition is used, 
+# not the "best" match:
+a <- structure(list(message = "my error", call = quote(a)), 
+  class = c("a", "error", "condition"))
+
+tryCatch(stop(a), 
+  error = function(c) "error",
+  a = function(c) "a"
+)
+tryCatch(stop(a), 
+  a = function(c) "a",
+  error = function(c) "error"
+)
 ```
-
-If you're using multiple `on.exit` calls, make sure to set `add = TRUE`, otherwise they will replace the previous call. **Caution**: Unfortunately the default in `on.exit()` is `add = FALSE`, so that every time you run it, it overwrites existing exit expressions.  Because of the way `on.exit()` is implemented, it's not possible to create a variant with `add = TRUE`, so you must be careful when using it.
-
-### Exercises
-
-1. Write a function that opens a graphics device, runs the supplied code, and closes the graphics device (always, regardless of whether or not the plotting code worked).
-
-## Conditions, restarts, and calling handlers
-
-R offers an exceptionally power exception system, but it's not particularly well document. If you want to learn more about the internals, I recommend the following two primary sources:
-
-* [A prototype of a condition system for R](http://homepage.stat.uiowa.edu/~luke/R/exceptions/simpcond.html) by Robert Gentleman and Luke Tierney. This is describes an early version of R's condition system. The implementation changed somewhat since this was written, but it provides a good overview of how the pieces fit together, and some motivation for the design.
-
-* [Beyond Exception Handling: Conditions and Restarts](http://www.gigamonkeys.com/book/beyond-exception-handling-conditions-and-restarts.html) by Peter Seibel. This describes exception handling in LISP, but the ideas are basically
-the same in R, and it provides some more complicated use cases.
-
-but to understand how it works, we first need to learn a little about conditions, the S3 objects that represent errors, warnings and messages.
-
-```{r}
-is.condition <- function(x) inherits(x, "condition")
-```
-    
-There are three convenience methods for creating errors, warnings and messages.  All take two arguments: the `message` to display, and an optional `call` indicating where the condition was created
-
-```{r}
-e <- simpleError("My error", quote(f(x = 71)))
-w <- simpleWarning("My warning")
-m <- simpleMessage("My message")
-```
-
-There is one class of conditions that can't be generated directly: interrupts, which occur when the user presses Ctrl + Break, Escape, or Ctrl + C (depending on the platform) to terminate execution.
-
-The components of a condition can be extracted with `conditionMessage` and `conditionCall`:
-    
-```{r}
-conditionMessage(e)
-conditionCall(e)
-```
-
-Conditions can be signalled using `signalCondition`. By default, no one is listening, so this doesn't do anything.
-
-```{r, eval = FALSE}
-signalCondition(e)
-signalCondition(w)
-signalCondition(m)
-```
-
 
 ## Defensive programming
 
@@ -529,10 +477,8 @@ There are a number of options for letting the user know when something has gone 
   tables.  You can suppress messages with `suppressMessages`.
 
 * use `warning()` for unexpected problems that aren't show stoppers.
-  `options(warn = 2)` will turn warnings into errors. Warnings are often
-  more appropriate for vectorised functions when a single value in the vector
-  is incorrect, e.g. `log(-1:2)` and `sqrt(-1:2)`.  You can suppress warnings
-  with `suppressWarnings`
+  Warnings are a good match for vectorised functions when a single value in
+  the vector is incorrect, e.g. `log(-1:2)` and `sqrt(-1:2)`. 
 
 * use `stop()` when the problem is so big you can't continue
 
