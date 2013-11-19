@@ -5,6 +5,22 @@ layout: default
 
 # Exceptions and debugging
 
+R functions have three main ways to communicate to the user:
+
+* By raising a fatal error with `stop()`. Errors force all execution to stop, 
+  and are usually displayed in a bold font or in red. Errors are used when
+  there is no way for a function to continue, and try to provide useful
+  diagnostics to allow you to solve the problem.
+
+* By generating a `warning()`, which is prefixed by "Warning message".
+  By default, multiple warnings are aggregated together, and displayed all at 
+  once when you call `warnings()`. Warnings are used to display potential
+  problems, or when some elements of a vectorised input are invalid.
+
+* By sending a `message()`, which usually is printed in bold font. Messages
+  are used to give informative output in a way that can easily be suppressed
+  by the user (with `suppressMessages()`).
+
 This chapter describes tools and techniques to help when things go wrong:
 
 * As a user, debugging tools and techniques help you get to the root cause of
@@ -12,18 +28,20 @@ This chapter describes tools and techniques to help when things go wrong:
   execution when something goes wrong, which is particularly useful when you're
   fitting potentially problematic models to multiple datasets.
 
-* As a programmer, exceptions, warnings and messages allow you to communicate 
-  problems to the user. Exception handling tools allow you to recover from
-  known errors and take appropriate action.
+* As a programmer, exceptions, warnings and messages (collectively known as 
+  conditions) allow you to communicate problems to the user. Condition handling 
+  tools allow you to recover from known problems and take appropriate action.
   
-* Finally, we'll discuss some useful defensive programming techniques that make
-  it less likely you'll get an error in the first place.
+* As a programmer, you can avoid errors in the first place by using defensive 
+  programming techniques. These make code take longer to write, but pay off by 
+  reducing the chance of an error, and when errors occur, by providing more 
+  informative messages.
 
-R offers an exceptionally powerful exception system based on ideas from common lisp, but it's currently not very well documented or often used. In this chapter, I have focussed most on the tools that are commonly used, not on illustrating all of the options. If you want to learn more about the possibilities, I recommend the following two primary sources:
+The focus of this chapter is to give you the basic tools to debugging your code and handle conditions. R offers an exceptionally powerful condition handling system based on ideas from common lisp, but it's currently not very well documented or often used. If you want to learn more about the possibilities, I recommend the following two primary sources:
 
 * [A prototype of a condition system for R](http://homepage.stat.uiowa.edu/~luke/R/exceptions/simpcond.html) by Robert Gentleman and Luke Tierney. This is describes an early version of R's condition system. The implementation changed somewhat since this was written, but it provides a good overview of how the pieces fit together, and some motivation for the design.
 
-* [Beyond Exception Handling: Conditions and Restarts](http://www.gigamonkeys.com/book/beyond-exception-handling-conditions-and-restarts.html) by Peter Seibel. This describes exception handling in LISP, but the ideas are very similar in R, it provides useful motivation and examples. I have provided an R translation at [beyond-exception-handling.html](beyond-exception-handling.html).
+* [Beyond Exception Handling: Conditions and Restarts](http://www.gigamonkeys.com/book/beyond-exception-handling-conditions-and-restarts.html) by Peter Seibel. This describes exception handling in LISP, but the ideas are very similar in R, it provides useful motivation and examples. I have provided an R translation of the chapter at [beyond-exception-handling.html](beyond-exception-handling.html).
 
 ## Debugging techniques
 
@@ -32,52 +50,91 @@ R offers an exceptionally powerful exception system based on ideas from common l
 > true.
 > --- Norm Matloff
 
-Debugging code is challenging. R provides some useful tools which we'll discuss in the next section, but if you have a good technique, you can still productively debug a problem with just print statements. I think there are four key components to the debugging process:
+Debugging code is challenging. R provides some useful tools which we'll discuss in the next section, but if you have a good technique, you can still productively debug a problem with just `print()`. There are four key components to the debugging process:
 
-1. Realise that you have a bug. 
+1. __Realise that you have a bug__
 
-    If you're reading this chapter, you've probably already completed this step. But this is a surprisingly important step: you can't fix a bug until you're aware of it, and this is one reason why automated test suites are so important.
+    If you're reading this chapter, you've probably already completed this step. 
+    But this is a surprisingly important step: you can't fix a bug until you're 
+    aware of it. This is one reason why automated test suites are so important
+    when producing high-quality code. Automated testing is unfortunately 
+    outside the scope of this book, but you can read some notes about it at
+    http://adv-r.had.co.nz/Testing.html.
 
-2. Make it repeatable. 
+2. __Make it repeatable__
 
-    This can be the most frustrating parts of debugging, but it you can't make the bug consistently repeatable, then it's extremely difficult to isolate why it's occuring, and it's impossible to verify that you've actually fixed it.  It's often best to start with a big block of code that you know causes the error and slowly whittle it down to the smallest possible error cases (this is also very useful if you're reporting a bug in someone elses code). As you do this, you'll also discover similar inputs that don't cause the bug. Make a note of those: they will be helpful when you're trying to figure out what's causing the bug.  If it takes a long time to generate the bug, it's also worthwhile figuring how to make it faster. It may be worthwhile to use a caching strategy to save incremental results (but be careful that you don't create new bugs by doing that)
+    Once you've determined you have a bug, you need to be able to recreate it 
+    on command. This can be the most frustrating part of debugging, but if you 
+    can't consistently recreate the bug, then it's extremely difficult to 
+    isolate why it's occuring, and it's impossible to confirm that you've 
+    fixed it. 
+    
+    Generally, you will start with a big block of code that you know causes the 
+    error and then slowly whittle it down to get to the smallest possible 
+    snippet that still causes the error. If it takes a long time to generate 
+    the bug, it's also worthwhile figuring how to make it faster. It may be 
+    worthwhile to use a caching strategy to save incremental results (but be 
+    careful that you don't create new bugs by doing that).
+    
+    As you work on creating a minimal example, you'll also discover similar 
+    inputs that don't cause the bug. Make a note of those: they will be 
+    helpful when diagnosing the cause of the bug. 
 
-3. Figure out where it is. 
+    If you're using automated testing, this is a good time to create an
+    automated test case. If your existing test coverage is low, take the 
+    opportunity to add some nearby tests to reduce your chances of creating
+    a new bug.
+    
+3. __Figure out where it is.__
 
-    If you're lucky, one of the tools in the following section will allow you to quickly navigate to the line of code that's causing the bug. In most cases, however, you'll probably have to think a bit more about the problem. Two general useful techniques are binary search and the scientific process.
+    If you're lucky, one of the tools in the following section will allow you 
+    to quickly navigate to the line of code that's causing the bug. Usually, 
+    however, you'll probably have to think a bit more about the problem. Two 
+    general useful techniques are binary search and the scientific process.
    
-    To do a binary search, you repeatedly remove half of the code. If the bug appears, you know it's in the other half. You can use this to rapidly zoom in 
+    To do a binary search, you repeatedly remove half of the code. The bug
+    will either bug appear or not; but either way you've reduced the amount of
+    code to look through by half. This allows you to quickly narrow down the
+    problem even if you have a lot of code.
 
-    If that doesn't work, adopt the scientific process. Generate hypotheses, design experiments to test them and then record your results. This does seem like more work, but a systematic approach will end up saving you time in the long run because each step you take will move you towards a solution. The test cases that don't cause the bug that you generated in the course of making the bug reproducible can be useful here.
+    If binary search doesn't work, adopt the scientific process. Generate 
+    hypotheses, design experiments to test them and then record your results. 
+    This does seem like more work, but a systematic approach will end up 
+    saving you time in the long run because each step you take will move you 
+    towards a solution. You can generate initial hypothesis by comparing the
+    inputs that cause the bug with those that don't.
 
-4. Fix it and test it. 
+4. __Fix it and test it.__
 
-    Once you've found the bug, you need to figure out how to fix it, and then check that it actually worked.  Again, it's very useful to have automated tests here so that you can ensure that you've actually fixed the bug, and you haven't created any new bugs in the process.
+    Once you've found the bug, you need to figure out how to fix it, and then 
+    check that it actually worked.  Again, it's very useful to have 
+    automated tests so that you can ensure that you've actually fixed the bug, 
+    and you haven't created any new bugs in the process.
 
 In my experience, it doesn't matter so much exactly what your process is, just that you have one. I often end up wasting too much time trying to rely on my intuition when I would have been better off taking a systematic approach.
 
 ## Debugging tools
 
-This section discusses how to debug from the command-line. Unlike the rest of the book, this section features a specific interface for working with R: RStudio. Rstudio has integrated debugging support which makes life easier, but it mostly exposes existing R tools in a user friendly way. I'll show you both the Rstudio way and the regular R way so that you can work with whatever tool you have.
+As well as a broad strategy to follow when debugging code, you also need some concrete tools. In this section you'll learn tools provided both by R and the RStudio IDE. Rstudio's integrated debugging support makes life easier, but it mostly exposes existing R tools in a user friendly way. I'll show you both the Rstudio way and the regular R way so that you can work with whatever environment you have. You may also want to refer to the official [Rstudio debugging documentation](http://www.rstudio.com/ide/docs/debugging/overview) - this will always reflect the functionality in the latest version of Rstudio.
 
-There are three key debugging tools are:
+There are three key debugging tools:
 
-* Finding out the sequence of calls that lead to the error with the Rstudio
+* Determining the sequence of calls that lead to the error with the Rstudio
   error inspector or `traceback()`.
 
-* Entering an interactive session in the middle of a sequence of calls with
-  Rstudio's "Rerun on debug" or `recover()`.
+* Entering an interactive session where an error occured with Rstudio's "Rerun 
+  on debug" or `recover()`.
 
-* Entering an interactive session in an arbitrary code location with 
-  Rstudio's breakpoints or `browser()`.
+* Entering an interactive session in arbitrary code with Rstudio's breakpoints 
+  or `browser()`.
 
-You may also want to refer to the official [Rstudio debugging documentation](http://www.rstudio.com/ide/docs/debugging/overview) - this will always reflect the functionality in the latest version of Rstudio.
+I'll explain each tool in more detail below.
 
-Generally, you shouldn't need to use these tools when writing new functions. If you find yourself using them frequently with new code, you may want to reconsider your approach: it's much easier to start very simple and test as you go, rather than write something big and complicated and then figure out exactly where the problem is. 
+Note that you shouldn't need to use these tools when writing new functions. If you find yourself using them frequently with new code, you may want to reconsider your approach: it's much easier to start simple and test interactively as you go, rather than writing something big and complicated and then trying to figure out exactly where the problem is. 
 
-### Traceback
+### Determining the sequence of calls
 
-The most important tool to start with is the traceback, the sequence of calls that lead up to an error. Here's a simple an example: you can see that `f()`, calls `g()` calls `h()` calls `i()` which adds together a number and a string creating a error:
+The most important tool to start with is the traceback, the sequence of calls that lead up to an error. Here's a simple an example: you can see that `f()` calls `g()` calls `h()` calls `i()` which adds together a number and a string creating a error:
 
 ```{r, eval = FALSE}
 f <- function(a) g(a)
@@ -105,21 +162,25 @@ traceback()
 # 1: f(10)
 ```
 
-You read the call stack from bottom to top: the initial call is `f()`, which eventually calls `i()` which triggers the error. If you're calling code that you've `source()`d into R, the traceback will also display the location of the function, in the form `filename.r#linenumber`. These are clickable in Rstudio.
+You read the call stack from bottom to top: the initial call is `f()`, which eventually calls `i()` which triggers the error. If you're calling code that you `source()`d into R, the traceback will also display the location of the function, in the form `filename.r#linenumber`. These are clickable in Rstudio, and will take you to the corresponding line of code in the editor.
 
-Sometimes this information is enough to track down what caused the error. However, it's often not enough: it shows you where the error occured, but not why. The next useful tool is the interactive debugger, which allows you to pause execution of a function and interactively explore its state.
+Sometimes this is enough information to let you track down the error and fix it. However, it's usually not enough: it shows you where the error occured, but not why. The next useful tool is the interactive debugger, which allows you to pause execution of a function and interactively explore its state.
 
 ### Browsing on error
 
-The easiest way to enter the interactive debugger is through RStudio's "Rerun with debug" command. This reruns the command the created the error, pausing execution where the error occured. You then get a command line environment that works exactly the same way as the regular R console, with the addition of a few extra special commands.  You can access them either with the Rstudio toolbar (![](debug-toolbar.png)) or with the keyboard:
+The easiest way to enter the interactive debugger is through RStudio's "Rerun with debug" tool. This reruns the command that created the error, pausing execution where the error occured. You're now in an interactive state just like the regular R console, but you're inside the function, and can interact with any object defined their. You'll see the objects in the current environment in the Environment pane, the traceback in a new traceback pane and you can run arbitrary R code in the console to figure out what went wrong.
 
-* Next, `n`: execute the next step. Be careful if you have a variable named 
-  `n`: to print it you'll need to be explicit `print(n)`.
+As well as any regular R function, there are a few special commands you can use in debug model. You can access them either with the Rstudio toolbar (![](debug-toolbar.png)) or with the keyboard:
 
-* Continue, `c`: leave interactive debugging and continue execution
+* Next, `n`: executes the next step in the function. Be careful if you have a 
+  variable named `n`; to print it you'll need to do `print(n)`.
 
-* Stop, `Q`: stops debugging, terminate the function and return to the global
-  workspace
+* Continue, `c`: leaves interactive debugging and continues regular execution
+  of the function. This is useful if you've fixed the bad state and want to 
+  check that the function proceeds correctly.
+
+* Stop, `Q`: stops debugging, terminates the function and return to the global
+  workspace.
 
 There are two other useful commands:
 
@@ -129,7 +190,24 @@ There are two other useful commands:
 * `where`: prints stack trace of active calls (the interactive equivalent of
   `traceback`)
 
-To enter this style of debugging outside of Rstudio, you can use the `error` option. This specifies a function to run when an error occurs. The function most similar to Rstudio's debug is `browser()`: this will start an interactive console at the environment where the error occured. Use `options(error = browser)` to turn it on, re-run the previous command, then use `options(error = NULL)` to return to the default error behaviour.  
+To enter this style of debugging outside of Rstudio, you can use the `error` option. This specifies a function to run when an error occurs. The function most similar to Rstudio's debug is `browser()`: this will start an interactive console in the environment where the error occured. Use `options(error = browser)` to turn it on, re-run the previous command, then use `options(error = NULL)` to return to the default error behaviour. You could automate this with the `browseOnce()` function as defined below:
+
+```{r, eval = FALSE}
+browseOnce <- function() {
+  old <- getOption("error")
+  function() {
+    options(error = old)
+    browser()
+  }
+}
+options(error = browseOnce())
+
+f <- function() stop("!")
+# Enters browser
+f()
+# Runs normally
+f()
+```
 
 There are two other useful functions that you can use with the `error` option:
 
@@ -139,9 +217,9 @@ There are two other useful functions that you can use with the `error` option:
 
 * `dump.frames` is an equivalent to `recover` for non-interactive code. It 
   creates a `last.dump.rda` file in the current working directory that you 
-  can load in a later R session using `debugger()`, and recreates the error
-  as if you had called `recover`: this allows interactive debugging of 
-  batch code.
+  can load into an interactive later R session using `debugger()`, and 
+  recreates the error as if you had called `recover`. This allows interactive 
+  debugging of batch code.
 
     ```{r, eval = FALSE}
     # In batch R process
@@ -158,36 +236,36 @@ There are two other useful functions that you can use with the `error` option:
     debugger()
     ```
 
-* `NULL`: the default. Prints an error message and stops function execution.
-  Use this to reset back to the regular behaviour.
+Finally, to reset error behaviour to the default, use `options(error = NULL)`. Then errors will print a message and abort function execution.
 
-### Browser
+### Browsing arbitrary code
 
-As well as entering an interactive console on error, you can enter it at an arbitrary location using Rstudio's breakpoints or `browser()`. You can set a breakpoint in R code by clicking to the left of the line number, or pressing `Shift + F9`. Breakpoints are effectively equivalent to `browser()` but they are easier to set (one click instead of nine key presses), and you don't run the risk of accidentally including a `browser()` statement in your source code. There are few places that breakpoints are not equivalent to `browser()`: read [breakpoint troubleshooting](http://www.rstudio.com/ide/docs/debugging/breakpoint-troubleshooting) for more details.
+As well as entering an interactive console on error, you can enter it at an arbitrary location in your code by using either an Rstudio breakpoint or `browser()`. You can set a breakpoint in Rstudio by clicking to the left of the line number, or pressing `Shift + F9`, or equivalently, add `browser()` when you want execution to pause. Breakpoints behave similarly to `browser()` but they are easier to set (one click instead of nine key presses), and you don't run the risk of accidentally including a `browser()` statement in your source code. There are few places that breakpoints are not equivalent to `browser()`: read [breakpoint troubleshooting](http://www.rstudio.com/ide/docs/debugging/breakpoint-troubleshooting) for more details. One downside of breakpoints is that you can't set them conditionally, whereas you can always put `browser()` inside an `if` statement.
 
-As well as adding `browser()` yourself, there are two functions that will added it to code:
+As well as adding `browser()` yourself, there are two functions that will add it to code:
 
 * `debug()` inserts a browser statement in the first line of the specified
-  function. `undebug` will remove it, or you can use `debugonce` to insert a
-  browser call for the next run, and have it automatically removed afterwards.
+  function. `undebug()` will remove it, or you can use `debugonce()` to insert 
+  to browse only on the next run.
 
-* `utils::setBreakpoint()` does the same thing, but instead inserts `browser()`
-  in the function corresponding to the specified file name and line number.
+* `utils::setBreakpoint()` works similarly, but instead of taking a function 
+  name, it takes a file name and line number and finds the appropriate function
+  for you.
 
-These two functions are both special cases of `trace()`, which allows you to insert arbitrary code in any position in an existing function. The complement of `trace()` is `untrace()`. You can only perform one trace per function - subsequent traces will replace prior.
+These two functions are both special cases of `trace()`, which inserts arbitrary code at any position in an existing function. `trace()` is occasionally useful when you're debugging code that you don't have the source for.  To remove tracing from a function, use  `untrace()`. Also note that you can only perform one trace per function.
 
 ### The call stack: `traceback(), `where` and `recover()`.
 
-Unfortunately the call stacks printed by `traceback()`, `browser()` + `where` and `recover()` are not consistent. Using the simple nested set of calls below, the call backs look like this table. Note that the numbering is different between `traceback()` and `where`, and `recover()` displays in the opposite order, and omits the call to `stop()`.
+Unfortunately the call stacks printed by `traceback()`, `browser()` + `where` and `recover()` are not consistent. Using the simple nested set of calls below, the call backs look like this table. Note that numbering is different between `traceback()` and `where`, and `recover()` displays calls in the opposite order, and omits the call to `stop()`.
 
 `traceback()`     `where`                 `recover()`
 ----------------  ----------------------- ------------
 4: stop("Error")  where 1: stop("Error")   1: f()  
-3: h(x)           where 2: h(x)            2: #1: g(x)
-2: g(x)           where 3: g(x)            3: #1: h(x)
+3: h(x)           where 2: h(x)            2: g(x)
+2: g(x)           where 3: g(x)            3: h(x)
 1: f()            where 4: f() 
 
-Rstudio displays in the same order as `traceback()` but omits the numbers.
+Rstudio displays calls in the same order as `traceback()` but omits the numbers.
 
 ```{r, eval = FALSE, echo = FALSE}
 f <- function(x) g(x)
@@ -203,9 +281,16 @@ options(error = NULL)
 
 There are other ways for a function to fail apart from throwing an error or returning an incorrect result. 
 
-* A function may generate an unexpected warning. Track them down by turning them into warnings with `options(warn = 2)` then using the regular debugging tools. When you do this you'll see some extra calls in `traceback()`:  `doWithOneRestart()`, `withOneRestart()`, `withRestarts()` and `.signalSimpleWarning()` - these are internal functions used to turn warnings into errors and can be ignored.
+* A function may generate an unexpected warning. The easiest way to track down
+  warnings is to convert them into errors with `options(warn = 2)`. The you can
+  use the regular debugging tools. When you do this you'll see some extra calls 
+  in the call stack, like to `doWithOneRestart()`, `withOneRestart()`, 
+  `withRestarts()` and `.signalSimpleWarning()`. Ignore these: they are 
+  internal functions used to turn warnings into errors.
 
-* Unexpected messages. There is no built in tool to help solve this problem like for warnings, but it's easy to create one (you'll see exactly how this works in the next section):
+* A function may generate an unexpected message. There's no built in tool to 
+  help solve like for warnings, but it's easy to create one (you'll learn how
+  this function works in the next section):
 
     ```{r, error = TRUE}
     message2error <- function(code) {
@@ -218,21 +303,32 @@ There are other ways for a function to fail apart from throwing an error or retu
     traceback()
     ```
   
-  As with warnings, you'll need to ignore some of the calls on the tracback (i.e. the first two and the last 7).
+    As with warnings, you'll need to ignore some of the calls on the tracback 
+    (i.e. the first two and the last 7).
 
-* A function might never return. This is particularly hard to debug automatically, but sometimes terminating the function and running `traceback()` can be informative. Otherwise you'll need to use the basic debugging strategies as  described previously.
+* A function might never return. This is particularly hard to debug 
+  automatically, but sometimes terminating the function and looking at the 
+  call stack is informative. Otherwise, use the basic debugging strategies 
+  described above.
 
-* The worst scenario is that your code might crash R altogether, leaving you no way to interactively debug your code. This typically indicates a bug with underlying C code, and the tools are much harder to use.  Sometimes an interative debugger like gdb can be useful, but describing how to use one is beyond the scope of this book.  If it's in base R code, positing a reproducible example to R-help is a good idea. If it's your own C or C++ code, you'll  need to use numerous `print()` statements to narrow down the location of the bug, and then you'll need to use many more print statements to figure out which data structure doesn't have the properties that you expect.
+* The worst scenario is that your code might crash R completely, leaving you 
+  no way to interactively debug your code. This typically indicates a bug with 
+  underlying C code, and the tools are much harder to use.  Sometimes an 
+  interative debugger, like `gdb`, can be useful, but describing how to use 
+  one is beyond the scope of this book.  If it's in base R code, posting a 
+  reproducible example to R-help is a good idea. If it's in a package, contact
+  the maintainer. If it's your own C or C++ code, you'll  need to use 
+  numerous `print()` statements to narrow down the location of the bug, and 
+  then you'll need to use many more print statements to figure out which 
+  data structure doesn't have the properties that you expect.
 
 ## Error handling
 
-Unexpected errors require interactive debugging to figure out what went wrong. Some errors, however, are expected, and you want to handle them automatically. In R, expected errors crop up most frequently when you're fitting many models to different datasets or bootstrap replicates. Sometimes the model might fail to fit and throw an error, but you don't want to abort everything; instead you want to fit as many models as possible and then perform diagnostics after the fact. 
-
-In R, there are two tools for handling exceptions programmatically: `try()` (simple) and `tryCatch()` (complex). 
+Unexpected errors require interactive debugging to figure out what went wrong. Some errors, however, are expected, and you want to handle them automatically. In R, expected errors crop up most frequently when you're fitting many models to different datasets or bootstrap replicates. Sometimes the model might fail to fit and throw an error, but you don't want to stop everything; instead you want to fit as many models as possible and then perform diagnostics after the fact. In R, there are two tools for handling exceptions programmatically: `try()` (simple) and `tryCatch()` (complex). 
 
 ### Basic error handling with try()
 
-`try()` allows execution to continue even after an exception has occured. For example, normally if you run a function that throws an error, it terminates immediately and doesn't return a value:
+`try()` allows execution to continue even after an error has occured. For example, normally if you run a function that throws an error, it terminates immediately and doesn't return a value:
 
 ```{r, error = TRUE}
 f1 <- function(x) {
@@ -242,7 +338,7 @@ f1 <- function(x) {
 f1("x")
 ```
 
-However, if you wrap the statement that creates the error in `try()`, the error message will still be printed but execution will continue:
+However, if you wrap the statement that creates the error in `try()`, the error message will  be printed but execution will continue:
 
 ```{r}
 f2 <- function(x) {
@@ -252,7 +348,7 @@ f2 <- function(x) {
 f2()
 ```
 
-You can pass larger blocks of code to `try()` by wrapping them in `{}`:
+You can suppress the message with `try(..., silent = TRUE)`. To pass larger blocks of code to `try()`, wrap them in `{}`:
 
 ```{r}
 try({
@@ -264,7 +360,7 @@ a
 b
 ```
 
-You can also capture the output of the `try()` function. If succesful, it will be the last result evaluated in the block (just like a function); if unsuccesful it will be an (invisible) object of class "try-error":
+You can also capture the output of the `try()` function. If successful, it will be the last result evaluated in the block (just like a function); if unsuccessful it will be an (invisible) object of class "try-error":
 
 ```{r}
 success <- try(1 + 2)
@@ -272,8 +368,6 @@ failure <- try("a" + "b")
 str(success)
 str(failure)
 ```
-
-You can use the second argument to `try()`, `silent`, to suppress printing of the error message.
 
 `try()` is particularly useful when you're applying a function to multiple elements in a list:
 
@@ -307,14 +401,17 @@ The function operators chapter discusses the `failwith()` function operator whic
 
 ### Advanced error handling with `tryCatch()`
 
-`tryCatch` gives more control than `try`, because it can take different actions depending on the type of error (or more generally the condition) that was raised. The `tryCatch()` call has three arguments:
+`tryCatch()` is more powerful than `try()`, because as well as dealing with errors, it also allows you to take specific actions for messages, warnings and interrupts. You've seen messages (made by `message()`) and warnings (made by `warn()`) before, but interrupts are new. They can't be generated directly by the programmer, but are raised when the user attempts to terminate execution by by presses Ctrl + Break, Escape, or Ctrl + C (depending on the platform). `tryCatch()` also provides the finally hook to run code regardless of whether or not an error occured.
+
+The `tryCatch()` has three arguments:
 
 * `expr`: the code to run.
 
-* `...`: a set of named arguments setting up error handlers. If an error
-  occurs, `tryCatch` will call the first handler whose name matches one of the
-  classes of the condition. The only useful names for built-in conditions are
-  `interrupt`, `error`, `warning` and `message`.
+* `...`: a set of named functions. If an condition is raised, `tryCatch` will 
+  call the first handler whose name matches one of the classes of the condition. 
+  The only useful names for built-in conditions are `error`, `warning`,
+  `message`, `interrupt` and `condition`. Handler functions are passed a single 
+  object, representing the condition that was raised.
 
 * `finally`: code to run regardless of whether `expr` succeeds or fails. This
   is useful for clean up, as described below. All handlers have been turned
@@ -325,13 +422,6 @@ The function operators chapter discusses the `failwith()` function operator whic
 The following examples illustrate the basic properties of `tryCatch`:
 
 ```{r, error = TRUE}
-# Handlers are passed a single argument
-tryCatch(stop("error"), 
-  error = function(...) list(...)
-)
-# This argument is the signalled condition (error, warning or message), 
-# so we'll call it c for short.
-
 # If multiple handlers match, the first is used
 tryCatch(stop("error"), 
   error = function(c) "a",
@@ -344,7 +434,7 @@ tryCatch(
   error = function(c) "b"
 )
 
-# Uncaught signals propagate outwards. 
+# Uncaught conditions propagate outwards. 
 tryCatch(
   tryCatch(stop("error")),
   error = function(c) "b"
@@ -358,8 +448,7 @@ tryCatch(a <- 1,
   
 # Any errors that occur in the finally block are handled normally
 a <- 1
-tryCatch(a <- 2, 
-  finally = stop("Error!"))
+tryCatch(a <- 2, finally = stop("Error!"))
 ```
 
 Catching interrupts can be useful if you want to take special action when the user tries to abort running code.
@@ -378,42 +467,29 @@ while(i < 3) {
 }
 ```
 
-A handler function can do anything, but typically it will either return a value, or pass the condition along. For example, we can write a simple version of `try` using `tryCatch`. 
+A handler function can do anything, but typically it will either return a value, or pass the condition along. For example, we can write a simple version of `try` using `tryCatch`: 
 
 ```{r}
-try <- function(code, silent = FALSE) {
+try2 <- function(code, silent = FALSE) {
   tryCatch(code, error = function(c) {
-    if (!silent) message("Error: ", conditionMessage(c))
+    msg <- conditionMessage(c)
+    if (!silent) message("Error: ", c)
     invisible(structure(conditionMessage(c), class = "try-error"))
   })
-} 
-try(1)
-try(stop("Hi"))
-try(stop("Hi"), silent = TRUE)
+}
 
-rm(try)
+try2(1)
+try2(stop("Hi"))
+try2(stop("Hi"), silent = TRUE)
 ```
 
-The real version of `try` is considerably more complicated to preserve the usual error behaviour.
+The real version of `try` is considerably more complicated to make the error message look more like what you'd see if `tryCatch()` wasn't used.
 
-## Communicating to the user
+### Advanced error handling
 
-R functions have three main ways to communicate to the user:
+One of the downsides of most functions in R is that they just call `stop()` with a string. That means if you want to figure out if a particular error occured, you have to look at the text of the error message. This is error prone, not only because the text of the error might change over time, but also because many error messages are translated, so the message might be completely different to what you expect.
 
-* By sending a `message()`, which usually is printed in bold font.
-  Messages can be suppressed with `suppressMessages()`
-
-* By generating a `warning()`, which is prefixed by "Warning message".
-  Multiple errors are aggregate together by default. You can see them all
-  with `warnings()` or force to display individually with `options(warn = 1)`.
-  Warnings can be suppressed with `suppressWarnings()`
-
-* By raising a fatal error with `stop()`. Errors force all execution to stop, 
-  and are displayed like messages with an additional "Error" prefix.
-
-Collectively, these three types of communcations are called __conditions__, represented by an S3 class built on top of a list containing `message` and `call` elements. There is one class of conditions that can't be generated directly by the programmer: the `interrupt`, which occur when the user presses Ctrl + Break, Escape, or Ctrl + C (depending on the platform) to terminate execution.
-
-Each function, `stop()`, `warning()` and `message()` can be given either a list of strings, or a custom S3 condition object. Custom condition objects are not used very often, but are very useful because they make it possible for the user to respond to different errors in different ways. For example, "expected" (like a model failing to converge for some input datasets) can be silently ignored, while unexpected errors (like no disk space available) can be propagated to the user. 
+However, R has a little known and little used feature that alleviates this problem. Conditions are S3 classes, so you can define your own for specific types of errors. Each function, `stop()`, `warning()` and `message()` can be given either a list of strings, or a custom S3 condition object. Custom condition objects are not used very often, but are very useful because they make it possible for the user to respond to different errors in different ways. For example, "expected" (like a model failing to converge for some input datasets) can be silently ignored, while unexpected errors (like no disk space available) can be propagated to the user. 
 
 R doesn't come with a built-in constructer function for conditions, but we can easily add one. Conditions must contain a `message` and `call` components, but can contain anything else that is useful for  When creating a new condition, it should always inherit from `condition` and one of `error`, `warning` and `message`.
 
@@ -426,25 +502,72 @@ condition <- function(subclass, message, call = sys.call(-1), ...) {
   )
 }
 is.condition <- function(x) inheritis(x, "condition")
-
-condition(c("my_error"), "error", message = "This is an error")
 ```
 
-```{r}
-# The first handler that matches a class of the condition is used, 
-# not the "best" match:
-a <- structure(list(message = "my error", call = quote(a)), 
-  class = c("a", "error", "condition"))
+You can signal an arbitrary condition with `signalCondition()`, but nothing will happen unless you've instantiated a custom signal handler. Instead, use `stop()`, `warning()` or `message()` as appropriate to trigger the usual handling. (Note that R won't complain if the class of your condition doesn't match the function, but you should avoid this in real code).
 
-tryCatch(stop(a), 
+```{r, error = TRUE}
+
+c <- condition(c("my_error", "error"), message = "This is an error")
+signalCondition(c)
+stop(c)
+warning(c)
+message(c)
+```
+
+Note that when using `tryCatch()` with multiple handlers and custom classes, the first handler to match any class in the hierarchy is called, not necessarily the best match. For this reason, you need to make sure to put the most specific handlers first:
+
+```{r}
+tryCatch(stop(c), 
   error = function(c) "error",
-  a = function(c) "a"
+  my_error = function(c) "my_error"
 )
 tryCatch(stop(a), 
-  a = function(c) "a",
+  my_error = function(c) "my_error",
   error = function(c) "error"
 )
 ```
+
+There is one other way to capture conditions: `withCallingHandlers()`. There are two main differences between `tryCatch()` and `withCallingHandlers()`:
+
+* The default behaviour of `tryCatch()` handlers is handle the error and return
+  a value, where the return value of `withCallingHandlers()` handlers is 
+  ignored by default:
+
+    ```{r, error = TRUE}
+    f <- function() stop("!")
+    tryCatch(f(), error = function(e) 1)
+    withCallingHandlers(f(), error = function(e) 1)
+    ```
+
+* The handlers in `withCallingHandlers()` are called in the context of the 
+  call that generated the condition; the handlers in `tryCatch()` are called 
+  in the context of `tryCatch()`:
+  
+    ```{r, eval = FALSE}
+    f <- function() g()
+    g <- function() h()
+    h <- function() stop("!")
+
+    tryCatch(f(), error = function(e) print(sys.calls()))
+    # [[1]] tryCatch(f(), error = function(e) print(sys.calls()))
+    # [[2]] tryCatchList(expr, classes, parentenv, handlers)
+    # [[3]] tryCatchOne(expr, names, parentenv, handlers[[1L]])
+    # [[4]] value[[3L]](cond)
+    
+    withCallingHandlers(f(), error = function(e) print(sys.calls()))
+    # [[1]] withCallingHandlers(f(), error = function(e) print(sys.calls()))
+    # [[2]] f()
+    # [[3]] g()
+    # [[4]] h()
+    # [[5]] stop("!")
+    # [[6]] .handleSimpleError(function (e) print(sys.calls()), "!", quote(h()))
+    # [[7]] h(simpleError(msg, call))
+    ```
+    
+    This also affects the order in which `on.exit()` is called.
+
+These subtle differences are rarely useful, except when you're trying to capture exactly what went wrong and pass it on to another function. For most purposes, you should never need to use `withCallingHandlers()`
 
 ## Defensive programming
 
