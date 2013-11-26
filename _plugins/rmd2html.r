@@ -3,16 +3,18 @@
 rmd2md <- function(in_path, out_path = tempfile(fileext = ".md")) {
   library(knitr)
 
+  collapse <- function(x, options) {
+    paste0("\n", paste0(x, collapse = "\n"))
+  }
+  
   set.seed(1410)
   options(digits = 3)
   knit_hooks$set(
-    source = function(x, options) paste(x, collapse = "\n"), 
-    output = function(x, options) {
-      paste0("\n", paste0(x, collapse = "\n"))
-    }, 
-    warning = function(x, options) paste(x, collapse = "\n"), 
-    error = function(x, options) paste(x, collapse = "\n"), 
-    message = function(x, options) paste(x, collapse = "\n"), 
+    source = function(x, options) paste(x, collapse = "\n"),
+    output = collapse,
+    warning = collapse,
+    error = collapse,
+    message = collapse,
     plot = function(x, options) {
       url <- paste(x, collapse = ".")
       img <- paste0("<img src='", url, "' ",  
