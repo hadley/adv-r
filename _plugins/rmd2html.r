@@ -38,7 +38,7 @@ rmd2md <- function(in_path, out_path = tempfile(fileext = ".md")) {
     }
   )
   opts_chunk$set(
-    comment = "#",
+    comment = "#>",
     error = FALSE,
     tidy = FALSE,
     cache.path = "_cache/",
