@@ -4,7 +4,7 @@
 #   Functional-programming.md \
 #   Functionals.md
 
-pandoc --chapters -o book/programming.pdf --latex-engine xelatex \
+pandoc --chapters -o book/adv-r.pdf --latex-engine xelatex \
   -V papersize:oneside -V links-as-notes --toc \
   book/title.md \
   book/chapters/Introduction.md \
