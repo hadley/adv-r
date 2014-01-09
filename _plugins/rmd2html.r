@@ -77,6 +77,10 @@ rmd2html <- function(path, cache = FALSE) {
 cache_file <- function(in_path, f, ext) {
   hash <- digest::digest(in_path, file = TRUE)
   cache_path <- paste0("_cache/", hash, ext)
+
+  if (!file.exists("_cache")) {
+    dir.create("_cache")
+  }
     
   if (file.exists(cache_path)) {
     if (interactive()) message("For ", in_path, " using cache ", cache_path)
