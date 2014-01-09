@@ -6,6 +6,7 @@
 
 pandoc --chapters -o book/adv-r.pdf --latex-engine xelatex \
   -V papersize:oneside -V links-as-notes --toc \
+  -M monofont=Inconsolata \
   book/title.md \
   book/chapters/Introduction.md \
   book/part-foundations.md \
