@@ -1,3 +1,5 @@
+library(stringr)
+
 # Convert an Rmd file to a md file using custom knitr options
 # Inputs and outputs paths
 rmd2md <- function(in_path, out_path = tempfile(fileext = ".md")) {
@@ -61,13 +63,15 @@ md2html <- function(in_path, out_path = tempfile(fileext = ".html")) {
   out_path
 }
 
-rmd2html <- function(path, cache = FALSE) {
+rmd2html <- function(path, cache = FALSE, fix_links = TRUE) {
   
   if (cache) {
     md_path <- cache_file(path, rmd2md, ".md")
+    if (fix_links) update_links(md_path)
     cache_file(md_path, md2html, ".html")
   } else {
     md_path <- rmd2md(path)
+    if (fix_links) update_links(md_path)
     md2html(md_path)
   }
   
@@ -128,4 +132,25 @@ check_all <- function(start = NULL) {
     message("----------------------------------------------------")
     rmd2md(file)
   }
+}
+
+# Convert internal links to explicit links also containing the file name
+update_links <- function(path) {
+  contents <- paste0(readLines(path, warn = FALSE), collapse = "\n")
+  
+  int_link_pos <- str_locate_all(contents, "\\(#([^)]*)\\)")[[1]]
+  int_link <- str_sub(contents, 
+    int_link_pos[, "start"] + 2, # (#
+    int_link_pos[, "end"] - 1    # )
+  )
+  
+  replacement <- vapply(int_link, lookup, character(1))
+  
+  for(i in rev(seq_len(nrow(int_link_pos)))) {
+    start <- int_link_pos[i, "start"] + 1
+    end <- int_link_pos[i, "end"] - 1
+    str_sub(contents, start, end) <- replacement[i]
+  }
+  
+  writeLines(contents, path)
 }

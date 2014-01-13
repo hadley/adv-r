@@ -36,6 +36,12 @@ build_index <- function() {
   saveRDS(invert(headers), "toc.rds")
 }
 
+link_type <- function(url) {
+  ifelse(grepl("^#", url), "internal", 
+    ifelse(grepl("^[a-z]+://", url), "external", 
+      "bad"))
+}
+
 # Check that all the links in a file are good
 check_file <- function(path) {
   index <- readRDS("toc.rds")
@@ -46,9 +52,7 @@ check_file <- function(path) {
       contents[[2]][[1]]
   }
   links <- walk_inline(body, get_link)
-  
-  type <- ifelse(grepl("^#", links), "internal", 
-    ifelse(grepl("^[a-z]+://", links), "external", "bad"))
+  type <- link_type(links)
   
   links_by_type <- split(links, type)
   if (length(links_by_type$bad) > 0) {
@@ -70,12 +74,12 @@ lookup <- function(name, index = readRDS("toc.rds")) {
   paste0(gsub(".rmd", ".html", path), "#", name)
 }
 
-
 invert <- function(x) {
   if (length(x) == 0) return()
   unstack(rev(stack(x)))
 }
 
+# Walkers ----------------------------------------------------------------------
 
 # action(key, value, format, meta)
 #  key is the type of the pandoc object (e.g. 'Str', 'Para')

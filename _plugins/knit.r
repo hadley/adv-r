@@ -1,5 +1,6 @@
 #!/usr/bin/Rscript
 source("_plugins/rmd2html.r")
+source("_plugins/index.R")
 library(methods)
 
 args <- commandArgs(trailingOnly = TRUE)
