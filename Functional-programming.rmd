@@ -3,6 +3,10 @@ title: Functional programming
 layout: default
 ---
 
+```{r, echo = FALSE, messages = FALSE}
+library(pryr)
+```
+
 # Functional programming
 
 At its heart, R is a functional programming (FP) language; it focusses on the creation and manipulation of functions. R has what's known as first class functions, functions that can be:
@@ -34,7 +38,7 @@ Recently FP has experienced a surge in interest because it provides a complement
 
 Imagine you've loaded a data file that uses -99 to represent missing values, like the following sample dataset.
 
-```R
+```{r}
 # Generate a sample dataset
 set.seed(1014)
 df <- data.frame(replicate(6, sample(c(1:10, -99), 10, rep = T)))
@@ -44,7 +48,7 @@ head(df)
 
 When you first start writing R code, you might write code like the following, dealing with the duplicated processing of each column with copy-and-paste:
 
-```R
+```{r, eval = FALSE}
 df$a[df$a == -99] <- NA
 df$b[df$b == -99] <- NA
 df$c[df$c == -98] <- NA
@@ -59,7 +63,7 @@ The "do not repeat yourself", or DRY, principle, was popularised by the [pragmat
 
 We can start applying some of the ideas of FP to our example by writing a function that fixes the missing values in a single vector:
 
-```R
+```{r, eval = FALSE}
 fix_missing <- function(x) {
   x[x == -99] <- NA
   x
@@ -76,7 +80,7 @@ This reduces the scope for errors, but doesn't eliminate them.  We've still made
 
 `lapply()` takes three inputs: `x`, a list; `f`, a function; and ``...`, other arguments to pass to `f`. It applies the function to each element of the list and returns a new list. Since data frames are also lists, `lapply()` also works on data frames. `lapply(x, f, ...)` is equivalent to the following for loop:
 
-```R
+```{r, eval = FALSE}
 out <- vector("list", length(x))
 for (i in seq_along(x)) {
   out[[i]] <- f(x[[i]], ...)
@@ -87,7 +91,7 @@ The real `lapply()` is rather more complicated since it's implemented in C for e
 
 We can use `lapply()` with one small trick: rather than simply assigning the results to `df` we assign them to `df[]`, so R's usual subsetting rules take over and we get a data frame instead of a list. (If this comes as a surprise, you might want to read over the [[subsetting]] appendix.)
 
-```R
+```{r, eval = FALSE}
 fix_missing <- function(x) {
   x[x == -99] <- NA
   x
@@ -105,7 +109,7 @@ As well as being more compact, there are four main advantages of this code over 
 
 * It is easy to generalise this technique to a subset of our columns:
 
-    ```R
+    ```{r, eval = FALSE}
     df[1:5] <- lapply(df[1:5], fix_missing)
     ```
 
@@ -113,7 +117,7 @@ The key idea here is composition. We take two simple functions, one which does s
 
 What if different columns used different indicators for missing values? You again might be tempted to copy-and-paste:
 
-```R
+```{r}
 fix_missing_99 <- function(x) {
   x[x == -99] <- NA
   x
@@ -130,7 +134,7 @@ fix_missing_9999 <- function(x) {
 
 But as before, it's easy to create bugs. The next functional programming tool we'll talk about helps deal with this sort of duplication: when we have multiple functions that all follow the same basic template. Closures, functions that return functions, allow us to make many functions from a template:
 
-```R
+```{r}
 missing_fixer <- function(na_value) {
   function(x) {
     x[x == na_value] <- NA
@@ -144,7 +148,7 @@ fix_missing_9999 <- missing_fixer(-9999)
 
 (In this case, you could argue that we should just add another argument:
 
-```R
+```{r}
 fix_missing <- function(x, na.value) {
   x[x == na.value] <- NA
   x
@@ -155,7 +159,7 @@ That's a reasonable solution here, but it doesn't work so well in every situatio
 
 Let's now consider a new problem: once we've cleaned up our data, we might want to compute the same set of numerical summaries for each variable. We could write code like this:
 
-```R
+```{r, eval = FALSE}
 mean(df$a)
 median(df$a)
 sd(df$a)
@@ -173,7 +177,7 @@ But we'd be better off identifying the sources of duplication and then removing 
 
 One approach would be to write a summary function and then apply it to each column:
 
-```R
+```{r, eval = FALSE}
 summary <- function(x) { 
   c(mean(x), median(x), sd(x), mad(x), IQR(x))
 }
@@ -182,7 +186,7 @@ lapply(df, summary)
 
 But there's still some duplication here. If we make the summary function slightly more realistic, it's easier to see the duplication:
 
-```R
+```{r, eval = FALSE}
 summary <- function(x) { 
  c(mean(x, na.rm = TRUE), 
    median(x, na.rm = TRUE), 
@@ -196,7 +200,7 @@ All five functions are called with the same arguments (`x` and `na.rm`) which we
 
 We can take advantage of another functional programming technique, storing functions in lists, to remove this duplication:
 
-```R
+```{r, eval = FALSE}
 summary <- function(x) {
   funs <- c(mean, median, sd, mad, IQR)
   lapply(funs, function(f) f(x, na.rm = TRUE))
@@ -213,7 +217,7 @@ Given the name of a function, like `"mean"`, it's possible to find the function 
 
 We use anonymous functions when it's not worth the effort of creating a named function:
 
-```R
+```{r, echo = FALSE}
 lapply(mtcars, function(x) length(unique(x)))
 Filter(function(x) !is.numeric(x), mtcars)
 integrate(function(x) sin(x) ^ 2, 0, pi)
@@ -221,7 +225,8 @@ integrate(function(x) sin(x) ^ 2, 0, pi)
 
 Unfortunately the default R syntax for anonymous functions is quite verbose. To make things a little more concise, the `pryr` packages provides `f()`:
 
-```R
+```{r, echo = FALSE}
+library(pryr)
 lapply(mtcars, f(length(unique(x))))
 Filter(f(!is.numeric(x)), mtcars)
 integrate(f(sin(x) ^ 2), 0, pi)
@@ -231,7 +236,7 @@ I'm not still sure whether I like this style or not, but it sure is compact!  Ot
 
 Like all functions in R, anoynmous functions have `formals()`, a `body()`, and a parent `environment()`:
   
-```R
+```{r}
 formals(function(x = 4) g(x) + h(x))
 body(function(x = 4) g(x) + h(x))
 environment(function(x = 4) g(x) + h(x))
@@ -239,7 +244,7 @@ environment(function(x = 4) g(x) + h(x))
 
 You can call anonymous functions directly, but the code is a little tricky to read because you must use parentheses in two different ways: to call a function, and to make it clear that we want to call the anonymous function `function(x) 3`, not inside our anonymous function call a function called `3` (which isn't a valid function name!):
 
-```R
+```{r}
 (function(x) x + 3)(10)
 
 # Exactly the same as
@@ -275,7 +280,7 @@ One of the most common uses for anonymous functions is to create closures, funct
 
 One use of anonymous functions is to create small functions that it's not worth naming; the other main use of anonymous functions is to create closures, functions written by functions. Closures are so called because they __enclose__ the environment of the parent function, and can access all variables in the parent. This is useful because it allows us to have two levels of parameters. One level of parameters (the parent) controls how the function works; the other level (the child) does the work. The following example shows how we can use this idea to generate a family of power functions. The parent function (`power()`) creates child functions (`square()` and `cube()`) that do the work.
 
-```R
+```{r}
 power <- function(exponent) {
   function(x) x ^ exponent
 }
@@ -293,21 +298,21 @@ In R, almost every function is a closure, because all functions remember the env
 
 When you print a closure, you don't see anything terribly useful:
 
-```R
+```{r}
 square
 cube
 ```
 
 That's because the function itself doesn't change; it's the enclosing environment, `environment(square)`, that's different. One way to see the contents of the environment is to convert it to a list:
 
-```R
+```{r}
 as.list(environment(square))
 as.list(environment(cube))
 ```
 
 Another way to see what's going on is to use `pryr::unenclose()`, which substitutes the variables defined in the enclosing environment into the original functon:
 
-```R
+```{r}
 library(pryr)
 unenclose(square)
 unenclose(cube)
@@ -315,7 +320,7 @@ unenclose(cube)
 
 Note that the parent environment of the closure is the environment created when the parent function is called:
 
-```R
+```{r}
 power <- function(exponent) {
   print(environment())
   function(x) x ^ exponent
@@ -346,7 +351,7 @@ Having variables at two levels makes it possible to maintain state across functi
 
 Together, a static parent environment and `<<-` make it possible to maintain state across function calls.  The following example shows a counter that records how many times a function has been called. Each time `new_counter` is run, it creates an environment, initialises the counter `i` in this environment, and then creates a new function.
 
-```R
+```{r}
 new_counter <- function() {
   i <- 0
   function() {
@@ -358,7 +363,7 @@ new_counter <- function() {
 
 The new function is a closure, and its enclosing environment is the usually temporary environment created when `new_counter` is run.  When the closures `counter_one` and `counter_two` are run, each one modifies the counter in a different enclosing environment and so maintain different counts. 
 
-```R
+```{r}
 counter_one <- new_counter()
 counter_two <- new_counter()
 
@@ -369,7 +374,7 @@ counter_two() # -> [1] 1
 
 We can use our environment inspection tools to see what's going on here:
 
-```R
+```{r}
 as.list(environment(counter_one))
 as.list(environment(counter_two))
 ```
@@ -378,7 +383,7 @@ The counters get around the "fresh start" limitation by not modifying variables 
 
 What happens if we don't use a closure? What happens if we only use `<-` instead of `<<-`? Make predictions about what will happen if you replace `new_counter()` with each variant below, then run the code and check your predictions.
 
-```R
+```{r}
 i <- 0
 new_counter2 <- function() {
   i <<- i + 1
@@ -401,7 +406,7 @@ The power of closures is tightly coupled to [[functionals]] and [[function opera
 
 * What does the following statistical function do? What would be a better name for it? (The existing name is a bit of a hint)
 
-    ```R
+    ```{r}
     bc <- function(lambda) {
       if (lambda == 0) {
         function(x) log(x)
@@ -413,12 +418,12 @@ The power of closures is tightly coupled to [[functionals]] and [[function opera
 
 * Create a function that creates functions that compute the ith [central moment](http://en.wikipedia.org/wiki/Central_moment) of a numeric vector. You can test it by running the following code:
 
-    ```R
+    ```{r, eval = FALSE}
     m1 <- moment(1)
     m2 <- moment(2)
 
     x <- runif(100)
-    stopifnot(all.equal(m1(x), mean(x)))
+    stopifnot(all.equal(m1(x), 0))
     stopifnot(all.equal(m2(x), var(x) * 99 / 100))
     ```
 
@@ -428,7 +433,7 @@ The power of closures is tightly coupled to [[functionals]] and [[function opera
 
 * Create a function `pick()`, that takes an index, `i`, as an argument and returns a function with an argument `x` that subsets `x` with `i`.
   
-    ```R
+    ```{r, eval = FALSE}
     lapply(mtcars, pick(5))
     # should do the same this as
     lapply(mtcars, function(x) x[[5]])
@@ -440,7 +445,7 @@ In R, functions can be stored in lists. Instead of giving a set of functions rel
 
 We'll start with a simple example: benchmarking, when you are comparing the performance of multiple approaches to the same problem. For example, if you wanted to compare a few approaches to computing the mean, you could store each approach (function) in a list:
 
-```R
+```{r}
 compute_mean <- list(
   base = function(x) mean(x),
   sum = function(x) sum(x) / length(x),
@@ -457,7 +462,7 @@ compute_mean <- list(
 
 Calling a function from a list is straightforward: just get it out of the list first:
 
-```R
+```{r}
 x <- runif(1e5)
 system.time(compute_mean$base(x))
 system.time(compute_mean[[2]](x))
@@ -466,7 +471,7 @@ system.time(compute_mean[["manual"]](x))
 
 If we want to call each functions to check that we've implemented them correctly and they return the same answer, we can use `lapply()`, either with an anonymous function, or an equivalent named function.
 
-```R
+```{r}
 lapply(compute_mean, function(f, ...) f(...), x)
 
 call_fun <- function(f, ...) f(...)
@@ -475,13 +480,13 @@ lapply(compute_mean, call_fun, x)
 
 If we want to time how long each function takes, we can combine lapply with `system.time()`:
 
-```R
+```{r}
 lapply(compute_mean, function(f) system.time(f(x)))
 ```
     
 Coming back to our original motivating example, another use case of lists of functions is summarising an object in multiple ways. We could store each summary function in a list, and then run them all with `lapply()`:
 
-```R
+```{r}
 funs <- list(
   sum = sum,
   mean = mean,
@@ -492,7 +497,7 @@ lapply(funs, function(f) f(1:10))
 
 What if we wanted our summary functions to automatically remove missing values?  One approach would be make a list of anonymous functions that call our summary functions with the appropriate arguments:
 
-```R
+```{r}
 funs2 <- list(
   sum = function(x, ...) sum(x, ..., na.rm = TRUE),
   mean = function(x, ...) mean(x, ..., na.rm = TRUE),
@@ -502,7 +507,7 @@ funs2 <- list(
 
 But this leads to a lot of duplication - each function is almost identical apart from a different function name. A better approach would be to modify our original `lapply()` call:
 
-```R
+```{r}
 lapply(funs, function(f) f(x))
 lapply(funs, function(f) f(x, na.rm = TRUE))
 
@@ -517,7 +522,7 @@ funs2 <- lapply(funs, remove_missings)
 
 From time to time you may want to create a list of functions that you want to be available to your users without having to use a special syntax. For a simple example, imagine you want to make it easy to create HTML with code, by mapping each HTML tag to an R function. The following simple example creates functions for `<p>` (paragraphics), `<b>` (bold), `<i>` (italics), and `<img>` (images).  Note the use of a closure function factory to produce the text for `<p>`, `<b>` and `<i>` tags.
 
-```R
+```{r}
 simple_tag <- function(tag) {
   function(...) paste0("<", tag, ">", paste0(...), "</", tag, ">")
 }
@@ -533,7 +538,7 @@ html <- list(
 
 We store the functions in a list because we don't want them to be available all the time: the risk of a conflict between an existing R function and an HTML tag is high. However, keeping them in a list means that our code is more verbose than necessary:
 
-```R
+```{r}
 html$p("This is ", html$b("bold"), ", ", html$i("italic"), " and ",
    html$b(html$i("bold italic")), " text")
 ```
@@ -542,14 +547,14 @@ We have three options to eliminate the use of `html$`, depending on how long we 
 
 * For a very temporary effect, we can use a `with()` block:
 
-    ```R
+    ```{r}
     with(html, p("This is ", b("bold"), ", ", i("italic"), " and ",
       b(i("bold italic")), " text"))
     ```
 
 * For a longer effect, we can use `attach()` to add the functions in `html` in to the search path.  It's possible to undo this action using `detach`:
 
-    ```R
+    ```{r}
     attach(html)
     p("This is ", b("bold"), ", ", i("italic"), " and ",
       b(i("bold italic")), " text")
@@ -558,7 +563,7 @@ We have three options to eliminate the use of `html$`, depending on how long we 
 
 * Finally, we could copy the functions into the global environment with `list2env()`.  We can undo this action by deleting the functions after we're done.
   
-    ```R
+    ```{r}
     list2env(html, environment())
     p("This is ", b("bold"), ", ", i("italic"), " and ",
       b(i("bold italic")), " text")
@@ -589,7 +594,7 @@ To conclude this chapter, we will develop a simple numerical integration tool, a
 
 The two simpliest approaches are the __midpoint__ and __trapezoid__ rules; the mid point rule approximates a curve by a rectangle, and the trapezoid rule by a trapezoid. Each takes a function we want to integrate, `f`, and a range to integrate over, from `a` to `b`. For this example we'll try to integrate `sin x` from 0 to pi, because it has a simple answer: 2.
 
-```R
+```{r}
 midpoint <- function(f, a, b) {
   (b - a) * f((a + b) / 2)
 }
@@ -604,7 +609,7 @@ trapezoid(sin, 0, pi)
 
 Neither of these functions gives a very good approximation, so we'll do what we normally do in calculus: break up the range into smaller pieces and integrate each piece using one of the simple rules. This is called __composite integration__, and we'll implement it with two new functions:
 
-```R
+```{r, mid-trap}
 midpoint_composite <- function(f, a, b, n = 10) {
   points <- seq(a, b, length = n + 1)
   h <- (b - a) / n
@@ -639,7 +644,7 @@ matplot(cbind(mid = mid, trap))
 
 But notice that there's a lot of duplication across `midpoint_composite` and `trapezoid_composite`: they are basically the same apart from the internal rule used to integrate over a simple range. Let's extract out a general composite integrate function:
 
-```R
+```{r}
 composite <- function(f, a, b, n = 10, rule) {
   points <- seq(a, b, length = n + 1)
   
@@ -658,7 +663,7 @@ composite(sin, 0, pi, n = 10, rule = trapezoid)
 
 This function now takes two functions as arguments: the function to integrate, and the integration rule to use for simple ranges. We can now add even better rules for integrating small ranges:
 
-```R
+```{r}
 simpson <- function(f, a, b) {
   (b - a) / 6 * (f(a) + 4 * f((a + b) / 2) + f(b))
 }
@@ -671,31 +676,11 @@ boole <- function(f, a, b) {
     (7 * fi(0) + 32 * fi(1) + 12 * fi(2) + 32 * fi(3) + 7 * fi(4))
 }
 ```
-    
-Let's compare these different approaches.
-
-```R
-expt1 <- expand.grid(
-  n = 5:50, 
-  rule = c("midpoint", "trapezoid", "simpson", "boole"), 
-  stringsAsFactors = F)
-
-abs_sin <- function(x) abs(sin(x))
-run_expt <- function(n, rule) {
-  composite(abs_sin, 0, 4 * pi, n = n, rule = match.fun(rule))
-}
-
-library(plyr)
-res1 <- mdply(expt1, run_expt)
-
-library(ggplot2)
-qplot(n, V1, data = res1, colour = rule, geom = "line")
-```
 
 It turns out that the midpoint, trapezoid, Simpson and Boole rules are all examples of a more general family called Newton-Cotes rules. (They are polynomials of increasing complexity).  We can take our integration one step further by extracting out this commonality to produce a function that can generate any general Newton-Cotes rule:
 
-```R
-# http://en.wikipedia.org/wiki/Newton%E2%80%93Cotes_formulas
+```{r}
+# From http://en.wikipedia.org/wiki/Newton%E2%80%93Cotes_formulas
 newton_cotes <- function(coef, open = FALSE) {
   n <- length(coef) + open
   
@@ -707,17 +692,14 @@ newton_cotes <- function(coef, open = FALSE) {
   }
 }
 
-trapezoid <- newton_cotes(c(1, 1))
-midpoint <- newton_cotes(1, open = TRUE)
-simpson <- newton_cotes(c(1, 4, 1))
-boole <- newton_cotes(c(7, 32, 12, 32, 7))
-milne <- newton_cotes(c(2, -1, 2), open = TRUE)
+rules <- list(
+  trapezoid = newton_cotes(c(1, 1)),
+  midpoint = newton_cotes(1, open = TRUE),
+  simpson = newton_cotes(c(1, 4, 1)),
+  boole = newton_cotes(c(7, 32, 12, 32, 7)),
+  milne = newton_cotes(c(2, -1, 2), open = TRUE)
+)
 
-expt1 <- expand.grid(n = 5:50, rule = names(rules), 
-  stringsAsFactors = FALSE)
-run_expt <- function(n, rule) {
-  composite(abs_sin, 0, 4 * pi, n = n, rule = rules[[rule]])
-}
 ```
 
 Mathematically, the next step in improving numerical integration is to move from a grid of evenly spaced points to a grid where the points are closer together near the end of the range, such as __Gaussian quadrature__.  That's beyond the scope of this case study, but you would use similar techniques to add it.
