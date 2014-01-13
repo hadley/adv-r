@@ -58,7 +58,7 @@ check_file <- function(path) {
   if (length(links_by_type$bad) > 0) {
     message("Bad links: ", paste0(links_by_type$bad, collapse = ", "))
   }
-  lapply(links_by_type$interal, lookup, index)
+  lapply(gsub("^#", "", links_by_type$internal), lookup, index)
   invisible()
 }
 
