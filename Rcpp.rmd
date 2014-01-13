@@ -3,6 +3,11 @@ title: Rcpp
 layout: default
 ---
 
+```{r, echo = FALSE, message = FALSE}
+library(microbenchmark)
+options(digits = 3)
+```
+
 # High performance functions with Rcpp
 
 Sometimes R code just isn't fast enough - you've used profiling to find the bottleneck, but there's simply no way to make the code any faster. This chapter is the answer to that problem. You'll learn how to rewrite key functions in C++ to get much better performance, while not taking too much longer to write. The key to this magic is [Rcpp](http://dirk.eddelbuettel.com/code/rcpp.html), a fantastic tool written by Dirk Eddelbuettel and Romain Francois (with key contributions by Doug Bates, John Chambers and JJ Allaire), that makes it dead simple to connect C++ to R. It is _possible_ to write C or Fortran code for use in R, but it will be painful; Rcpp provides a clean, approachable API that lets you write high-performance code, insulated from R's arcane C API.
@@ -30,14 +35,13 @@ In this chapter you'll learn:
 
 The chapter concludes with a selection of real case studies showing how others have used C++ and Rcpp to speed up their slow R code.
 
-
 ## Getting started
 
 All examples in this chapter need at least version 0.10.1 of the `Rcpp` package. This version includes `cppFunction` and `sourceCpp`, which makes it very easy to connect C++ to R. You'll also (obviously!) need a working C++ compiler.  
 
 `cppFunction` allows you to write C++ functions in R like this:
 
-```{r, cache = TRUE}
+```{r add, cache = TRUE}
 library(Rcpp)
 cppFunction('
   int add(int x, int y, int z) {
@@ -66,7 +70,7 @@ The following section shows the basics of C++ by translating simple R functions 
 
 Let's start with a very simple function. It has no arguments and always returns the integer 1:
 
-```{r}
+```{r one-r}
 one <- function() 1L
 ```
 
@@ -80,7 +84,7 @@ int one() {
 
 We can compile and use this from R with `cppFunction`
 
-```{r, eval = FALSE}
+```{r one-cpp, eval = TRUE, cache = TRUE}
 cppFunction('
   int one() {
     return 1;
@@ -104,7 +108,7 @@ This small function illustrates a number of important differences between R and 
 
 The next example function makes things a little more complicated by implementating a scalar version of the `sign` function which returns 1 if the input is positive, and -1 if it's negative:
 
-```{r, cache = TRUE}
+```{r sign, cache = TRUE}
 signR <- function(x) {
   if (x > 0) {
     1
@@ -138,7 +142,7 @@ In the C++ version:
 
 One big difference between R and C++ is that the cost of loops is much lower.  For example, we could implement the `sum` function in R using a loop. If you've been programming in R a while, you'll probably have a visceral reaction to this function!
 
-```{r}
+```{r sum-r}
 sumR <- function(x) {
   total <- 0
   for (i in seq_along(x)) {
@@ -150,7 +154,7 @@ sumR <- function(x) {
 
 In C++, loops have very little overhead, so it's fine to use them (later, we'll see alternatives to `for` loops that more clearly express your intent; they're not faster, but they can make your code easier to understand).
 
-```{r, cache = TRUE}
+```{r sum-cpp, cache = TRUE}
 cppFunction('
   double sumC(NumericVector x) {
     int n = x.size();
@@ -177,8 +181,7 @@ The C++ version is similar, but:
 
 This is a good example of where C++ is much more efficient than the R equivalent. As shown by the following microbenchmark, our `sumC` function is competitive with the built-in (and highly optimised) `sum` function, while `sumR` is several orders of magnitude slower.
 
-```{r, cache = TRUE}
-library(microbenchmark)
+```{r sum-bench, cache = TRUE}
 x <- runif(1e3)
 microbenchmark(
   sum(x),
@@ -191,7 +194,7 @@ microbenchmark(
 
 For our next example, we'll create a function that computes the distance between one value and a vector of other values:
 
-```{r}
+```{r pdist-r}
 pdistR <- function(x, ys) {
   sqrt( (x - ys) ^ 2 )
 }
@@ -199,7 +202,7 @@ pdistR <- function(x, ys) {
 
 From the function definition, it's not obvious that we want `x` to be a scalar - that's something we'd need to mention in the documentation. That's not a problem in the C++ version:
 
-```{r, cache = TRUE}
+```{r pdist-cpp, cache = TRUE}
 cppFunction('
   NumericVector pdistC(double x, NumericVector ys) {
     int n = ys.size();
@@ -227,7 +230,7 @@ In the sugar section, you'll see how to rewrite this function to take advantage 
 
 Each vector type also has a matrix equivalent: `NumericMatrix`, `IntegerMatrix`, `CharacterMatrix` and `LogicalMatrix`. Using them is straightforward. For example, we could create a function that reproduces `rowSums`:
 
-```{r, cache = TRUE}
+```{r rowsums-cpp, cache = TRUE}
 cppFunction('
   NumericVector rowSumsC(NumericMatrix x) {
     int nrow = x.nrow(), ncol = x.ncol();
@@ -275,7 +278,7 @@ Then using `sourceCpp("path/to/file.cpp")` will compile the C++ code, create the
 
 For example, running `sourceCpp` on the following file first compiles the C++ code and then compares it to native equivalent:
 
-```cpp
+```{r, engine = "Rcpp"}
 #include <Rcpp.h>
 using namespace Rcpp;
 
@@ -384,7 +387,10 @@ You've already seen the basic vector classes (`IntegerVector`, `NumericVector`, 
 
 All R objects have attributes, which can be queried and modified with the `attr` method.  Rcpp also provides a `names()` method for the commonly used attribute: `attr("names")`. The following code snippet illustrates these methods.  Note the use of the `create()` class method to easily create an R vector from C++ scalar values.
 
-```cpp
+```{r attribs, engine = "Rcpp"}
+#include <Rcpp.h>
+using namespace Rcpp;
+
 // [[Rcpp::export]]
 NumericVector attribs() {
   NumericVector out = NumericVector::create(1, 2, 3);
@@ -403,7 +409,10 @@ Rcpp also provides classes `List` and `DataFrame`. These are more useful for out
 
 For example, the linear model objects that `lm` produces are lists and the components are always of the same type. The following code illustrates how you might component the mean percentage error (`mpe`) of a linear model.  This isn't a very good example for when you might use C++ (because it's so easily implemented in R), but it illustrates how to pull out the components of a list. Note the use of the `inherits()` method and the `stop()` function to check that the object really is a linear model.
 
-```cpp
+```{r, engine = "Rcpp"}
+#include <Rcpp.h>
+using namespace Rcpp;
+
 // [[Rcpp::export]]
 double mpe(List mod) {
   if (!mod.inherits("lm")) stop("Input must be a linear model");
@@ -418,11 +427,11 @@ double mpe(List mod) {
   }
   return err / n;
 }
+```
 
-/*** R
-  mod <- lm(mpg ~ wt, data = mtcars)
-  mpe(mod)
-*/
+```{r}
+mod <- lm(mpg ~ wt, data = mtcars)
+mpe(mod)
 ```
 
 It is possible to write code that works differently depending on the type of the R input, but it is beyond the scope of this book.
@@ -447,7 +456,10 @@ assign(_["x"] = "y", _["value"] = 1);
 
 The challenge is storing the output. If you don't know in advance what the output will be, store it in an `RObject` or in components of a `List`. For example, the following code is a basic implementation of `lapply` in C++:
 
-```cpp
+```{r lapply1, engine = "Rcpp"}
+#include <Rcpp.h>
+using namespace Rcpp;
+
 // [[Rcpp::export]]
 List lapply1(List input, Function f) {
   int n = input.size();
@@ -459,11 +471,11 @@ List lapply1(List input, Function f) {
 
   return out;
 }
+```
 
-/*** R
-  lapply1(1:10, sqrt)
-  lapply1(list("a", 1, F), class)
-*/
+```{r}
+lapply1(1:3, sqrt)
+lapply1(list("a", 1, F), class)
 ```
 
 There are also classes for many more specialised language objects: `Environment`, `ComplexVector`, `RawVector`, `DottedPair`, `Language`,  `Promise`, `Symbol`, `WeakReference` and so on. These are beyond the scope of this chapter and won't be discussed further.
@@ -483,13 +495,16 @@ Sugar functions can be roughly broken down into
 
 All the basic arithmetic and logical operators are vectorised: `+` `*`, `-`, `/`, `pow`, `<`, `<=`, `>`, `>=`, `==`, `!=`, `!`.  For example, we could use sugar to considerably simplify the implementation of our `pdistC` function.  (If you don't remember I've included the R version of `pdistC`, `pdistR`, as well.  Note the similarities with the Rcpp sugar version.)
 
-```r
+```{r}
 pdistR <- function(x, ys) {
   (x - ys) ^ 2
 }
 ```
 
-```cpp
+```{r, engine = "Rcpp"}
+#include <Rcpp.h>
+using namespace Rcpp;
+
 // [[Rcpp::export]]
 NumericVector pdistC2(double x, NumericVector ys) {
   return pow((x - ys), 2);
@@ -502,13 +517,16 @@ The sugar function `any` and `all` are fully lazy, so that e.g `any(x == 0)` mig
 
 For example, we could use this to write an efficient funtion to determine whether or not a numeric vector contains any missing values. In R we could do `any(is.na(x))`:
 
-```r
+```{r}
 any_naR <- function(x) any(is.na(x))
 ```
 
 However that will do almost the same amount of work whether there's a missing value in the first position or the last. Here's the C++ implementation:
 
-```cpp
+```{r, engine = "Rcpp"}
+#include <Rcpp.h>
+using namespace Rcpp;
+
 // [[Rcpp::export]]
 bool any_naC(NumericVector x) {
   return is_true(any(is_na(x)));
@@ -517,8 +535,7 @@ bool any_naC(NumericVector x) {
 
 Our C++ `any_naC` function is slightly slower than `any_naR` when there are no missing values, or the missing value is at the end, but it's much faster when the first value is missing. 
 
-```r
-library(microbenchmark)
+```{r, cache = TRUE}
 x0 <- runif(1e5)
 x1 <- c(x0, NA)
 x2 <- c(NA, x0)
@@ -562,7 +579,10 @@ If you're working with missing values, you need to know two things:
 
 The following code explores what happens when you take one of R's missing values, coerce it into a scalar, and then coerce back to an R vector. This is a generally useful technique: if you don't know what an operation will do, design an experiment to figure it out.
 
-```cpp
+```{r missings, engine = "Rcpp"}
+#include <Rcpp.h>
+using namespace Rcpp;
+
 // [[Rcpp::export]]
 List scalar_missings() {
   int int_s = NA_INTEGER;
@@ -572,10 +592,10 @@ List scalar_missings() {
 
   return List::create(int_s, chr_s, lgl_s, num_s);
 }
+```
 
-/*** R
-  str(scalar_missings())
-*/
+```{r}
+str(scalar_missings())
 ```
 
 Things look pretty good here: with the exception of `bool`, all of the missing values have been preserved. 
@@ -590,7 +610,11 @@ If you want to work with missing values in integers, either use length one `Inte
 
 If you're working with doubles, you may be able to get away with ignoring missing values and working with NaN (not a number). R's missing values are a special type of the IEEE 754 floating point number NaN. That means if you coerce them to `double` in your C++ code, they will behave like regular NaN's. That means, in a logical context they always evaluate to FALSE:
 
-```r
+```{r, echo = FALSE, message = FALSE}
+library(Rcpp)
+```
+
+```{r}
 evalCpp("NAN == 1")
 evalCpp("NAN < 1")
 evalCpp("NAN > 1")
@@ -599,14 +623,14 @@ evalCpp("NAN == NAN")
 
 But be careful when combining then with boolean values:
 
-```r
+```{r}
 evalCpp("NAN && TRUE")
 evalCpp("NAN || FALSE")
 ```
 
 In numeric contexts, they propagate similarly to NA in R:
 
-```r
+```{r}
 evalCpp("NAN + 1")
 evalCpp("NAN - 1")
 evalCpp("NAN / 1")
@@ -625,7 +649,10 @@ C++'s `bool` only stores two values (true or false), but R's logical vector has 
 
 To set a missing value in a vector, you need to use a missing value specific to the type of vector. Unfortunately these are not named terribly consistently:
 
-```cpp
+```{r, engine = "Rcpp"}
+#include <Rcpp.h>
+using namespace Rcpp;
+
 // [[Rcpp::export]]
 List missing_sampler() {
   return(List::create(
@@ -634,15 +661,18 @@ List missing_sampler() {
     LogicalVector::create(NA_LOGICAL), 
     CharacterVector::create(NA_STRING)));
 }
+```
 
-/*** R
-  str(missing_sampler())
-*/
+```{r}
+str(missing_sampler())
 ```
 
 To check if a value in a vector is missing, use the class method `is_na`:
 
-```cpp
+```{r, engine = "Rcpp"}
+#include <Rcpp.h>
+using namespace Rcpp;
+
 // [[Rcpp::export]]
 LogicalVector is_naC(NumericVector x) {
   int n = x.size();
@@ -653,23 +683,26 @@ LogicalVector is_naC(NumericVector x) {
   }
   return out;
 }
+```
 
-/*** R
-  is_naC(c(NA, 5.4, 3.2, NA))
-*/
+```{r}
+is_naC(c(NA, 5.4, 3.2, NA))
 ```
 
 Another alternative is the similarly named sugar function `is_na`: it takes a vector and returns a logical vector.
 
-```cpp
+```{r, engine = "Rcpp"}
+#include <Rcpp.h>
+using namespace Rcpp;
+
 // [[Rcpp::export]]
 LogicalVector is_naC2(NumericVector x) {
   return is_na(x);
 }
+```
 
-/*** R
+```{r}
 is_naC2(c(NA, 5.4, 3.2, NA))
-*/
 ```
 
 ### Exercises
@@ -688,7 +721,10 @@ If you need an algorithm or data structure that isn't implemented in STL, a good
 
 Iterators are used extensively in the STL: many functions either accept or return iterators. They are the next step up from basic loops, abstracting away the details of the underlying data structure. Iterators have three main operators: they can be advanced with `++`, dereferenced (to get the value they refer to) with `*` and compared using `==`. For example we could re-write our sum function using iterators:
 
-```cpp
+```{r, engine = "Rcpp"}
+#include <Rcpp.h>
+using namespace Rcpp;
+
 // [[Rcpp::export]]
 double sum3(NumericVector x) {
   double total = 0;
@@ -710,8 +746,10 @@ The main changes are in the for loop:
 
 Iterators also allow us to use the C++ equivalents of the apply family of functions. For example, we could again rewrite `sum` to use the `accumulate` function, which takes an starting and ending iterator and adds all the values in between. The third argument to accumulate gives the initial value: it's particularly important because this also determines the data type that accumulate uses (here we use `0.0` and not `0` so that accumulate uses a `double`, not an `int`.).  To use `accumulate` we need to include the `<numeric>` header.
 
-```cpp
+```{r, engine = "Rcpp"}
 #include <numeric>
+#include <Rcpp.h>
+using namespace Rcpp;
 
 // [[Rcpp::export]]
 double sum4(NumericVector x) {
@@ -725,8 +763,10 @@ double sum4(NumericVector x) {
 
 The `<algorithm>` header provides a large number of algorithms that work with iterators. For example, we could write a basic Rcpp version of `findInterval` that takes two arguments a vector of values and a vector of breaks - the aim is to find the bin that each x falls into. This shows off a few more advanced iterator features.  Read the code below and see if you can figure out how it works.
 
-```cpp
+```{r, engine = "Rcpp"}
 #include <algorithm>
+#include <Rcpp.h>
+using namespace Rcpp;
 
 // [[Rcpp::export]]
 IntegerVector findInterval2(NumericVector x, NumericVector breaks) {
@@ -770,7 +810,10 @@ An STL vector is very similar to an R vector, except that it expands efficiently
 
 The following code implements run length encoding (`rle`). It produces two vectors of output: a vector of values, and a vector `lengths` giving how many times each element is repeated. It works by looping through the input vector `x` comparing each value to the previous: if it's the same, then it increments the last value in `lengths`; if it's different, it adds the value to the end of `values`, and sets the corresponding length to 1.
 
-```cpp
+```{r, engine = "Rcpp"}
+#include <Rcpp.h>
+using namespace Rcpp;
+
 // [[Rcpp::export]]
 List rleC(NumericVector x) {
   std::vector<int> lengths;
@@ -804,16 +847,21 @@ Other methods of a vector are described at <http://www.cplusplus.com/reference/v
 
 ### Sets
 
-Sets maintain a unique set of values, and can efficiently tell if you've seen a value before. They are useful for problems that involve duplicates or unique values (like `unique`, `duplicated`, or `in`). C++ provides both ordered (`std::set`) and unordered sets (`std::tr1::unorded_set`), depending on whether or not order matters for you. Unordered sets tend to be much faster (because they use a hash table internally rather than a tree), so even if you need an ordered set, you should consider using an unordered set and then sorting the output. Like vectors, sets are templated, so you need to request the appropriate type of set for your purpose: `unordered_set<int>`, `unordered_set<bool>`, etc.
+Sets maintain a unique set of values, and can efficiently tell if you've seen a value before. They are useful for problems that involve duplicates or unique values (like `unique`, `duplicated`, or `in`). C++ provides both ordered (`std::set`) and unordered sets (`std::unorded_set`), depending on whether or not order matters for you. Unordered sets tend to be much faster (because they use a hash table internally rather than a tree), so even if you need an ordered set, you should consider using an unordered set and then sorting the output. Like vectors, sets are templated, so you need to request the appropriate type of set for your purpose: `unordered_set<int>`, `unordered_set<bool>`, etc.
 
 <http://www.cplusplus.com/reference/set/set/> and <http://www.cplusplus.com/reference/unordered_set/unordered_set/> provide complete documentation for sets structures.
     
 The following function uses an unordered set to implement an equivalent to `duplicated` for integer vectors. Note the use of `seen.insert(x[i]).second` - `insert` returns a pair, the `first` value is an iterator that points to element and the `second` value is a boolean that's true if the value was a new addition to the set.  
 
-```cpp
+```{r, engine = "Rcpp"}
+// [[Rcpp::plugins(cpp11)]]
+
+#include <Rcpp.h>
+using namespace Rcpp;
+
 // [[Rcpp::export]]
 LogicalVector duplicatedC(IntegerVector x) {
-  std::tr1::unordered_set<int> seen;
+  std::unordered_set<int> seen;
   int n = x.size();
   LogicalVector out(n);
 
@@ -824,6 +872,8 @@ LogicalVector duplicatedC(IntegerVector x) {
   return out;
 }
 ```
+
+Note that unordered sets are only available in C++ 11, which means we need to use the `cpp11` plugin (`Rcpp::plugins(cpp11)`). Note that CRAN does not currently support C++ 11, so it's best avoiding such features if you want to distribute your code via CRAN. Some work arounds are available, but they're beyond the scope of this chapter.
 
 ### Map
 
@@ -855,7 +905,7 @@ The following case study updates an example [blogged about](http://dirk.eddelbue
 
 The R code is as follows:
 
-```r
+```{r}
 gibbs_r <- function(N, thin) {
   mat <- matrix(nrow = N, ncol = 2)
   x <- y <- 0
@@ -877,7 +927,10 @@ This is straightforward to convert to C++.  We:
 * use `(` instead of `[` to index into the matrix
 * subscript the results of `rgamma` and `rnorm` to convert from a vector into a scalar
 
-```cpp
+```{r, engine = "Rcpp"}
+#include <Rcpp.h>
+using namespace Rcpp;
+
 // [[Rcpp::export]]
 NumericMatrix gibbs_cpp(int N, int thin) {
   NumericMatrix mat(N, 2);
@@ -898,19 +951,18 @@ NumericMatrix gibbs_cpp(int N, int thin) {
 
 Benchmarking the two implementations yields:
 
-```r
-  library(microbenchmark)
-  microbenchmark(
-    gibbs_r(100, 10),
-    gibbs_cpp(100, 10)
-  )
+```{r, cache = TRUE}
+microbenchmark(
+  gibbs_r(100, 10),
+  gibbs_cpp(100, 10)
+)
 ```
 
 ### R vectorisation vs. C++ vectorisation
 
 This example is adapted from [Rcpp is smoking fast for agent-based models in data frames](http://www.babelgraph.org/wp/?p=358). The challenge is to predict a model response from three inputs. The basic R version looks like:
 
-```r
+```{r}
 vacc1a <- function(age, female, ily) {
   p <- 0.25 + 0.3 * 1 / (1 - exp(0.04 * age)) + 0.1 * ily
   p <- p * if (female) 1.25 else 0.75
@@ -922,7 +974,7 @@ vacc1a <- function(age, female, ily) {
 
 We want to be able to apply this function to many inputs, so we might write a vector-input version using a for loop.
 
-```r
+```{r}
 vacc1 <- function(age, female, ily) {
   n <- length(age)
   out <- numeric(n)
@@ -937,7 +989,7 @@ If you're familiar with R, you'll have a gut feeling that this will be slow, and
 
 Either approach is fairly straighforward. In R:
 
-```r
+```{r}
 vacc2 <- function(age, female, ily) {
   p <- 0.25 + 0.3 * 1 / (1 - exp(0.04 * age)) + 0.1 * ily
   p <- p * ifelse(female, 1.25, 0.75)
@@ -951,7 +1003,10 @@ vacc2 <- function(age, female, ily) {
 
 Or in C++:
 
-```cpp
+```{r engine = "Rcpp"}
+#include <Rcpp.h>
+using namespace Rcpp;
+
 double vacc3a(double age, bool female, bool ily){
   double p = 0.25 + 0.3 * 1 / (1 - exp(0.04 * age)) + 0.1 * ily;
   p = p * (female ? 1.25 : 0.75);
@@ -975,7 +1030,7 @@ NumericVector vacc3(NumericVector age, LogicalVector female, LogicalVector ily) 
 
 We next generate some sample data, and check that all three versions return the same values:
 
-```r
+```{r}
 n <- 1000
 age <- rnorm(n, mean = 50, sd = 10)
 female <- sample(c(T, F), n, rep = TRUE)
@@ -989,7 +1044,7 @@ stopifnot(
 
 The original blog post forgot to do this, and hence introduced a bug in the C++ version: it used `0.004` instead of `0.04`.  Finally, we can benchmark our three approaches:
 
-```r
+```{r, cache = TRUE}
 microbenchmark(
   vacc1(age, female, ily),
   vacc2(age, female, ily),
@@ -1008,13 +1063,13 @@ The same C++ code that is used with `sourceCpp` can also be bundled into a packa
 
 To generate a new Rcpp package that includes a simple hello, world function you can use the `Rcpp.package.skeleton` function as follows:
 
-```r
+```{r, eval = FALSE}
 Rcpp.package.skeleton("NewPackage", attributes = TRUE)
 ```
 
 To generate a package based on C++ files that you've been using with `sourceCpp` you can use the `cpp_files` parameter:
 
-```r
+```{r, eval = FALSE}
 Rcpp.package.skeleton("NewPackage", example_code = FALSE, 
                         cpp_files = c("convolve.cpp"))
 ```
@@ -1025,21 +1080,29 @@ To add `Rcpp` to an existing package, you put your C++ files in the `src/` direc
 
 * In `DESCRIPTION` add    
 
-        LinkingTo: Rcpp 
+    ```
+    LinkingTo: Rcpp 
+    ```
 
   (If you're using advanced Rcpp features like modules, you'll also need `Imports: Rcpp and to import the specific functions you're using)
 
 * Make sure your `NAMESPACE` includes:
 
-        useDynLib(mypackage)
+    ```
+    useDynLib(mypackage)
+    ```
 
 * You need `src/Makevars` which contains:
 
-        PKG_LIBS = `$(R_HOME)/bin/Rscript -e "Rcpp:::LdFlags()"`
+    ```
+    PKG_LIBS = `$(R_HOME)/bin/Rscript -e "Rcpp:::LdFlags()"`
+    ```
 
     And `src/Makevars.win` that contains:
 
-        PKG_LIBS = $(shell "${R_HOME}/bin${R_ARCH_BIN}/Rscript.exe" -e "Rcpp:::LdFlags()")
+    ```
+    PKG_LIBS = $(shell "${R_HOME}/bin${R_ARCH_BIN}/Rscript.exe" -e "Rcpp:::LdFlags()")
+    ```
 
 ## Adding Rcpp to an existing package (Rcpp >= 0.10.7)
 
@@ -1047,13 +1110,17 @@ To add `Rcpp` to an existing package, you put your C++ files in the `src/` direc
 
 * In `DESCRIPTION` add    
 
-        LinkingTo: Rcpp
-        Imports: Rcpp
+    ```
+    LinkingTo: Rcpp
+    Imports: Rcpp
+    ```
 
 * Make sure your `NAMESPACE` includes:
 
-        useDynLib(mypackage)
-        importFrom( Rcpp, sourceCpp )
+    ```
+    useDynLib(mypackage)
+    importFrom(Rcpp, sourceCpp)
+    ```
 
 We need to import something (anything) from Rcpp so that internal Rcpp code is properly loaded. In an ideal world, we would just need to use the `LinkingTo` but this is not enough. 
 
