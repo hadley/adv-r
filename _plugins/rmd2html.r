@@ -29,7 +29,7 @@ rmd2md <- function(in_path, out_path = tempfile(fileext = ".md")) {
     chunk = function(x, options) {
       ind <- options$indent
       x <- add_trailing_nl(x)
-      out <- paste0("```R\n", x, "```")
+      out <- paste0("```", options$engine, "\n", x, "```")
 
       if (is.null(ind)) return(out)
       paste0(ind, gsub("\n", paste0("\n", ind), out))
