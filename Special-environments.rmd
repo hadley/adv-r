@@ -31,7 +31,7 @@ It's often useful to evaluate a chunk of code in a special context
 
 There are a number of parameters in R that have global state (e.g. `option()`, environmental variables, `par()`, ...) and it's useful to be able to run code temporarily in a different context.  For example, it's often useful to be able to run code with the working directory temporarily set to a new location:
 
-```R
+```{r}
 in_dir <- function(dir, code) {
   old <- setwd(dir)
   on.exit(setwd(old))
@@ -52,7 +52,7 @@ The basic pattern is simple:
 
 We could use similar code to temporarily set global options:
 
-```R
+```{r}
 with_options <- function(opts, code) {
   old <- options(opts)
   on.exit(options(old))
@@ -67,7 +67,7 @@ with_options(list(digits = 1), print(x))
 
 You might notice that there's a lot of similarity between these two functions. We could extract out that commonality with a function operator that takes the setter function as an input:
 
-```R
+```{r}
 with_something <- function(set) {
   function(new, code) {
     old <- set(new)
@@ -79,7 +79,7 @@ with_something <- function(set) {
 
 Then we can easily generate a whole set of with functions:
 
-```R
+```{r}
 in_dir <- with_something(setwd)
 with_options <- with_something(options)
 with_par <- with_something(par)
@@ -87,7 +87,7 @@ with_par <- with_something(par)
 
 However, many of the setter functions that affect global state in R don't return the previous values in a way that can easily be passed back in.  In that case, like for `.libPaths()`, which controls where R looks for packages to load, we first create a wrapper that enforces the behaviour we want, and then use `with_something()`: 
 
-```R
+```{r}
 set_libpaths <- function(paths) {
   libpath <- normalizePath(paths, mustWork = TRUE)
 
@@ -104,7 +104,7 @@ These functions (and a few others) are provided by the devtools package. See `?w
 
 `capture.output()` is a useful function when the output you really want from a function is printed to the console. It also allows you to work around badly written functions that have no way to suppress output to the console.  For example, it's difficult to capture the output of `str()`:
 
-```R
+```{r}
 y <- 1:10
 y_str <- str(y)
 y_str
@@ -115,7 +115,7 @@ y_str
 
 To work its magic, `capture.output()` uses `sink()`, which allows you to redirect the output stream to an arbitrary connection. We'll first write a helper function that allows us to execute code in the context of a `sink()`, automatically un-`sink()`ing when the function finishes:
 
-```
+```{r}
 with_sink <- function(connection, code, ...) {
   sink(connection, ...)
   on.exit(sink())
@@ -124,11 +124,12 @@ with_sink <- function(connection, code, ...) {
 }
 with_sink("temp.txt", print("Hello"))
 readLines("temp.txt")
+file.remove("temp.text")
 ```
 
 With this in hand, we just need to add a little extra wrapping to our `capture.output2()` to write to a temporary file, read from it and clean up after ourselves:
 
-```R
+```{r}
 capture.output2 <- function(code) {
   temp <- tempfile()
   on.exit(file.remove(temp))
@@ -141,7 +142,7 @@ capture.output2(cat("a", "b", "c", sep = "\n"))
 
 The real `capture.output()` is a bit more complicated: it uses a local `textConnection` to capture the data sent to sink, and it allows you to supply multiple expressions which are evaluated in turn. Using `with_sink()` this looks like `capture.output3()`
 
-```R
+```{r}
 capture.output3 <- function(..., env = parent.frame()) {
   txtcon <- textConnection("rval", "w", local = TRUE)
   
@@ -165,7 +166,7 @@ If you want to capture more types of output (like messages and warnings), you ma
 
 In the process of performing a data analysis, you may create variables that are necessarily because they help break a complicated sequence of steps down in to easily digestible chunks, but are not needed afterwards. For example, in the following example, we might only want to keep the value of x:
 
-```R
+```{r}
 a <- 10
 b <- 30
 x <- a + b
@@ -173,7 +174,7 @@ x <- a + b
 
 It's useful to be able to store only the final result, preventing the intermediate results from cluttering your workspace.  We already know one way of doing this, using a function:
 
-```R
+```{r}
 x <- (function() {
   a <- 10
   b <- 30
@@ -185,7 +186,7 @@ x <- (function() {
 
 R provides another tool that's a little less verbose, the `local()` function:
 
-```R
+```{r}
 x <- local({
   a <- 10
   b <- 30
@@ -195,7 +196,7 @@ x <- local({
 
 The idea of local is to create a new environment (inheriting from the current environment) and run the code in that.  The essence of `local()` is captured in this code:
 
-```R
+```{r}
 local2 <- function(expr) {
   envir <- new.env(parent = parent.frame())
   eval(substitute(expr), envir)  
@@ -204,7 +205,7 @@ local2 <- function(expr) {
 
 The real `local()` code is considerably more complicated because it adds a second environment parameter. I don't think this is necessary because if you have an explicit environment parameter, then you can already evaluate code in that environment with `evalq()`. The original code is also hard to understand because it is very concise and uses some sutble features of evaluation (including non-standard evaluation of both arguments). If you have read [[computing-on-the-language]], you might be able to puzzle it out, but to make it a bit easier I have rewritten it in a simpler style below. 
 
-```R
+```{r}
 local2 <- function(expr, envir = new.env()) {
   env <- parent.frame()
   call <- substitute(eval(quote(expr), envir))
@@ -221,7 +222,7 @@ my_get()
 
 You might wonder we can't simplify to this:
 
-```R
+```{r}
 local3 <- function(expr, envir = new.env()) {
   eval(substitute(expr), envir)
 }
@@ -239,7 +240,7 @@ But it's because of how the arguments are evaluated - default arguments are eval
 
 Another variant along these lines is an "[anaphoric](http://en.wikipedia.org/wiki/Anaphora_(linguistics)) function", or a function that uses a pronoun. This is easiest to understand with an example using an interesting anaphoric function in base R: `curve()`.`curve()` draws a plot of the specified function, but interestingly you don't need to use a function, you just supply an expression that uses `x`:
 
-```R
+```{r curve-demo}
 curve(x ^ 2)
 curve(sin(x), to = 3 * pi)
 curve(sin(exp(4 * x)), n = 1000)
@@ -247,20 +248,20 @@ curve(sin(exp(4 * x)), n = 1000)
 
 Here `x` plays a role like a pronoun in an English sentence: it doesn't represent a single concrete value, but instead is a place holder that varies over the range of the plot. Note that it doesn't matter what the value of `x` outside of `curve()` is: the expression is evaluated in a special environment where `x` has a special meaning:
 
-```R
+```{r curve}
 x <- 1
 curve(sin(exp(4 * x)), n = 1000)
 ```
 
 `curve()` works by evaluating the expression in a special environment in which the appropriate `x` exists. The essence of `curve()`, omitting many useful but incidental details like plot labelling, looks like this:
 
-```R
+```{r curve2}
 curve2 <- function(expr, xlim = c(0, 1), n = 100, env = parent.frame()) {
   env2 <- new.env(parent = env)
   env2$x <- seq(xlim[1], xlim[2], length = n)
   
-  y <- eval(expr, env2)
-  plot(x, y, type = "l", ylab = deparse(substitute(expr)))
+  y <- eval(substitute(expr), env2)
+  plot(env2$x, y, type = "l", ylab = deparse(substitute(expr)))
 }
 curve2(sin(exp(4 * x)), n = 1000)
 ```
@@ -269,9 +270,9 @@ Creating a new environment containing the pronoun is the key technique for imple
 
 Another way to solve the problem would be to turn the expression into a function using `make_function()`:
 
-```R
-curve3 <- function(expr, xlim, n = 100, env = parent.frame()) {
-  f <- make_function(alist(x = ), substitute(expr), env)
+```{r curve3}
+curve3 <- function(expr, xlim = c(0, 1), n = 100, env = parent.frame()) {
+  f <- pryr::make_function(alist(x = ), substitute(expr), env)
   
   x <- seq(xlim[1], xlim[2], length = n)
   y <- f(x)
@@ -289,7 +290,7 @@ If you're interesting in learning more, there are some good resources for anapho
 
 We could use this idea to create a function that allows you to use a connection, automatically openning and closing it if needed. This is a common technique in Ruby, which uses its block syntax whenever you deal with resources that need to be closed after you're done with them.  We can't use the same implementation as the with functions above because an implementation like that below gives no way for the code to refer to the connection:
 
-```R
+```{r}
 with_conn <- function(conn, code) {
   open(conn)
   on.exit(close(conn))
@@ -300,7 +301,7 @@ with_conn <- function(conn, code) {
 
 We can work around this problem by using an anaphoric function, referring to the connection as `.it`. We'd need to clearly document that convention so the user knew what to call it.
 
-```R
+```{r}
 with_conn <- function(conn, code, env = parent.frame()) {
   if (!isOpen(conn)) {
     open(conn)
@@ -323,6 +324,7 @@ with_conn(file("test.txt", "w+"), {
     x <- readChar(.it, 6)
   }
 })
+file.remove("test.txt")
 ```
 
 The construction of this function also has the appealing side-effect that the scope of the connection is clearly shown with indenting.
@@ -339,7 +341,7 @@ One of the checks that `R CMD check` runs ensures that you don't use the logical
 
 The basic idea is to use an active binding so that whenever code tries to access `F` or `T` it throws an error.  This is a very similar technique to anaphoric functions:
 
-```R
+```{r, error = TRUE}
 check_logical_abbr <- function(code, env = parent.frame()) {
   new_env <- new.env(parent = env)
   delayedAssign("T", stop("Use TRUE not T"), assign.env = new_env)
@@ -353,7 +355,7 @@ check_logical_abbr(c(FALSE, T, FALSE))
 
 Note that functions look in the environment in which they were defined so to test large bodies of code, you'll need to run `check_logical_abbr()` as far as out as possible:
 
-```R
+```{r, error = TRUE}
 f <- function(x) {
   mean(x, na.rm = T)
 }
@@ -369,7 +371,7 @@ check_logical_abbr({
 
 This will be typically easiest to do as a wrapper around the code you use to load your code into R:
 
-```R
+```{r, eval = FALSE}
 check_logical_abbr(source("my-file.r"))
 check_logical_abbr(load_all())
 ```
@@ -381,9 +383,8 @@ Manage global state accessible from functions. Use special environment.
 Create with function that uses `on.exit()` to push and pop from stack.
 
 
-```R
+```{r}
 testthat_env <- new.env()
-testthat_env$reporter <- StopReporter$new()
 
 set_reporter <<- function(value) {
   old <- testthat_env$reporter
@@ -395,7 +396,7 @@ get_reporter <<- function() {
 }
 ```
 
-```R
+```{r}
 with_reporter <- function(reporter, code) {
   reporter <- find_reporter(reporter)
 
