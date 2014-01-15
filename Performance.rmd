@@ -5,11 +5,53 @@ layout: default
 
 # Performance
 
-General techniques for improving performance.  
+<!--
+Once more complete, need to circulate to Justin, Radford, Alex & Jan for comments.
+-->
 
-Find out what is slow. Then make it fast.
+There's no getting away from the fact that as a computer language, R is relatively slow. In this chapter we'll explore some of the reasons why R is slow and learn about microbenchmarking as a tool to understand R's performance characterisics. I'll also talk about some of the projects that aim to overcome R's shortcomigns and speculate a little on the future. By the end of this chapter you'll have a better understanding of why R is slow. The next chapter will focus on what you can do about it for your code.
 
-[Mature optimisation](http://carlos.bueno.org/optimization/mature-optimization.pdf) (PDF)
+Absolute vs. relative speed. Fast vs. fast enough.
+
+
+
+## Why is R slow?
+
+General advice from https://www.cs.purdue.edu/homes/jv/pubs/ecoop12.pdf
+
+Fundamental reasons for R's slowness
+
+* Missing value support
+* Many inner workings are exposed: first class environments, promises, ...
+* Promises are usually executed right away, but have overhead associated with them.
+* Everything is a lexically scoped function call 
+* Dynamic typing
+* Everything can be modified after the fact. After function has been defined, can change it's body, arguments and environment
+* No scalars
+
+It's not possible to make code to implement this fast, but the complicated semantics and the fact that you can override the default behaviour of almost anything makes it very hard. It seems likely that R could probably be made 10x faster (and use much less memory) with a reasonable effort. 
+
+The challenge with any rewrite is maintaining compatibility with base R. Can you imagine having to reimplement every function in base R to not only be faster, but to have exactly the same documented bugs? (e.g. `nchar(NA)`)
+
+Incidental reasons for R's slownesss
+
+* Deferred evaluation: x + y * z. http://radfordneal.wordpress.com/2013/07/24/deferred-evaluation-in-renjin-riposte-and-pqr/. JT: "for long vectors, R’s execution is completely memory bound. It spends almost all of its time reading and writing vector intermediates to memory"
+* Many R core functions not implemented with goal of being fast
+* Most R users are not programmers, so mistakes in common code and packages.
+* Base library missing important data structures
+* Technical debt. A no point has anyone been paid to work on making R faster or cleaner
+
+While R will get faster over time as incidental reasons for poor performance, R is never going to be a fast language. It's never going to be as fast as C, or probably even as fast as javascript (unless someone spends a lot of money). That's because R's design is not optimised for performance, but instead it's optimised for expressiveness.  John Chambers, the designer of the S language that underlies R, recognised that the biggest bottleneck in most data analyses is congitive, not computational. It takes much longer to figure out what you want do, and express it 
+
+## R futures
+
+* [Pretty quick R](http://www.pqr-project.org/)
+* [Riposte](http://www.justintalbot.com/wp-content/uploads/2012/10/pact080talbot.pdf)
+* [Renjin](http://www.renjin.org/)
+* [fastr](https://github.com/allr/fastr)
+* [CXXR](http://www.cs.kent.ac.uk/projects/cxxr/)
+
+R is slow, but most of the time that doesn't matter. Cognition time >> computation time. Many R functions are inefficient. Can often recreate slow general purpose functions to fast special purpose functions. Can easily access faster languages.
 
 ## Micro-benchmarking
 
@@ -39,7 +81,7 @@ system.time(for (i in x) f()) * 1e3
 
 Running both examples on my computer a few times reveals that the estimate from `system.time` is about 20 nanoseconds higher than the median from `microbenchmark`.
 
-By default, microbenchmark evaluates each expression 100 times, and in random order to control for any systematic variability. It also provides times each expression individually, so you get a distribution of times, which helps estimate error.  You can also display the results visually using either `boxplot`, or if you have `ggplot2` loaded, `autoplot`:
+By default, microbenchmark evaluates each expression 100 times, and in random order to control for any systematic variability. It also provides times each expression individually, so you get a distribution of times, which helps estimate error.  You can also display the results visually using either `boxplot()`, or if you have `ggplot2` loaded, `autoplot()`:
 
 ```{r microbenchmark}
 f <- function() NULL
@@ -67,6 +109,24 @@ Microbenchmarking is also a powerful tool to improve your intuition about what o
 
 * What's the cost of function vs S3 or S4 method dispatch? 
 * What's the fastest way to extract a column out of data.frame?
+
+### Generating promises
+
+```{r promise-cost}
+f1 <- function(a = 1) NULL
+f2 <- function(a = 1, b = 1) NULL
+f3 <- function(a = 1, b = 2, c = 3) NULL
+f4 <- function(a = 1, b = 2, c = 4, d = 4) NULL
+f5 <- function(a = 1, b = 2, c = 4, d = 4, e = 5) NULL
+microbenchmark(
+  f1(),
+  f2(),
+  f3(),
+  f4(), 
+  f5(), 
+  times = 1000
+)
+```
 
 ### Method dispatch
 
@@ -157,45 +217,5 @@ Good to have a variety of approaches to call upon.
 * Read R code
 
 We introduce a few at a high-level in the Rcpp chapter.
-
-## Caching
-
-`readRDS`, `saveRDS`, `load`, `save`
-
-Caching packages
-
-### Memoisation
-
-A special case of caching is memoisation.
-
-## Byte code compilation
-
-R 2.13 introduced a new byte code compiler which can increase the speed of certain types of code 4-5 fold. This improvement is likely to get better in the future as the compiler implements more optimisations - this is an active area of research.
-
-Using the compiler is an easy way to get speed ups - it's easy to use, and if it doesn't work well for your function, then you haven't invested a lot of time in it, and so you haven't lost much.
-
-## Other people's code
-
-One of the easiest ways to speed up your code is to find someone who's already done it! Good idea to search for CRAN packages.
-
-    RppGSL, RcppEigen, RcppArmadillo
-
-Stackoverflow can be a useful place to ask.
-
-### Important vectorised functions
-
-Not all base functions are fast, but many are. And if you can find the one that best matches your problem you may get big improvements
-
-    cumsum, diff
-    rowSums, colSums, rowMeans, colMeans
-    rle
-    match
-    duplicated
-
-Read the source code - implementation in C is usually correlated with high performance.
-
-## Rewrite in a lower-level language
-
-C, C++ and Fortran are easy. C++ easiest, recommended, and described in the following chapter.
 
 [microbenchmark]: http://cran.r-project.org/web/packages/microbenchmark/index.html
