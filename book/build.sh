@@ -24,7 +24,6 @@ pandoc --chapters -o book/adv-r.pdf --latex-engine xelatex \
   book/part-adv.md \
   book/chapters/Computing-on-the-language.md \
   book/chapters/Expressions.md \
-  book/chapters/Formulas.md \
   book/chapters/Special-environments.md \
   book/chapters/dsl.md \
   book/part-perf.md \
