@@ -15,7 +15,13 @@ options("microbenchmark.unit" = "ns")
 Once more complete, circulate to Justin, Radford, Alex & Jan for comments.
 -->
 
+## Introduction
+
 As far as computer languages go, R is pretty slow. However, in practice this isn't usually a problem. In data analysis, the bottleneck is usually your brain: you spend more time thinking about what you should compute compared to actually performing the computations. However, as you start to develop more complicated code that works on large datasets, you may find computation becomes a bottleneck. That's because R's design is not optimised for performance, but instead it's optimised for expressiveness.  John Chambers, the designer of the S language that underlies R, recognised that the biggest bottleneck in most data analyses is congitive, not computational. It takes much longer to figure out what you want do, and express it 
+
+For most data analysis problems, the bottleneck is cognitive, not computational: you spend more time thinking about what you should be doing than having the computer actually do it. The R language is optimised for expressiveness, not speed, which is the right tradeoff for most problems. The flexibility of the R language makes it harder to optimise, but it makes it easy to build domain specific languages that allow you to clearly express what you want.
+
+You didn't start using R because it was a fast language, you probably started using it because it helped you solve a problem.
 
 The goal of this part of the book is to give you a deeper understanding into R's performance characteristics. You'll learn where R is fast, where it's slow, and how you can improve speed when you need to.
 
@@ -30,6 +36,27 @@ The goal of this part of the book is to give you a deeper understanding into R's
 * Finally, if you want to deeply understand the performance of built in base functions, you'll need to learn a little bit about R's C api. In [R's C interface](#c-api), you'll learn more about the R's C internals and see how some common built-in functions work.
 
 A recurring theme throughout this part of the book is the importance of differentiating between absoluate and relative speed, and fast vs fast enough. First, whenever you compare the speed of two approaches to a problem, be very wary of just looking at a relative differences. One approach may be 10x faster than another, but if that difference is between 1ms and 10ms, it's unlikely to have any real impact. You also need to think about the costs of modifying your code. For example, if it takes you an hour to implement a change that makes you code 10x faster, saving 9 s each run, then you'll have to run at least 400 times before you'll see a net benefit.  At the end of the day, what you want is code that's fast enough to not be a bottleneck, not code that is fast in any absolute sense.  Be careful that you don't spend hours to save seconds.
+
+1 ms means 1000 calls take one second, 1 µs means needs 1,000,000 calls, 1 ns needs 1,000,000,000 calls. 
+
+## Why is R slow?
+
+By and large R is slow because it is optimised for expressiveness, not speed. This is a tradeoff between writing and running code: R makes it faster for you to write code at the cost of making it harder for the computer to run it. Different languages occupy different positions in the space of expressiveness vs performance, which is one of the reasons why one language isn't appropriate for every task.
+
+
+The downside of mingling two languages is that you need more knowledge (i.e. now you need to know some C++ as well as R) to understand code. In practice, this is not a big drawback because:
+
+1. Often the people writing the high-performance code and the people using it are different. For every package author who has to learn a little C++, there may be thousands (or tens of thousands) of people who use the package and only need to understand R.
+
+2. There are extremely few environments where you can get away with only knowing one language. Is your data in a database? You'll need to know some SQL. Are you working with strings? You'll need to know regular expressions. Are you doing a lot of web scraping? You'll probably need to know some ruby or python. Does your company have a big hadoop cluster? You'll probably need to know some java.
+
+While R suffers from the theoretical inelegance of not being "turtles all the way" down, this is not a big draw back in practice. Most data scientists will be expert in one language, and have basic skills in a handful of others.
+
+At the end of this chapter you might feel like R is so impossibly slow that you can never achieve anything in it, or when you try and tackle some problems you'll feel parallelised because you know what ever approach you take will be hopelessly inefficient. Just remember that while R might be slow compared to other programming languages, for most tasks is fast enough. All of the timings in the microbenchmarks are in nanoseconds and unless you are calling functions billions of times, these inefficiencies don't matter. R has been carefully designed to save time for data analysts (whose time is valuable), not to save time for computers (whose time is cheap). Also just because R slow as a language does not mean it will be slow for a specific task. Many common data analysis bottlenecks have been rewritten in C or Fortran for better speed.
+
+The fundamental reason that R is slow is that it was designed to be expressive, not fast. There's a tradeoff between expressiveness, speed and ease of implementation. It's easy to make a language that's fast but limited, or expressive but slow. It's hard to make a language that's both expressive and performant. That's not to say that R can't be made much faster. A ten-fold improvement in speed seems achievable, and in [faster R](#faster-r) I'll discuss some of the promising new implementations of R that show how R might do better in the future.
+
+
 
 ## Microbenchmarking
 
@@ -59,7 +86,7 @@ My favourite features of the microbenchmark package are:
 
 ### Exercises
 
-* Using Compare the microbenchmark to `system.time()`. Why are the estimates of the individual operations different?
+* Compare the results `microbenchmark()` from `system.time()` (you'll need to use a loop so that they're long enough to register with `system.time()`). Why are the estimates of the individual operations different?
 
     ```{r, eval = FALSE}
     n <- 1:1e6
@@ -74,40 +101,36 @@ My favourite features of the microbenchmark package are:
     exp(log(x) / 2)
     ```
 
-## What makes R slow?
+## Fundamental reasons
 
-In the remainder of this chapter I'll discuss the reasons why R is slow, illustrating each reason with a microbenchmark. By and large R is slow because it is optimised for expressiveness, not speed. This is a tradeoff between writing and running code: R makes it faster for you to write code at the cost of making it harder for the computer to run it. Different languages occupy different positions in the space of expressiveness vs performance, which is one of the reasons why one language isn't appropriate for every task.
-
-Generally, there's a tradeoff between expressiveness, performance and ease of implementation. It's easy to make a language that's fast but limited, or expressive but slow. It's hard to make a language that's both expressive and performant. Over time, it's gotten easier to write new languages (better tools and better understanding) and the tradeoffs are better understood, so very generally speaking, modern languages can be more performant for a given level of expressiveness than older languages.
-
-That's not to say that R can't be made much faster. A ten-fold improvement in speed seems achievable, and in [faster R](#faster-r), I'll discuss some of the promising new implementations of R that show how R might do better in the future.
-
-Individually each of the individual aspects maybe slow a function call down by just a few nanoseconds. But together they add up, and are problematic in scenarios where you want to call functions millions or billions of times, like in simulations (esp agent based and mcmc), or heavily recursive code.
-
-At the end of this chapter you might feel like R is so impossibly slow that you can never achieve anything in it, or when you try and tackle some problems you'll feel parallelised because you know what ever approach you take will be hopelessly inefficient. Just remember that while R might be slow compared to other programming languages, for most tasks is fast enough. All of the timings in the microbenchmarks are in nanoseconds and unless you are calling functions billions of times, these inefficiencies don't matter. R has been carefully designed to save time for data analysts (whose time is valuable), not to save time for computers (whose time is cheap). Also just because R slow as a language does not mean it will be slow for a specific task. Many common data analysis bottlenecks have been rewritten in C or Fortran for better speed.
+In this section I'll explore three reasons why R is slow: extreme dynamism, few built-in constants, and lazy evaluation of function arguments. I'll illustrate each reason with a microbenchmark, showing how it slows R down. Each reason only causes a tiny slowdown, on the order of a few microseconds per function call, but together they add up. When looking at millions or billions of function calls, which happens when looping over long vectors or doing big simulations, they make R a relatively slow language. I've picked these reasons because they have some obvious benefits, but they do come at a performance cost.
 
 If you'd like to learn more about the performance characteristics of R, I'd particularly recommend the article [Evaluating the Design of the R Language](https://www.cs.purdue.edu/homes/jv/pubs/ecoop12.pdf) by Floreal Morandat, Brandon Hill, Leo Osvald and Jan Vitek. It discusses a better methodology for understand the performance characteristics of R using a modified R interpreter and a wide set of real code.
 
 ### Extreme dynamism
 
-Everything can be modified after the fact. After function has been defined, can change its body, arguments and environment. This makes it much harder for compilers to specialise to a special fast case - it might pick the right function the first time, but if you've changed the function it might now point to the wrong thing. This means that a compiler needs to figure out which funtion to call every time, 
+R is an extremely dynamic programming language, and almost anything can be modified after it's created. You can:
 
-R is a very flexible programming language that exposes many itself in ways that most other programming languages do not. For example, you can use `substitute()` to access the expression that will compute the value of a function argument. Or you can use `<<-` to modify values in a non-local environment. The flexibility of the R language makes it harder to optimise, but it makes it easy to build domain specific languages that allow you to clearly express what you want.
+* change the body, arguments and environment of functions
+* change the S4 methods for a generic
+* add new fields to an S3 object, or even change its class
+* modify objects outside of the local environment with `<<-`
 
-The "type"s of objects in R are very dynamic, and functions have no type declarations associated with them. In statically type compiled language, the compiler can do a lot of work up front to figure out exactly which method should get called for a given set of input arguments. Compilation basically means that this lookup happens once in an initial first pass, instead of every time that the function is called.
+Dynamism makes code slow because it makes it difficult to predict exactly what will happen in a given function call. The easier it is to predict what's going to happen, the more likely an interpreter or compiler can jump directly to the fastest implementation. (If you'd like more details, Charles Nutter expands on this idea at [On Languages, VMs, Optimization, and the Way of the World](http://blog.headius.com/2013/05/on-languages-vms-optimization-and-way.html).) If a compiler can't predict what's going to happen, it has to look through many options to find the best one, which is an expensive operation.
+
+The following microbenchmark illustrates the cost of method dispatch for S3, S4, and RC. I create a generic and a method for each OO system, then call the generic and see how long it takes to find and call the method. I also time how long it takes to call the bare method for comparison.
 
 ```{r, results = 'hide'}
 f <- function(x) NULL
 
 s3 <- function(x) UseMethod("s3")
-s3.integer <- function(x) NULL
+s3.integer <- f
 
 A <- setClass("A", representation(a = "list"))
 setGeneric("s4", function(x) standardGeneric("s4"))
-setMethod(s4, "A", function(x) NULL)
+setMethod(s4, "A", f)
 
-B <- setRefClass("B")
-B$methods(r5 = function(x) NULL)
+B <- setRefClass("B", methods = list(rc = f))
 
 a <- A()
 b <- B$new()
@@ -115,19 +138,19 @@ b <- B$new()
 
 ```{r}
 microbenchmark(
-  bare = NULL,
   fun = f(),
-  s3 = s3(1L),
-  s4 = s4(a),
-  r5 = b$r5()
+  S3 = s3(1L),
+  S4 = s4(a),
+  RC = b$rc()
 )
 ```
 
-On my computer, the bare call takes about 40 ns. Wrapping it in a function adds about an extra 200 ns - this is the cost of creating the environment where the function execution happens. S3 method dispatch adds around 3 µs and S4 around 12 µs.
+On my computer, the function call takes about 280 ns. S3 method dispatch takes an additional 3,000 ns; S4 dispatch, 13,000 ns; and RC dispatch, 11,000 ns. Method dispatch is so expensive because R must look for the function every time the method is called; it might have changed between this time and the last time. R could do better by caching methods between calls, but caching is hard to do correctly and a notorious source of bugs. In many situations, compiled languages only need to method lookup once, during compilation, because they know that method can't be change at run-time. This takes the cost of method dispatch down to effectively 0.
 
-However, it's important to notice the units: microseconds. There are a million microseconds in a second, so it will take hundreds of thousands of calls before the cost of S3 or S4 dispatch appreciable. Most problems don't involve hundreds of thousands of function calls, so it's unlikely to be a bottleneck in practice.This is why microbenchmarks can not be considered in isolation: they must be  carefully considered in the context of your real problem.
+### Few built-in constants
 
-Another example of this dynamism is that R has very few built in constants because almost every operation is a lexically scoped function call. For example, this simple function:
+Another example of R's dynamisms is the very small number of built-in constants.
+Almost every operation is a lexically scoped function call. For example, in the following simple function contains four function calls: `{`, `(`, `+`, `^`.
 
 ```{r}
 f <- function(x, y) {
@@ -135,13 +158,14 @@ f <- function(x, y) {
 }
 ```
 
-Has four function calls: `{`, `(`, `+`, `^`. These functions are not hard coded constants in R, and can be overriden by other code. This means that to find their definitions, R has to look through every environment on the search path, which could easily be 10 or 20 environments. It would be possible to change this behaviour for R, and affect very little code (it's a bad idea to override `{` or `(`!), but it would require substantial work by R core.
+These functions are not hard coded constants, and can be overriden by you. This means that to find the definition of each function, R has to look through every environment on the search path, which could easily be 10 or 20 environments. It would be possible to change this behaviour for R, and affect very little code (it's a bad idea to override `{` or `(`!), but it would require substantial work by R core.
 
-The following microbenchmark hints at the performance costs. We create four versions of `f()`, each with one more environment between the environment of `f()` and the base environment where `+`, `^`, `(`, and `{` are defined. That means there's one more environment that R has to look through every time.
+The following microbenchmark hints at the performance costs. We create four versions of `f()`, each with one more environment (containing 26 bindings) between the environment of `f()` and the base environment where `+`, `^`, `(`, and `{` are defined. 
 
 ```{r}
 random_env <- function(parent = globalenv()) {
-  list2env(setNames(as.list(runif(26)), LETTERS), envir = new.env(parent = parent))
+  letter_list <- setNames(as.list(runif(26)), LETTERS)
+  list2env(letter_list, envir = new.env(parent = parent))
 }
 set_env <- function(f, e) {
   environment(f) <- e
@@ -151,20 +175,24 @@ f2 <- set_env(f, random_env())
 f3 <- set_env(f, random_env(environment(f2)))
 f4 <- set_env(f, random_env(environment(f3)))
 
+f_b <- set_env(f, baseenv())
+
 microbenchmark(
   f(1, 2),
   f2(1, 2),
   f3(1, 2),
-  f4(1, 2), times = 1000
+  f4(1, 2), 
+  times = 1000
 )
-
 ```
+
+Each additional environment between `f()` and the base environment makes the function slower by about 50ns.  Most other languages have many more built in constants that you can't override. This means that they always know exactly what `+`, `-`, `{` and `(` and they don't need to waste time repeatedly looking up their definitions. The cost of that decision is it means make writing the interpreter a little harder (because there are more special cases), and the language isn't quite as flexible.
 
 ### Lazy evaluation overhead
 
-As discussed in [lazy evaluation](#lazy-evaluation) and [capturing expressions](#capturing-expressions) function arguments are lazily evaluated. Internally, function arguments are implemented as a promise, an object which contains the expression needed to compute the result, and the environment in which to perform the computation. Creating these objects has some overhead, so every additional argument to an R function slows it down a little.
+In R, functions arguments are evaluated lazily (as discussed in [lazy evaluation](#lazy-evaluation) and [capturing expressions](#capturing-expressions)). To implement lazy evaluation, when a function is called, R creates a promise object that contains the expression needed to compute the result, and the environment in which to perform the computation. Creating these objects has some overhead, so every additional argument to an R function slows it down a little.
 
-The following microbenchmark shows that each an additional argument slow function execution by about 20 ns.
+The following microbenchmark compares the run time of a very simple function. Each version of the function has one extra argument, which allows us to see that each an additional argument costs about 20 ns.
 
 ```{r promise-cost}
 f0 <- function() NULL
@@ -173,46 +201,22 @@ f2 <- function(a = 1, b = 1) NULL
 f3 <- function(a = 1, b = 2, c = 3) NULL
 f4 <- function(a = 1, b = 2, c = 4, d = 4) NULL
 f5 <- function(a = 1, b = 2, c = 4, d = 4, e = 5) NULL
-microbenchmark(f0(), f1(), f2(), f3(), f4(), f5(), times = 1000)
+m <- microbenchmark(f0(), f1(), f2(), f3(), f4(), f5(), times = 1000)
 ```
 
 In most other programming languages there is no overhead for adding extra arguments. Many compiled languages will even warn you if arguments are never used, and automatically remove them from the function.
 
-### Missing values
-
-Missing values are built into the language in a very deep way. This is really important for statistic and data analysis, but comes at a cost. For example, whenever you add together two vectors, `x + y`, R can not just use the lowest level addition operator implemented on your processor. For every value of `x` and `y`, R must check whether the value is missing. This means instead of the simple C loop:
-
-```cpp
-for (int i = 0; i < n; ++i) {
-  z[i] = x[i] + y[i];
-}
-```
-
-R must do something more like:
-
-```cpp
-for (int i = 0; i < n; ++i) {
-  if (is_na(x[i]) || is_na(y[i])) {
-    z[i] = NA
-  } else {
-    z[i] = x[i] + y[i];
-  }
-}
-```
-
-This is harder for compilers to figure out how to convert to very efficient machine code. Additionally, many modern processors have single commands that allow you to add multiple numbers together simultaneously (i.e. the chip itself implements vector operations), and it's much harder for R to take advantage of these sorts of features.  SIMD (single instruction, multiple data) instructions allow a chip to add four pairs of number simultaneously, which can be four times as fast.
-
 ## Incidental reasons
 
-As well as fundamental reasons that R is slow, and will always be relatively slow, because of design tradeoffs, there as some incidental reasons why R is slow. These are effectively accidents of history and fixing them only requires the (scarce) time of R core.
+R's design limits its maximum theoretical performance. But R is currently nowhere that maximum, and there are many things that can (and will) be done to speed it up. This section discusses some of the parts of R that are currently not for fundamental reasons, but because no one has had the time to make them fast.
 
-One important reason that R is slow is that no member of R core is paid to work on R full-time. They are mostly statistics professors. Not formally trained in software development or software engineering.
+R is over 20 years old, and contains nearly 800,000 lines of code. All changes to base R are made by R Core Team (or R-core for short). R-core contains [20 members](http://www.r-project.org/contributors.html), but only about six are actively involved in day-to-day development. No one on R-core is paid to work on R full time. Most members of R-core are statistics professors, and can only spend a relatively small amount of their time working on R. 
 
-It can be frustrating to see what look like obvious performance improvements rejected by R-core. This becomes more obvious when you better understand what R core are optimising for: stability, not speed. 
+Because R-core lacks full-time software developers, it has accumulated considerable technical debt over time. One component of this debt is the lack of unit tests. Without unit tests, it's difficult to improve performance without accidentally changing behaviour. Because of the care that must be taken to avoid breaking existing code, R-core tends to be very conservation about accepting new code. It can be frustrating to see obvious performance improvements rejected by R-core, but the driving motivation for R-core is not to make R faster, it's to build a stable platform for statistical computing.
 
-R is a old, big, C project, and change comes slowly. Most of the time this is good: you want your R code to keep working over time. But it also means that it is very hard to make big changes to the code base.  R has accumulated a lot of technical debt which means its difficult to make improvements. Base R doesn't have a great system of unit tests, which makes it difficult to come back after the fact and rewrite code without worrying that you've changed behaviour.
+Next, I'll show three parts of R that are currently slow, but could be made faster with some effort. They are not critical parts of base R, but they have frustrated me in the past. As with the microbenchmarks above, these do not generally impact the average performance of most funtion, but can be important for special cases.
 
-One illustration of these performance 
+The following microbenchmark shows seven ways to access a single value (the number in the bottom-right corner) from the built-in `mtcars` dataset. The variation in performance is startling: the slowest method takes 30x longer than the method. There's no reason for there to be such a huge difference in performance, but no one has spent the time to make the slowest methods faster.
 
 ```{r}
 microbenchmark(
@@ -222,13 +226,12 @@ microbenchmark(
   mtcars[["carb"]][32],
   mtcars[[11]][32],
   mtcars$carb[32],
-  .subset2(mtcars, 11)[32]
+  .subset2(mtcars, 11)[32],
+  unit = "us"
 )
 ```
 
-
-Some base functions are known to be slow. For example, look at the following three implementations of a function to `squish()` a vector to make the sure smallest value is at least `a` and the largest value is at most `b`.  
-The first implementation uses `ifelse()` which is known to be slow due to the complicated way it figures out what class the output should have. The second uses `pmin()` and `pmax()` which should be much faster because they're so specialised. But they're actually rather slow because they can take any number of arguments and have to do some relatively complicated checks to determine which method to use. The final implementation uses basic subassignment.
+Some base functions are known to be slow. For example, look at the following three implementations of a function to `squish()` a vector to make the sure smallest value is at least `a` and the largest value is at most `b`.  The first implementation, `squish_ife()` uses `ifelse()`. `ifelse()` is known to be slow because it is relatively general, and must evaluate all arguments fully. The second implementation, `squish_p()`, uses `pmin()` and `pmax()` which should be much faster because they're so specialised. But they're actually rather slow because they can take any number of arguments and have to do some relatively complicated checks to determine which method to use. The final implementation uses basic subassignment.
 
 ```{r}
 squish_ife <- function(x, a, b) {
@@ -248,21 +251,40 @@ microbenchmark(
   squish_ife(x, -1, 1),
   squish_p(x, -1, 1),
   squish_in_place(x, -1, 1),
-  unit = "ms"
+  unit = "us"
 )
 ```
 
-Another example is `%in%` - it's not efficient as it could be because it's built on top of `match()` which does more work than is needed. 
+There's quite a variation in speed: using `pmin()` and `pmax()` is about 3x faster than using `ifelse()`, and using subsetting directly is about twice as fast again. As we'll see in [Rcpp](C++), we can often do even better by calling out to C++. The following example compares the best R implementation to a relatively simple (if verbose) implementation in C++. The C++ implementation is around 3x faster.
 
 ```{r}
+library(Rcpp)
+cppFunction("NumericVector squish_cpp(NumericVector x, double a, double b) {
+  int n = x.length();
+  NumericVector out(n);
+  
+  for (int i = 0; i < n; ++i) {
+    double xi = x[i];
+    if (xi < a) {
+      out[i] = a;
+    } else if (xi > b) {
+      out[i] = b;
+    } else {
+      out[i] = xi;
+    }
+  }
+  
+  return out;
+}")
+
 microbenchmark(
-  "x" %in% letters, 
-  any("x" == letters),
-  unit = "ms"
+  squish_in_place(x, -1, 1),
+  squish_cpp(x, -1, 1),
+  unit = "us"
 )
 ```
 
-Most package developers are not professional software engineers, and again are not paid to work on R packages. This means that most package code is written to solve a pressing problem. The vast majority of R code is poorly written and slow. This sounds bad but it's actually a positive! There's no point in optimising code until it's actually a bottleneck - most R code should be incredibly inefficient because even inefficient code is usually fast enough. If most R code was efficient, it would be a strong signal that R programmers are prematurely optimising, spend timing making their code faster instead of solving real problems. 
+It's often relatively easy to speed up the performance of R code just by making a few small changes (you'll learn more about that in the next chapter). Most package developers are not professional software engineers and are not paid to work on R packages. This means that most package code is written to solve a pressing problem. The vast majority of R code is poorly written and slow. This sounds bad but it's actually a reflection that people are doing real work, not messing around with code. R code can be incredibly inefficient but still fast enough. 
 
 ### Exercises
 
