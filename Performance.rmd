@@ -222,15 +222,28 @@ m <- microbenchmark(f0(), f1(), f2(), f3(), f4(), f5(), times = 1000)
 
 In most other programming languages there is no overhead for adding extra arguments. Many compiled languages will even warn you if arguments are never used, and automatically remove them from the function.
 
+### Exercises
+
+* How does the performance of S3 method dispatch change with the length
+  of the class vector? How does performance of S4 method dispatch change
+  with number of superclasses? How about RC?
+
+* `scan()` has the most arguments (21) of any base function. About how
+  much time does it take to make 21 promises each time scan is called?
+  Given a simple input (e.g. `scan(text = "1 2 3", quiet = T)`) what
+  proportion of the total run time is due to creating those promises?
+
 ## Implementation performance
 
 The design of R-language limits its maximum theoretical performance. But GNU-R is currently nowhere close to that maximum, and there are many things that can (and will) be done to speed it up. This section discusses some of the parts of GNU-R that are currently slow not because of the language, but because no one has had the time to make them fast.
 
 R is over 20 years old, and contains nearly 800,000 lines of code (about 45% C, 19% R, and 17% fortran). Changes to base R can only be made by members of the R Core Team (or R-core for short). R-core contains [20 members](http://www.r-project.org/contributors.html), but only six are actively involved in day-to-day development. No one on R-core is paid to work on R full time. Most are statistics professors, and can only spend a relatively small amount of their time working on R.
 
-Because R-core lacks full-time software developers, it has accumulated considerable technical debt over time. One component of this debt is the lack of unit tests. Without unit tests, it's difficult to improve performance without accidentally changing behaviour. Because of the care that must be taken to avoid breaking existing code, R-core tends to be very conservation about accepting new code. It can be frustrating to see obvious performance improvements rejected by R-core, but the driving motivation for R-core is not to make R faster, it's to build a stable platform for statistical computing.
+Because R-core lacks full-time software developers, it has accumulated considerable technical debt. One component of this debt is the lack of unit tests. Without unit tests, it's difficult to improve performance without accidentally changing behaviour. Because of the care that must be taken to avoid breaking existing code, R-core tends to be very conservation about accepting new code. It can be frustrating to see obvious performance improvements rejected by R-core, but the driving motivation for R-core is not to make R faster, it's to build a stable platform for statistical computing.
 
-Next, I'll show three parts of R that are currently slow, but could be made faster with some effort. They are not critical parts of base R, but they have frustrated me in the past. As with the microbenchmarks above, these do not generally impact the average performance of most funtion, but can be important for special cases.
+Next, I'll show two small illustration of slow parts of R, but could be made faster with some effort. They are not critical parts of base R, but they have frustrated me in the past. As with the microbenchmarks above, these do not generally impact the average performance of most funtion, but can be important for special cases.
+
+### Extracting a single value from a data frame
 
 The following microbenchmark shows seven ways to access a single value (the number in the bottom-right corner) from the built-in `mtcars` dataset. The variation in performance is startling: the slowest method takes 30x longer than the method. There's no reason for there to be such a huge difference in performance, but no one has spent the time to make the slowest methods faster.
 
@@ -246,6 +259,8 @@ microbenchmark(
   unit = "us"
 )
 ```
+
+### `ifelse()`, `pmin()`, and `pmax()`.
 
 Some base functions are known to be slow. For example, look at the following three implementations of a function to `squish()` a vector to make the sure smallest value is at least `a` and the largest value is at most `b`.  The first implementation, `squish_ife()` uses `ifelse()`. `ifelse()` is known to be slow because it is relatively general, and must evaluate all arguments fully. The second implementation, `squish_p()`, uses `pmin()` and `pmax()` which should be much faster because they're so specialised. But they're actually rather slow because they can take any number of arguments and have to do some relatively complicated checks to determine which method to use. The final implementation uses basic subassignment.
 
@@ -271,11 +286,10 @@ microbenchmark(
 )
 ```
 
-There's quite a variation in speed: using `pmin()` and `pmax()` is about 3x faster than using `ifelse()`, and using subsetting directly is about twice as fast again. As we'll see in [Rcpp](C++), we can often do even better by calling out to C++. The following example compares the best R implementation to a relatively simple (if verbose) implementation in C++. The C++ implementation is around 3x faster.
+There's quite a variation in speed: using `pmin()` and `pmax()` is about 3x faster than using `ifelse()`, and using subsetting directly is about twice as fast again. As we'll see in [Rcpp](#rcpp), we can often do even better by calling out to C++. The following example compares the best R implementation to a relatively simple (if verbose) implementation in C++. The C++ implementation is around 3x faster. Even if you've never used C++, you should be able to follow the basic strategy: we loop over every element in the vector and performance a difference action depending on whether
 
-```{r}
-library(Rcpp)
-cppFunction("NumericVector squish_cpp(NumericVector x, double a, double b) {
+```{r, engine = "Rcpp"}
+NumericVector squish_cpp(NumericVector x, double a, double b) {
   int n = x.length();
   NumericVector out(n);
 
@@ -291,8 +305,10 @@ cppFunction("NumericVector squish_cpp(NumericVector x, double a, double b) {
   }
 
   return out;
-}")
+}
+```
 
+```{r}
 microbenchmark(
   squish_in_place(x, -1, 1),
   squish_cpp(x, -1, 1),
@@ -304,11 +320,12 @@ It's often relatively easy to speed up the performance of R code just by making 
 
 ### Exercises
 
-* The performance characteristics of `trunc_ife()`, `trunc_p()` and `trunc_in_place()` vary considerably with the size of `x`. Explore the differences. For what sizes of input is the difference biggest? Smallest?
+* The performance characteristics of `trunc_ife()`, `trunc_p()` and
+  `trunc_in_place()` vary considerably with the size of `x`. Explore the
+  differences. For what sizes of input is the difference biggest? Smallest?
 
-* Compare the performance costs of extract an element from a list, a column from a matrix, and a column from a data frame. What about a row?
-
-* `scan()` has the most arguments (21) of any base function. About how much time does it take to make 21 promises each time scan is called? Given a simple input (e.g. `scan(text = "1 2 3", quiet = T)`) what proportion of the total run time is due to creating those promises?
+* Compare the performance costs of extract an element from a list, a
+  column from a matrix, and a column from a data frame. What about a row?
 
 ## How might R become faster? {#faster-r}
 
@@ -362,7 +379,7 @@ double cond_mean_cpp(NumericVector x, NumericVector y, LogicalVector z) {
   double sum = 0;
   int n = x.length();
 
-  for(int i = 0; i++; i < n) {
+  for(int i = 0; i < n; i++) {
     if (!z[i]) continue;
     sum += x[i] + y[i];
   }
