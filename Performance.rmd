@@ -103,7 +103,9 @@ My favourite features of the microbenchmark package are:
 
 ## Fundamental reasons
 
-In this section I'll explore three reasons why R is slow: extreme dynamism, few built-in constants, and lazy evaluation of function arguments. I'll illustrate each reason with a microbenchmark, showing how it slows R down. Each reason only causes a tiny slowdown, on the order of a few microseconds per function call, but together they add up. When looking at millions or billions of function calls, which happens when looping over long vectors or doing big simulations, they make R a relatively slow language. I've picked these reasons because they have some obvious benefits, but they do come at a performance cost.
+In this section I'll explore three fundamental reasons why R is slow: extreme dynamism, few built-in constants, and lazy evaluation of function arguments. I'll illustrate each reason with a microbenchmark, showing how it slows R down. Each reason only causes a tiny slowdown, on the order of a few microseconds per function call, but together they add up. When looking at millions or billions of function calls, which happens when looping over long vectors or doing big simulations, they make R a relatively slow language. 
+
+These reasons fundamentally limit the maximum performance of the R language. They are all illustrates features where R has traded speed for expressiveness. 
 
 If you'd like to learn more about the performance characteristics of R, I'd particularly recommend the article [Evaluating the Design of the R Language](https://www.cs.purdue.edu/homes/jv/pubs/ecoop12.pdf) by Floreal Morandat, Brandon Hill, Leo Osvald and Jan Vitek. It discusses a better methodology for understand the performance characteristics of R using a modified R interpreter and a wide set of real code.
 
@@ -296,26 +298,78 @@ It's often relatively easy to speed up the performance of R code just by making 
 
 ## How might R become faster? {#faster-r}
 
-These are things that could be fixed in a new implementation.
+There are some exciting new projects that explore ways to make R faster. They all try to stick as closely as possible to the existing language definition, but implement ideas from modern compiler design to make the implementation as fast as possible. The three most mature projects are:
 
 * [Pretty quick R](http://www.pqr-project.org/). By Radford Neal. Built on top of existing R code base (2.15.0).  Fixes many obvious performance issues. Better memory management.
-
-* [CXXR](http://www.cs.kent.ac.uk/projects/cxxr/). Reimplementation of R into clean C++. Not currently faster, but is much more extensible and might form clean foundation for future work. Better documentation of intenrals.  http://www.cs.kent.ac.uk/projects/cxxr/pubs/WIREs2012_preprint.pdf. Behaviour identical.
 
 * [Renjin](http://www.renjin.org/). JVM. Extensive [test suite](http://packages.renjin.org/). Good discussion at http://www.renjin.org/blog/2013-07-30-deep-dive-vector-pipeliner.html. Along the same lines, but currently less developed in [fastr](https://github.com/allr/fastr).  Written by the same group as traceR paper.
 
 * [Riposte](https://github.com/jtalbot/riposte). Experimental VM. (http://www.justintalbot.com/wp-content/uploads/2012/10/pact080talbot.pdf)
 
-(ordered roughly from most practical to most ambitious). 
+These are roughly ordered in from most practical to most ambitious. There is one other project that currently does not provide any performance improvements, but might provide a better foundation for future improvements:
 
-These are all interesting experiments with R. It's not clear how many will evolve to be long-term alternatives to R. It's hard task to make sure an alternative backend can run all R code in the same way (or similar enough) to GNU R. The challenge with any rewrite is maintaining compatibility with base R. Can you imagine having to reimplement every function in base R to not only be faster, but to have exactly the same documented bugs? (e.g. `nchar(NA)`) But they provide a lot of information about what R can do better, and put pressure on base R to improve performance.
+* [CXXR](http://www.cs.kent.ac.uk/projects/cxxr/). Reimplementation of R into clean C++. Not currently faster, but is much more extensible and might form clean foundation for future work. Better documentation of intenrals.  http://www.cs.kent.ac.uk/projects/cxxr/pubs/WIREs2012_preprint.pdf. Behaviour identical.
 
-Deferred evaluation: `x + y * z`. http://radfordneal.wordpress.com/2013/07/24/deferred-evaluation-in-renjin-riposte-and-pqr/. JT: "for long vectors, R’s execution is completely memory bound. It spends almost all of its time reading and writing vector intermediates to memory"
+R is a huge language and it's not clear whether any of these approaches will even become mainstream. It's hard task to make sure an alternative backend can run all R code in the same way (or similar enough) to GNU R. The challenge with any rewrite is maintaining compatibility with base R. Can you imagine having to reimplement every function in base R to not only be faster, but to have exactly the same documented bugs? (e.g. `nchar(NA)`).
 
-1:n
+However, even if these implementations never make a dent in the use of GNU R, they have other benefits:
 
-Parallelisation
+* Simpler implementations make it easy to validate new approaches before
+  porting to the GNU R.
+  
+* Gain understanding about which currently core features could be changed
+  with minimal changes to existing code and maximal impact on performance.
+  
+* Alternative implementations put pressure on the R Core Team to incorporate
+  performance improvements.
 
-Scalars
+One of the most important approaches that pqr, renjin and riposte are exploring is the idea of deferred evaluation. As Justin Talbot, the author of riposte, points out "for long vectors, R's execution is completely memory bound. It spends almost all of its time reading and writing vector intermediates to memory". If you can eliminate intermediate vectors, you can not only decrease memory usage, you can also considerably improve performance.
 
-Better memory management.
+The following example shows a very simple example of where deferred evaluation might help. We have three vectors, `x`, `y`, `z` each containing 1 million elements, and we want to find the average value of `x` + `y` where `z` is TRUE. (This represents a simplification of a pretty common sort of data analysis question.)
+
+```{r}
+x <- runif(1e6)
+y <- runif(1e6)
+z <- sample(c(T, F), 1e6, rep = TRUE)
+
+mean((x + y)[z])
+```
+
+In R, this creates two big temporary vectors: `x + y`, 1 million elements long, and `(x + y)[z]`, about 500,000 elements long. This means you need to have extra memory free for the intermediate calculation, and allocating and freeing that memory is relatively expensive so it slows the computation down.
+
+If we rewrote the function using a loop in a language like C++, we could recognise that we only need one intermediate value: the sum of all the values we've seen:
+
+```{r, engine = "Rcpp"}
+#include <Rcpp.h>
+using namespace Rcpp;
+
+// [[Rcpp::export]]
+double cond_mean_cpp(NumericVector x, NumericVector y, LogicalVector z) {
+  double sum = 0;
+  int n = x.length();
+  
+  for(int i = 0; i++; i < n) {
+    if (!z[i]) continue;
+    sum += x[i] + y[i];
+  }
+  
+  return sum / n;
+}
+```
+
+On my computer, this approach is about 8 times faster than the vectorised R equivalent (which is already pretty fast).
+
+```{r}
+cond_mean_r <- function(x, y, z) {
+  mean((x + y)[z])
+}
+
+microbenchmark(
+  cond_mean_cpp(x, y, z),
+  cond_mean_r(x, y, z)
+)
+```
+
+Riposte, renjin and pqr all provide tools to do this sort of transformation automatically, so you can write the concise R and it's automatically translated into efficient machine code.  Sophisticated translators can also figure out how to make the most of multiple cores. In the above example, if you have four cores, you could give 1/4 of the vectors to each core and then add together the results, possibly giving a 4-fold speed up.
+
+
