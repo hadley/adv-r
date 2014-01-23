@@ -116,11 +116,11 @@ To help calibrate the impact of a microbenchmark on run time, it's helpful to th
 
 ## Language performance
 
-In this section I'll explore three fundamental reasons why R is slow: extreme dynamism, few built-in constants, and lazy evaluation of function arguments. I'll illustrate each reason with a microbenchmark, showing how it slows R down. Each reason only causes a tiny slowdown, on the order of a few microseconds per function call, but together they add up. When looking at millions or billions of function calls, which happens when looping over long vectors or doing big simulations, they make R a relatively slow language.
+In this section I'll explore three trade-offs that limit the performance of the R-language: extreme dynamism, few built-in constants, and lazy evaluation of function arguments. I'll illustrate each reason with a microbenchmark, showing how it slows GNU-R down. You can't benchmark a language, since it's an abtract construct, so the benchmarks are only suggestive of the cost of these decisions to the language, but are nevertheless useful.
 
-These reasons fundamentally limit the maximum performance of the R language. They are all illustrates features where R has traded speed for expressiveness.
+Designing a useful language is a delicate balancing act. There are many options and many tradeoffs, and you need to balance between speed, flexibility and ease of implementation. I hope the three examples will give you a sense of this balance.
 
-If you'd like to learn more about the performance characteristics of R, I'd particularly recommend the article [Evaluating the Design of the R Language](https://www.cs.purdue.edu/homes/jv/pubs/ecoop12.pdf) by Floreal Morandat, Brandon Hill, Leo Osvald and Jan Vitek. It discusses a better methodology for understand the performance characteristics of R using a modified R interpreter and a wide set of real code.
+If you'd like to learn more about the performance characteristics of the R-language and how they affect real code, I'd particularly recommend the article [Evaluating the Design of the R Language](https://www.cs.purdue.edu/homes/jv/pubs/ecoop12.pdf) by Floreal Morandat, Brandon Hill, Leo Osvald and Jan Vitek. It discusses a power methodology for understanding the performance characteristics of R using a modified R interpreter and a wide set of code found in the wild.
 
 ### Extreme dynamism
 
@@ -131,7 +131,9 @@ R is an extremely dynamic programming language, and almost anything can be modif
 * add new fields to an S3 object, or even change its class
 * modify objects outside of the local environment with `<<-`
 
-Dynamism makes code slow because it makes it difficult to predict exactly what will happen in a given function call. The easier it is to predict what's going to happen, the more likely an interpreter or compiler can jump directly to the fastest implementation. (If you'd like more details, Charles Nutter expands on this idea at [On Languages, VMs, Optimization, and the Way of the World](http://blog.headius.com/2013/05/on-languages-vms-optimization-and-way.html).) If a compiler can't predict what's going to happen, it has to look through many options to find the best one, which is an expensive operation.
+The big advantage of dyanmism is that you don't need to do upfront planning, and you don't need an initial compilation step. You can change your mind at any point, without having to start again from scratch.
+
+The disadvantage of dynamism is that it makes code slow because it's harder to predict exactly what will happen for a given function call. The easier it is to predict what's going to happen, the more likely an interpreter or compiler can jump directly to the fastest implementation. (If you'd like more details, Charles Nutter expands on this idea at [On Languages, VMs, Optimization, and the Way of the World](http://blog.headius.com/2013/05/on-languages-vms-optimization-and-way.html).) If an interpreter can't predict what's going to happen, it has to look through many options to find the best one, which is an expensive operation.
 
 The following microbenchmark illustrates the cost of method dispatch for S3, S4, and RC. I create a generic and a method for each OO system, then call the generic and see how long it takes to find and call the method. I also time how long it takes to call the bare method for comparison.
 
@@ -160,12 +162,11 @@ microbenchmark(
 )
 ```
 
-On my computer, the function call takes about 280 ns. S3 method dispatch takes an additional 3,000 ns; S4 dispatch, 13,000 ns; and RC dispatch, 11,000 ns. Method dispatch is so expensive because R must look for the function every time the method is called; it might have changed between this time and the last time. R could do better by caching methods between calls, but caching is hard to do correctly and a notorious source of bugs. In many situations, compiled languages only need to method lookup once, during compilation, because they know that method can't be change at run-time. This takes the cost of method dispatch down to effectively 0.
+On my computer, the function call takes about 280 ns. S3 method dispatch takes an additional 3,000 ns; S4 dispatch, 13,000 ns; and RC dispatch, 11,000 ns. Method dispatch is so expensive because R must look for the function every time the method is called; it might have changed between this time and the last time. R could do better by caching methods between calls, but caching is hard to do correctly and a notorious source of bugs. In many situations, compiled languages only need to method lookup once, during compilation, because they know that method can't be change at run-time. This makes the cost of method dispatch extremely small.
 
 ### Few built-in constants
 
-Another example of R's dynamisms is the very small number of built-in constants.
-Almost every operation is a lexically scoped function call. For example, in the following simple function contains four function calls: `{`, `(`, `+`, `^`.
+R has very few number of built-in constants. Almost every operation is a lexically scoped function call. For example, in the following simple function contains four function calls: `{`, `(`, `+`, `^`.
 
 ```{r}
 f <- function(x, y) {
@@ -173,7 +174,7 @@ f <- function(x, y) {
 }
 ```
 
-These functions are not hard coded constants, and can be overriden by you. This means that to find the definition of each function, R has to look through every environment on the search path, which could easily be 10 or 20 environments. It would be possible to change this behaviour for R, and affect very little code (it's a bad idea to override `{` or `(`!), but it would require substantial work by R core.
+These functions are not hard coded constants, and can be overriden by you. This means that to find the definition of each function, R has to look through every environment on the search path, which could easily be 10 or 20 environments. It would be possible to change this behaviour. It would probably affect very little code (it's a bad idea to override `{` or `(`!), but it would require substantial work by R core.
 
 The following microbenchmark hints at the performance costs. We create four versions of `f()`, each with one more environment (containing 26 bindings) between the environment of `f()` and the base environment where `+`, `^`, `(`, and `{` are defined.
 
@@ -223,9 +224,9 @@ In most other programming languages there is no overhead for adding extra argume
 
 ## Implementation performance
 
-R's design limits its maximum theoretical performance. But R is currently nowhere that maximum, and there are many things that can (and will) be done to speed it up. This section discusses some of the parts of R that are currently not for fundamental reasons, but because no one has had the time to make them fast.
+The design of R-language limits its maximum theoretical performance. But GNU-R is currently nowhere close to that maximum, and there are many things that can (and will) be done to speed it up. This section discusses some of the parts of GNU-R that are currently slow not because of the language, but because no one has had the time to make them fast.
 
-R is over 20 years old, and contains nearly 800,000 lines of code. All changes to base R are made by R Core Team (or R-core for short). R-core contains [20 members](http://www.r-project.org/contributors.html), but only about six are actively involved in day-to-day development. No one on R-core is paid to work on R full time. Most members of R-core are statistics professors, and can only spend a relatively small amount of their time working on R.
+R is over 20 years old, and contains nearly 800,000 lines of code (about 45% C, 19% R, and 17% fortran). Changes to base R can only be made by members of the R Core Team (or R-core for short). R-core contains [20 members](http://www.r-project.org/contributors.html), but only six are actively involved in day-to-day development. No one on R-core is paid to work on R full time. Most are statistics professors, and can only spend a relatively small amount of their time working on R.
 
 Because R-core lacks full-time software developers, it has accumulated considerable technical debt over time. One component of this debt is the lack of unit tests. Without unit tests, it's difficult to improve performance without accidentally changing behaviour. Because of the care that must be taken to avoid breaking existing code, R-core tends to be very conservation about accepting new code. It can be frustrating to see obvious performance improvements rejected by R-core, but the driving motivation for R-core is not to make R faster, it's to build a stable platform for statistical computing.
 
