@@ -59,7 +59,7 @@ To understand R's performance it helps to think about R in two ways: as a langua
 
 The distinction between language and implementation is a bit murky for R because the R-language is not formally defined, but instead, is mostly defined by how GNU-R works. Other languages, like [C++](http://isocpp.org/std/the-standard) and [javascript](http://www.ecma-international.org/publications/standards/Ecma-262.htm) make the distinction more clear. They have formal specifications that describe in minute detail how every aspect of the language should work. R has the [R language definition](http://cran.r-project.org/doc/manuals/R-lang.html), but it is informal and incomplete. Even though the distinction between R-language and GNU-R isn't clear cut, it's still useful because poor performance due to the implementation can fixed, while poor performance related to the language is hard to fix without changing what R code means.
 
-[Language performance](#language-performance) discusses some of the ways in which the design of the R language imposes fundamental constraints on R's speed. While language design constrains the maximum possible performance, GNU-R is currently far from the optimum. I'll discuss some of the features of the current that are slow and why performance improvements to GNU-R happen slowly in [implementation performance](#implementation-performance). It's hard to know exactly how much faster a better implementation could be, but a 10-100x improvement in speed seems achievable. In [alternative implementations](#faster-r), I'll discuss some of the promising new implementations, and illustrate one important technique they use to make R code faster.
+[Language performance](#language-performance) discusses some of the ways in which the design of the R language imposes fundamental constraints on R's speed. While language design constrains the maximum possible performance, GNU-R is currently far from the optimum. [Implementation performance](#implementation-performance) discusses why and why performance improvements happen so slowly. It's hard to know exactly how much faster a better implementation could be, but a 10-100x improvement in speed seems achievable. In [alternative implementations](#faster-r), I'll discuss some of the promising new implementations, and illustrate one important technique they use to make R code faster.
 
 As well as performance limitations imposed by the language design and current implementation, a lot of R code is slow because it's poorly written. Few R users have any formal training in programming and software development, and fewer still write R code for a living. Most people coding in R use it to better understand their data. For them, it's more important to get a solution quickly, rather than developing a system that will work for a wide variety of inputs. This means that most R code can be made much faster, as described in the following chapters.
 
@@ -83,7 +83,7 @@ microbenchmark(
 
 In this example, you can see that using the special purpose `sqrt()` function is faster than general exponentiation operator. Note the units: each computation takes about 800 ns, 800 billionths of a second.
 
-`microbenchmark()` takes a multiple expressions as input, and display summaries of the distribution of timings. By default, `microbenchmark()` runs each expression 100 times (controlled by the `times` parameter), randomising the order of the expressions. It summarises the results with a minimum (`min`), lower quartile (`lq`), median, upper quartile (`uq`) and maximum (`max`). You normally want to focus on the median, but the upper and lower quartiles (`lq` and `uq`) are also useful to get a feel for the variability. You can see the complete distribution with the `boxplot()` method, or if ggplot2 is loaded, with `autoplot()`.
+`microbenchmark()` takes multiple expressions as input, and display summaries of the distribution of timings. By default, `microbenchmark()` runs each expression 100 times (controlled by the `times` parameter), randomising the order of the expressions. It summarises the results with a minimum (`min`), lower quartile (`lq`), median, upper quartile (`uq`) and maximum (`max`). You normally want to focus on the median, but the upper and lower quartiles (`lq` and `uq`) are also useful to get a feel for the variability. You can see the complete distribution with the `boxplot()` method, or if ggplot2 is loaded, with `autoplot()`.
 
 To help calibrate the impact of a microbenchmark on run time, it's useful to think about how many times an function needs to run before it takes a second. If a microbenchmark takes:
 
@@ -118,7 +118,8 @@ The `sqrt()` function takes about 800 ns, or 0.8 µs, to compute the square-root
     ```
 
 * Use microbenchmarking to rank the basic arithmetic operators (`+`, `-`,
-  `*`, `/`, and `^`) in terms of speed. Visualise the results.
+  `*`, `/`, and `^`) in terms of speed. Visualise the results. Compare
+  integers and floating point numbers.
 
 * You can change the units in which the microbenchmark results are
   expressed with the `unit` parameter. Use `unit = "eps"` to show
@@ -144,7 +145,14 @@ R is an extremely dynamic programming language, and almost anything can be modif
 
 The advantage of dynamism is that you don't need to do upfront planning, and you don't need an initial compilation step. You can change your mind at any point, iterating you way to a solution without having to start afresh.
 
-The disadvantage of dynamism is that it makes it difficult to predict exactly what will happen for a given function call. The easier it is to predict what's going to happen, the more likely an interpreter or compiler can jump directly to the fastest implementation. (If you'd like more details, Charles Nutter expands on this idea at [On Languages, VMs, Optimization, and the Way of the World](http://blog.headius.com/2013/05/on-languages-vms-optimization-and-way.html).) If an interpreter can't predict what's going to happen, it has to look through many options to find the best one, a slow operation.
+The disadvantage of dynamism is that it makes it difficult to predict exactly what will happen for a given function call. The easier it is to predict what's going to happen, the more likely an interpreter or compiler can jump directly to the fastest implementation. (If you'd like more details, Charles Nutter expands on this idea at [On Languages, VMs, Optimization, and the Way of the World](http://blog.headius.com/2013/05/on-languages-vms-optimization-and-way.html).) If an interpreter can't predict what's going to happen, it has to look through many options to find the right one, a slow operation. For example, code like the following loop is slow in R, because R can't know that the type of `x` never changes. That means R has to look for the right `+` method in every iteration of the loop.
+
+```{r, eval = FALSE}
+x <- 0L
+for (i in 1:1e6) {
+  x <- x + 1
+}
+```
 
 The following microbenchmark illustrates the cost of method dispatch for S3, S4, and RC. I create a generic and a method for each OO system, then call the generic and see how long it takes to find and call the method. I also time how long it takes to call the bare method for comparison.
 
