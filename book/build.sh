@@ -24,7 +24,6 @@ pandoc --chapters -o book/adv-r.pdf --latex-engine xelatex \
   book/part-adv.md \
   book/chapters/Computing-on-the-language.md \
   book/chapters/Expressions.md \
-  book/chapters/Special-environments.md \
   book/chapters/dsl.md \
   book/part-perf.md \
   book/chapters/Performance.md \
@@ -45,4 +44,4 @@ pandoc --chapters -o book/adv-r.pdf --latex-engine xelatex \
 #   Namespaces.md \
 #   git.md \
 #   Release.md
- 
+
