@@ -30,6 +30,14 @@ The chapter will hopefully also help to dispell some myths like:
 
 The details of memory management in R are not documented in one place, but most of the information in this chapter I gleaned from close reading of the documentation (particularly `?Memory` and `?gc`), the [memory profiling](http://cran.r-project.org/doc/manuals/R-exts.html#Profiling-R-code-for-memory-use) section of R-exts, and the [SEXPs](http://cran.r-project.org/doc/manuals/R-ints.html#SEXPs) section of R-ints. The rest I figured out by reading the C source code, performing small experiments and by asking questions on R-devel.
 
+### Packages
+
+```{r}
+install.packages("ggplot2")
+devtools::install_github("hadley/pryr")
+devtools::install_github("hadley/lineprof")
+```
+
 ## `object.size()`
 
 One of the most useful tools for understanding memory usage in R is `object.size()`, which tells you how much memory an object occupies. This section uses `object.size()` to look at the size of some simple vectors. By exploring some unusual findings, you'll start to understand some important aspects of memory allocation in R.
@@ -52,11 +60,11 @@ object.size(list())
 
 What are those 40 bytes of memory used for? Every object in R has four components:
 
-* object metadata, the _sxpinfo_ (4 bytes). This metadata includes the base type, and information used for debugging and memory management. 
+* object metadata, the _sxpinfo_ (4 bytes). This metadata includes the base type, and information used for debugging and memory management.
 
 * Two pointers: one to the next object in memory, and one to the previous object (2 * 8 bytes). This doubly-linked list makes it easy for internal R code to loop iterate through every object in memory.
 
-* A pointer to the attributes (8 bytes). 
+* A pointer to the attributes (8 bytes).
 
 All vector types (e.g. atomic vectors and lists), have three more components:
 
@@ -85,8 +93,8 @@ There are a few other subtleties to `object.size()`: it only promises to give an
 ```{r}
 env_size <- function(x) {
   if (!is.environment(x)) return(object.size(x))
-  
-  objs <- ls(x, all = TRUE) 
+
+  objs <- ls(x, all = TRUE)
   sizes <- vapply(objs, function(o) env_size(get(o, x)), double(1))
   structure(sum(sizes) + object.size(x), class = "object_size")
 }
@@ -109,7 +117,7 @@ env_size(b)
 
 You could argue that the size of `b` is actually only 56 bytes, because if you remove `b`, that's how much memory will be freed. But if you deleted `a` first, and then deleted `b` it would free 4000152 bytes. So is the size of `b` 56 or 4000152 bytes? The answer depends on the context.
 
-Another challenge for `object.size()` is strings: 
+Another challenge for `object.size()` is strings:
 
 ```{r}
 object.size("banana")
@@ -151,9 +159,9 @@ mem <- function() {
   if (!(bit == 32L || bit == 64L)) {
     stop("Unknown architecture", call. = FALSE)
   }
-  
+
   node_size <- if (bit == 32L) 28L else 56L
-  
+
   usage <- gc()
   sum(usage[, 1] * c(node_size, 8)) / (1024 ^ 2)
 }
@@ -173,11 +181,11 @@ We can build a function on top of `mem()` that tells us how memory changes durin
 ```{r}
 mem_change <- function(code) {
   start <- mem()
-  
+
   expr <- substitute(code)
   eval(expr, parent.frame())
   rm(code, expr)
-  
+
   round(mem() - start, 3)
 }
 # Need about 4 mb to store 1 million integers
@@ -287,11 +295,11 @@ You can hover over any of the bars to get the exact numbers. For this example, l
 
 There are two downsides to profiling:
 
-1. `read_delim()` only takes around half a second, and the profile can only capture memory usage at most every 1ms, so we only get about 500 samples. 
+1. `read_delim()` only takes around half a second, and the profile can only capture memory usage at most every 1ms, so we only get about 500 samples.
 
-2. Since GC is lazy, we can never tell exactly when memory is no longer needed. 
+2. Since GC is lazy, we can never tell exactly when memory is no longer needed.
 
-One way to work around both problems is to use `torture = TRUE`, which forces R to run GC after every allocation (see `gctorture()` for more details). This helps with both problems because memory is freed as soon as possible, and R runs 10-100x more slowly, so the resolution of the timer is effectively much greater. This allows you to see smaller allocations and exactly when memory is no longer needed. 
+One way to work around both problems is to use `torture = TRUE`, which forces R to run GC after every allocation (see `gctorture()` for more details). This helps with both problems because memory is freed as soon as possible, and R runs 10-100x more slowly, so the resolution of the timer is effectively much greater. This allows you to see smaller allocations and exactly when memory is no longer needed.
 
 If we re-run our `read_delim()` example with `torture = TRUE` we get:
 
@@ -315,9 +323,9 @@ The basic messages remain the same, but we now we see a big memory release on li
       x
     }
     ```
-    
+
     What impact does using this function have on `read_delim()`?  What are the downsides of this function?
-    
+
 * Line profile the following very simple function with `torture = TRUE`. What is surprising? Read the source code of `gc()` to figure out what's going on.
 
     ```{r}
@@ -349,11 +357,11 @@ It turns out that R can do either depending on the circumstances. In the example
 library(pryr)
 x <- 1:10
 c(address(x), refs(x))
-# [1] "0x103100060" "1" 
+# [1] "0x103100060" "1"
 
 y <- x
 c(address(y), refs(y))
-# [1] "0x103100060" "2" 
+# [1] "0x103100060" "2"
 ```
 
 (Note that if you're using Rstudio this `refs()` will always return two: the environment browser makes a reference to every object you create on the command line, but not inside a function.)
@@ -432,7 +440,7 @@ x <- 1:10; g(x); refs(x)
 # [1] 1
 ```
 
-Generally, any primitive replacement function will modify in place, provided that the object is not referred to elsewhere. This includes `[[<-`, `[<-`, `@<-`, `$<-`, `attr<-`, `attributes<-`, `class<-`, `dim<-`, `dimnames<-`, `names<-`, and `levels<-`. To be precise, all non-primitive functions increment refs, but a primitive function may be written in such a way that it doesn't increment refs.  The rules are sufficiently complicated that there's not a lot of point in trying to memorise them; instead approach the problem practically; use `refs()` and `tracemem()` to figure out when objects are being copied. 
+Generally, any primitive replacement function will modify in place, provided that the object is not referred to elsewhere. This includes `[[<-`, `[<-`, `@<-`, `$<-`, `attr<-`, `attributes<-`, `class<-`, `dim<-`, `dimnames<-`, `names<-`, and `levels<-`. To be precise, all non-primitive functions increment refs, but a primitive function may be written in such a way that it doesn't increment refs.  The rules are sufficiently complicated that there's not a lot of point in trying to memorise them; instead approach the problem practically; use `refs()` and `tracemem()` to figure out when objects are being copied.
 
 Once you have determined that where copies are being made, it can be hard to prevent them. If you find yourself resorting to exotic tricks to avoid copies, it may be time to rewrite your function in C++, as described in [Rcpp](#rcpp).
 
