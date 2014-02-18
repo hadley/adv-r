@@ -3,10 +3,29 @@ title: Metaprogramming
 layout: default
 ---
 
+```{r, echo = FALSE, eval = FALSE}
+library(pryr)
+library(stringr)
+special <- c("substitute", "deparse")
+funs <- lapply(special, function(x) {
+  match <- paste0("^", x, "$")
+  c(
+    find_funs("package:base", fun_calls, match),
+    find_funs("package:utils", fun_calls, match),
+    find_funs("package:stats", fun_calls, match)
+  )
+})
+names(funs) <- special
+names(Filter(function(x) length(x) == 2, ggplot2:::invert(funs)))
+names(Filter(function(x) length(x) == 1, ggplot2:::invert(funs)))
+```
+
+
 # Metaprogramming
 
 > "Flexibility in syntax, if it does not lead to ambiguity, would seem a
 > reasonable thing to ask of an interactive programming language."
+>
 > --- Kent Pitman, <http://www.nhplace.com/kent/Papers/Special-Forms.html>
 
 R has powerful tools for computing not only on values, but also on the actions that lead to those values. These tools are powerful and magical, and one of the most surprising features if you're coming from another programming language.  Take the following simple snippet of code that draws a sine curve:
@@ -17,44 +36,38 @@ sinx <- sin(x)
 plot(x, sinx, type = "l")
 ```
 
-Look at the labels on the axes! How did R know that the variable on the x axis was called `x` and the variable on the y axis was called `sinx`? In most programming languages, you can only access values of the arguments provided to functions, but in R you can also access the expression used to compute them. Combined with R's lazy evaluation mechanism this gives function authors considerable power to both access the underlying expression and do special things with it.
+Look at the labels on the axes! How did R know that the variable on the x axis was called `x` and the variable on the y axis was called `sinx`? In most programming languages, you can only access values of the function arguments. In R, you can also access the code used to compute them. This is a powerful feature as it allows you to capture code and evaluate it in special ways. Techniques based on this idea is called "metaprogramming" or "computing on the language", and in R is often used to implement non-standard evaluation. They are particularly useful for developing user-facing functions because they can dramatically reduce the amount of typing required to specify an action.
 
-Techniques based on these tools are generally called "computing on the language", and in R provide a set of tools with power equivalent to functional and object oriented programming.  This chapter will introduce you to the basic ideas of special evaluation, show you how they are used in base R, and how you can use them to create your own functions that save typing for interactive analysis. These tools are very useful for developing convenient user-facing functions because they can dramatically reduce the amount of typing required to specify an action.
+Non-standard evaluation is an extremely powerful tool, but it can also create code that is hard for others to understand and is substantially harder to program with. Before you use it, make sure that you have exhausted all other possibilities. You'll also learn about the downsides: because these tools work with expressions rather than values this increases ambiguity in the function call, and makes the function difficult to call from another function.
 
-Computing on the language is an extremely powerful tool, but it can also create code that is hard for others to understand and is substantially harder to program with. Before you use it, make sure that you have exhausted all other possibilities. You'll also learn about the downsides: because these tools work with expressions rather than values this increases ambiguity in the function call, and makes the function difficult to call from another function.
+In [Capturing expressions](#capturing-expressions) you'll learn how to capture unevaluated code using `substitute()`. Next, in [non-standard evaluation](#non-standard-evaluation) you'll learn how `subset()` combines `substitute()` with `eval()` to allow succinctly to select rows from  data frame. FIXME. In the following chapters ([expressions](#expressions) and [special environments](#special-environments)), expand on these ideas, discussing the underlying data structures and how you can manipulate them to create even more powerful tools.
 
-The following chapters ([expressions](#expressions) and [special environments](#special-environments)), expand on these ideas, discussing the underlying data structures and how you can understand and manipulate them to create new tools.
+### Prereqs
 
-In this chapter you'll learn:
-
-* how many functions such as `plot()` and `data.frame()` capture the names of the variable supplied to them, and the downsides of this technique.
-
-* Manipulate a data frame by referring to the variables:  `subset()`, `transform()`, `plyr::mutate()`, `plyr::arrange()`, `plyr::summarise()`, `with()`
-
-* Work around non-standard evaluation (like lattice functions) with `substitute`.
-
-* Capture an expression for later evaluation: ggplot2 and plyr
-
-* Use formulas to describe computations: `lm()` and the lattice package
+Before reading this chapter, make sure you're familiar with how environments work, as described in [Environments](#environments), and regular function scoping rules.  You'll also need to install the pryr package from my github account: `devtools::install_github("hadley/pryr")`. Some of the exercises require the plyr package.
 
 ## Capturing expressions
 
-The tool that makes non-standard evaluation possible in R is `substitute()`. It looks at a function argument, and instead of seeing the value, it looks to see how the value was computed:
+The tool that makes non-standard evaluation possible in R is `substitute()`. It looks at a function argument, and instead of seeing the value, it sees the code used to compute the value:
 
 ```{r}
 f <- function(x) {
   substitute(x)
 }
 f(1:10)
+
+x <- 10
 f(x)
-f(x + y ^ 2 / z + exp(a * sin(b)))
+
+y <- 13
+f(x + y ^ 2)
 ```
 
-We won't worry yet about exactly what sort of object `substitute()` returns (that's the topic of the [Expressions](#expressions) chapter), but we'll call it an expression.  (Note that it's not the same thing as returned by the `expression()` function: we'll call that an expression _object_.)
+We won't worry yet about exactly what `substitute()` returns (that's the topic of [the following chapter](#expressions)), but we'll call it an expression.
 
-`substitute()` works because function arguments in R are only evaluated when they are needed, not automatically when the function is called. This means that function arguments are not just a simple value, but instead store both the expression to compute the value and the environment in which to compute it. Together these two things are called a __promise__. Most of the time in R, you don't need to know anything about promises because the first time you access a promise it is seamlessly evaluated, returning its value.
+`substitute()` works because function arguments in R are a special object called a __promise__. A promise captures the expression needed compute the value and the environment in which to compute. You don't normally see promises, because the first time you access a promise it is seamlessly evaluated, returning its value.
 
-We need one more function if we want to understand how `plot()` and `data.frame()` work: `deparse()`. This function takes an expression and converts it to a character vector.
+One another funtion is usally paired with `substitute()`: `deparse()`. It takes the result of `substitute()` (an expression) and turns it to a character vector.
 
 ```{r}
 g <- function(x) deparse(substitute(x))
@@ -63,25 +76,6 @@ g(x)
 g(x + y ^ 2 / z + exp(a * sin(b)))
 ```
 
-There's one important caveat with `deparse()`: it can return a multiple strings if the input is long:
-
-```{r, eval = FALSE}
-g(a + b + c + d + e + f + g + h + i + j + k + l + m + n + o + p + q + r + s + t + u + v + w + x + y + z)
-```
-
-If you need a single string, you can work around this by using the `width.cutoff` argument (which has a maximum value of 500), or by joining the lines back together again with `paste()`.
-
-You might wonder why we couldn't use our original `f()` to compute `g()`.  Let's try it:
-
-```{r}
-g <- function(x) deparse(f(x))
-g(1:10)
-g(x)
-g(x + y ^ 2 / z + exp(a * sin(b)))
-```
-
-This is one of the downsides of functions that use `substitute()`: because they use the expression, not the value, of an argument, it becomes harder to call them from other functions.  We'll talk more about this problem and some remedies later on.
-
 There are a lot of functions in base R that use these ideas. Some use them to avoid quotes:
 
 ```{r, eval = FALSE}
@@ -89,7 +83,7 @@ library(ggplot2)
 library("ggplot2")
 ```
 
-Others use them to provide default labels. For example, `plot.default()` has code that basically does (the real code is more complicated because of the way base plotting methods work, but it's effectively the same):
+Other functions, like `plot.default()`, use them to provide default labels:
 
 ```{r, eval = FALSE}
 plot.default <- function(x, y = NULL, xlabel = NULL, ylabel = NULL, ...) {
@@ -100,9 +94,9 @@ plot.default <- function(x, y = NULL, xlabel = NULL, ylabel = NULL, ...) {
 }
 ```
 
-If a label is not set and the variable is present, then the expression used to generate the value of `x` is used as a default value for the label on the x axis.
+(The real code is a little more complicated because `plot()` uses `xy.coords()` to standardise the multiple ways that `x` and `y` can be supplied)
 
-`data.frame()` does a similar thing.  It automatically labels variables with the expression used to compute them:
+`data.frame()` labels variables with the expression used to compute them:
 
 ```{r}
 x <- 1:4
@@ -112,39 +106,76 @@ names(data.frame(x, y))
 
 This wouldn't be possible in most programming langauges because functions usually only see values (e.g. `1:4` and `c("a", "b", "c", "d")`), not the expressions that created them (`x` and `y`).
 
+### Exercises
+
+1.  There's one important feature of `deparse()` to be aware of when
+    programming with it: can return multiple strings if the input is long.
+    For example, calling `g()` as follows will a vector of length two.
+
+    ```{r}
+    g(a + b + c + d + e + f + g + h + i + j + k + l + m + n + o + p + q +
+      r + s + t + u + v + w + x + y + z)
+    ```
+
+    Why does this happen? Carefully read the documentation. Can you write a
+    wrapper around `deparse()` that always returns a single string?
+
+2.  Why does `as.Date.default()` use `substitute()` and `deparse()`?
+    Why does `pairwise.t.test()` use them?
+
+3.  `pairwise.t.test()` is written under the assumption that `deparse()`
+    always returns a length one character vector. Can you construct an
+    input that violates this expectation? What happens?
+
+4.  `f()`, defined above, just calls `substitute()`. Why can't we use it
+    to define `g()`? In other words, what will the following code return?
+    First make a prediction, then run the code and think about the results.
+
+    ```{r, eval = FALSE}
+    g <- function(x) deparse(f(x))
+    g(1:10)
+    g(x)
+    g(x + y ^ 2 / z + exp(a * sin(b)))
+    ```
+
+5.  The pattern `deparse(substitute(x))` is very common in base R code.
+    Why can't you write a function that does both things in one step?
+
 ## Non-standard evaluation in subset {#non-standard-evaluation}
 
-Just printing out the expression used to generate an argument value is useful, but we can do even more with the unevaluated function.  For example, take `subset()`. It's a useful interactive shortcut for subsetting data frames: instead of repeating the data frame you're working with again and again, you can save some typing:
+Just printing out the expression used to generate an argument value is useful, but we can do more with the unevaluated code. For example, take `subset()`. It's a useful interactive shortcut for subsetting data frames: instead of repeating the data frame you're working with again and again, you can save some typing:
 
-```{r, eval = FALSE}
-subset(mtcars, cyl == 4)
-# equivalent to:
-# mtcars[mtcars$cyl == 4, ]
+```{r}
+sample_df <- data.frame(a = 1:5, b = 5:1, c = c(5, 3, 1, 4, 1))
 
-subset(mtcars, vs == am)
+subset(sample_df, a >= 4)
 # equivalent to:
-# mtcars[mtcars$vs == mtcars$am, ]
+# sample_df[sample_df$a >= 4, ]
+
+subset(sample_df, b == c)
+# equivalent to:
+# sample_df[sample_df$b == sample_df$c, ]
 ```
 
-Subset is special because `vs == am` or `cyl == 4` aren't evaluated in the global environment: instead they're evaluated in the data frame. In other words, `subset()` implements different [scoping](#lexical-scoping) rules so instead of looking for those variables in the current environment, `subset()` looks in the specified data frame. This is called __non-standard evaluation__: you are deliberately breaking R's usual rules in order to do something special.
+Subset is special because the expressions `a >= 4` or `b == c` aren't evaluated in the global environment: instead they're evaluated in the data frame. In other words, `subset()` implements different scoping rules so instead of looking for those variables in the current environment, `subset()` looks in the specified data frame. This is called __non-standard evaluation__: you are deliberately breaking R's usual lexical-scoping rules in order to do something special.
 
-How does `subset()` work?  We've already seen how to capture the expression that represents an argument, rather than its value, so we just need to figure out how to evaluate that expression in the right context: i.e. `cyl` should be interpreted as `mtcars$cyl`. To do this we need `eval()`, which takes an expression and evaluates it in the specified environment.
+How does `subset()` work?  We've already seen how to capture the expression that computes an argument, rather than its result, so we just need to figure out how to evaluate that expression in the right context: i.e. `x` should be interpreted as `sample_df$x`. To do this we need `eval()`, which takes an expression and evaluates it in the specified environment.
 
-But before we can do that, we need to learn one more useful function: `quote()`. It's similar to `substitute()` but it always gives you back exactly the expression you entered. This makes it useful for interactive experimentation.
+But first we need to one more useful function: `quote()`. It's similar to `substitute()`, but it can be used outside of a function. This makes it useful for interactive experimentation.
 
 ```{r}
 quote(1:10)
 quote(x)
-quote(x + y ^ 2 / z + exp(a * sin(b)))
+quote(x + y ^ 2)
 ```
 
-Now let's experiment with `eval()`.  If you only provide one argument, it evaluates the expression in the current environment.  This makes `eval(quote(x))` exactly equivalent to typing `x`, regardless of what `x` is:
+Now let's experiment with `eval()`. If you only provide one argument, it evaluates the expression in the current environment.  This makes `eval(quote(x))` exactly equivalent to typing `x`, regardless of what `x` is:
 
 ```{r, error = TRUE}
 eval(quote(x <- 1))
 eval(quote(x))
 
-eval(quote(cyl))
+eval(quote(y))
 ```
 
 Note that `quote()` and `eval()` are basically opposites. In the example below, each `eval()` peels off one layer of quoting.
@@ -158,13 +189,7 @@ eval(quote(quote(2 + 2)))
 eval(eval(quote(quote(2 + 2))))
 ```
 
-What will this code return?
-
-```{r, eval = FALSE}
-eval(quote(eval(quote(eval(quote(2 + 2))))))
-```
-
-The second argument to `eval()` controls which environment the code is evaluated in:
+The second argument to `eval()` controls the environment in which the code is executed:
 
 ```{r}
 x <- 10
@@ -175,21 +200,32 @@ e$x <- 20
 eval(quote(x), e)
 ```
 
-Instead of an environment, the second argument can also be a list or a data frame.  This works because an environment is basically a set of mappings between names and values, in the same way as a list or data frame.
+Instead of an environment, the second argument can also be a list or a data frame.  This works because an environment is a set of mappings between names and values, just like lists and data frames.
 
 ```{r}
 eval(quote(x), list(x = 30))
 eval(quote(x), data.frame(x = 40))
 ```
 
-This is basically what we want for `subset()`:
+This is gives one part of `subset()`:
 
 ```{r}
-eval(quote(cyl == 4), mtcars)
-eval(quote(vs == am), mtcars)
+eval(quote(a >= 4), sample_df)
+eval(quote(b == c), sample_df)
 ```
 
-We can combine `eval()` and `substitute()` together to write `subset()`: we can capture the call representing the condition, evaluate it in the context of the data frame, and then use the result for subsetting:
+A common mistake when first starting to use `eval()` is to forget to quote the first argument. Compare the results in the following example:
+
+```{r, error = TRUE}
+a <- 10
+eval(quote(a), sample_df)
+eval(a, sample_df)
+
+eval(quote(b), sample_df)
+eval(b, sample_df)
+```
+
+We can use `eval()` and `substitute()` to write `subset()`. First we capture the call representing the condition, then evaluate it in the context of the data frame and use the result for subsetting:
 
 ```{r}
 subset2 <- function(x, condition) {
@@ -197,22 +233,42 @@ subset2 <- function(x, condition) {
   r <- eval(condition_call, x)
   x[r, ]
 }
-subset2(mtcars, cyl == 6)
-```
-
-When you first start using `eval()` it's easy to make mistakes.  Here's a common one: forgetting to quote the input:
-
-```{r, error = TRUE}
-eval(cyl, mtcars)
-# Carefully look at the difference to this error
-eval(quote(cyl), mtcars)
+subset2(sample_df, a >= 4)
 ```
 
 ### Exercises
 
-* The real subset function (`subset.data.frame()`) does two other things to the result. What are they?
+1.  Implement your own version of `quote()` using `substitute()`.
 
-* The other component of the real subset function is variable selection. It allows you to work with variable names like they are positions, so you can do things like `subset(mtcars, , -cyl)` to drop the cylinder variable, or `subset(mtcars, , disp:drat)` to select all the variables between `disp` and `drat`.   How does select work? I've made it easier to understand by extracting it out into its own function:
+2.  What will this code return?
+
+    ```{r, eval = FALSE}
+    eval(quote(eval(quote(eval(quote(2 + 2))))))
+    eval(eval(quote(eval(quote(eval(quote(2 + 2)))))))
+    quote(eval(quote(eval(quote(eval(quote(2 + 2)))))))
+    ```
+
+3.  `subset2()` has a bug if you use it with a single column data frame.
+    What should the following code return? How can you modify `subset2()`
+    so it returns the correct type of object?
+
+    ```{r}
+    sample_df2 <- data.frame(x = 1:10)
+    subset2(sample_df2, x > 8)
+    ```
+
+4.  What happens if you use `quote()` instead of `substitute()` inside of
+    `subset2()`?
+
+4.  The real subset function (`subset.data.frame()`) removes missing
+    values in the condition. Modify `subset2()` to also drop these rows.
+
+5.  The real subset function also performs variable selection. It allows you
+    to work with variable names like they are positions, so you can do things
+    like `subset(mtcars, , -cyl)` to drop the cylinder variable, or
+    `subset(mtcars, , disp:drat)` to select all the variables between `disp`
+    and `drat`.  How does it work? I've made it easier to
+    understand by extracting it out into its own function.
 
     ```{r, eval = FALSE}
     select <- function(df, vars) {
@@ -224,13 +280,12 @@ eval(quote(cyl), mtcars)
     select(mtcars, -cyl)
     ```
 
-* What does `evalq()` do? Use it to reduce the amount of typing for the examples above that use both `eval()` and `quote()`
-
-* Write an alternative to `<-` that never overrides an existing binding (refer back to [bindings](#binding) for more details). This would be useful if you are running a test script multiple times and only want to generate the test data once.
+6.  What does `evalq()` do? Use it to reduce the amount of typing for the
+    examples above that use both `eval()` and `quote()`
 
 ## Scoping issues
 
-While it certainly looks like our `subset2()` function works, whenever we're working with expressions instead of values, we need to test a little more carefully. For example, you might expect that the following uses of `subset2()` should all return the same value because each variable refers to the same value:
+It certainly looks like our `subset2()` function works. But since we're working with expressions instead of values, we need to test a little more carefully. For example, you might expect that the following uses of `subset2()` should all return the same value because each variable refers to the same value:
 
 ```{r, error = TRUE}
 y <- 4
@@ -238,18 +293,18 @@ x <- 4
 condition <- 4
 condition_call <- 4
 
-nrow(subset2(mtcars, cyl == 4))
-nrow(subset2(mtcars, cyl == y))
-nrow(subset2(mtcars, cyl == x))
-nrow(subset2(mtcars, cyl == condition))
-nrow(subset2(mtcars, cyl == condition_call))
+subset2(sample_df, a == 4)
+subset2(sample_df, a == y)
+subset2(sample_df, a == x)
+subset2(sample_df, a == condition)
+subset2(sample_df, a == condition_call)
 ```
 
-What's going wrong? You can get a hint from the variable names I've chosen: they are all variables defined inside `subset2()`. It seems like if `eval()` can't find the variable inside the data frame (it's second argument), it's looking in the function environment.  That's obviously not what we want, so we need some way to tell `eval()` to look somewhere else if it can't find the variables in the data frame.
+What's going wrong? You can get a hint from the variable names I've chosen: they are all variables defined inside `subset2()`. It seems like if `eval()` can't find the variable inside the data frame (its second argument), it's looking in the environment of `subset2()`.  That's obviously not what we want, so we need some way to tell `eval()` to look somewhere else if it can't find the variables in the data frame.
 
 The key is the third argument: `enclos`. This allows us to specify the parent (or enclosing) environment for objects that don't have one like lists and data frames (`enclos` is ignored if we pass in a real environment). The `enclos`ing environment is where any objects that aren't found in the data frame will be looked for. By default it uses the environment of the current function, which is not what we want.
 
-We want to look for `x` in the environment in which `subset` was called. In R terminology this is called the __parent frame__ and is accessed with `parent.frame()`. This is an example of [dynamic scope](http://en.wikipedia.org/wiki/Scope_%28programming%29#Dynamic_scoping). With this modification our function works:
+We want to look for `x` in the environment in which `subset2()` was called. In R terminology this is called the __parent frame__ and is accessed with `parent.frame()`. This is an example of [dynamic scope](http://en.wikipedia.org/wiki/Scope_%28programming%29#Dynamic_scoping) because the values come from where the function is called, not where it was defined. With this modification our function works:
 
 ```{r}
 subset2 <- function(x, condition) {
@@ -259,13 +314,13 @@ subset2 <- function(x, condition) {
 }
 
 x <- 4
-subset2(mtcars, cyl == x)
+subset2(sample_df, a == x)
 ```
 
-Using `enclos` is just a short cut for converting a list or data frame to an environment with the desired parent yourself. We can use the `list2env()` to turn a list into an environment and explicitly set the parent ourselves:
+Using `enclos` is just a shortcut for converting a list or data frame to an environmen. We can use the `list2env()` to turn a list into an environment and explicitly set the parent:
 
 ```{r}
-subset2 <- function(x, condition) {
+subset2a <- function(x, condition) {
   condition_call <- substitute(condition)
   env <- list2env(x, parent = parent.frame())
   r <- eval(condition_call, env)
@@ -273,28 +328,33 @@ subset2 <- function(x, condition) {
 }
 
 x <- 4
-subset2(mtcars, cyl == x)
+subset2(sample_df, a >= x)
 ```
 
 When evaluating code in a non-standard way, it's also a good idea to test your code works when run outside of the global environment:
 
 ```{r}
 f <- function() {
-  x <- 6
-  subset(mtcars, cyl == x)
+  x <- 5
+  subset(sample_df, a == x)
 }
 f()
 ```
 
-And indeed it now works.
-
 ### Exercises
 
-* `plyr::arrange()` works similarly to `subset()`, but instead of selecting rows, it reorders them. How does it work?  What does `substitute(order(...))` do?
+1.  What does `transform()` do? (Hint: read the documentation). How does it
+    work? (Hint: read the source code for `transform.data.frame`) What does
+    `substitute(list(...))` do? (Hint: create a function that does only that
+    and experiment with it).
 
-* What does `transform()` do? (Hint: read the documentation). How does it work? (Hint: read the source code for `transform.data.frame`) What does `substitute(list(...))` do? (Hint: create a function that does only that and experiment with it).
+2.  `plyr::arrange()` works similarly to `subset()`, but instead of selecting
+    rows, it reorders them. How does it work?  What does
+    `substitute(order(...))` do?
 
-* `plyr::mutate()` is similar to `transform()` but it applies the transformations sequentially so that transformation can refer to columns that were just created:
+3.  `plyr::mutate()` is similar to `transform()` but it applies the
+    transformations sequentially so that transformation can refer to columns
+    that were just created:
 
     ```{r, eval = FALSE}
     df <- data.frame(x = 1:5)
@@ -302,25 +362,19 @@ And indeed it now works.
     plyr::mutate(df, x2 = x * x, x3 = x2 * x)
     ```
 
-  How does mutate work? What's the key difference between mutate and transform?
+    How does mutate work? What's the key difference between `mutate()` and
+    `transform()`?
 
-* What does `with()` do? How does it work? (Read the source code for `with.default()`)
+4.  What does `with()` do? How does it work? Read the source code for
+    `with.default()`.
 
-* What does `within()` do? How does it work? (Read the source code for `within.data.frame()`). What makes the code so much more complicated than `with()`?
+5.  What does `within()` do? How does it work? Read the source code for
+    `within.data.frame()`. Why is the code so much more complicated than
+    `with()`?
 
 ## Calling from another function
 
-Typically, computing on the language is most useful for functions called directly by the user, not by other functions. While `subset` saves typing, it has one big disadvantage: it's now difficult to use non-interactively, e.g. from another function. For example, you might try using `subset()` from within a function that is given the name of a variable and it's desired value:
-
-```{r}
-colname <- "cyl"
-val <- 6
-
-subset2(mtcars, colname == val)
-# Zero rows because "cyl" != 6
-```
-
-Or imagine we want to create a function that randomly reorders a subset of the data. A nice way to write that function would be to write a function for random reordering and a function for subsetting (that we already have!) and combine the two together. Let's try that:
+Typically, computing on the language is most useful for functions called directly by the user, not by other functions. While `subset()` saves typing, it has one big disadvantage: it's now difficult to use non-interactively, from another function. For example, imagine we want to create a function that randomly reorders a subset of the data. A nice way to write that function would be to write a function for random reordering and a function for subsetting and combine the two together. Let's try that:
 
 ```{r}
 subset2 <- function(x, condition) {
@@ -336,24 +390,24 @@ subscramble <- function(x, condition) {
 }
 ```
 
-But when we run that we get:
+But it doesn't work:
 
 ```{r, error = TRUE}
-subscramble(mtcars, cyl == 4)
-# Error in eval(expr, envir, enclos) : object 'cyl' not found
+subscramble(sample_df, a >= 4)
+# Error in eval(expr, envir, enclos) : object 'a' not found
 traceback()
 #> 5: eval(expr, envir, enclos)
 #> 4: eval(condition_call, x, parent.frame()) at #3
 #> 3: subset2(x, condition) at #1
 #> 2: scramble(subset2(x, condition)) at #2
-#> 1: subscramble(mtcars, cyl == 4)
+#> 1: subscramble(sample_df, a >= 4)
 ```
 
 What's gone wrong? To figure it out, lets `debug()` subset and work through the code line-by-line:
 
 ```{r, eval = FALSE}
 debugonce(subset2)
-subscramble(mtcars, cyl == 4)
+subscramble(sample_df, a >= 4)
 #> debugging in: subset2(x, condition)
 #> debug at #1: {
 #>     condition_call <- substitute(condition)
@@ -365,25 +419,25 @@ n
 n
 #> debug at #3: r <- eval(condition_call, x, parent.frame())
 r <- eval(condition_call, x, parent.frame())
-#> Error in eval(expr, envir, enclos) : object 'cyl' not found
+#> Error in eval(expr, envir, enclos) : object 'a' not found
 condition_call
 #> condition
 eval(condition_call, x)
-#> Error in eval(expr, envir, enclos) : object 'cyl' not found
+#> Error in eval(expr, envir, enclos) : object 'a' not found
 Q
 ```
 
-Can you see what the problem is? `condition_call` contains the expression `condition` so when we try to evaluate that it evaluates `condition` which has the value `cyl == 4`. This can't be computed in the parent environment because it doesn't contain an object called `cyl`. If `cyl` is set in the global environment, far more confusing things can happen:
+Can you see what the problem is? `condition_call` contains the expression `condition` so when we try to evaluate that it evaluates `condition` which has the value `a >= 4`. This can't be computed in the parent environment because it doesn't contain an object called `a`. If `a` is set in the global environment, far more confusing things can happen:
 
 ```{r}
-cyl <- 4
-nrow(subscramble(mtcars, cyl == 4))
+a <- 4
+subscramble(sample_df, a == 4)
 
-cyl <- sample(10, 100, rep = T)
-subscramble(mtcars, cyl == 4)
+a <- c(1, 1, 4, 4, 4, 4)
+subscramble(sample_df, a >= 4)
 ```
 
-This is an example of the general tension between functions that are designed for interactive use, and functions that are safe to program with. A function that uses `substitute()` might save typing, but it's difficult to call from another function. As a developer you should also provide an alternative version that works when passed a quoted expression. For example, we could rewrite:
+This is an example of the general tension between functions that are designed for interactive use and functions that are safe to program with. A function that uses `substitute()` might save typing, but it's difficult to call from another function. As a developer you should always provide an escape hatch: an alternative version that uses standard evaluation. In this case, we could write a function that works when passed an already quoted expression:
 
 ```{r}
 subset2_q <- function(x, condition) {
@@ -403,25 +457,48 @@ subscramble <- function(x, condition) {
 
 I usually suffix these functions with `q` to indicate that they take a quoted call.  Most users won't need them so the name can be a little longer.
 
-You might wonder why the function couldn't do this automatically:
+Base R functions tend to use a different sort of escape hatch. They often have an arguments turns off non-standard evaluation. I don't think using an argument to change the behaviour of another argument is a good idea because it means you must completely and carefully read all of the function arguments to understand what one function argument means. Since you can't understand the effect of each argument in isolation, it's harder to predict what the function will do.
 
-```{r, eval = FALSE}
-subset3 <- function(x, condition) {
-  if (!is.call(condition)) {
-    condition <- substitute(condition)
-  }
-  r <- eval(condition, x)
-  x[r, ]
-}
-subset3(mtcars, quote(cyl == 4))
-subset3(mtcars, cyl == 4)
-```
+### Exercises
 
-But hopefully a little thought, or maybe some experimentation, will show why this doesn't work.
+1.  The following function attempts to figure out if the input is already
+    a quoted expression using `is.call()`. Why wont't it work?
+
+    ```{r}
+    is.call(123)
+    is.call(quote(a == b))
+
+    subset3 <- function(x, condition) {
+      if (!is.call(condition)) {
+        condition <- substitute(condition)
+      }
+      r <- eval(condition, x)
+      x[r, ]
+    }
+    ```
+
+2.  The following R functions all use non-standard evaluation. For each,
+    describe how it uses non-standard evaluation. Read the documentation
+    to determine the escape hatch: how do you force the function to use
+    standard evaluation rules?
+    * `rm()`
+    * `library()` and `require()`
+    * `substitute()`
+    * `data()`
+    * `data.frame()`
+    * `ls()`
+
+3.  Add an escape hatch to `plyr::mutate()` by splitting it into two functions.
+    One function should capture the unevaluated inputs, and the other should
+    take a data frame and list of expressions and perform the computation.
+
+4.  What's the escape hatch for `ggplot::aes()`? What about `plyr::.()`?
+    What do they have in common? What the advantages and disadvantages of
+    their differences?
 
 ## Substitute
 
-Following the examples above, whenever you write your own functions that use non-standard evaluation, you should always provide alternatives that others can use. But what happens if you want to call a function that uses non-standard evaluation and doesn't have a form that takes expressions? For example, imagine you want to create a lattice graphic given the names of two variables:
+Most functions that use non-standard evaluation provide an escape hatch. But what happens if you want to call a function that doesn't have one? For example, imagine you want to create a lattice graphic given the names of two variables:
 
 ```{r, error = TRUE}
 library(lattice)
@@ -432,9 +509,7 @@ y <- quote(disp)
 xyplot(x ~ y, data = mtcars)
 ```
 
-Again, we can turn to substitute and use it for another purpose:  modifying expressions.  So far we've just used `substitute()` to capture the unevaluated expression associated with arguments, but it can actually do much much more, and is very useful for manipulating expressions in general.
-
-Unfortunately `substitute()` has a "feature" that makes experimenting with it interactively a bit of a pain: it never does substitutions when run from the global environment, and just behaves like `quote()`:
+We can turn to `substitute()` and use it for another purpose: to modify an expression. Unfortunately `substitute()` has a feature that makes modifying calls interactively a bit of a pain: it never does substitutions when run from the global environment, and just behaves like `quote()`:
 
 ```{r, eval = FALSE}
 a <- 1
@@ -443,7 +518,7 @@ substitute(a + b + x)
 #> a + b + x
 ```
 
-But if we run it inside a function, `substitute()` substitutes what it can and leaves everything else the same:
+However, if you run it inside a function, `substitute()` substitutes what it can and leaves everything else as is:
 
 ```{r}
 f <- function() {
@@ -454,7 +529,7 @@ f <- function() {
 f()
 ```
 
-To make it easier to experiment with `substitute()`, `pryr` provides the `subs()` function.  It works exactly the same way as `substitute()` except it has a shorter name and if the second argument is the global environment it turns it into a list. Together, this makes it much easier to experiment with substitution:
+To make it easier to experiment with `substitute()`, `pryr` provides the `subs()` function.  It works exactly the same way as `substitute()` except it has a shorter name and it works in the global environment. Together, this makes it much easier to experiment with substitution:
 
 ```{r}
 library(pryr)
@@ -476,31 +551,33 @@ subs(a + b, list("+" = quote(f)))
 subs(a + b, list("+" = quote(`*`)))
 ```
 
-Note that it's quite possible to make nonsense commands with `substitute`:
+It's quite possible to make nonsense commands with `substitute()`:
 
 ```{r}
 subs(y <- y + 1, list(y = 1))
 ```
 
-And you can use substitute to insert any arbitrary object into an expression. This is technically ok, but often results in surprising and undesirable behaviour.  In the example below, the expression we create doesn't print correctly, but it returns the correct result when we evaluate it:
+You can also use `substitute()` to insert arbitrary objects into an expression, but this is a bad idea. In the example below, the expression doesn't print correctly, but it returns the correct result when we evaluate it:
 
 ```{r}
 df <- data.frame(x = 1)
-(x <- subs(class(df)))
+x <- subs(class(df))
+x
 eval(x)
 ```
 
-Formally, substitution takes place by examining each name in the expression. If the name refers to:
+Formally, substitution takes place by examining each object name in the expression. If the name is:
 
 * an ordinary variable, it's replaced by the value of the variable.
 
-* a promise, it's replaced by the expression associated with the promise.
+* a promise (a function argument), it's replaced by the expression associated
+  with the promise.
 
-* `...`, it's replaced by the contents of `...` (only if the substitution occurs in a function)
+* `...`, it's replaced by the contents of `...`
 
-Otherwise the name is left as is.
+Otherwise it's left as is.
 
-We can use this to create the right call to `xyplot`:
+We can use this to create the right call to `xyplot()`:
 
 ```{r}
 x <- quote(mpg)
@@ -528,34 +605,37 @@ xyplot3(mpg, disp, data = mtcars, col = "red", aspect = "xy")
 
 ### Non-standard evaluation in substitute
 
-One application of this idea is to make a version of `substitute` that evaluates its first argument (i.e. a version that uses standard evaluation). Note the following example:
+`substitute()` is itself a function that uses non-standard evaluation, but doesn't have an escape hatch. For example, we can't use `substitute()` if we already have an expression saved in a variable:
 
 ```{r}
 x <- quote(a + b)
 substitute(x, list(a = 1, b = 2))
 ```
 
-Instead we can use `pryr::substitute2`:
-
-```{r}
-x <- quote(a + b)
-substitute2(x, list(a = 1, b = 2))
-```
-
-The implementation of `substitute2` is short, but deep:
+`substitute()` has no built-in escape hatch, so we can use `substitute()` to create one:
 
 ```{r}
 substitute2 <- function(x, env) {
   call <- substitute(substitute(y, env), list(y = x))
   eval(call)
 }
+
+x <- quote(a + b)
+substitute2(x, list(a = 1, b = 2))
 ```
 
-Let's work through the example above: `substitute2(x, list(a = 1, b = 2))`.  It's a little tricky because of `substitute()`'s non-standard evaluation rules, we can't use the usual technique of working through the parentheses inside-out.
+The implementation of `substitute2` is short, but deep. Let's work through the example above: `substitute2(x, list(a = 1, b = 2))`.  It's a little tricky because of `substitute()`'s non-standard evaluation rules, we can't use the usual technique of working through the parentheses inside-out.
 
-1. First `substitute(substitute(y, env), list(y = x))` is evaluated. The first argument is specially evaluated in the environment containing only one item, the value of `x` with the name `y`. Because we've put `x` inside a list, it will be evaluated and the rules of substitute will replace `y` with it's value. This yields the expression `substitute(a + b, env)`
+1.  First `substitute(substitute(y, env), list(y = x))` is evaluated. The
+    first argument is specially evaluated in the environment containing only
+    one item, the value of `x` with the name `y`. Because we've put `x` inside
+    a list, it will be evaluated and the rules of substitute will replace `y`
+    with it's value. This yields the expression `substitute(a + b, env)`
 
-2. Next we evaluate that expression inside the current function. `substitute()` specially evaluates its first argument, and looks for name value pairs in `env`, which evaluates to `list(a = 1, b = 2)`. Those are both values (not promises) so the result will be `a + b`
+2.  Next we evaluate that expression inside the current function.
+    `substitute()` specially evaluates its first argument, and looks for name
+    value pairs in `env`, which evaluates to `list(a = 1, b = 2)`. Those are
+    both values (not promises) so the result will be `1 + 2`
 
 ### Capturing unevaluated ... {#capturing-dots}
 
@@ -569,20 +649,34 @@ dots <- function(...) {
 
 This uses the `alist()` function which simply captures all its arguments.  This function is the same as `pryr::dots()`, and pryr also provides `pryr::named_dots()`, which ensures all arguments are named, using the deparsed expressions as default names.
 
+### Exercises
+
+1.  Use `subs()` convert the LHS to the RHS for each of the following pairs:
+    * `a + b + c` -> `a * b * c`
+    * `f(g(a, b), c)` -> `(a + b) * c`
+    * `f(a < b, c, d)` -> `if (a < b) c else d`
+
+2.  For each of the following pairs of expressions, describe why you can't
+    use `substitute()` to convert between them.
+    * `a + b + c` -> `a + b * c`
+    * `f(a, b)` -> `f(a, b, c)`
+    * `f(a, b, c)` -> `f(a, b)`
+
+3.  How does `pryr::named_dots()` work?
+
 ## The downsides of non-standard evaluation
 
-There are usually two principles you can follow when modelling the evaluation of R code:
+A big downside of non-standard evaluation is code that uses it is no longer [referentially transparent](http://en.wikipedia.org/wiki/Referential_transparency_(computer_science)). A function is __referentially transparent__ if you can replace its arguments with their values and behaviour doesn't change. For example, if a function `f()` referentially transparent, and both `x` and `y` are 10, then both `f(x)` and `f(y)` evaluate to the same result, which will be same as `f(10)`.
 
-* If the underlying values are the same, the results will be the same. i.e. the three results will all be the same, regadless of what `f` is:
+FIXME
 
-    ```{r, eval = FALSE}
-    x <- 10; y <- 10
-    f(10); f(x); f(y)
-    ```
+There are many important referentially opaque functions:
 
-* You can model evaluation by working from the innermost parentheses to the outermost.
+* assignment
+* `read.csv()`, `source()`
+* `runif()`
 
-Non-standard evaluation can break both principles.  This makes the mental model needed to correctly predict the output much more complicated, so it's only worthwhile to do so if there is significant gain.
+These are fundamentally referentially opaque: there's no way to make them referentially transparent without fundamental changing the nature of R. However, `subset()` and functions like it are referntially opaque just to save on some typing.  This makes the mental model needed to correctly predict the output much more complicated, so it's only worthwhile to do so if there is significant gain.
 
 For example, `library()` and `require()` allow you to call them either with or without quotes, because internally they use `deparse(substitute(x))` plus a couple of tricks. That means that these two lines do exactly the same thing:
 
@@ -591,24 +685,16 @@ library(ggplot2)
 library("ggplot2")
 ```
 
-However, things start to get complicated if the variable has a value. What do you think the following lines of code will do?
+However, things start to get complicated if the variable is associated with a value. What package will this load?
 
 ```{r, eval = FALSE}
 ggplot2 <- "plyr"
 library(ggplot2)
 ```
 
-It loads ggplot2, not plyr.  If you want to load plyr (the value of the ggplot2 variable), you need to use an additional argument:
+There are a number of other R functions that work in this way: `ls()`, `rm()`, `data()`, `demo()`, `example()`, `vignette()`. To me, eliminating two keystrokes is not worth the loss of referential transparency, and I don't recommend you use `substitute()` for this purpose.
 
-```{r, eval = FALSE}
-library(ggplot2, character.only = TRUE)
-```
-
-Using an argument to change the behaviour of another argument is not a great idea because it means you must completely and carefully read all of the function arguments to understand what one function argument means. You can't understand the effect of each argument in isolation, and hence it's harder to reason about the results of a function call.
-
-There are a number of other R functions that use `substitute()` and `deparse()` in this way: `ls()`, `rm()`, `data()`, `demo()`, `example()`, `vignette()`. These all use non-standard evaluation and then have special ways of enforcing the usual rules. To me, eliminating two quotes is not worth the cognitive cost of non-standard evaluation, and I don't recommend you use `substitute()` for this purpose.
-
-One situtation where non-standard evaluation is more useful is `data.frame()`, which uses the input expressions to automatically name the output variables if not otherwise provided:
+One situtation where non-standard evaluation is more useful is `data.frame()`. It uses the input to automatically name the output variables if not explicitly supplied:
 
 ```{r}
 x <- 10
@@ -619,93 +705,17 @@ names(df)
 
 I think it is worthwhile in `data.frame()` because it eliminates a lot of redundancy in the common scenario when you're creating a data frame from existing variables, and importantly, it's easy to override this behaviour by supplying names for each variable.
 
-The code for `data.frame()` is rather complicated, but we can create our own simple version for lists to see how a function that does this might work. The key is `pryr::named_dots()`, a function which returns the unevaluated ... arguments, with default names. Then it's just a matter of arranging the evaluated results in a list:
+### Exercises
 
-```{r}
-list2 <- function(...) {
-  dots <- named_dots(...)
-  lapply(dots, eval, parent.frame())
-}
-x <- 1; y <- 2
-list2(x, y)
-list2(x, z = y)
-```
+1.  What does the following function do?
 
-## Applications
+    ```{r}
+    nl <- function(...) {
+      dots <- named_dots(...)
+      lapply(dots, eval, parent.frame())
+    }
+    ```
 
-To show how I've used some of these ideas in practice, the following two sections show applications of non-standard evaluation to plyr and ggplot2.
-
-### `plyr::.` and `ggplot2::aes`
-
-Both plyr and ggplot2 have ways of capturing what you want to do, and then performing that action later. ggplot2 uses the `aes()` to define a set of mappings between variables in your data and visual properties on your graphic. plyr uses the `.` function to capture the names (or more complicated expressions) of variables used to split a data frame into pieces. Let's look at the code:
-
-```{r}
-. <- function (..., .env = parent.frame()) {
-  structure(
-    as.list(match.call()[-1]),
-    env = .env,
-    class = "quoted"
-  )
-}
-
-aes <- function (x = NULL, y = NULL, ...) {
-  aes <- structure(
-    as.list(match.call()[-1]),
-    class = "uneval")
-  class(aes) <- "uneval"
-  ggplot2:::rename_aes(aes)
-}
-```
-
-Both functions were written when I didn't know so much about non-standard evaluation, and if I was to write them today, I'd use the `dots()` helper function I showed previously.  I'd also think more about the environment in which the results of `aes()` should be evaluated, and how that integrates with ggplot2's rules for aesthetic mapping inheritance. That's a bit murky at the moment and leads to confusion when creating complex graphics across multiple functions.
-
-ggplot2 and plyr provide slightly different ways to use standard evaluation so that you can refer to variables by reference. ggplot2 provides `aes_string()` which allows you to specify variables by the string representation of their name, and plyr uses S3 methods so that you can either supply an object of class quoted (as created with `.()`), or a regular character vector.
-
-### Plyr: summarise, mutate and arrange
-
-The plyr package also uses non-standard evaluation to complete the set of tools provided by the base `subset()` and `transform()` functions with `mutate()`, `summarise()` and `arrange()`. Each of these functions has the same interface: the first argument is a data frame and the subsequent arguments are evaluated in the context of that data frame (i.e. they look there first for variables, and then in the current environment) and they return a data frame.
-
-The following code shows the essence of how these four functions work:
-
-```{r}
-subset2 <- function(.data, subset) {
-  sub <- eval(substitute(subset), .data, parent.frame())
-  sub <- sub & !is.na(sub)
-
-  .data[sub, , drop = FALSE]
-}
-arrange2 <- function (.data, ...) {
-  ord <- eval(substitute(order(...)), .data, parent.frame())
-  .data[ord, , drop = FALSE]
-}
-
-mutate2 <- function(.data, ...) {
-  cols <- named_dots(...)
-  data_env <- eval_df(.data, parent.frame(), cols)
-
-  out_cols <- union(names(.data), names(cols))
-  quickdf(mget(out_cols, data_env))
-}
-summarise2 <- function (.data, ...) {
-  cols <- named_dots(...)
-  data_env <- eval_df(.data, parent.frame(), cols)
-
-  quickdf(mget(names(cols), env))
-}
-eval_df <- function(data, env, expr) {
-  data_env <- list2env(data, parent = env)
-
-  for(nm in names(exprs)) {
-    data_env[[nm]] <- eval(data_env[[nm]], env)
-  }
-  data_env
-}
-```
-
-You might be surprised to see the for loops in `eval_df`, but they are necessary because the computation of one variable might depend on the results of previous variables (this is the key difference between `mutate()` and `transform()`).
-
-Combined with a by operator (e.g. `ddply()`) these four functions allow you to express the majority of data manipulation operations. Then when you have a new problem, solving it becomes a matter of thinking about which operations you need to apply and in what order. The realm of possible actions has been shrunk to a manageable number.
-
-## Conclusion
-
-Now that you understand how our version of subset works, go back and read the source code for `subset.data.frame`, the base R version which does a little more. Other functions that work similarly are `with.default`, `within.data.frame`, `transform.data.frame`, and in the plyr package `.`, `arrange`, and `summarise`. Look at the source code for these functions and see if you can figure out how they work.
+2.  Instead of relying on promises, you can use formulas created with `~`
+    to explicitly capture an expression and its environment. What are the
+    advantages and disadvantages of making quoting explicit?
