@@ -4,9 +4,11 @@ layout: default
 ---
 
 # Metaprogramming
+```{r, echo = FALSE}
+library(pryr)
+```
 
 ```{r, echo = FALSE, eval = FALSE}
-library(pryr)
 library(stringr)
 special <- c("substitute", "eval", "match.call", "call", "as.call", "quote", "expression", "enquote", "bquote", "parse")
 funs <- lapply(special, function(x) {
@@ -25,7 +27,11 @@ ggplot2:::invert(funs)
 "%||%" <- function(a, b) if (is.null(a)) b else a
 ```
 
-In [non-standard evaluation](#nse), you learned the basics of accessing the expressions underlying computation in R, and evaluating them in new ways. In this chapter, you'll learn more about the underlying structure of expressions, and how you can compute on them directly.
+In [non-standard evaluation](#nse), you learned the basics of accessing the expressions underlying computation in R, and evaluating them in new ways. In this chapter, you'll learn how to manipulate expressions with code. In other words, you're going to learn how to write code with code, which is also called metaprogramming or computing on the language.
+
+FIXME: chapter preview.
+
+* more about the underlying structure of expressions, and how you can compute on them directly.
 
 * The structure of expressions (a tree made up of constants, names and calls) and how you can create and modify them directly
 
@@ -35,9 +41,27 @@ In [non-standard evaluation](#nse), you learned the basics of accessing the expr
 
 * Walk the code tree using recursive functions to understand how many of the functions in the codetools package work, and to you write your own functions that detect if a function uses logical abbreviations, list all assignments inside a function and understand how `bquote()` works.
 
+The techniques in this chapter give an alternative approach to writing code in strings with, `paste()`, `parse()` and `eval()`. Here
+
+```{r}
+adder1 <- function(x) function(y) y + x
+adder2 <- function(x) {
+  code <- paste0("function(y) y + ", x)
+  eval(parse(text = code))
+}
+adder3 <- function(x) {
+  make_function(alist(x = ), substitute(y + x, list(x = x)))
+}
+adder1(10)
+adder2(10)
+adder3(10)
+```
+
 It's generally a bad idea to create code by operating on its string representation: there is no guarantee that you'll create valid code.  Don't get me wrong: pasting strings together will often allow you to solve your problem in the least amount of time, but it may create subtle bugs that will take your users hours to track down. Learning more about the structure of the R language and the tools that allow you to modify it is an investment that will pay off by allowing you to make more robust code.
 
-Thoroughout this chapter we're going to use tools from the `pryr` package to help see what's going on.  If you don't already have it, install it by running `devtools::install_github("pryr")`.
+### Prereqs
+
+Thoroughout this chapter we're going to use tools from the `pryr` package to help see what's going on.  If you don't already have it, install it by running `devtools::install_github("hadley/pryr")`.
 
 ## Structure of expressions
 
@@ -49,139 +73,234 @@ y <- x * 10
 y
 ```
 
-We want to distinguish between the action of multiplying x by 10 and assigning the results to `y` versus the actual result (40).  In R, we can capture the action with `quote()`:
+We want to distinguish action of multiplying x by 10 and assigning the results to `y` from the actual result (40).  As you've seen in the previous chapter, we can capture the action with `quote()`:
 
 ```{r}
 z <- quote(y <- x * 10)
 z
 ```
 
-`quote()` gives us back an __expression__, an object that represents an action that can be performed by R. (Confusingly the `expression()` function produces expression lists, but since you'll never need to use that function we can safely ignore it).
+`quote()` gives us back an __expression__, an object that represents an action that can be performed by R.
 
-An expression is also called an abstract syntax tree (AST) because it represents the abstract structure of the code in a tree form. We can use `pryr::call_tree()` to see the hierarchy more clearly:
+(Unfortunately the `expression()` function does not produce an expression in this sense. Instead, it returns something more like a list of expressions, with some special behaviour for `eval()`. However, you never need to use `expression()`, and they definition of expression that follows match more closely to the use of the term in R, and in other programming languages. FIXME)
+
+An expression is also called an abstract syntax tree (AST) because it represents the abstract structure of the code in a tree form. We can use `pryr::ast()` to see the hierarchy more clearly:
 
 ```{r}
 library(pryr)
-call_tree(z)
+ast(y <- x * 10)
 ```
 
-There are three basic things you'll commonly see in a call tree: constants, names and calls.
+There are three components of an expression: constants, names and calls.
 
-* __constants__ are atomic vectors, like `"a"` or `10`. These appear as is.
-
-    ```{r}
-    call_tree(quote("a"))
-    call_tree(quote(1))
-    call_tree(quote(1L))
-    call_tree(quote(TRUE))
-    ```
-
-* __names__ which represent the name of a variable, not its value. (Names are also sometimes called symbols). These are prefixed with `'`
+* __constants__ are length one atomic vectors, like `"a"` or `10`.
+  `ast()` displays them as is.
 
     ```{r}
-    call_tree(quote(x))
-    call_tree(quote(mean))
-    call_tree(quote(`an unusual name`))
+    ast("a")
+    ast(1)
+    ast(1L)
+    ast(TRUE)
     ```
 
-* __calls__ represent the action of calling a function, not its result. These are suffixed with `()`.  The arguments to the function are listed below it, and can be constants, names or other calls.
+    Quoting an length one atomic vector returns it unchanged.
 
     ```{r}
-    call_tree(quote(f()))
-    call_tree(quote(f(1, 2)))
-    call_tree(quote(f(a, b)))
-    call_tree(quote(f(g(), h(1, a))))
+    is.atomic(quote(1))
+    identical(1, quote(1))
+    is.atomic(quote("test"))
+    identical("test", quote("test"))
     ```
 
-    As mentioned in [Functions](#functions), even things that don't look like function calls still follow this same hierarchical structure:
+* __names__ which the name of an object, not its value. Names are
+  also called symbols. Names are prefixed with `'` by `call_tree()`.
 
     ```{r}
-    call_tree(quote(a + b))
-    call_tree(quote(if (x > 1) x else 1/x))
-    call_tree(quote(function(x, y) {x * y}))
+    ast(x)
+    ast(mean)
+    ast(`an unusual name`)
     ```
 
-(In general, it's possible for any type of R object to live in a call tree, but these are the only three types you'll get from parsing R code. It's possible to put anything else inside an expression using the tools described below, but while technically correct, support is often patchy.)
+* __calls__ represent the action of calling a function. Calls are recursive
+  and work like lists: you can extract the `i`th element of call `x` with
+  `x[[i]]`, not its result. `ast()` prints `()` after calls, then lists
+  the arguments of call.
 
-Together, names and calls are sometimes called language objects, and can be tested for with `is.language()`. Note that `str()` is somewhat inconsistent with respect to this naming convention, describing names as symbols, and calls as a language objects:
+    ```{r}
+    ast(f())
+    ast(f(1, 2))
+    ast(f(a, b))
+    ast(f(g(), h(1, a)))
+    ```
+
+    As mentioned in [every operation is a function call]
+    (#every-operation-is-a-function-call), even things that don't look like
+    function calls still follow this same hierarchical structure:
+
+    ```{r}
+    ast(a + b)
+    ast(if (x > 1) x else 1/x)
+    ast(function(x, y) {x * y})
+    ```
+
+Collectively names and calls are sometimes called language objects, and can be tested for with `is.language()`. Note that `str()` is somewhat inconsistent with respect to this naming convention, describing names as symbols, and calls as a language objects:
 
 ```{r}
 str(quote(a))
 str(quote(a + b))
 ```
 
-Together, constants, names and calls define the structure of all R code. The following section provides more detail about each in turn.
+Together, constants, names and calls define the structure of all R code. The following two sections provides more detail about names and calls.
 
-### Constants
+### Exercises
 
-Quoting a single atomic vector gives it back to you:
+* `pryr::ast()` uses non-standard evaluation. What equivalent uses standard
+  evaluation?
 
-```{r}
-is.atomic(quote(1))
-identical(1, quote(1))
-is.atomic(quote("test"))
-identical("test", quote("test"))
-```
+* Why can't an expression containing an atomic vector of length greater than 1?
 
-But quoting a vector of values gives you something different because you always use a function to create a vector:
+* Of the six types of atomic vector, there's one type that can't appear in
+  an expression. Which one and why?
 
-```{r}
-identical(1:3, quote(1:3))
-identical(c(FALSE, TRUE), quote(c(FALSE, TRUE)))
-```
+* Complex number with only an imaginary component, e.g. `1i`, print like
+  `0 + 1i`. Does this really represent an addition?
 
-It's possible to use `substitute()` to directly insert a vector into a call tree, but use this with caution as you are creating a call that is not be generated during the normal operation of R.
+## Names
 
-```{r}
-y <- substitute(f(x), list(x = 1:3))
-is.atomic(y)
-```
-
-### Names
-
-As well as capturing names with `quote()`, it's also possible to convert strings to names. This is mostly useful when your function receives strings as input, as it's more typing than using `quote()`:
+As well as capturing names with `quote()`, you can convert a string to a name with `as.name()`. This is mostly useful when your function receives strings as input, as otherwise it's more typing than using `quote()`. Use `is.name()` to test if an object is a name.
 
 ```{r}
 as.name("name")
 identical(quote(name), as.name("name"))
 
-as.name("a b")
+is.name("name")
+is.name(quote(name))
+is.name(quote(f(name)))
 ```
 
-Note that the second example produces the name ` `a b` `: the backticks are the standard way of escape non-standard names in R. (And are explained more in [Functions](#functions))
+(Names are also called symbols. `as.symbol()` and `is.symbol()` are identical to `as.name()` and `is.name()`.)
 
-There's one special name that needs a little extra discussion: the name that represents missing values. You can get this from the formals of a function, or with `alist()`:
+Names that would otherwise be invalid are automatically surrounded by backticks:
 
 ```{r}
-formals(plot)$x
-alist(x =)[[1]]
+as.name("a b")
+as.name("if")
 ```
 
-It is basically a special name, that you can create by using `quote()` in a slightly unusual way:
+There's one special name that needs a little extra discussion: the empty name, used to represent missing arguments. This object behaves strangely. You can't bind it to a variable: if you do, it triggers an error about missing arguments. It's only useful if you want to programmatically create a function with missing arguments.
+
+```{r, error = TRUE}
+f <- function(x) 10
+formals(f)$x
+is.name(formals(f)$x)
+as.character(formals(f)$x)
+
+missing_arg <- formals(f)$x
+# Doesn't work!
+is.name(missing_arg)
+```
+
+To explicitly create it when needed, call `quote()` with a named argument:
 
 ```{r}
 quote(expr =)
 ```
 
-Note that this object behaves strangely, and is rarely useful, except when (as we'll see later) you want to try a function with arguments that don't have defaults.
+### Exercises
 
-```{r, error = TRUE}
-x <- quote(expr =)
+* You can use `formals()` to both get and set the arguments of a function.
+  Use `formals()` to modify the following function so that the default value
+  of `x` is missing and `y` is 10.
+
+    ```{r}
+    g <- function(x = 20, y) {
+      x + y
+    }
+    ```
+
+* Write an equivalent to `get()` using `as.name()` and `eval()`. Write an
+  equivalent to `assign()` using `as.name()`, `substitute()` and `eval()`.
+
+## Calls
+
+A call is very similar to a list. It has a has `length`, `'[[` and `[` methods. The length of a call minus 1 gives the number of arguments:
+
+```{r}
+x <- quote(read.csv("important.csv", row.names = FALSE))
+length(x) - 1
+```
+
+The first element of the call is usually the _name_ of a function:
+
+```{r}
+x[[1]]
+# read.csv
+is.name(x[[1]])
+```
+
+But it can also be another call:
+
+```{r}
+y <- quote(add(10)(20))
+y[[1]]
+is.call(y[[1]])
+```
+
+The remaining elements are the arguments. They can be extracted by name or by position.
+
+```{r}
+x$row.names
+x[[3]]
+
+names(x)
+```
+
+You can add, modify and delete elements of the call with the standard replacement operators, `$<-` and `[[<-`:
+
+```{r}
+y$row.names <- TRUE
+y$col.names <- FALSE
+y
+
+y[[2]] <- "less-important.csv"
+y[[4]] <- NULL
+y
+
+y$file <- quote(paste0(filename, ".csv"))
+y
+```
+
+Calls also support the `[` method, but use it with care: since the first element is the function to call, removing it is unlikely to create a useful call.
+
+```{r}
+x[-3] # remove the second argument
+x[-1] # remove the function name - but it's still a call!
 x
 ```
 
-### Calls
+If you want to get a list of the unevaluated arguments, explicitly convert it to a list:
 
-As well as capturing complete calls using `quote()`, modifying existing calls using `substitute()` you can also create calls from their constituent pieces using using `as.call()` or `call()`.
+```{r}
+# A list of the unevaluated arguments
+as.list(x[-1])
+```
 
-The first argument to `call()` is a string giving a function name, and the other arguments should be expressions that are used as the arguments to the call.
+### Creating a call from its components
+
+There are three ways to create calls:
+
+* by capturing as is with `quote()`,
+* by modifying an existing call with `substitute()`, or
+* by creating from constituent pieces with `as.call()` or `call()`.
+
+The first argument to `call()` is a string giving a function name. The other arguments are expressions that represent the arguments of the call.
 
 ```{r}
 call(":", 1, 10)
 call("mean", 1:10, na.rm = TRUE)
 ```
 
-`as.call()` is a minor variation that takes a list where the first argument is the _name_ of a function (not a string), and the subsequent values are the arguments.
+`as.call()` is a minor variation that takes a list. The first element is the _name_ of a function (not a string), and the subsequent elements are the arguments.
 
 ```{r}
 x_call <- quote(1:10)
@@ -189,7 +308,25 @@ mean_call <- as.call(list(quote(mean), x_call))
 identical(mean_call, quote(mean(1:10)))
 ```
 
-Note that the following two calls look the same, but are actually different:
+You can not use `call()` to call that has a call as the first component:
+
+```{r}
+call("adder(1)", 10)
+# But you can with as.call
+as.call(list(quote(adder(1)), 10))
+```
+
+### Non-standard components
+
+You can use `call()`, `substitute()` or `[[<-` to insert things into a call that don't belong. You can put any R object into an expression, but you shouldn't because the object will not print correctly:
+
+```{r}
+a <- call("class", data.frame(x = 10))
+a
+eval(a)
+```
+
+This usually happens by accident because you forget to quote the arguments. The following two calls look the same, but are actually different:
 
 ```{r}
 (a <- call("mean", 1:10))
@@ -199,84 +336,9 @@ call_tree(a)
 call_tree(b)
 ```
 
-In `a`, the first argument to mean is an integer vector containing the numbers 1 to 10, and in `b` the first argument is a call to `:`.  You can put any R object into an expression, but the printing of expression objects will not always show the difference.
+In `a`, the first argument to mean is an integer vector containing the numbers 1 to 10, and in `b` the first argument is a call to `:`.
 
-The key difference is where/when evaluation occurs:
-
-```{r, cache = TRUE}
-a <- call("print", Sys.time())
-b <- call("print", quote(Sys.time()))
-eval(a); Sys.sleep(1); eval(a)
-eval(b); Sys.sleep(1); eval(b)
-```
-
-The first element of a call doesn't have to be the name of a function, and instead can be a call that generates a function:
-
-```{r}
-(function(x) x + 1)(10)
-add <- function(y) function(x) x + y
-add(1)(10)
-
-# Note that you can't create this sort of call with call
-call("add(1)", 10)
-# But you can with as.call
-as.call(list(quote(add(1)), 10))
-```
-
-#### An interesting use of `call()`
-
-One interesting use of call lies inside the `mode<-` function which is an alternative way to change the mode of a vector. The important part of the function is extracted in the `mode2<-` function below.
-
-```{r}
-`mode2<-` <- function (x, value) {
-  mde <- paste0("as.", value)
-  eval(call(mde, x), parent.frame())
-}
-x <- 1:10
-mode2(x) <- "character"
-x
-```
-
-Another way to achieve the same goal would be find the function and then call it:
-
-```{r}
-`mode3<-` <- function(x, value) {
-  mde <- match.fun(paste0("as.", value))
-  mde(x)
-}
-x <- 1:10
-mode3(x) <- "character"
-x
-```
-
-Generally, I'd prefer `mode3<-` over `mode2<-` because it uses concepts familiar to more R programmers, and generally it's a good idea to use the simplest and most commonly understood techniques that solve a given problem.
-
-#### Extracting elements of a call
-
-When it comes to modifying calls, they behave almost exactly like lists: a call has `length`, `'[[` and `[` methods. The length of a call minus 1 gives the number of arguments:
-
-```{r}
-x <- quote(read.csv("important.csv", row.names = FALSE))
-length(x) - 1
-```
-
-The first element of the call is the _name_ of the function:
-
-```{r}
-x[[1]]
-# read.csv
-```
-
-The remaining elements are the arguments to the function, which can be extracted by name or by position.
-
-```{r}
-x$row.names
-x[[3]]
-
-names(x)
-```
-
-#### Standardising function calls
+### Standardising function calls
 
 Generally, extracting arguments by position is dangerous, because R's function calling semantics are so flexible. It's better to match by name, but all arguments might not be named. The solution to this problem is to use `match.call()`, which takes a function and a call as arguments:
 
@@ -307,74 +369,50 @@ standardise_call(y)
 standardise_call(quote(standardise_call(y)))
 ```
 
-#### Modifying a call
-
-You can add, modify and delete elements of the call with the standard replacement operators, `$<-` and `[[<-`:
-
-```{r}
-y$row.names <- TRUE
-y$col.names <- FALSE
-y
-
-y[[2]] <- "less-important.csv"
-y[[4]] <- NULL
-y
-
-y$file <- quote(paste0(filename, ".csv"))
-y
-```
-
-Calls also support the `[` method, but use it with care: since the first element is the function to call, removing it is unlikely to create a call that will evaluate without error.
-
-```{r}
-x[-3] # remove the second argument
-x[-1] # remove the function name - but it's still a call!
-x
-```
-
-If you want to get a list of the unevaluated arguments, explicitly convert it to a list:
-
-```{r}
-# A list of the unevaluated arguments
-as.list(x[-1])
-```
-
-We can use these ideas to create an easy way modify a call given a list.
-
-```{r}
-modify_call <- function(call, new_args) {
-  call <- standardise_call(call)
-  nms <- names(new_args) %||% rep("", length(new_args))
-
-  if (any(nms == "")) {
-    stop("All new arguments must be named", call. = FALSE)
-  }
-
-  for(nm in nms) {
-    call[[nm]] <- new_args[[nm]]
-  }
-  call
-}
-modify_call(quote(mean(x, na.rm = TRUE)), list(na.rm = NULL))
-modify_call(quote(mean(x, na.rm = TRUE)), list(na.rm = FALSE))
-modify_call(quote(mean(x, na.rm = TRUE)), list(x = quote(y)))
-```
-
 ### Exercises
 
-* If you create a functional, you may want it to accept the name of a function as a string or the name of a function. Use `substitute()` and what you know about expressions to create a function that returns a list containing the name of the function (where you can determine it) and the function itself.
+1.  Implement a pure R version of `do.call()`.
+
+2.  There is no existing base function that checks where an element is
+    a valid component of an expression (i.e. it's a constant, name or
+    call). Implement one using what you've learned so far.
+
+3.  Since `list()`s don't belong in expressions, we could create a more
+    convenient call construction function that automatically combined
+    lists into the argument. Implement `make_call()` so that the following
+    code works.
+
+    ```{r, eval = FALSE}
+    make_call(quote(mean), list(quote(x), na.rm = TRUE))
+    make_call(quote(mean), quote(x), na.rm = TRUE)
+    ```
+
+    Use the function you wrote for (2) to check that all inputs are valid.
+
+4.  How does `mode<-` work? How does it use `call()`?
+
+5.  Read the documentation for `pryr::modify_call()`. How do you think
+    it works? Read the source code.
+
+6.  When writing functionals, it's often useful to accept the name of a
+    function as a string, or the function object itself. Use `substitute()`
+    and what you know about expressions to create a function that returns a
+    list containing the name of the function (where you can determine it) and
+    the function itself. Your function should return the same results as the
+    following code:
 
     ```{r, eval = FALSE}
     fname(mean)
-    list(name = "mean", f = mean)
+    #> list(name = "mean", f = mean)
     fname("mean")
-    list(name = "mean", f = mean)
+    #> list(name = "mean", f = mean)
     fname(function(x) sum(x) / length(x))
-    list(name = "<anonymous>", f = function(x) sum(x) / length(x))
+    #> list(name = "<anonymous>", f = function(x) sum(x) / length(x))
     ```
 
-  Create a version that uses standard evaluation suitable for calling from another function (Hint: it should have two arguments: an expression and an environment).
-
+    Create a version that uses standard evaluation suitable for calling
+    from another function (Hint: it should have two arguments: an expression
+    and an environment).
 
 ## Parsing and deparsing
 
