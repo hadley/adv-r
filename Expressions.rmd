@@ -9,22 +9,10 @@ library(pryr)
 ```
 
 ```{r, echo = FALSE, eval = FALSE}
-library(stringr)
-special <- c("substitute", "eval", "match.call", "call", "as.call", "quote", "expression", "enquote", "bquote", "parse")
-funs <- lapply(special, function(x) {
-  match <- paste0("^", x, "$")
-  c(
-    find_funs("package:base", fun_calls, match),
-    find_funs("package:utils", fun_calls, match),
-    find_funs("package:stats", fun_calls, match)
-  )
-})
-names(funs) <- special
-ggplot2:::invert(funs)
-```
-
-```{r, echo = FALSE}
-"%||%" <- function(a, b) if (is.null(a)) b else a
+funs <- find_uses(
+  c("package:base", "package:utils", "package:stats"),
+  c("substitute", "call", "as.call", "quote", "expression", "enquote", "bquote")
+)
 ```
 
 In [non-standard evaluation](#nse), you learned the basics of accessing the expressions underlying computation in R, and evaluating them in new ways. In this chapter, you'll learn how to manipulate expressions with code. In other words, you're going to learn how to write code with code, which is also called metaprogramming or computing on the language.
@@ -87,7 +75,6 @@ z
 An expression is also called an abstract syntax tree (AST) because it represents the abstract structure of the code in a tree form. We can use `pryr::ast()` to see the hierarchy more clearly:
 
 ```{r}
-library(pryr)
 ast(y <- x * 10)
 ```
 
@@ -150,20 +137,28 @@ str(quote(a))
 str(quote(a + b))
 ```
 
+Using low-level functions, it is possible to create call trees that contain objects other can constants, calls and names. The following example uses `substitute()` to insert a data frame into a call tree. As you can see, this is a bad idea because the object does not print correctly. The printed call looks like it should return "list", but when evaluated, it returns the "data.frame".
+
+```{r}
+class_df <- substitute(class(df), list(df = data.frame(x = 10)))
+class_df
+eval(class_df)
+```
+
 Together, constants, names and calls define the structure of all R code. The following two sections provides more detail about names and calls.
 
 ### Exercises
 
-* `pryr::ast()` uses non-standard evaluation. What equivalent uses standard
-  evaluation?
+1.  `pryr::ast()` uses non-standard evaluation. What equivalent uses standard
+    evaluation?
 
-* Why can't an expression containing an atomic vector of length greater than 1?
+1.   Why can't an expression contain an atomic vector of length greater than 1?
 
-* Of the six types of atomic vector, there's one type that can't appear in
-  an expression. Which one and why?
+1.   One of the the six types of atomic vector can't appear in an
+     expression. Which one and why?
 
-* Complex number with only an imaginary component, e.g. `1i`, print like
-  `0 + 1i`. Does this really represent an addition?
+1.   Complex numbers with only an imaginary component, e.g. `1i`, print like
+     `0+1i`. Is this reprsented internally as addition?
 
 ## Names
 
@@ -220,10 +215,12 @@ quote(expr =)
 
 * Write an equivalent to `get()` using `as.name()` and `eval()`. Write an
   equivalent to `assign()` using `as.name()`, `substitute()` and `eval()`.
+  (Don't worry about the multiple ways of choosing an environment, assume
+  that the user supplies it explicitly.)
 
 ## Calls
 
-A call is very similar to a list. It has a has `length`, `'[[` and `[` methods. The length of a call minus 1 gives the number of arguments:
+A call is very similar to a list. It has a has `length`, `[[` and `[` methods, is recursive because calls can contain other calls. The length of a call minus 1 gives the number of arguments:
 
 ```{r}
 x <- quote(read.csv("important.csv", row.names = FALSE))
@@ -234,7 +231,6 @@ The first element of the call is usually the _name_ of a function:
 
 ```{r}
 x[[1]]
-# read.csv
 is.name(x[[1]])
 ```
 
@@ -249,8 +245,9 @@ is.call(y[[1]])
 The remaining elements are the arguments. They can be extracted by name or by position.
 
 ```{r}
+x <- quote(read.csv("important.csv", row.names = FALSE))
+x[[2]]
 x$row.names
-x[[3]]
 
 names(x)
 ```
@@ -258,6 +255,7 @@ names(x)
 You can add, modify and delete elements of the call with the standard replacement operators, `$<-` and `[[<-`:
 
 ```{r}
+y <- quote(read.csv("important.csv", row.names = FALSE))
 y$row.names <- TRUE
 y$col.names <- FALSE
 y
@@ -270,12 +268,28 @@ y$file <- quote(paste0(filename, ".csv"))
 y
 ```
 
-Calls also support the `[` method, but use it with care: since the first element is the function to call, removing it is unlikely to create a useful call.
+Calls also support the `[` method, but use it with care: removing the first element is unlikely to create a useful call.
 
 ```{r}
 x[-3] # remove the second argument
 x[-1] # remove the function name - but it's still a call!
 x
+```
+
+Generally, getting or setting arguments by position is dangerous, because R's function calling semantics are so flexible. For example, the following three calls all have the same effect, even though the values at each position are call:
+
+```{r}
+m1 <- quote(read.delim("data.txt", sep = "|"))
+m2 <- quote(read.delim(s = "|", "data.txt"))
+m3 <- quote(read.delim(file = "data.txt", , "|"))
+```
+
+To work around this problem, pryr provides `standardise_call()`. It uses the base `match.call()` function to convert all positional arguments to named arguments:
+
+```{r}
+standardise_call(m1)
+standardise_call(m2)
+standardise_call(m3)
 ```
 
 If you want to get a list of the unevaluated arguments, explicitly convert it to a list:
@@ -285,19 +299,11 @@ If you want to get a list of the unevaluated arguments, explicitly convert it to
 as.list(x[-1])
 ```
 
-### Creating a call from its components
-
-There are three ways to create calls:
-
-* by capturing as is with `quote()`,
-* by modifying an existing call with `substitute()`, or
-* by creating from constituent pieces with `as.call()` or `call()`.
-
-The first argument to `call()` is a string giving a function name. The other arguments are expressions that represent the arguments of the call.
+To create a new call from its components you can use `call()` or `as.call()`. The first argument to `call()` is a string giving a function name. The other arguments are expressions that represent the arguments of the call.
 
 ```{r}
 call(":", 1, 10)
-call("mean", 1:10, na.rm = TRUE)
+call("mean", quote(1:10), na.rm = TRUE)
 ```
 
 `as.call()` is a minor variation that takes a list. The first element is the _name_ of a function (not a string), and the subsequent elements are the arguments.
@@ -316,68 +322,34 @@ call("adder(1)", 10)
 as.call(list(quote(adder(1)), 10))
 ```
 
-### Non-standard components
-
-You can use `call()`, `substitute()` or `[[<-` to insert things into a call that don't belong. You can put any R object into an expression, but you shouldn't because the object will not print correctly:
-
-```{r}
-a <- call("class", data.frame(x = 10))
-a
-eval(a)
-```
-
-This usually happens by accident because you forget to quote the arguments. The following two calls look the same, but are actually different:
-
-```{r}
-(a <- call("mean", 1:10))
-(b <- call("mean", quote(1:10)))
-identical(a, b)
-call_tree(a)
-call_tree(b)
-```
-
-In `a`, the first argument to mean is an integer vector containing the numbers 1 to 10, and in `b` the first argument is a call to `:`.
-
-### Standardising function calls
-
-Generally, extracting arguments by position is dangerous, because R's function calling semantics are so flexible. It's better to match by name, but all arguments might not be named. The solution to this problem is to use `match.call()`, which takes a function and a call as arguments:
-
-```{r}
-y <- match.call(read.csv, x)
-names(y)
-
-# Or if you don't know in advance what the function is
-match.call(eval(x[[1]]), x)
-```
-
-This will be an important tool when we start manipulating existing function calls. If we don't use `match.call` we'll need a lot of extra code to deal with all the possible ways to call a function.
-
-We can wrap this up into a function. To figure out the definition of the associated function we evaluate the first component of the call, the name of the function. We need to specify an environment here, because the function might be different in different places. Whenever we provide an environment parameter, `parent.frame()` is usually a good default.
-
-Note the check for primitive functions: they don't have `formals()` and handle argument matching specially, so there's nothing we can do.
-
-```{r}
-standardise_call <- function(call, env = parent.frame()) {
-  stopifnot(is.call(call))
-  f <- eval(call[[1]], env)
-  if (is.primitive(f)) return(call)
-
-  match.call(f, call)
-}
-
-standardise_call(y)
-standardise_call(quote(standardise_call(y)))
-```
-
 ### Exercises
+
+1.  The following two calls look the same, but are actually different:
+
+    ```{r}
+    (a <- call("mean", 1:10))
+    (b <- call("mean", quote(1:10)))
+    identical(a, b)
+    ```
+
+    What's the different and which one should you prefer?
 
 1.  Implement a pure R version of `do.call()`.
 
-2.  There is no existing base function that checks where an element is
-    a valid component of an expression (i.e. it's a constant, name or
-    call). Implement one using what you've learned so far.
+1.  Concatenating a call and an expression with `c()` creates a list. Create
+    a method that yields a call with additional argument.
 
-3.  Since `list()`s don't belong in expressions, we could create a more
+    ```{r, eval = FALSE}
+    concat(quote(f), a = 1, b = quote(mean(a)))
+    #> f(a = 1, b = mean(a))
+    ```
+
+1.  There is no existing base function that checks where an element is
+    a valid component of an expression (i.e. it's a constant, name or
+    call). Implement one using what you've learned so far. Use it to
+    make your `concat()` function safer.
+
+1.  Since `list()`s don't belong in expressions, we could create a more
     convenient call construction function that automatically combined
     lists into the argument. Implement `make_call()` so that the following
     code works.
@@ -387,14 +359,26 @@ standardise_call(quote(standardise_call(y)))
     make_call(quote(mean), quote(x), na.rm = TRUE)
     ```
 
-    Use the function you wrote for (2) to check that all inputs are valid.
+    Use the function you wrote above to check that all inputs are valid.
 
-4.  How does `mode<-` work? How does it use `call()`?
+1.  How does `mode<-` work? How does it use `call()`?
 
-5.  Read the documentation for `pryr::modify_call()`. How do you think
+1.  Read the source for `pryr::standardise_call()`. How does it work?
+    Why is `is.primitive()` needed?
+
+1.  `standardise_call()` doesn't work so well for the following calls.
+    Why?
+
+    ```{r}
+    standardise_call(quote(mean(1:10, na.rm = TRUE)))
+    standardise_call(quote(mean(n = T, 1:10)))
+    standardise_call(quote(mean(x = 1:10, , TRUE)))
+    ```
+
+1.  Read the documentation for `pryr::modify_call()`. How do you think
     it works? Read the source code.
 
-6.  When writing functionals, it's often useful to accept the name of a
+1.  When writing functionals, it's often useful to accept the name of a
     function as a string, or the function object itself. Use `substitute()`
     and what you know about expressions to create a function that returns a
     list containing the name of the function (where you can determine it) and
@@ -414,187 +398,15 @@ standardise_call(quote(standardise_call(y)))
     from another function (Hint: it should have two arguments: an expression
     and an environment).
 
-## Parsing and deparsing
-
-You can convert quoted calls back and forth between text with `parse()` and `deparse()`. You've seen `deparse()` already it: takes an expression and returns a character vector. `parse()` does the opposite: it takes a character vector and returns a list of expressions, also known as an expression object or expression list.
-
-Note that because the primary use of `parse()` is parsing files of code on disk, the first argument is a file path, and if you have the code in a character vector, you need to use the `text` argument.
-
-```{r}
-z <- quote(y <- x * 10)
-deparse(z)
-
-parse(text = deparse(z))
-```
-
-`deparse()` returns a character vector with an entry for each line, and by default it will try to make lines that are around 60 characters long. If you want a single string be sure to `paste()` it back together, and read the other options in the documentation.
-
-`parse()` can't return just a single expression, because there might be many top-level calls in an file. So instead it returns expression objects, or expression lists. You should never need to create expression objects yourself, and all you need to know about them is that they're a list of calls:
-
-```{r}
-exp <- parse(text = c("x <- 4\ny <- x * 10"))
-length(exp)
-exp[[1]]
-is.call(exp[[1]])
-call_tree(exp)
-```
-
-It's not possible for `parse()` and `deparse()` be completely symmetric. See the help for `deparse()` for more details.
-
-### Sourcing files from disk
-
-With `parse()` and `eval()` you can write your own simple version of `source()`. We read in the file on disk, `parse()` it and then `eval()` each component in the specified environment. This version defaults to a new environment, so it doesn't affect existing objects. `source()` invisibly returns the result of the last expression in the file, so `simple_source()` does the same.
-
-```{r}
-simple_source <- function(file, envir = new.env()) {
-  stopifnot(file.exists(file))
-  stopifnot(is.environment(envir))
-
-  lines <- readLines(file, warn = FALSE)
-  exprs <- parse(text = lines, n = -1)
-
-  n <- length(exprs)
-  if (n == 0L) return(invisible())
-
-  for (i in seq_len(n - 1)) {
-    eval(exprs[i], envir)
-  }
-  invisible(eval(exprs[n], envir))
-}
-```
-
-The real `source()` is considerably more complicated because it preserves the underlying source code, can `echo` input and output, and has many additional settings to control behaviour.
-
-### Exercises
-
-## Capturing the current call
-
-You may want to capture the expression that caused the current function to run. There are two ways to do this:
-
-* `sys.call()` captures exactly what the user typed.
-
-* `match.call()` uses R's regular argument matching rules and converts everything to full name matching. This is usually easier to work with because you know that the call will always have the same structure.
-
-The following example illustrates the difference:
-
-```{r}
-f <- function(abc = 1, def = 2, ghi = 3, ...) {
-  list(sys = sys.call(), match = match.call())
-}
-f(d = 2, 2)
-```
-
-#### A cautionary tale: `write.csv`
-
-`write.csv()` is a base R function where call manipulation is used in a suboptimal manner. It captures the call to `write.csv()` and mangles it to instead call `write.table()`:
-
-```{r}
-write.csv <- function (...) {
-  Call <- match.call(expand.dots = TRUE)
-  for (argname in c("append", "col.names", "sep", "dec", "qmethod")) {
-    if (!is.null(Call[[argname]])) {
-      warning(gettextf("attempt to set '%s' ignored", argname), domain = NA)
-    }
-  }
-  rn <- eval.parent(Call$row.names)
-  Call$append <- NULL
-  Call$col.names <- if (is.logical(rn) && !rn) TRUE else NA
-  Call$sep <- ","
-  Call$dec <- "."
-  Call$qmethod <- "double"
-  Call[[1L]] <- as.name("write.table")
-  eval.parent(Call)
-}
-```
-
-We could write a function that behaves identically using regular function call semantics:
-
-```{r}
-write.csv <- function(x, file = "", sep = ",", qmethod = "double", ...) {
-  write.table(x = x, file = file, sep = sep, qmethod = qmethod, ...)
-}
-```
-
-This makes the function much easier to understand: it's just calling `write.table` with different defaults.  This also fixes a subtle bug in the original `write.csv`: `write.csv(mtcars, row = FALSE)` raises an error, but `write.csv(mtcars, row.names = FALSE)` does not. There's also no reason that `write.csv` shouldn't accept the `append` argument. Generally, you always want to use the simplest tool that will solve a problem - that makes it more likely that others will understand your code. Again, there's no point in using non-standard evaluation unless there's a big win: non-standard evaluation will make your function behave much less predictably.
-
-### Other uses of call capturing
-
-Many modelling functions use `match.call()` to capture the call used to create the model. (This is one reason that creating lists of models using a function doesn't give the greatest output). This makes it possible to `update()` a model, modifying only a few components of the original model (but note that it doesn't preserve any of the computation, even if possible). Here's a quick example of `update()` in case you haven't used it before:
-
-```{r}
-mod <- lm(mpg ~ wt, data = mtcars)
-update(mod, formula = . ~ . + cyl)
-update(mod, subset = cyl == 4)
-```
-
-How does `update()` work?  We can rewrite it using some of the tools (`dots()` and `modify_call()`) we've developed in this chapter to make it easier to see exactly what's going on.  Once you've figured out what's going on here, you might want to read the source code for `update.default()` and see if you can how each component corresponds between the two versions.
-
-```{r}
-update_call <- function (object, formula., ...) {
-  call <- object$call
-
-  # Use a update.formula to deal with formulas like . ~ .
-  if (!missing(formula.)) {
-    call$formula <- update.formula(formula(object), formula.)
-  }
-
-  modify_call(call, dots(...))
-}
-update2 <- function(object, formula., ...) {
-  call <- update_call(object, formula., ...)
-  eval(call, parent.frame())
-}
-update_call(mod, formula = . ~ . + cyl)
-update_call(mod, subset = cyl == 4)
-```
-
-The original `update()` has an `evaluate` argument that controls whether the function returns a call or the result, but I think it's good principle for a function to only return one type of object (not different types depending on the arguments) so I split it into two.
-
-This rewrite also allows us to fix a small bug in update: it evaluates the call in the global environment, when really we want to re-evaluate it in the environment where the model was originally fit. This happens to be stored in the formula (called terms) so we can easily extract it.
-
-```{r, error = TRUE}
-f <- function() {
-  n <- 3
-  lm(mpg ~ poly(wt, n), data = mtcars)
-}
-mod <- f()
-update(mod, data = mtcars)
-
-update2 <- function(object, formula., ...) {
-  call <- update_call(object, formula., ...)
-  eval(call, environment(object$terms))
-}
-update2(mod, data = mtcars)
-```
-
-This is a good principle to remember: if you want to later replay the code you've captured using `match.call()` you really also need to capture the environment in which the code was evaluated.
-
-There is a big potential downside: because you've captured that environment and saved it in an object, that environment will hang around and any objects in the environment will also hang around. That can have big implications for memory use.  For example, in the following code, the big `x` and `y` objects will be captured in memory.
-
-```{r}
-f <- function() {
-  x <- runif(1e7)
-  y <- runif(1e7)
-
-  lm(mpg ~ wt, data = mtcars)
-}
-mod <- f()
-object.size(environment(mod$terms)$x)
-```
-
-### Exercises
-
-* Create a version of lm that doesn't do any special evaluation: all arguments should be quoted expressions, and it should construct a call to `lm` that preserves all information.
-
 ## Creating a function
 
-There's one function call that's so special it's worth devoting a little extra attention to: the `function` function that creates functions. This is one place we'll see pairlists (the object type that predated lists in R's history).  The arguments of a function are stored as a pairlist: for our purposes we can treat a pairlist like a list, but we need to remember to cast arguments with `as.pairlist()`.
+There's one function call that's so special it's worth devoting a little extra attention to: the `function()` function that creates functions. This is one place we'll see "dotted" pair lists (the object type that predated lists in R's history).  The arguments of a function are stored as a pairlist: for our purposes we can treat a pairlist like a list, but we need to remember to cast arguments with `as.pairlist()`.
 
 ```{r}
 str(quote(function(x, y = 1) x + y)[[2]])
 ````
 
-Building up a function by hand is also useful when you can't use a closure because you don't know in advance what the arguments will be. We'll use `pryr::make_function` to build up a function from its component pieces: an argument list, a quoted body (the code to run) and the environment in which it is defined (which defaults to the.current environment). The function itself is fairly simple: it creates a call to `function` with the args and body as arguments, and then evaluates that in the correct environment so that the function has the right scope.
+Building up a function by hand is also useful when you can't use a closure because you don't know in advance what the arguments will be. We'll use `pryr::make_function()` to build up a function from its component pieces: an argument list, a quoted body (the code to run) and the environment in which it is defined (which defaults to the.current environment). The function itself is fairly simple: it creates a call to `function` with the args and body as arguments, and then evaluates that in the correct environment so that the function has the right scope.
 
 ```{r, eval = FALSE}
 make_function <- function(args, body, env = parent.frame()) {
@@ -660,6 +472,196 @@ unenclose(f(1))
 * Modify `unenclose` so it only substitutes in atomic vectors, not more complicated objects. (Hint: think about what the parent environment should be.)
 
 * Read the documentation and source for `pryr::partial()` - what does it do? How does it work?
+
+
+## Parsing and deparsing
+
+You can convert quoted calls back and forth between text with `parse()` and `deparse()`. You've seen `deparse()` already it: takes an expression and returns a character vector. `parse()` does the opposite: it takes a character vector and returns an expression object.
+
+Since the primary use of `parse()` is parsing files of code on disk, the first argument is a file path, and if you have the code in a character vector, you need to use the `text` argument.
+
+```{r}
+z <- quote(y <- x * 10)
+deparse(z)
+
+parse(text = deparse(z))
+```
+
+`parse()` can't return just a single expression, because there might be many top-level calls in an file. So instead it returns expression objects, or expression lists. You should never need to create expression objects yourself, and all you need to know about them is that they work like a list of expressions:
+
+```{r}
+exp <- parse(text = c("x <- 4\nx\n5"))
+length(exp)
+exp[[1]]
+exp[[2]]
+exp[[3]]
+call_tree(exp)
+```
+
+You can create expression objects by hand with `expression()`, but I don't recommend it. You already know how to work with lists of expressions, you don't need a special class for them.
+
+With `parse()` and `eval()` you can write your own simple version of `source()`. We read in the file on disk, `parse()` it and then `eval()` each component in the specified environment. This version defaults to a new environment, so it doesn't affect existing objects. `source()` invisibly returns the result of the last expression in the file, so `simple_source()` does the same.
+
+```{r}
+simple_source <- function(file, envir = new.env()) {
+  stopifnot(file.exists(file))
+  stopifnot(is.environment(envir))
+
+  lines <- readLines(file, warn = FALSE)
+  exprs <- parse(text = lines, n = -1)
+
+  n <- length(exprs)
+  if (n == 0L) return(invisible())
+
+  for (i in seq_len(n - 1)) {
+    eval(exprs[i], envir)
+  }
+  invisible(eval(exprs[n], envir))
+}
+```
+
+The real `source()` is considerably more complicated because it can `echo` input and output, and has many additional settings to control behaviour.
+
+### Exercises
+
+1.  What are the differences between `quote()` and `expression()`?
+
+1.  Read the help for `deparse()` and construct a call that `deparse()`
+    and `parse()` do not operate symmetrically on.
+
+1.  Modify `simple_source()` so it returns the result of _every_ expression,
+    not just the last one.
+
+1.  What's the difference between `source()` and `sys.source()`?
+
+1.  The most important missing feature in `simple_source()` is that it
+    drops source referencs. Read the source code for `sys.source()` and
+    the help for `srcfilecopy()`, then modify `simple_source()` to maintain
+    source references. You can test your code by sourcing a function that
+    contains a comment. If successful, when you look at the function,
+    you'll see the comment, not just the source code.
+
+## Capturing the current call
+
+```{r, eval = FALSE, echo = FALSE}
+std <- c("package:base", "package:utils", "package:stats")
+names(find_uses(std, "sys.call"))
+names(find_uses(std, "match.call"))
+```
+
+You may want to capture the expression that caused the current function to run. There are two ways to do this:
+
+* `sys.call()` captures exactly what the user typed.
+
+* `match.call()` makes a call that only uses named matching. It's like
+  automatically calling `pryr::standardise_call()` on the result of
+  `sys.call()`
+
+The following example illustrates the difference:
+
+```{r}
+f <- function(abc = 1, def = 2, ghi = 3, ...) {
+  list(sys = sys.call(), match = match.call())
+}
+f(d = 2, 2)
+```
+
+Many modelling functions use `match.call()` to capture the call used to create the model. This makes it possible to `update()` a model, re-fitting the model after modifying a selection of the original parameters. Here's an example of `update()` in action:
+
+```{r}
+mod <- lm(mpg ~ wt, data = mtcars)
+update(mod, formula = . ~ . + cyl)
+update(mod, subset = cyl == 4)
+```
+
+How does `update()` work?  We can rewrite it using some tools from pryr to focus on the essense of the algorithm.
+
+```{r}
+update_call <- function (object, formula., ...) {
+  call <- object$call
+
+  # Use update.formula to deal with formulas like . ~ .
+  if (!missing(formula.)) {
+    call$formula <- update.formula(formula(object), formula.)
+  }
+
+  modify_call(call, dots(...))
+}
+update_model <- function(object, formula., ...) {
+  call <- update_call(object, formula., ...)
+  eval(call, parent.frame())
+}
+update_model(mod, formula = . ~ . + cyl)
+update_model(mod, subset = cyl == 4)
+```
+
+The original `update()` has an `evaluate` argument that controls whether the function returns a call or the result, but I think it's good principle for a function to only return one type of object, not different types depending on the arguments.
+
+This rewrite also allows us to fix a small bug in `update()`: it evaluates the call in the global environment, when really we want to re-evaluate it in the environment where the model was originally fit. This happens to be stored in the formula.
+
+```{r, error = TRUE}
+f <- function() {
+  n <- 3
+  lm(mpg ~ poly(wt, n), data = mtcars)
+}
+mod <- f()
+update(mod, data = mtcars)
+
+update_model <- function(object, formula., ...) {
+  call <- update_call(object, formula., ...)
+  eval(call, environment(formula(object)))
+}
+update_model(mod, data = mtcars)
+```
+
+This is a good principle to remember: if you want to replay code captured with `match.call()`, you also need to capture the environment in which it was evaluated. There is a downside to this. Capturing the environment will capture any large objects in that environment, preventing their memory from being freed. This topic is explored in more detail in [garbage collection](#garbarge-collection).
+
+Some base R functions use `match.call()` where it's not necessary.  For example,  `write.csv()` captures call to `write.csv()` and mangles it to call `write.table()`:
+
+```{r}
+write.csv <- function (...) {
+  Call <- match.call(expand.dots = TRUE)
+  for (argname in c("append", "col.names", "sep", "dec", "qmethod")) {
+    if (!is.null(Call[[argname]])) {
+      warning(gettextf("attempt to set '%s' ignored", argname), domain = NA)
+    }
+  }
+  rn <- eval.parent(Call$row.names)
+  Call$append <- NULL
+  Call$col.names <- if (is.logical(rn) && !rn) TRUE else NA
+  Call$sep <- ","
+  Call$dec <- "."
+  Call$qmethod <- "double"
+  Call[[1L]] <- as.name("write.table")
+  eval.parent(Call)
+}
+```
+
+We could implement `write.csv()` using regular function call semantics:
+
+```{r}
+write.csv <- function(x, file = "", sep = ",", qmethod = "double", ...) {
+  write.table(x = x, file = file, sep = sep, qmethod = qmethod, ...)
+}
+```
+
+This is much easier to understand: it's just calling `write.table()` with different defaults. This also fixes a subtle bug in the original `write.csv()`: `write.csv(mtcars, row = FALSE)` raises an error, but `write.csv(mtcars, row.names = FALSE)` does not. There's also no reason that `write.csv` shouldn't accept the `append` argument. Generally, you always want to use the simplest tool that will solve a problem - that makes it more likely that others will understand your code.
+
+### Exercises
+
+1.  Compare `update_model()` with `upate.default()`. What's different?
+    What's the same?
+
+1.  Why doesn't `write.csv(mtcars, "mtcars.csv", row = FALSE)` work?
+    What property of argument matching has the original author forgotten
+    about?
+
+1.  Rewrite `update.formula()` using only R code.
+
+1.  Sometimes it's necessary to figure out the function that called the
+    function that called the current function (i.e. the grandparent, not
+    the parent). How can you use `sys.call()` or `match.call()` to find
+    this function?
 
 ## Walking the call tree with recursive functions
 
