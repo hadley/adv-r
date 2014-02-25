@@ -17,6 +17,8 @@ funs <- find_uses(
 
 In [non-standard evaluation](#nse), you learned the basics of accessing the expressions underlying computation in R, and evaluating them in new ways. In this chapter, you'll learn how to manipulate expressions with code. In other words, you're going to learn how to write code with code, which is also called metaprogramming or computing on the language.
 
+
+
 FIXME: chapter preview.
 
 * more about the underlying structure of expressions, and how you can compute on them directly.
@@ -74,9 +76,7 @@ z <- quote(y <- x * 10)
 z
 ```
 
-`quote()` gives us back an __expression__, an object that represents an action that can be performed by R.
-
-(Unfortunately the `expression()` function does not produce an expression in this sense. Instead, it returns something more like a list of expressions, with some special behaviour for `eval()`. However, you never need to use `expression()`, and they definition of expression that follows match more closely to the use of the term in R, and in other programming languages. FIXME)
+`quote()` gives us back an __expression__, an object that represents an action that can be performed by R. (Unfortunately `expression()` does not return an expression in this sense. Instead it returns something more like a list of expressions. See [parsing and deparsing](#parsing-and-deparsing) for more details.)
 
 An expression is also called an abstract syntax tree (AST) because it represents the abstract structure of the code in a tree form. We can use `pryr::ast()` to see the hierarchy more clearly:
 
@@ -84,7 +84,7 @@ An expression is also called an abstract syntax tree (AST) because it represents
 ast(y <- x * 10)
 ```
 
-There are two components of an expression: constants, names, calls and pairlists.
+There are four possible components of an expression: constants, names, calls and pairlists.
 
 * __constants__ are length one atomic vectors, like `"a"` or `10`.
   `ast()` displays them as is.
@@ -96,7 +96,7 @@ There are two components of an expression: constants, names, calls and pairlists
     ast(TRUE)
     ```
 
-    Quoting an length one atomic vector returns it unchanged.
+    Note that quoting an length one atomic vector returns it unchanged:
 
     ```{r}
     is.atomic(quote(1))
@@ -105,8 +105,8 @@ There are two components of an expression: constants, names, calls and pairlists
     identical("test", quote("test"))
     ```
 
-* __names__ which the name of an object, not its value. Names are
-  also called symbols. Names are prefixed with `'` by `call_tree()`.
+* __names__ which represent the name of an object, not its value. Names are
+  also called symbols. Names are prefixed with a backtick by `call_tree()`.
 
     ```{r}
     ast(x)
@@ -115,9 +115,9 @@ There are two components of an expression: constants, names, calls and pairlists
     ```
 
 * __calls__ represent the action of calling a function. Calls are recursive
-  and work like lists: you can extract the `i`th element of call `x` with
-  `x[[i]]`, not its result. `ast()` prints `()` at the top-level of call,
-  then lists the children.
+  like lists. The first element is the function to call, and the remaining
+  elements are the arguments to that function. `ast()` prints `()` at the
+  top-level of call, then lists the children.
 
     ```{r}
     ast(f())
@@ -128,17 +128,16 @@ There are two components of an expression: constants, names, calls and pairlists
 
     As mentioned in [every operation is a function call]
     (#every-operation-is-a-function-call), even things that don't look like
-    function calls still follow this same hierarchical structure:
+    function calls still follow this hierarchical structure:
 
     ```{r}
     ast(a + b)
     ast(if (x > 1) x else 1/x)
     ```
 
-* __pairlists__, short for dotted pair lists, and a holdover of R's past.
-  They are only used in one place: for the formal arguments of a function.
-  `ast()` prints `[]` at the top-level of a pairlist. Arguments are always
-  named.
+* __pairlists__, short for dotted pair lists, are a holdover of R's past.
+  They are only used in one place: the formal arguments of a function.
+  `ast()` prints `[]` at the top-level of a pairlist.
 
     ```{r}
     ast(function(x = 1, y) x)
@@ -152,7 +151,7 @@ str(quote(a))
 str(quote(a + b))
 ```
 
-Using low-level functions, it is possible to create call trees that contain objects other than constants, names, calls and pairlists. The following example uses `substitute()` to insert a data frame into a call tree. As you can see, this is a bad idea because the object does not print correctly. The printed call looks like it should return "list", but when evaluated, it returns the "data.frame".
+Using low-level functions, it is possible to create call trees that contain objects other than constants, names, calls and pairlists. The following example uses `substitute()` to insert a data frame into a call tree. This is a bad idea because the object does not print correctly. While the printed call looks like it should return "list", when evaluated, it returns "data.frame".
 
 ```{r}
 class_df <- substitute(class(df), list(df = data.frame(x = 10)))
@@ -160,7 +159,7 @@ class_df
 eval(class_df)
 ```
 
-Together, constants, names, calls and pairlists define the structure of all R code. The following two sections provides more detail about names, calls and pairlists.
+Together these four components define the structure of all R code. The following two sections provides more detail about names, calls and pairlists.
 
 ### Exercises
 
@@ -427,103 +426,6 @@ as.call(list(quote(adder(1)), 10))
     `if()` call. Which are components are required? What are the arguments to
     the `for()` and `while()` calls?
 
-## Pairlists
-
-Pairlists are a holdover from R's past. They behave identically to a list, but have a different internal representation (as a linked list rather than a vector). Pairlists have been replaced by the list everywhere except in function arguments.
-
-The only place you need to care about the difference between a list and a pairlist is if you're going to construct functions by hand by constructing and then evaluating a call to `function()`. The following functions allows you to construct a function from its component pieces: a list of formal arguments, a body and an environment. It uses `as.pairlist()` to convert a list to a pairlist.
-
-```{r, eval = FALSE}
-make_function <- function(args, body, env = parent.frame()) {
-  args <- as.pairlist(args)
-
-  eval(call("function", args, body), env)
-}
-```
-
-This function is also available in pryr, where it does a little extra checking. `make_function()` is best used in conjunction with `alist()`, the **a**rgument list function. `alist()` doesn't evaluate its arguments, meaning that `alist(x = a)` shorthand for `list(x = quote(a))`.
-
-```{r}
-add <- make_function(alist(a = 1, b = 2), quote(a + b))
-add(1)
-add(1, 2)
-
-# To have an argument with no default, you still need an explicit =
-make_function(alist(a = , b = a), quote(a + b))
-# To take ... as an argument put it on the LHS of =
-make_function(alist(a = , b = , ... =), quote(a + b))
-```
-
-`make_function()` has one advantage over using closures to construct functions: you can easily read the source code. For example:
-
-```{r}
-adder <- function(x) {
-  make_function(alist(y =), substitute({x + y}), parent.frame())
-}
-adder(10)
-```
-
-One useful application of `make_function()` is in anaphoric functions.
-
-### Anaphoric functions
-
-An [anaphoric](http://en.wikipedia.org/wiki/Anaphora_(linguistics)) function is a function that uses a pronoun. This is easiest to understand with an example using an example from base R: `curve()`.`curve()` draws a plot of the specified function, but interestingly you don't need to use a function, you just supply an expression that uses `x`:
-
-```{r curve-demo}
-curve(x ^ 2)
-curve(sin(x), to = 3 * pi)
-curve(sin(exp(4 * x)), n = 1000)
-```
-
-Here `x` plays the role of pronoun: it doesn't represent a single concrete value, but instead is a placeholder that varies over the range of the plot. Note that it doesn't matter what the value of `x` outside of `curve()` is: the expression is evaluated in a special environment where `x` has a special meaning:
-
-```{r curve}
-x <- 1
-curve(sin(exp(4 * x)), n = 1000)
-```
-
-One way to implement a function like `curve()` would be to use `make_function()`:
-
-```{r curve2}
-curve2 <- function(expr, xlim = c(0, 1), n = 100, env = parent.frame()) {
-  f <- make_function(alist(x = ), substitute(expr), env)
-
-  x <- seq(xlim[1], xlim[2], length = n)
-  y <- f(x)
-
-  plot(x, y, type = "l", ylab = deparse(substitute(expr)))
-}
-curve2(sin(exp(4 * x)), n = 1000)
-```
-
-If you're interesting in learning more, there are some good resources for anaphoric functions in [Arc](http://www.arcfn.com/doc/anaphoric.html) (a list like language), [Perl](http://www.perlmonks.org/index.pl?node_id=666047) and [Clojure](http://amalloy.hubpages.com/hub/Unhygenic-anaphoric-Clojure-macros-for-fun-and-profit).
-
-### Exercises
-
-1.  What's the difference between `alist(a)` and `alist(a = )`?
-    Think about both the input and the output.
-
-1.  Read the documentation and source for `pryr::partial()`. What does it
-    do? How does it work?
-
-1.  Read the document and source for `pryr::unenclose()`. What does it do and
-    how does it work? Why does it use `substitute2()` and not `substitute()`?
-    Can you modify modify `unenclose` so it only substitutes in atomic vectors,
-    not more complicated objects?
-
-1.  The actual implementation of `curve()` looks more like
-
-    ```{r curve3}
-    curve3 <- function(expr, xlim = c(0, 1), n = 100, env = parent.frame()) {
-      env2 <- new.env(parent = env)
-      env2$x <- seq(xlim[1], xlim[2], length = n)
-
-      y <- eval(substitute(expr), env2)
-      plot(env2$x, y, type = "l", ylab = deparse(substitute(expr)))
-    }
-    ```
-
-    How does this approach differ from `curve2()` defined above?
 
 ## Capturing the current call
 
@@ -533,9 +435,7 @@ names(find_uses(std, "sys.call"))
 names(find_uses(std, "match.call"))
 ```
 
-FIXME: need segue
-
-You may want to capture the expression that caused the current function to run. There are two ways to do this:
+Many base R functions use the current call: expression that caused the current function to be run. There are two ways to do this:
 
 * `sys.call()` captures exactly what the user typed.
 
@@ -552,7 +452,7 @@ f <- function(abc = 1, def = 2, ghi = 3, ...) {
 f(d = 2, 2)
 ```
 
-Many modelling functions use `match.call()` to capture the call used to create the model. This makes it possible to `update()` a model, re-fitting the model after modifying a selection of the original parameters. Here's an example of `update()` in action:
+Modelling functions often use `match.call()` to capture the call used to create the model. This makes it possible to `update()` a model, re-fitting the model after modifying a selection of the original parameters. Here's an example of `update()` in action:
 
 ```{r}
 mod <- lm(mpg ~ wt, data = mtcars)
@@ -560,7 +460,7 @@ update(mod, formula = . ~ . + cyl)
 update(mod, subset = cyl == 4)
 ```
 
-How does `update()` work?  We can rewrite it using some tools from pryr to focus on the essense of the algorithm.
+How does `update()` work? We can rewrite it using some tools from pryr to focus on the essense of the algorithm.
 
 ```{r}
 update_call <- function (object, formula., ...) {
@@ -602,7 +502,7 @@ update_model(mod, data = mtcars)
 
 This is a good principle to remember: if you want to replay code captured with `match.call()`, you also need to capture the environment in which it was evaluated. There is a downside to this. Capturing the environment will capture any large objects in that environment, preventing their memory from being freed. This topic is explored in more detail in [garbage collection](#garbarge-collection).
 
-Some base R functions use `match.call()` where it's not necessary.  For example,  `write.csv()` captures call to `write.csv()` and mangles it to call `write.table()`:
+Some base R functions use `match.call()` where it's not necessary.  For example,  `write.csv()` captures call to `write.csv()` and mangles it to call `write.table()` instead:
 
 ```{r}
 write.csv <- function (...) {
@@ -649,11 +549,98 @@ This is much easier to understand: it's just calling `write.table()` with differ
     the parent). How can you use `sys.call()` or `match.call()` to find
     this function?
 
+## Pairlists
+
+Pairlists are a holdover from R's past. They behave identically to a list, but have a different internal representation (as a linked list rather than a vector). Pairlists have been replaced by lists everywhere except in function arguments.
+
+The only place you need to care about the difference between a list and a pairlist is if you're going to construct functions by hand. The following function allows you to construct a function from its component pieces: a list of formal arguments, a body and an environment. It uses `as.pairlist()` to convert a list to the pairlist that `function()` needs.
+
+```{r, eval = FALSE}
+make_function <- function(args, body, env = parent.frame()) {
+  args <- as.pairlist(args)
+
+  eval(call("function", args, body), env)
+}
+```
+
+This function is also available in pryr, where it does a little extra checking. `make_function()` is best used in conjunction with `alist()`, the **a**rgument list function. `alist()` doesn't evaluate its arguments, meaning that `alist(x = a)` shorthand for `list(x = quote(a))`.
+
+```{r}
+add <- make_function(alist(a = 1, b = 2), quote(a + b))
+add(1)
+add(1, 2)
+
+# To have an argument with no default, you still need an explicit =
+make_function(alist(a = , b = a), quote(a + b))
+# To take ... as an argument put it on the LHS of =
+make_function(alist(a = , b = , ... =), quote(a + b))
+```
+
+`make_function()` has one advantage over using closures to construct functions: you can easily read the source code. For example:
+
+```{r}
+adder <- function(x) {
+  make_function(alist(y =), substitute({x + y}), parent.frame())
+}
+adder(10)
+```
+
+One useful application of `make_function()` is in functions like `curve()`. `curve()` allow you to draw a plot of function in the mathematical sense without creating an explicit R function:
+
+```{r curve-demo}
+curve(x ^ 2)
+curve(sin(x), to = 3 * pi)
+curve(sin(exp(4 * x)), n = 1000)
+```
+
+Here `x` plays the role of pronoun: it doesn't represent a single concrete value, but instead is a placeholder that varies over the range of the plot. It doesn't matter what the value of `x` outside of `curve()` is: the expression is evaluated in a special environment where `x` has a special meaning.
+
+One way to implement `curve()` would be to use `make_function()`:
+
+```{r curve2}
+curve2 <- function(expr, xlim = c(0, 1), n = 100, env = parent.frame()) {
+  f <- make_function(alist(x = ), substitute(expr), env)
+
+  x <- seq(xlim[1], xlim[2], length = n)
+  y <- f(x)
+
+  plot(x, y, type = "l", ylab = deparse(substitute(expr)))
+}
+curve2(sin(exp(4 * x)), n = 1000)
+```
+
+Functions that use a pronoun like `curve()` a sometimes called [anaphoric](http://en.wikipedia.org/wiki/Anaphora_(linguistics)) functions. They are are more common in [Arc](http://www.arcfn.com/doc/anaphoric.html) (a list like language), [Perl](http://www.perlmonks.org/index.pl?node_id=666047) and [Clojure](http://amalloy.hubpages.com/hub/Unhygenic-anaphoric-Clojure-macros-for-fun-and-profit).
+
+### Exercises
+
+1.  What's the difference between `alist(a)` and `alist(a = )`?
+    Think about both the input and the output.
+
+1.  Read the documentation and source for `pryr::partial()`. What does it
+    do? How does it work?
+
+1.  Read the document and source for `pryr::unenclose()`. What does it do and
+    how does it work? Why does it use `substitute2()` and not `substitute()`?
+    Can you modify modify `unenclose` so it only substitutes in atomic vectors,
+    not more complicated objects?
+
+1.  The actual implementation of `curve()` looks more like
+
+    ```{r curve3}
+    curve3 <- function(expr, xlim = c(0, 1), n = 100, env = parent.frame()) {
+      env2 <- new.env(parent = env)
+      env2$x <- seq(xlim[1], xlim[2], length = n)
+
+      y <- eval(substitute(expr), env2)
+      plot(env2$x, y, type = "l", ylab = deparse(substitute(expr)))
+    }
+    ```
+
+    How does this approach differ from `curve2()` defined above?
+
 ## Parsing and deparsing
 
-FIXME: need segue
-
-You can convert quoted calls back and forth between text with `parse()` and `deparse()`. You've seen `deparse()` already it: takes an expression and returns a character vector. `parse()` does the opposite: it takes a character vector and returns an expression object.
+While it's always better to work with call trees, sometime you don't get a call tree, but instead get a string that represents some code. You can convert calls back and forth between text with `parse()` and `deparse()`. You've seen `deparse()` already it: takes an expression and returns a character vector. `parse()` does the opposite: it takes a character vector and returns an expression object.
 
 Since the primary use of `parse()` is parsing files of code on disk, the first argument is a file path, and if you have the code in a character vector, you need to use the `text` argument.
 
@@ -664,15 +651,20 @@ deparse(z)
 parse(text = deparse(z))
 ```
 
-`parse()` can't return just a single expression, because there might be many top-level calls in an file. Instead it return an expression object, which is effectively a list of expressions:
+`parse()` can't return just a single expression because there might be many top-level calls in an file. Instead it return an expression object, which is effectively a list of expressions:
 
 ```{r}
-exp <- parse(text = c("x <- 4\nx\n5"))
+exp <- parse(text = c("
+  x <- 4
+  x
+  5
+"))
 length(exp)
+typeof(exp)
+
 exp[[1]]
 exp[[2]]
 exp[[3]]
-call_tree(exp)
 ```
 
 You can create expression objects by hand with `expression()`, but I don't recommend it. You already know how to work with lists of expressions, so you don't need a new object type to deal with them.
@@ -685,7 +677,7 @@ simple_source <- function(file, envir = new.env()) {
   stopifnot(is.environment(envir))
 
   lines <- readLines(file, warn = FALSE)
-  exprs <- parse(text = lines, n = -1)
+  exprs <- parse(text = lines)
 
   n <- length(exprs)
   if (n == 0L) return(invisible())
@@ -711,8 +703,8 @@ The real `source()` is considerably more complicated because it can `echo` input
 1.  Modify `simple_source()` so it returns the result of _every_ expression,
     not just the last one.
 
-1.  The most important missing feature in `simple_source()` is that it
-    drops source referencs. Read the source code for `sys.source()` and
+1.  The most important missing feature in `simple_source()` is that the
+    lack of source referencs. Read the source code for `sys.source()` and
     the help for `srcfilecopy()`, then modify `simple_source()` to maintain
     source references. You can test your code by sourcing a function that
     contains a comment. If successful, when you look at the function,
