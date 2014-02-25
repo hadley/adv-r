@@ -379,6 +379,78 @@ f()
     `within.data.frame()`. Why is the code so much more complex than
     `with()`?
 
+## Evaluating code in a new environment
+
+Another useful application of these ideas in base R is `local()`. In the process of performing a data analysis, you may create variables that are necessary because they help break a complicated sequence of steps down in to easily digestible chunks, but are not needed afterwards. For example, in the following example, we might only want to keep the value of x:
+
+```{r}
+a <- 10
+b <- 30
+x <- a + b
+rm(a)
+rm(b)
+```
+
+It's useful to be able to store only the final result, preventing the intermediate results from cluttering your workspace.  We already know one way of doing this, using a function:
+
+```{r}
+x <- (function() {
+  a <- 10
+  b <- 30
+  a + b
+})()
+```
+
+(In JavaScript this is called the immediately invoked function expression (IIFE), and is used extensively in modern JavaScript to encapsulate different JavaScript libraries)
+
+R provides another tool that's a little more concise, the `local()` function:
+
+```{r, error = TRUE}
+x <- local({
+  a <- 10
+  b <- 30
+  a + b
+})
+a
+b
+```
+
+The idea of local is to create a new environment (inheriting from the current environment) and run the code in that. The essence of `local()` is captured in this code:
+
+```{r}
+local2 <- function(expr) {
+  envir <- new.env(parent = parent.frame())
+  eval(substitute(expr), envir)
+}
+
+a <- 100
+local2({
+  b <- a + sample(10, 1)
+  my_get <<- function() b
+})
+my_get()
+
+```
+
+The real `local()` code is considerably more complicated because it adds a parameter to specify the environment. I don't think this is necessary because if you have an explicit environment parameter, then you can already evaluate code in that environment with `evalq()`.
+
+### Exercises
+
+1.  `local()` is hard to understand because it is very concise and uses
+    some sutble features of evaluation (including non-standard evaluation
+    of both arguments). Confirm that the following function works the same
+    as `local()` and then explain how it works.
+
+    ```{r}
+    local3 <- function(expr, envir = new.env()) {
+      call <- substitute(eval(quote(expr), envir))
+      env <- parent.frame()
+
+      eval(call, env)
+    }
+    ```
+
+
 ## Calling from another function
 
 Typically, computing on the language is most useful for functions called directly by the user, not by other functions. For example `subset()` saves typing but it's difficult to use non-interactively, from another function. For example, imagine we want a function that randomly reorders a subset of the data. A nice way to write that function would be to compose a function for random reordering and a function for subsetting. Let's try that:
