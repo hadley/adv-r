@@ -17,7 +17,7 @@ rmd2md <- function(in_path, out_path = tempfile(fileext = ".md"), out = "mdhtml"
     warning = collapse,
     error = collapse,
     message = collapse,
-    plot = if (out == "mdhtml") plot_html else hook_plot_tex,
+    plot = if (out == "mdhtml") plot_html else plot_tex,
     chunk = function(x, options) {
       ind <- options$indent
       x <- add_trailing_nl(x)
@@ -40,7 +40,7 @@ rmd2md <- function(in_path, out_path = tempfile(fileext = ".md"), out = "mdhtml"
     cache.path = "_cache/",
     fig.width = 4,
     fig.height = 4,
-    dev = "png"
+    dev = if (out == "mdhtml") "png" else "pdf"
   )
 
   knit(in_path, out_path, quiet = TRUE)
@@ -159,3 +159,9 @@ plot_html <- function(x, options) {
   paste0("\n```\n", img, "\n```R\n")
 }
 
+plot_tex <- function(x, options) {
+  if (identical(options$out.width, "\\maxwidth")) {
+    options$out.width <- "0.5 \\linewidth"
+  }
+  paste0("\n```\n", hook_plot_tex(x, options), "\n```R\n")
+}
