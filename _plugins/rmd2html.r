@@ -2,13 +2,13 @@ library(stringr)
 
 # Convert an Rmd file to a md file using custom knitr options
 # Inputs and outputs paths
-rmd2md <- function(in_path, out_path = tempfile(fileext = ".md")) {
+rmd2md <- function(in_path, out_path = tempfile(fileext = ".md"), out = "mdhtml") {
   library(knitr)
 
   collapse <- function(x, options) {
     paste0("\n", paste0(x, collapse = "\n"))
   }
-  
+
   set.seed(1410)
   options(digits = 3)
   knit_hooks$set(
@@ -17,15 +17,7 @@ rmd2md <- function(in_path, out_path = tempfile(fileext = ".md")) {
     warning = collapse,
     error = collapse,
     message = collapse,
-    plot = function(x, options) {
-      url <- paste(x, collapse = ".")
-      img <- paste0("<img src='", url, "' ",  
-        "width = '", options$out.width %||% 300, "' ", 
-        "height = '", options$out.height %||% 300, "' ", 
-        "title = '", options$caption, "' ", 
-        "/>\n")
-      paste0("\n```\n", img, "\n```R\n")
-    },
+    plot = if (out == "mdhtml") plot_html else hook_plot_tex,
     chunk = function(x, options) {
       ind <- options$indent
       x <- add_trailing_nl(x)
@@ -33,7 +25,7 @@ rmd2md <- function(in_path, out_path = tempfile(fileext = ".md")) {
 
       if (is.null(ind)) return(out)
       paste0(ind, gsub("\n", paste0("\n", ind), out))
-    }, 
+    },
     document = function(x, options) {
       x <- paste0(x, collapse = "\n")
       # Remove empty blocks (produced by plot)
@@ -50,7 +42,7 @@ rmd2md <- function(in_path, out_path = tempfile(fileext = ".md")) {
     fig.height = 4,
     dev = "png"
   )
-  
+
   knit(in_path, out_path, quiet = TRUE)
   out_path
 }
@@ -59,12 +51,12 @@ rmd2md <- function(in_path, out_path = tempfile(fileext = ".md")) {
 md2html <- function(in_path, out_path = tempfile(fileext = ".html")) {
   cmd <- paste0("pandoc -f markdown -t html -o ", out_path, " ", in_path)
   system(cmd)
-  
+
   out_path
 }
 
 rmd2html <- function(path, cache = FALSE, fix_links = TRUE) {
-  
+
   if (cache) {
     md_path <- cache_file(path, rmd2md, ".md")
     if (fix_links) update_links(md_path)
@@ -74,7 +66,7 @@ rmd2html <- function(path, cache = FALSE, fix_links = TRUE) {
     if (fix_links) update_links(md_path)
     md2html(md_path)
   }
-  
+
 }
 
 #' @param f A function with two input arguments: in_path and out_path
@@ -85,19 +77,19 @@ cache_file <- function(in_path, f, ext) {
   if (!file.exists("_cache")) {
     dir.create("_cache")
   }
-    
+
   if (file.exists(cache_path)) {
     if (interactive()) message("For ", in_path, " using cache ", cache_path)
     return(cache_path)
   }
-  
+
   f(in_path, cache_path)
 }
 
 add_trailing_nl <- function(x) {
   last <- nchar(x)
   if (substr(x, last, last) == "\n") return(x)
-  
+
   paste0(x, "\n")
 }
 
@@ -118,7 +110,7 @@ clear_cache <- function() {
 "%||%" <- function(a, b) if (is.null(a)) b else a
 
 check_all <- function(start = NULL) {
-  
+
   files <- dir(pattern = "\\.rmd$")
   if (!is.null(start)) {
     match <- grep(start, files)[1]
@@ -126,7 +118,7 @@ check_all <- function(start = NULL) {
       files <- files[match:length(files)]
     }
   }
-  
+
   for (file in files) {
     message("Knitting ", file)
     message("----------------------------------------------------")
@@ -137,20 +129,33 @@ check_all <- function(start = NULL) {
 # Convert internal links to explicit links also containing the file name
 update_links <- function(path) {
   contents <- paste0(readLines(path, warn = FALSE), collapse = "\n")
-  
+
   int_link_pos <- str_locate_all(contents, "\\(#([^)]*)\\)")[[1]]
-  int_link <- str_sub(contents, 
+  int_link <- str_sub(contents,
     int_link_pos[, "start"] + 2, # (#
     int_link_pos[, "end"] - 1    # )
   )
-  
+
   replacement <- vapply(int_link, lookup, character(1))
-  
+
   for(i in rev(seq_len(nrow(int_link_pos)))) {
     start <- int_link_pos[i, "start"] + 1
     end <- int_link_pos[i, "end"] - 1
     str_sub(contents, start, end) <- replacement[i]
   }
-  
+
   writeLines(contents, path)
 }
+
+# Image outputs -----------------------------
+
+plot_html <- function(x, options) {
+  url <- paste(x, collapse = ".")
+  img <- paste0("<img src='", url, "' ",
+    "width = '", options$out.width %||% 300, "' ",
+    "height = '", options$out.height %||% 300, "' ",
+    "title = '", options$caption, "' ",
+    "/>\n")
+  paste0("\n```\n", img, "\n```R\n")
+}
+

@@ -1,11 +1,11 @@
-library(devtools)
 source("_plugins/rmd2html.r")
 
 chapters <- dir(".", pattern = "\\.rmd$")
 
 for (chapter in chapters) {
-  out <- cache_file(chapter, rmd2md, ".md")
-  file.copy(out, paste0("book/chapters/", gsub(".rmd", ".md", chapter)))
+  message("Processing ", chapter)
+  out_path <- paste0("book/chapters/", gsub(".rmd", ".md", chapter))
+  out <- rmd2md(chapter, out_path, out = "mdtex")
 }
 
 system("book/build.sh")
