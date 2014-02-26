@@ -1,5 +1,10 @@
 library(stringr)
 
+print.html <- function(x, ...) {
+  cat("<HTML> ", paste0(strwrap(x, width = 65), collapse = "\n"), "\n", sep = "")
+}
+
+
 # Convert an Rmd file to a md file using custom knitr options
 # Inputs and outputs paths
 rmd2md <- function(in_path, out_path = tempfile(fileext = ".md"), out = "mdhtml") {
