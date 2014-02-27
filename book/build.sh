@@ -1,7 +1,5 @@
-pandoc -o book/adv-r.pdf --latex-engine xelatex \
-  --variable=papersize:oneside --variable=links-as-notes \
-  --toc --chapters --number-sections \
-  --metadata=monofont:Inconsolata \
+pandoc -o book/adv-r.pdf --latex-engine xelatex --chapters \
+  --template=book/book-template.tex \
   book/title.md \
   book/chapters/Introduction.md \
   book/part-foundations.md \
