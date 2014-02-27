@@ -9,11 +9,11 @@ library(pryr)
 
 # Metaprogramming
 
-In [non-standard evaluation](#nse), you learned the basics of accessing the expressions underlying computation in R, and evaluating them in new ways. In this chapter, you'll learn how to manipulate those expressions with code. You're going to learn how to metaprogram: creating programs with other programs!
+In [non-standard evaluation](#nse), you learned the basics of accessing the expressions underlying computation in R, and evaluating them in new ways. In this chapter, you'll learn how to manipulate those expressions with code. You're going to learn how to metaprogram: how to create programs with other programs!
 
-The chapter begins with a deep dive into the structure of expressions in [structure of expressions](#structure-of-expressions). You'll learn about the four components of an expression: constants, names, calls and pairlists. The following sections go into detail about names, [names](#names), and calls, [calls](#calls). [Capturing the current call](#capturing-call) takes a minor detour to discuss some common uses of calls in base R. [Pairlists](#pairlists) completes the discussion of the four major components of an expression, and shows how you can create functions from their component pieces. The chapter concludes with [walking the call tree with recursive functions](#modifying-code) which combines everything you've learned to write functions that can compute on and modify arbitrary R code.
+The chapter begins with a deep dive into the structure of expressions in [structure of expressions](#structure-of-expressions). You'll learn about the four components of an expression: constants, names, calls and pairlists. The following sections go into detail about names, [names](#names), and calls, [calls](#calls). [Capturing the current call](#capturing-call) takes a minor detour to discuss some common uses of calls in base R. [Pairlists](#pairlists) completes the discussion of the four major components of an expression, and shows how you can create functions from their component pieces. The chapter concludes with [walking the call tree with recursive functions](#ast-funs) which combines everything you've learned to write functions that can compute on and modify arbitrary R code.
 
-### Prereqs
+##### Prereqs
 
 Thoroughout this chapter we're going to use tools from the `pryr` package to help see what's going on.  If you don't already have it, install it by running `devtools::install_github("hadley/pryr")`.
 
@@ -70,11 +70,11 @@ There are four possible components of an expression: constants, names, calls and
     ast(`an unusual name`)
     ```
 
-* __calls__ represent the action of calling a function. Calls are recursive
-  like lists: they can contain constants, names, pairlists and other calls.
-  The first element is the function to call, and the remaining elements
-  are the arguments to that function. `ast()` prints `()` then lists the
-  children.
+* __calls__ represent the action of calling a function. Like lists, calls are
+  recursive: they can contain constants, names, pairlists and other calls.
+  `ast()` prints `()` then lists the children. The first child is the
+  function to call, and the remaining children are the arguments to that
+  function.
 
     ```{r}
     ast(f())
@@ -83,9 +83,10 @@ There are four possible components of an expression: constants, names, calls and
     ast(f(g(), h(1, a)))
     ```
 
-    As mentioned in [every operation is a function call]
-    (#every-operation-is-a-function-call), even things that don't look like
-    function calls still follow this hierarchical structure:
+    As mentioned in
+    [every operation is a function call](#every-operation-is-a-function-call),
+    even things that don't look like function calls still follow this
+    hierarchical structure:
 
     ```{r}
     ast(a + b)
@@ -102,7 +103,7 @@ There are four possible components of an expression: constants, names, calls and
     ast(function(x = 1, y = x * 2) {x / y})
     ```
 
-Note that `str()` does not follow these naming conventions. It describes names as symbols and calls as a language objects:
+Note that `str()` does not follow these naming conventions when describing objects. It describes names as symbols and calls as language objects:
 
 ```{r}
 str(quote(a))
@@ -122,11 +123,12 @@ Together these four components define the structure of all R code, and are expla
 ### Exercises
 
 1.  There is no existing base function that checks where an element is
-    a valid component of an expression (i.e. it's a constant, name or
-    call). Implement one using what you've learned so far.
+    a valid component of an expression (i.e. it's a constant, name,
+    call or pairlist). Implement one by guessing the names of the "is"
+    functions for calls, names and pairlists.
 
-1.  `pryr::ast()` uses non-standard evaluation. What equivalent uses standard
-    evaluation?
+1.  `pryr::ast()` uses non-standard evaluation. What's its escape hatch to
+    standard evaluation?
 
 1.  What does the call tree for a if statement with multiple else conditions
     look like?
@@ -309,8 +311,9 @@ as.call(list(quote(adder(10)), 20))
 
 1.  Implement a pure R version of `do.call()`.
 
-1.  Concatenating a call and an expression with `c()` creates a list. Create
-    a method that yields a call with additional argument.
+1.  Concatenating a call and an expression with `c()` creates a list. Implement
+    `concat()` so that the following code works to combine a call and
+    an additional argument.
 
     ```{r, eval = FALSE}
     concat(quote(f), a = 1, b = quote(mean(a)))
@@ -318,13 +321,14 @@ as.call(list(quote(adder(10)), 20))
     ```
 
 1.  Since `list()`s don't belong in expressions, we could create a more
-    convenient call construction function that automatically combined
-    lists into the argument. Implement `make_call()` so that the following
-    code works.
+    convenient call constructor that automatically combined lists into the
+    arguments. Implement `make_call()` so that the following code works.
 
     ```{r, eval = FALSE}
     make_call(quote(mean), list(quote(x), na.rm = TRUE))
+    #> mean(x, na.rm = TRUE)
     make_call(quote(mean), quote(x), na.rm = TRUE)
+    #> mean(x, na.rm = TRUE)
     ```
 
 1.  How does `mode<-` work? How does it use `call()`?
@@ -356,7 +360,7 @@ names(find_uses(std, "sys.call"))
 names(find_uses(std, "match.call"))
 ```
 
-Many base R functions use the current call: expression that caused the current function to be run. There are two ways to do this:
+Many base R functions use the current call: expression that caused the current function to be run. There are two ways to capture the current call:
 
 * `sys.call()` captures exactly what the user typed.
 
@@ -378,7 +382,6 @@ Modelling functions often use `match.call()` to capture the call used to create 
 ```{r}
 mod <- lm(mpg ~ wt, data = mtcars)
 update(mod, formula = . ~ . + cyl)
-update(mod, subset = cyl == 4)
 ```
 
 How does `update()` work? We can rewrite it using some tools from pryr to focus on the essense of the algorithm.
@@ -399,7 +402,6 @@ update_model <- function(object, formula., ...) {
   eval(call, parent.frame())
 }
 update_model(mod, formula = . ~ . + cyl)
-update_model(mod, subset = cyl == 4)
 ```
 
 The original `update()` has an `evaluate` argument that controls whether the function returns a call or the result, but I think it's good principle for a function to only return one type of object, not different types depending on the arguments.
@@ -421,7 +423,7 @@ update_model <- function(object, formula., ...) {
 update_model(mod, data = mtcars)
 ```
 
-This is a good principle to remember: if you want to replay code captured with `match.call()`, you also need to capture the environment in which it was evaluated, usually `parent.frame()`. There is a downside to this. Capturing the environment will capture any large objects in that environment, preventing their memory from being freed. This topic is explored in more detail in [garbage collection](#garbarge-collection).
+This is a good principle to remember: if you want to replay code captured with `match.call()`, you also need to capture the environment in which it was evaluated, usually the `parent.frame()`. There is a downside to this. Capturing the environment will capture any large objects in that environment, preventing their memory from being freed. This topic is explored in more detail in [garbage collection](#garbarge-collection).
 
 Some base R functions use `match.call()` where it's not necessary. For example,  `write.csv()` captures call to `write.csv()` and mangles it to call `write.table()` instead:
 
@@ -456,8 +458,7 @@ This is much easier to understand: it's just calling `write.table()` with differ
 
 ### Exercises
 
-1.  Compare `update_model()` with `upate.default()`. What's different?
-    What's the same?
+1.  Compare and contrast `update_model()` to `upate.default()`.
 
 1.  Why doesn't `write.csv(mtcars, "mtcars.csv", row = FALSE)` work?
     What property of argument matching has the original author forgotten
@@ -472,9 +473,9 @@ This is much easier to understand: it's just calling `write.table()` with differ
 
 ## Pairlists
 
-Pairlists are a holdover from R's past. They behave identically to a list, but have a different internal representation (as a linked list rather than a vector). Pairlists have been replaced by lists everywhere except in function arguments.
+Pairlists are a holdover from R's past. They behave identically to lists, but have a different internal representation (as a linked list rather than a vector). Pairlists have been replaced by lists everywhere except in function arguments.
 
-The only place you need to care about the difference between a list and a pairlist is if you're going to construct functions by hand. The following function allows you to construct a function from its component pieces: a list of formal arguments, a body and an environment. It uses `as.pairlist()` to convert a list to the pairlist that `function()` needs.
+The only place you need to care about the difference between a list and a pairlist is if you're going to construct functions by hand. The following function allows you to construct a function from its component pieces: a list of formal arguments, a body and an environment. It uses `as.pairlist()` to to ensure the `args` is the pairlist that `function()` needs.
 
 ```{r, eval = FALSE}
 make_function <- function(args, body, env = parent.frame()) {
@@ -508,14 +509,14 @@ adder(10)
 
 One useful application of `make_function()` is in functions like `curve()`. `curve()` allow you to draw a plot of function in the mathematical sense without creating an explicit R function:
 
-```{r curve-demo}
+```{r curve-demo, out.width = "2in", out.height = "2in"}
 curve(sin(x), to = 3 * pi)
 curve(sin(exp(4 * x)), n = 1000)
 ```
 
-Here `x` plays the role of a pronoun. `x` doesn't represent a single concrete value, but instead is a placeholder that varies over the range of the plot. One way to implement `curve()` would be to use `make_function()`:
+Here `x` plays the role of a pronoun. `x` doesn't represent a single concrete value, but is instead a placeholder that varies over the range of the plot. One way to implement `curve()` would be to use `make_function()`:
 
-```{r curve2}
+```{r curve2, out.width = "2in", out.height = "2in"}
 curve2 <- function(expr, xlim = c(0, 1), n = 100, env = parent.frame()) {
   f <- make_function(alist(x = ), substitute(expr), env)
 
@@ -527,7 +528,7 @@ curve2 <- function(expr, xlim = c(0, 1), n = 100, env = parent.frame()) {
 curve2(sin(exp(4 * x)), n = 1000)
 ```
 
-Functions that use a pronoun like `curve()` a sometimes called [anaphoric](http://en.wikipedia.org/wiki/Anaphora_(linguistics)) functions. They are are more common in [Arc](http://www.arcfn.com/doc/anaphoric.html) (a list like language), [Perl](http://www.perlmonks.org/index.pl?node_id=666047) and [Clojure](http://amalloy.hubpages.com/hub/Unhygenic-anaphoric-Clojure-macros-for-fun-and-profit).
+Functions that use a pronoun are called [anaphoric](http://en.wikipedia.org/wiki/Anaphora_(linguistics)) functions. They are are more common in [Arc](http://www.arcfn.com/doc/anaphoric.html) (a list like language), [Perl](http://www.perlmonks.org/index.pl?node_id=666047) and [Clojure](http://amalloy.hubpages.com/hub/Unhygenic-anaphoric-Clojure-macros-for-fun-and-profit).
 
 ### Exercises
 
@@ -541,7 +542,8 @@ Functions that use a pronoun like `curve()` a sometimes called [anaphoric](http:
 1.  The actual implementation of `curve()` looks more like
 
     ```{r curve3}
-    curve3 <- function(expr, xlim = c(0, 1), n = 100, env = parent.frame()) {
+    curve3 <- function(expr, xlim = c(0, 1), n = 100,
+                       env = parent.frame()) {
       env2 <- new.env(parent = env)
       env2$x <- seq(xlim[1], xlim[2], length = n)
 
@@ -554,9 +556,7 @@ Functions that use a pronoun like `curve()` a sometimes called [anaphoric](http:
 
 ## Parsing and deparsing
 
-While it's always better to work with call trees, sometime you don't get a call tree, but instead get a string that represents code. You can convert calls back and forth between text with `parse()` and `deparse()`. You've seen `deparse()` already it: takes an expression and returns a character vector. `parse()` does the opposite: it takes a character vector and returns an expression object.
-
-Since the primary use of `parse()` is parsing files of code on disk, the first argument is a file path, and if you have the code in a character vector, you need to use the `text` argument.
+Sometimes you get code represented as a string, rather than as an expression. You can convert a string to an expression with `parse()`. `parse()` is the opposite of `deparse()`: it takes an character vector and returns an expression object. The primary use of `parse()` is parsing files of code on disk, so the first argument is a file path, and if you have the code in a character vector, you need to use the `text` argument:
 
 ```{r}
 z <- quote(y <- x * 10)
@@ -578,10 +578,9 @@ typeof(exp)
 
 exp[[1]]
 exp[[2]]
-exp[[3]]
 ```
 
-You can create expression objects by hand with `expression()`, but I don't recommend it. You already know how to work with lists of expressions, so you don't need a new object type to deal with them.
+You can create expression objects by hand with `expression()`, but I don't recommend it. There's no need to learn about this esoteric data structure if you know how to use expressions.
 
 With `parse()` and `eval()` it's possible to write a simple version of `source()`. We read in the file on disk, `parse()` it and then `eval()` each component in the specified environment. This version defaults to a new environment, so it doesn't affect existing objects. `source()` invisibly returns the result of the last expression in the file, so `simple_source()` does the same.
 
@@ -617,26 +616,26 @@ The real `source()` is considerably more complicated because it can `echo` input
 1.  Modify `simple_source()` so it returns the result of _every_ expression,
     not just the last one.
 
-1.  The most important missing feature in `simple_source()` is that the
-    lack of source referencs. Read the source code for `sys.source()` and
-    the help for `srcfilecopy()`, then modify `simple_source()` to maintain
-    source references. You can test your code by sourcing a function that
-    contains a comment. If successful, when you look at the function,
-    you'll see the comment, not just the source code.
+1.  The code generated by `simple_source()` lacks source references. Read
+    the source code for `sys.source()` and the help for `srcfilecopy()`,
+    then modify `simple_source()` to maintain source references. You can
+    test your code by sourcing a function that contains a comment. If
+    successful, when you look at the function, you'll see the comment,
+    not just the source code.
 
-## Walking the call tree with recursive functions
+## Walking the AST with recursive functions {#ast-funs}
 
-It's easy to modify a single call with `substitute()` or `pryr::modify_call()`. For more complicated tasks we need some way to drill down into a nested set of function calls. The base `codetools` package provides some useful motiviating examples:
+It's easy to modify a single call with `substitute()` or `pryr::modify_call()`. For more complicated tasks we need work with a general AST. The base `codetools` package provides some useful motiviating examples:
 
 * `findGlobals()` locates all global variables used by a function. This
-  can be useful if you want to check that your functions don't inadvertently
+  can be useful if you want to check that your function doesn't inadvertently
   rely on variables defined in their parent environment.
 
 * `checkUsage()` checks for a range of common problems including
   unused local variables, unused parameters and use of partial
   argument matching.
 
-To write functions like `findGlobals()` and `checkUsage()` you'll need a new tool.  Because calls have a tree structure, the natural tool for the job is a recursive function. The key to writing recursive functions is getting the recursion right, which means making sure that you know what the base case is and figuring out how to combine the results from the recursive case. For calls, there are two base cases (atomic vectors and names) and two recursive cases (calls and pairlists). This means that a function for working with expressions will look like:
+To write functions like `findGlobals()` and `checkUsage()` you'll need a new tool.  Because expressions have a tree structure, the natural tool for the job is a recursive function. The key to writing recursive functions is getting the recursion right, which means making sure that you know what the base case is and figuring out how to combine the results from the recursive case. For calls, there are two base cases (atomic vectors and names) and two recursive cases (calls and pairlists). This means that a function for working with expressions will look like:
 
 ```{r, eval = FALSE}
 recurse_call <- function(x) {
@@ -906,12 +905,9 @@ These tools are somewhat similar to Lisp macros, as discussed in [Programmer’s
     logical_abbr(f)
     ```
 
-1.  Extend `find_assign()` to pick up all the assignments in expressions
-    like `a <- b <- c <- d <- 10`.
-
-1.  Write a function called `node_type()` that returns either constant,
-    name, call or pairlist. Rewrite `logical_abbr()`, `find_assign()` and
-    `bquote2()` to use this function + `switch()` instead of nested if
+1.  Write a function called `ast_type()` that returns either "constant",
+    "name", "call" or "pairlist". Rewrite `logical_abbr()`, `find_assign()`
+    and `bquote2()` to use this function with `switch()` instead of nested if
     statements.
 
 1.  Write a function that extracts all calls to a function. Compare your
