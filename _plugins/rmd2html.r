@@ -34,7 +34,7 @@ rmd2md <- function(in_path, out_path = tempfile(fileext = ".md"), out = "mdhtml"
     document = function(x, options) {
       x <- paste0(x, collapse = "\n")
       # Remove empty blocks (produced by plot)
-      x <- gsub("\n```R\n```\n", "", x)
+      x <- gsub("\n```R\n+```\n", "", x)
       x
     }
   )
@@ -168,5 +168,5 @@ plot_tex <- function(x, options) {
   if (identical(options$out.width, "\\maxwidth")) {
     options$out.width <- "0.5 \\linewidth"
   }
-  paste0("\n```\n", hook_plot_tex(x, options), "\n```R\n")
+  paste0("\n```", hook_plot_tex(x, options), "\n```R\n")
 }
