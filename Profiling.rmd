@@ -4,7 +4,7 @@ layout: default
 ---
 
 ```{r, echo = FALSE}
-options(digits = 3)
+source("code/microbenchmark.r")
 ```
 
 # Profiling and performance optimisation {#profiling}
@@ -12,7 +12,15 @@ options(digits = 3)
 > "We should forget about small efficiencies, say about 97% of the time:
 > premature optimization is the root of all evil" --- Donald Knuth.
 
+The key idea in this chapter can be summed up simply: "Find out what's then make it fast".  The first part of this chapter introduces you to tools to help understand what makes your code slow. The second part introduces you to some general tools for making your code faster.
+
+Unfortunately optimisations are typically tightly coupled with the problem. It's hard to give give advice that will work in every situation, but I'll do my best. I include some general techniques, and so
+
+Explore
+
 Your code should be correct, maintainable and fast. Notice that speed comes last - if your function is incorrect or unmaintainable (i.e. will eventually become incorrect) it doesn't matter if it's fast. As computers get faster and R is optimised, your code will get faster all by itself. Your code is never going to automatically become correct or elegant if it is not already.
+
+When making code faster be careful not to make it incorrect.
 
 
 Like javascript, the vast majority of R code is poorly written and slow. This sounds bad but it's actually a positive! There's no point in optimising code until it's actually a bottleneck - most R code should be incredibly inefficient because even inefficient code is usually fast enough. If most R code was efficient, it would be a strong signal that R programmers are prematurely optimising, spend time making their code faster instead of solving real problems. Additionally, most people writing R code are not programmers. Many of them don't have any formal training in programming or computer science, but are using R because it helps them solve their data analysis problems.
@@ -23,30 +31,21 @@ This applies not only to packages, but also to base R code. The focus on R code 
 
 That said, sometimes there are times where you need to make your code faster: spending several hours of your day might save days of computing time for others. The aim of this chapter is to give you the skills to figure out why your code is slow, what you can do to improve it, and ensure that you don't accidentally make it slow again in the future.  You may already be familiar with `system.time`, which tells you how long a block of code takes to run. This is a useful building block, but is a crude tool.
 
-Making fast code is a four part process:
-
-1. Profiling helps you discover which parts of your code are taking up the most time.
-
-2. Microbenchmarking lets you experiment with small parts of your code to find faster approaches.
-
-3. Timing helps you check that the micro-optimisations have a macro effect, and helps experiment with larger changes (like totally rethinking your approach)
-
-4. A performance testing tool makes sure your code stays fast in the future  (e.g. [Vbench](http://wesmckinney.com/blog/?p=373))
-
 Along the way, you'll also learn about the most common causes of poor performance in R, and how to address them. Sometimes there's no way to improve performance within R, and you'll need to use C++, the topic of [Rcpp](#rcpp).
 
 Having a good test suite is important when tuning the performance of your code: you don't want to make your code fast at the expense of making it incorrect. We won't discuss testing any further in this chapter, but we strongly recommend having a good set of test cases written before you begin optimisation.
 
-Good exploration from Winston: http://rpubs.com/wch/3797
-
-Find out what is slow. Then make it fast.
+Additionally, most people writing R code are not programmers. Many of don't have any formal training in programming or computer science, but are using R because it helps them solve their data analysis problems. This means that the vast majority of R code can be re-written in R to be more efficient. This often means vectorising code, or avoiding some of the most obvious traps discussed later in this chapter. There are also other strategies like caching/memoisation that trade space for time. Otherwise, a basic knowledge of data structures and algorithms can help come up with alternative strategies.
 
 [Mature optimisation](http://carlos.bueno.org/optimization/mature-optimization.pdf) (PDF)
 
 A recurring theme throughout this part of the book is the importance of differentiating between absolute and relative speed, and fast vs fast enough. First, whenever you compare the speed of two approaches to a problem, be very wary of just looking at a relative differences. One approach may be 10x faster than another, but if that difference is between 1ms and 10ms, it's unlikely to have any real impact. You also need to think about the costs of modifying your code. For example, if it takes you an hour to implement a change that makes you code 10x faster, saving 9 s each run, then you'll have to run at least 400 times before you'll see a net benefit.  At the end of the day, what you want is code that's fast enough to not be a bottleneck, not code that is fast in any absolute sense.  Be careful that you don't spend hours to save seconds.
 
+##### Prereqs
 
-## Performance profiling
+`install_github("hadley/lineprof")`
+
+## Understanding performance
 
 R provides a built in tool for profiling: `Rprof`. When active, this records the current call stack to disk every `interval` seconds. This provides a fine grained report showing how long each function takes. The function `summaryRprof` provides a way to turn this list of call stacks into useful information. But I don't think it's terribly useful, because it makes it hard to see the entire structure of the program at once. Instead, we'll use the `profr` package, which turns the call stack into a data.frame that is easier to manipulate and visualise.
 
@@ -54,39 +53,65 @@ Example showing how to use profr.
 
 Sample pictures.
 
+Other tools:
+* https://github.com/ltierney/Rpkg-proftools - show flamegraph and call graph
 
-Additionally, most people writing R code are not programmers. Many of don't have any formal training in programming or computer science, but are using R because it helps them solve their data analysis problems. This means that the vast majority of R code can be re-written in R to be more efficient. This often means vectorising code, or avoiding some of the most obvious traps discussed later in this chapter. There are also other strategies like caching/memoisation that trade space for time. Otherwise, a basic knowledge of data structures and algorithms can help come up with alternative strategies.
+## Improving performance
 
+* use better tools
+* alternative algorithms
+* trade space for time
+* write in C++
 
-## Timing
+## Use better tools
 
-## Performance testing
-
-
-
-## Caching
-
-`readRDS`, `saveRDS`, `load`, `save`
-
-Caching packages
-
-### Memoisation
-
-A special case of caching is memoisation.
-
-## Byte code compilation
+### Byte code compilation
 
 R 2.13 introduced a new byte code compiler which can increase the speed of certain types of code 4-5 fold. This improvement is likely to get better in the future as the compiler implements more optimisations - this is an active area of research.
 
-Using the compiler is an easy way to get speed ups - it's easy to use, and if it doesn't work well for your function, then you haven't invested a lot of time in it, and so you haven't lost much.
+```{r}
+library(compiler)
+```
 
-## Other people's code
+Using the compiler is an easy way to get speed ups - it's easy to use, and if it doesn't work well for your function, then you haven't invested a lot of time in it, and so you haven't lost much. The following example shows the pure R version of `lapply()` from [functionals](#lapply). Compiling it gives a considerable speedup, although it's still not quite as fast as the C version provided by base R.
+
+```{r}
+lapply2 <- function(x, f, ...) {
+  out <- vector("list", length(x))
+  for (i in seq_along(x)) {
+    out[[i]] <- f(x[[i]], ...)
+  }
+  out
+}
+
+lapply2_c <- cmpfun(lapply2)
+
+x <- list(1:10, letters, c(F, T), NULL)
+microbenchmark(
+  lapply2(x, is.null),
+  lapply2_c(x, is.null),
+  lapply(x, is.null)
+)
+```
+
+This is a relatively good example for byte code compiling. In most cases you're more like to get a 10-40% speedup. This example optimises well because it uses a for-loop, something that is generally rare in R.
+
+All base R functions are byte code compiled by default.
+
+### Other people's code
 
 One of the easiest ways to speed up your code is to find someone who's already done it! Good idea to search for CRAN packages.
 
     RppGSL, RcppEigen, RcppArmadillo
 
 Stackoverflow can be a useful place to ask.
+
+### Things that I know are slow
+
+* for single x or y: `x %in% y` vs `any(x == y)`
+* for s3 objects: `is()` vs `inherits()`
+* using `textConnection()`
+* modifying things in place
 
 ### Important vectorised functions
 
@@ -100,10 +125,13 @@ Not all base functions are fast, but many are. And if you can find the one that 
 
 Read the source code - implementation in C is usually correlated with high performance.
 
-## Rewrite in a lower-level language
+## Trade space for time
 
-C, C++ and Fortran are easy. C++ easiest, recommended, and described in the following chapter.
+`readRDS`, `saveRDS`
 
+Caching packages
+
+A special case of caching is memoisation.
 
 ## Brainstorming
 
@@ -111,6 +139,10 @@ Most important step is to brainstorm as many possible alternative approaches.
 
 Can often recreate slow general purpose functions to fast special purpose functions. Can easily access faster languages.
 
+* http://rpubs.com/wch/3797
+* http://rpubs.com/wch/13698
+* https://gist.github.com/hadley/6353939
+* http://rpubs.com/wch/8107
 
 Good to have a variety of approaches to call upon.
 
