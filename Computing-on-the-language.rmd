@@ -15,7 +15,7 @@ std <- c("package:base", "package:utils", "package:stats")
 >
 > --- Kent Pitman, <http://www.nhplace.com/kent/Papers/Special-Forms.html>
 
-R has powerful tools for computing not only on values, but on the actions that lead to those values. These tools are powerful and magical, and one of the most surprising features if you're coming from another programming language. Take the following simple snippet that plots a sine curve:
+R has powerful tools for computing not only on values, but also on the actions that lead to those values. These tools are powerful and magical, and, if you're coming from another programming language, they are one of its most surprising features. Consider the following simple snippet that plots a sine curve:
 
 ```{r plot-labels}
 x <- seq(0, 2 * pi, length = 100)
@@ -23,13 +23,13 @@ sinx <- sin(x)
 plot(x, sinx, type = "l")
 ```
 
-Look at the labels on the axes. How did R know that the variable on the x axis was called `x` and the variable on the y axis was called `sinx`? In most programming languages, you can only access values of the function arguments. In R, you can also access the code used to compute the arguments. This makes it possible to evaluate code in non-standard ways, allowing __non-standard evaluation__ or NSE for short. NSE is particularly useful for functions used for interactive data analysis because it can dramatically reduce the amount of typing.
+Look at the labels on the axes. How does R know that the variable on the x axis is called `x` and the variable on the y axis is called `sinx`? In most programming languages, you can only access values of a function's arguments. In R, you can also access the code used to compute the arguments. This makes it possible to evaluate code in non-standard ways: to use what is known as __non-standard evaluation__, or NSE for short. NSE is particularly useful for functions used in interactive data analysis because it can dramatically reduce the amount of typing.
 
-The goal of this chapter is to help you understand NSE in existing R code, and to show you how to write your own functions that use it. In [capturing expressions](#capturing-expressions) you'll learn how to capture unevaluated expressions using `substitute()`. In [non-standard evaluation](#subset) you'll learn how `subset()` combines `substitute()` with `eval()` to allow you to succinctly to select rows from a data frame. [Scoping issues](#scoping-issues) will teach you about the scoping issues that arise in NSE, and show you how to resolve them.
+The goals of this chapter are to help you understand how NSE works in R, and to show you how to write functions with it. In [capturing expressions](#capturing-expressions), you'll learn how to capture unevaluated expressions using `substitute()`. In [non-standard evaluation](#subset) you'll learn how `subset()` combines `substitute()` with `eval()` to allow you to succinctly select rows from a data frame. [Scoping issues](#scoping-issues) will teach you about scoping issues specific to NSE, and will show you how to address them.
 
-NSE is great for interactive use, but can be hard to program with. [Calling from another function](#calling-from-another-function) shows why every function that uses NSE should have an escape hatch, a version that uses regular evaluation. Not all functions have an escape hatch, so [substitute](#substitute) shows you how you to can use `substitute()` to modify unevaluated cocde, making it possible to program with any function that uses NSE.
+NSE is great for interactive use, but it can be hard to program with. [Calling from another function](#calling-from-another-function) shows why every function that uses NSE should have an escape hatch, a version that uses regular evaluation. Since not all functions have an escape hatch, [substitute](#substitute) shows you how you can use `substitute()` to modify unevaluated code so that you can program with any function that uses NSE.
 
-While powerful, NSE makes code substantially harder to reason about. The chapter concludes with a look at the downsides of NSE in [the downsides](#nse-downsides).
+While powerful, NSE makes code substantially harder to reason about. The chapter concludes with a look at [the downsides](#nse-downsides) of NSE.
 
 ##### Prereqs
 
@@ -41,7 +41,7 @@ Before reading this chapter, make sure you're familiar with environments ([Envir
 find_uses("package:base", c("substitute", "deparse"))
 ```
 
-`substitute()` makes non-standard evaluation possible. It looks at a function argument and instead of seeing the value, it sees the code used to compute the value:
+`substitute()` makes non-standard evaluation possible. It looks at a function's argument and instead of seeing the value, it sees the code used to compute the value:
 
 ```{r}
 f <- function(x) {
@@ -53,23 +53,23 @@ x <- 10
 f(x)
 
 y <- 13
-f(x + y ^ 2)
+f(x + y^2)
 ```
 
 We won't worry about exactly what `substitute()` returns (that's the topic of [the following chapter](#metaprogramming)), but we'll call it an expression.
 
-`substitute()` works because function arguments are represented by a special type of object called a __promise__. A promise captures the expression needed compute the value and the environment in which to compute it. You're not normally aware of promises because the first time you access a promise its code is evaluated in its environment, yielding a value.
+`substitute()` works because function arguments are represented by a special type of object called a __promise__. A promise captures the expression needed to compute the value and the environment in which to compute it. You're not normally aware of promises because the first time you access a promise its code is evaluated in its environment, yielding a value.
 
-Another function is often paired with `substitute()`: `deparse()`. It takes the result of `substitute()`, an expression, and turns it into a character vector.
+`substitute()` is often paired with `deparse()`. That function takes the result of `substitute()`, an expression, and turns it into a character vector.
 
 ```{r}
 g <- function(x) deparse(substitute(x))
 g(1:10)
 g(x)
-g(x + y ^ 2)
+g(x + y^2)
 ```
 
-There are a lot of functions in base R that use these ideas. Some use them to avoid quotes:
+There are a lot of functions in Base R that use these ideas. Some use them to avoid quotes:
 
 ```{r, eval = FALSE}
 library(ggplot2)
@@ -77,7 +77,7 @@ library(ggplot2)
 library("ggplot2")
 ```
 
-Other functions, like `plot.default()`, use them to provide default labels. `data.frame()` labels variables with the expression used to compute them:
+Others, like `plot.default()`, use them to provide default labels. `data.frame()` labels variables with the expression used to compute them:
 
 ```{r}
 x <- 1:4
@@ -88,12 +88,12 @@ names(data.frame(x, y))
 rm(x, y)
 ```
 
-We'll learn about the ideas underlying all these functions by starting with a particularly useful application of NSE: `subset()`.
+We'll learn about the ideas underlying all these functions by looking at one particularly useful application of NSE: `subset()`.
 
 ### Exercises
 
-1.  There's one important feature of `deparse()` to be aware of when
-    programming with it: can return multiple strings if the input is long.
+1.  One important feature of `deparse()` to be aware of when
+    programming is that it can return multiple strings if the input is long.
     For example, the following call produces a vector of length two:
 
     ```{r, eval = FALSE}
@@ -101,15 +101,15 @@ We'll learn about the ideas underlying all these functions by starting with a pa
       n + o + p + q + r + s + t + u + v + w + x + y + z)
     ```
 
-    Why does this happen? Carefully read the documentation. Can you write a
+    Why does this happen? Read the documentation carefully. Can you write a
     wrapper around `deparse()` that always returns a single string?
 
-1.  Why does `as.Date.default()` use `substitute()` and `deparse()`?
+1. Why does `as.Date.default()` use `substitute()` and `deparse()`?
     Why does `pairwise.t.test()` use them? Read the source code.
 
-1.  `pairwise.t.test()` is written under the assumption that `deparse()`
-    always returns a length one character vector. Can you construct an
-    input that violates this expectation? What happens?
+1.  `pairwise.t.test()` assumes that `deparse()` always returns a length one 
+    character vector. Can you construct an input that violates this expectation? 
+    What happens?
 
 1.  `f()`, defined above, just calls `substitute()`. Why can't we use it
     to define `g()`? In other words, what will the following code return?
@@ -125,7 +125,7 @@ We'll learn about the ideas underlying all these functions by starting with a pa
 
 ## Non-standard evaluation in subset {#subset}
 
-Just printing out the code supplied to an argument value can be useful, but we can do more with the unevaluated code. Take `subset()`, for example. It's a useful interactive shortcut for subsetting data frames: instead of repeating the name of data frame many times, you can save some typing:
+Just printing out the code supplied to an argument value can be useful, but we can do more with unevaluated code. Take `subset()`, for example. It's a useful interactive shortcut for subsetting data frames: instead of repeating the name of data frame many times, you can save some typing:
 
 ```{r}
 sample_df <- data.frame(a = 1:5, b = 5:1, c = c(5, 3, 1, 4, 1))
@@ -139,16 +139,16 @@ subset(sample_df, b == c)
 # sample_df[sample_df$b == sample_df$c, ]
 ```
 
-Subset is special because the expressions `a >= 4` or `b == c` aren't evaluated in the global environment, but are instead evaluated in the data frame. In other words, `subset()` implements different scoping rules. Instead of looking for those variables in the current environment, it looks in the specified data frame. This is the essence of non-standard evaluation.
+Subset is special because the expressions `a >= 4` or `b == c` aren't evaluated in the global environment, but are instead evaluated in the data frame. In other words, `subset()` implements different scoping rules: instead of looking for those variables in the current environment, it looks in the specified data frame. This is the essence of non-standard evaluation.
 
 How does `subset()` work?  We've already seen how to capture the expression that computes an argument, rather than its result, so we just need to figure out how to evaluate that expression in the right context. We want `x` to be interpreted as `sample_df$x`, not `globalenv()$x`. To do this we need `eval()`, which takes an expression and evaluates it in the specified environment.
 
-Before we can explore `eval()`, we need one more useful function: `quote()`. It captures an unevaluated expression like `substitute()`, but you don't need to use it inside a function. This makes it useful for interactive experimentation.
+Before we can explore `eval()`, we need one more useful function: `quote()`. It captures an unevaluated expression like `substitute()`. Because you don't need to use it inside a function, `substitute()` is useful for interactive experimentation.
 
 ```{r}
 quote(1:10)
 quote(x)
-quote(x + y ^ 2)
+quote(x + y^2)
 ```
 
 We need `quote()` to experiment with `eval()` because the first argument to `eval()` is an expression. If you only provide one argument, it evaluates the expression in the current environment. This makes `eval(quote(x))` exactly equivalent to `x`, regardless of what `x` is:
@@ -160,7 +160,7 @@ eval(quote(x))
 eval(quote(y))
 ```
 
-`quote()` and `eval()` are opposites. In the example below, each `eval()` peels off one layer of quoting.
+`quote()` and `eval()` are opposites. In the example below, each `eval()` peels off one layer of quotes.
 
 ```{r}
 quote(2 + 2)
@@ -182,7 +182,7 @@ e$x <- 20
 eval(quote(x), e)
 ```
 
-Instead of an environment, the second argument can be a list or a data frame.  This works because lists and data frames bind names to values in a similar way to environments.
+Besides an environment, the second argument can also be a list or a data frame. This works because lists and data frames bind names to values in a way similar to environments.
 
 ```{r}
 eval(quote(x), list(x = 30))
@@ -207,7 +207,7 @@ eval(quote(b), sample_df)
 eval(b, sample_df)
 ```
 
-We can use `eval()` and `substitute()` to write `subset()`. First we capture the call representing the condition, then evaluate it in the context of the data frame and use the result for subsetting:
+We can use `eval()` and `substitute()` to write `subset()`. We first capture the call representing the condition, then we evaluate it in the context of the data frame and finally, we use the result for subsetting:
 
 ```{r}
 subset2 <- function(x, condition) {
@@ -238,16 +238,17 @@ subset2(sample_df, a >= 4)
     ```
 
 1.  The real subset function (`subset.data.frame()`) removes missing
-    values in the condition. Modify `subset2()` to also drop these rows.
+    values in the condition. Modify `subset2()` so it does the same by  
+    dropping offending rows.
 
 1.  What happens if you use `quote()` instead of `substitute()` inside of
     `subset2()`?
 
-1.  The second argument to `subset()` allows you to select variables. It
-    treats variable names like they are positions, so you can do things
+1.  The second argument in `subset()` allows you to select variables. It
+    treats variable names as if they were positions. Thus, you can do things
     like `subset(mtcars, , -cyl)` to drop the cylinder variable, or
     `subset(mtcars, , disp:drat)` to select all the variables between `disp`
-    and `drat`. How does it work? I've made it easier to understand by
+    and `drat`. How does this work? I've made it easier to understand by
     extracting it out into its own function.
 
     ```{r, eval = FALSE}
