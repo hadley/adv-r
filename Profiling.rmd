@@ -65,6 +65,161 @@ Other tools:
 
 ## Use better tools
 
+
+### Other people's code
+
+One of the easiest ways to speed up your code is to find someone who's already done it! Good idea to search for CRAN packages.
+
+    RppGSL, RcppEigen, RcppArmadillo
+
+Stackoverflow can be a useful place to ask.
+
+* If you want to find if a vector contains a single value, `any(x == 10)`
+  is much faster than `10 %in% x` or `is.element(10, x).
+
+* `apply()` is always slower than a specialised functions: be aware of
+  `rowSums()`, `colSums()`, `rowMeans()`, and `colMeans()`.
+
+* Be aware of the most efficient ways to convert continuous to categorical
+  values (`findInterval()`) and to re-name categorical values (character
+  subsetting).
+
+* Work with the simplest object possible. Data frames are particularly
+  expensive because modifying any value in a data frame will copy the
+  entire data frame. Lists and matrices don't suffer from this problem so
+  can be much faster. Instead of splitting a data frame, split a vector of
+  indices and then use to index into the data frame when needed.
+
+* `ifelse()` is slow, particularly if you are testing multiple conditions.
+  One trick to get around this is to assign a unique number to each combination
+  of logical values by using binary. If `x`, `y` and `z` are logical variables
+  then `x + 2 * y + 4 * z` will assume a unique number between 1 and 8 to each
+  combination of TRUE and FALSE values. See http://rpubs.com/wch/8107 for other
+  approaches.
+
+* Writing to a `textConnection()` is very slow, use a temporary file on disk
+  instead. (More details at http://rpubs.com/wch/13698).
+
+* If you're fitting many linear models, `lm()` is quite slow. Use
+  `model = FALSE` to avoid copying the input data in. Look at the biglm
+  package. Try RcppArmadillo::fastLm
+
+## Case study: Lots of t-tests
+
+Vectorisation is a powerful tool. But it's not always possible to apply it directly, and you may need to understand the underlying method. The following case study explores how to make many t-tests faster, following "Computing thousands of test statistics simultaneously in R" by Holger Schwender and Tina Müller in http://stat-computing.org/newsletter/issues/scgn-18-1.pdf.
+
+```{r, cache = TRUE}
+m <- 10000
+n <- 50
+X <- matrix(rnorm(m * n, 10, 3), m)
+cl <- rep(0:1, e = n / 2)
+
+system.time(for(i in 1:m) t.test(X[i, ] ~ cl)$stat)
+system.time(for(i in 1:m) t.test(X[i, cl == 0], X[i, cl== 1])$stat)
+
+compT <- function(x, cl){
+  t.test(x[cl == 0], x[cl == 1])$stat
+}
+system.time(apply(X, 1, compT, cl = cl))
+
+rowtstat <- function(X, cl){
+  X0 <- X[, cl == 0]
+  m0 <- rowMeans(X0)
+  n0 <- sum(cl == 0)
+  s0 <- rowSums((X0 - m0) ^ 2)
+  s0 <- s0 / (n0 * (n0 - 1))
+
+  X1 <- X[, cl == 1]
+  m1 <- rowMeans(X1)
+  n1 <- sum(cl)
+  s1 <- rowSums((X1 - m1) ^ 2)
+  s1 <- s1 / (n1 * (n1 - 1))
+
+  (m0 - m1) / sqrt(s0 + s1)
+}
+system.time(rowtstat(X, cl))
+
+rowtstat <- function(X, cl){
+  t_stat <- function(X) {
+    m <- rowMeans(X)
+    n <- length(m)
+
+    var <- rowSums((X - m) ^ 2) / (n - 1)
+
+    list(m = m, n = n, var = var)
+  }
+
+  g1 <- t_stat(X[, cl == 0])
+  g2 <- t_stat(X[, cl == 1])
+
+  pooled_se <- sqrt(g1$var / g1$n + g2$var / g1$n)
+  (g1$m - g2$m) / pooled_se
+}
+system.time(rowtstat(X, cl))
+
+```
+## Case study speeding up bootstrap fits of linear model
+
+The `lm()` function is a good example.
+
+1.  `model.frame()` handles non-standard evaluation to create a single
+    data frame containing all variables needed.
+
+2.  `model.matrix()` converts a formula and a data frame to a matrix.
+
+3.  `lm.fit()` performs the linear algebra
+
+4.  The final results and combined with intermediate pieces to create
+    an S3 object.
+
+```{r}
+fit_model <- function(df) {
+  coef(lm(mpg ~ disp + wt + cyl, data = df))
+}
+boot <- function(df) {
+  df[sample(nrow(df), replace = TRUE), , drop = FALSE]
+}
+system.time(replicate(1000, fit_model(boot(mtcars))))
+
+library(lineprof)
+l <- lineprof(replicate(1000, fit_model(boot(mtcars))))
+shine(l)
+```
+
+```{r}
+library(biglm)
+library(RcppArmadillo)
+
+mtcars$cyl <- factor(mtcars$cyl)
+mtcars_m <- model.matrix(mpg ~ disp + wt + cyl, mtcars)
+
+library(microbenchmark)
+microbenchmark(
+  mtcars_m <- model.matrix(mpg ~ disp + wt + cyl, mtcars),
+  coef(lm(mpg ~ disp + wt + cyl, data = mtcars)),
+  coef(lm.fit(mtcars_m, mtcars$mpg)),
+
+  coef(fastLm(mpg ~ disp + wt + cyl, data = mtcars)),
+  coef(fastLmPure(mtcars_m, mtcars$mpg))[, 1]
+)
+```
+
+```{r, eval = FALSE}
+data(diamonds, package = "ggplot2")
+diamonds_m <- model.matrix(price ~ carat + color, diamonds)
+
+library(microbenchmark)
+microbenchmark(
+  diamonds_m <- model.matrix(price ~ carat + color, diamonds),
+  coef(lm(price ~ carat + color, diamonds)),
+  coef(lm.fit(diamonds_m, diamonds$price)),
+
+  coef(fastLm(price ~ carat + color, diamonds)),
+  coef(fastLmPure(diamonds_m, diamonds$price))[, 1],
+  times = 10
+)
+```
+
 ### Byte code compilation
 
 R 2.13 introduced a new byte code compiler which can increase the speed of certain types of code 4-5 fold. This improvement is likely to get better in the future as the compiler implements more optimisations - this is an active area of research.
@@ -98,33 +253,6 @@ This is a relatively good example for byte code compiling. In most cases you're 
 
 All base R functions are byte code compiled by default.
 
-### Other people's code
-
-One of the easiest ways to speed up your code is to find someone who's already done it! Good idea to search for CRAN packages.
-
-    RppGSL, RcppEigen, RcppArmadillo
-
-Stackoverflow can be a useful place to ask.
-
-### Things that I know are slow
-
-* for single x or y: `x %in% y` vs `any(x == y)`
-* for s3 objects: `is()` vs `inherits()`
-* using `textConnection()`
-* modifying things in place
-
-### Important vectorised functions
-
-Not all base functions are fast, but many are. And if you can find the one that best matches your problem you may get big improvements
-
-    cumsum, diff
-    rowSums, colSums, rowMeans, colMeans
-    rle
-    match
-    duplicated
-
-Read the source code - implementation in C is usually correlated with high performance.
-
 ## Trade space for time
 
 `readRDS`, `saveRDS`
@@ -138,11 +266,6 @@ A special case of caching is memoisation.
 Most important step is to brainstorm as many possible alternative approaches.
 
 Can often recreate slow general purpose functions to fast special purpose functions. Can easily access faster languages.
-
-* http://rpubs.com/wch/3797
-* http://rpubs.com/wch/13698
-* https://gist.github.com/hadley/6353939
-* http://rpubs.com/wch/8107
 
 Good to have a variety of approaches to call upon.
 
