@@ -342,7 +342,10 @@ subset2a(sample_df, a == x)
 
 ## Calling from another function
 
-Typically, computing on the language is most useful for functions called directly by the user, not by other functions. `subset()` saves typing but it's difficult to use non-interactively from another function. For example, imagine we want a function that randomly reorders a subset of the data. A nice way to write that function would be to compose a function that random reorders rows with a function that selects rows. Let's try that:
+Typically, computing on the language is most useful when functions are called directly by users and less useful when they are called by other functions.
+
+While `subset()` saves typing, it's actually difficult to use non-interactively. For example, imagine we want to create a function that randomly reorders a subset of rows of data. A nice way to do that would be to compose a function that reorders with another that selects. Let's try that:
+
 
 ```{r}
 subset2 <- function(x, condition) {
@@ -371,7 +374,8 @@ traceback()
 #> 1: subscramble(sample_df, a >= 4)
 ```
 
-What's gone wrong? To figure it out, lets `debug()` subset and work through the code line-by-line:
+What's gone wrong? To figure it out, lets `debug()` subset2()` and work through the code line-by-line:
+
 
 ```{r, eval = FALSE}
 debugonce(subset2)
@@ -395,7 +399,7 @@ eval(condition_call, x)
 Q
 ```
 
-Can you see what the problem is? `condition_call` contains the expression `condition`. When we evaluate `condition_call` it evaluates `condition`, which has the value `a >= 4`. This can't be computed in the parent environment because it doesn't contain an object called `a`. If `a` is set in the global environment, far more confusing things can happen:
+Can you see what the problem is? `condition_call` contains the expression `condition`. So when we evaluate `condition_call` it also evaluates `condition`, which has the value `a >= 4`. However, this can't be computed because there's no object called `a` in the parent environment . But, if `a` were set in the global environment, even more confusing things can happen:
 
 ```{r}
 a <- 4
@@ -405,7 +409,7 @@ a <- c(1, 1, 4, 4, 4, 4)
 subscramble(sample_df, a >= 4)
 ```
 
-This is an example of the general tension between functions that are designed for interactive use and functions that are safe to program with. A function that uses `substitute()` might save typing, but it's difficult to call from another function.
+This is an example of the general tension between functions that are designed for interactive use and functions that are safe to program with. A function that uses `substitute()` might reduce typing, but it can be difficult to call from another function.
 
 As a developer, you should always provide an escape hatch: an alternative version of the function that uses standard evaluation. In this case, we could write a version of `subset2()` that takes an already quoted expression:
 
@@ -416,7 +420,7 @@ subset2_q <- function(x, condition) {
 }
 ```
 
-Here I use the suffix `_q` to indicate that it takes a quoted expression. Most users won't need them so the name can be a little longer.
+Here I use the suffix `_q` to indicate that it takes a quoted expression. Most users won't need this function so the name can be a little longer.
 
 We can then rewrite both `subset2()` and `subscramble()` to use `subset2_q()`:
 
@@ -448,14 +452,14 @@ Base R functions tend to use a different sort of escape hatch. They often have a
 
 1.  Base functions `match.fun()`, `page()`, and `ls()` all try to
     automatically determine whether you want standard or non-standard
-    evaluation. They each use a different approach. Figure out the essence
+    evaluation. Each uses a different approach. Figure out the essence
     of each approach then compare and contrast.
 
 1.  Add an escape hatch to `plyr::mutate()` by splitting it into two functions.
-    One function should capture the unevaluated inputs, and the other should
-    take a data frame and list of expressions and perform the computation.
+    One function should capture the unevaluated inputs. The other should take a 
+    data frame and list of expressions and perform the computation.
 
-1.  What's the escape hatch for `ggplot2::aes()`? What about `plyr::.()`?
+1.  What's the escape hatch for `ggplot2::aes()`? What about `plyr::()`?
     What do they have in common? What are the advantages and disadvantages
     of their differences?
 
@@ -473,7 +477,7 @@ Base R functions tend to use a different sort of escape hatch. They often have a
 
 ## Substitute
 
-Most functions that use non-standard evaluation provide an escape hatch. But what happens if you want to call a function without one? For example, imagine you want to create a lattice graphic given the names of two variables:
+Most functions that use non-standard evaluation provide an escape hatch. But what happens if you want to call a function that doesn't have one? For example, imagine you want to create a lattice graphic given the names of two variables:
 
 ```{r, error = TRUE, fig.keep = "none"}
 library(lattice)
@@ -484,7 +488,7 @@ y <- quote(disp)
 xyplot(x ~ y, data = mtcars)
 ```
 
-We can turn to `substitute()` and use it for another purpose: to modify an expression. Unfortunately `substitute()` has a feature that makes modifying calls interactively a bit of a pain. It never does substitutions when run from the global environment, and just behaves like `quote()`:
+We might turn to `substitute()` and use it for another purpose: to modify an expression. Unfortunately `substitute()` has a feature that makes modifying calls interactively a bit of a pain. When run from the global environment, it never does substitutions: in fact, in this situation it behaves just like `quote()`:
 
 ```{r, eval = FALSE}
 a <- 1
@@ -493,7 +497,7 @@ substitute(a + b + z)
 #> a + b + z
 ```
 
-However, if you run it inside a function, `substitute()` substitutes what it can and leaves everything else as is:
+However, if you run it inside a function, `substitute()` does substitute and leaves everything else as is:
 
 ```{r}
 f <- function() {
@@ -504,7 +508,7 @@ f <- function() {
 f()
 ```
 
-To make it easier to experiment with `substitute()`, `pryr` provides the `subs()` function.  It works exactly the same way as `substitute()` except it has a shorter name and it works in the global environment. These two features make it easier to experiment with:
+To make it easier to experiment with `substitute()`, `pryr` provides the `subs()` function. It works exactly the same way as `substitute()` except it has a shorter name and it works in the global environment. These two features make experimentation easier:
 
 ```{r}
 a <- 1
@@ -512,7 +516,7 @@ b <- 2
 subs(a + b + z)
 ```
 
-The second argument (to both `subs()` and `substitute()`) can override the use of the current environment, and provide an alternative list of name-value pairs to use. The following example uses that technique to show some variations on substituting a string, variable name or function call:
+The second argument (of both `subs()` and `substitute()`) can override the use of the current environment, and provide an alternative via a list of name-value pairs. The following example uses this technique to show some variations on substituting a string, variable name or function call:
 
 ```{r}
 subs(a + b, list(a = "y"))
@@ -581,7 +585,7 @@ x <- quote(a + b)
 substitute(x, list(a = 1, b = 2))
 ```
 
-Although `substitute()` doesn't have a built-in escape hatch, we can use `substitute()` itself to create one:
+Although `substitute()` doesn't have a built-in escape hatch, we can use the function itself to create one:
 
 ```{r}
 substitute_q <- function(x, env) {
@@ -593,24 +597,24 @@ x <- quote(a + b)
 substitute_q(x, list(a = 1, b = 2))
 ```
 
-The implementation of `substitute_q()` is short, but deep. Let's work through the example above: `substitute_q(x, list(a = 1, b = 2))`.  It's a little tricky because `substitute()` uses NSE so we can't use the usual technique of working through the parentheses inside-out.
+The implementation of `substitute_q()` is short, but deep. Let's work through the example above: `substitute_q(x, list(a = 1, b = 2))`. It's a little tricky because `substitute()` uses NSE so we can't use the usual technique of working through the parentheses inside-out.
 
 1.  First `substitute(substitute(y, env), list(y = x))` is evaluated.
     The expression `substitute(y, env)` is captured and `y` is replaced by the
     value of `x`. Because we've put `x` inside a list, it will be evaluated and
-    the rules of substitute will replace `y` with it's value. This yields the
+    the rules of substitute will replace `y` with its value. This yields the
     expression `substitute(a + b, env)`
 
 2.  Next we evaluate that expression inside the current function.
-    `substitute()` specially evaluates its first argument, and looks for name
-    value pairs in `env`, which evaluates to `list(a = 1, b = 2)`. Those are
-    both values (not promises) so the result will be `1 + 2`
+    `substitute()` evaluates its first argument, and looks for name
+    value pairs in `env`. Here, it evaluates as `list(a = 1, b = 2)`. Since 
+    these are both values (not promises), the result will be `1 + 2`
 
 A slightly more rigorous version of `substitute_q()` is provided by the pryr package.
 
 ### Capturing unevaluated ... {#capturing-dots}
 
-Another useful technique is to capture all of the unevaluated expressions in `...`.  Base R functions do this in many ways, but there's one technique that works well in a wide variety of situations:
+Another useful technique is to capture all of the unevaluated expressions in `...`. Base R functions do this in many ways, but there's one technique that works well across a wide variety of situations:
 
 ```{r}
 dots <- function(...) {
@@ -618,7 +622,7 @@ dots <- function(...) {
 }
 ```
 
-This uses the `alist()` function which simply captures all its arguments. This function is the same as `pryr::dots()`. Pryr also provides `pryr::named_dots()`, which ensures all arguments are named, using deparsed expressions as default names, just like `data.frame()`.
+This uses the `alist()` function which simply captures all its arguments. This function is the same as `pryr::dots()`. Pryr also provides `pryr::named_dots()`, which, by using deparsed expressions as default names, ensures that all arguments are named (just like `data.frame()`).
 
 ### Exercises
 
@@ -628,7 +632,7 @@ This uses the `alist()` function which simply captures all its arguments. This f
     * `f(a < b, c, d)` -> `if (a < b) c else d`
 
 2.  For each of the following pairs of expressions, describe why you can't
-    use `subs()` to convert between them.
+    use `subs()` to convert one to the other.
     * `a + b + c` -> `a + b * c`
     * `f(a, b)` -> `f(a, b, c)`
     * `f(a, b, c)` -> `f(a, b)`
@@ -637,7 +641,7 @@ This uses the `alist()` function which simply captures all its arguments. This f
 
 ## The downsides of non-standard evaluation {#nse-downsides}
 
-The biggest downside of NSE is that functions that use it are no longer [referentially transparent](http://en.wikipedia.org/wiki/Referential_transparency_(computer_science)). A function is __referentially transparent__ if you can replace its arguments with their values and its behaviour doesn't change. For example, if a function `f()` is referentially transparent, and both `x` and `y` are 10, then both `f(x)` and `f(y)` evaluate to the same result, which will be same as `f(10)`. Referentially transparent code is easier to reason about because names of objects don't matter, and you can always work from the innermost parentheses outwards.
+The biggest downside of NSE is that functions that use it are no longer [referentially transparent](http://en.wikipedia.org/wiki/Referential_transparency_(computer_science)). A function is __referentially transparent__ if you can replace its arguments with their values and its behaviour doesn't change. For example, if a function, `f()`, is referentially transparent and both `x` and `y` are 10, then `f(x)`, `f(y)` and `f(10)` will all return the same result. Referentially transparent code is easier to reason about because the names of objects don't matter, and because you can always work from the innermost parentheses outwards.
 
 There are many important functions that by their very nature are not referentially transparent. Take the assignment operator. You can't take `a <- 1` and replace `a` by its value and get the same behaviour. This is one reason that people usually write assignments at the top-level of functions. It's hard to reason about code like this:
 
@@ -649,7 +653,7 @@ if ((b <- a + 1) > (a <- b - 1)) {
 }
 ```
 
-Using NSE prevents a function from being referentially transparent. This makes the mental model needed to correctly predict the output much more complicated, so it's only worthwhile to use NSE if there is significant gain. For example, `library()` and `require()` can be called either with or without quotes, because internally they use `deparse(substitute(x))` plus some other tricks. That means that these two lines do exactly the same thing:
+Using NSE prevents a function from being referentially transparent. This makes the mental model needed to correctly predict the output much more complicated. So, it's only worthwhile to use NSE if there is significant gain. For example, `library()` and `require()` can be called either with or without quotes, because internally they use `deparse(substitute(x))` plus some other tricks. This means that these two lines do exactly the same thing:
 
 ```{r, eval = FALSE}
 library(ggplot2)
@@ -665,7 +669,7 @@ library(ggplot2)
 
 There are a number of other R functions that work in this way, like `ls()`, `rm()`, `data()`, `demo()`, `example()` and `vignette()`. To me, eliminating two keystrokes is not worth the loss of referential transparency, and I don't recommend you use NSE for this purpose.
 
-One situtation where non-standard evaluation is more useful is `data.frame()`. It uses the input to automatically name the output variables if not explicitly supplied:
+One situation where non-standard evaluation is worthwhile is `data.frame()`. If not explicitly supplied, it uses the input to automatically name the output variables:
 
 ```{r}
 x <- 10
@@ -674,9 +678,9 @@ df <- data.frame(x, y)
 names(df)
 ```
 
-I think it is worthwhile in `data.frame()` because it eliminates a lot of redundancy in the common scenario when you're creating a data frame from existing variables, and importantly, it's easy to override this behaviour by supplying names for each variable.
+I think it's worthwhile because it eliminates a lot of redundancy in the common scenario when you're creating a data frame from existing variables. More importantly, if needed, it's easy to override this behaviour by supplying names for each variable.
 
-Non-standard evaluation allows you to write functions that are extremely powerful, but they are harder to understand and harder to program with. As well as always providing an escape hatch, carefully consider both the benefits and costs of NSE before using it in a new domain.
+Non-standard evaluation allows you to write functions that are extremely powerful. However, they are harder to understand and to program with. As well as always providing an escape hatch, carefully consider both the costs and benefits of NSE before using it in a new domain.
 
 ### Exercises
 
