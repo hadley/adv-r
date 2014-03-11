@@ -63,31 +63,44 @@ Other tools:
 * trade space for time
 * write in C++
 
+Again, remember that unless performance is important for the particular case you should always default to the code that is easier to understand. Use built-in functions that you know are slow if they more clearly express intent. Don't use more-performant but less-clear alternatives until you know they're helping with a bottleneck.
+
 ## Use better tools
 
 
-### Other people's code
+### Beware of modify in place
 
-One of the easiest ways to speed up your code is to find someone who's already done it! Good idea to search for CRAN packages.
+* don't repeatedly paste together strings, or `cbind()` columns, or
+  `c()` vectors
 
-    RppGSL, RcppEigen, RcppArmadillo
+* `df$x <- y` copies entire data frame.
 
-Stackoverflow can be a useful place to ask.
+```{r}
+f <- function(x) {
+  out <- ""
+  for (x in letters) {
+    out <- paste0(out, x)
+  }
+  out
+}
+
+microbenchmark(
+  f(),
+  paste(letters, collapse = "")
+)
+```
+
+### Avoid slow functions
 
 * If you want to find if a vector contains a single value, `any(x == 10)`
   is much faster than `10 %in% x` or `is.element(10, x).
 
-* `apply()` is always slower than a specialised functions: be aware of
-  `rowSums()`, `colSums()`, `rowMeans()`, and `colMeans()`.
-
-* Be aware of the most efficient ways to convert continuous to categorical
-  values (`findInterval()`) and to re-name categorical values (character
-  subsetting).
-
 * Work with the simplest object possible. Data frames are particularly
   expensive because modifying any value in a data frame will copy the
   entire data frame. Lists and matrices don't suffer from this problem so
-  can be much faster. Instead of splitting a data frame, split a vector of
+  can be much faster.
+
+  Instead of splitting a data frame, split a vector of
   indices and then use to index into the data frame when needed.
 
 * `ifelse()` is slow, particularly if you are testing multiple conditions.
@@ -100,50 +113,157 @@ Stackoverflow can be a useful place to ask.
 * Writing to a `textConnection()` is very slow, use a temporary file on disk
   instead. (More details at http://rpubs.com/wch/13698).
 
-* If you're fitting many linear models, `lm()` is quite slow. Use
-  `model = FALSE` to avoid copying the input data in. Look at the biglm
-  package. Try RcppArmadillo::fastLm
+* If you're fitting many linear models (for example bootstrap replicates),
+  `lm()` is quite slow. Use `model = FALSE` to avoid copying the input data
+  in. Look at the biglm package. Try `RcppArmadillo::fastLm()`.
 
-## Case study: Lots of t-tests
+### Do as little as possible
 
-Vectorisation is a powerful tool. But it's not always possible to apply it directly, and you may need to understand the underlying method. The following case study explores how to make many t-tests faster, following "Computing thousands of test statistics simultaneously in R" by Holger Schwender and Tina Müller in http://stat-computing.org/newsletter/issues/scgn-18-1.pdf.
+In many cases, a specific function will be faster than a general function. If you can find a more specific function, use. Otherwise you might need to write it yourself.
 
-```{r, cache = TRUE}
-m <- 10000
+* `vapply()` is faster than `sapply()`
+
+* Avoid method dispatch. For S4, you can use `findMethod()` to find the
+  method once, and then call that repeatedly.
+
+* Or avoid overhead by calling `.Internal()` functions directly
+
+```{r}
+x <- runif(1e2)
+
+microbenchmark(
+  mean(x),
+  mean.default(x),
+  .Internal(mean(x))
+)
+```
+
+But note that if we make the input a hundred times bigger, the difference barely matters. This is why you shouldn't optimise unless you've correctly identified the code. You may save hardly any time at the cost of introducing bugs.
+
+```{r}
+x <- runif(1e4)
+
+microbenchmark(
+  mean(x),
+  mean.default(x),
+  .Internal(mean(x))
+)
+```
+
+
+If a bottleneck is a base R function, you can sometimes make it faster by making it more specific. Maybe it computes things that you don't need and are discarding anyway. Maybe it does a lot of error checking that you don't need.
+
+For example, if you have a named list with vectors of equal lengths, you can turn it into a data frame very efficiently. We can make a version of `as.data.frame()` for lists that's around 20x faster, by omitting all checking code. Writing this sort of code typically requires carefully re-writing of the source code of base R functions, remove unused functionality while preserve functionality.
+
+```{r}
+quickdf <- function(l) {
+  class(l) <- "data.frame"
+  attr(l, "row.names") <- .set_row_names(length(l[[1]]))
+  l
+}
+
+l <- lapply(1:26, function(i) runif(1e3))
+names(l) <- letters
+
+microbenchmark(
+  quickdf(l),
+  as.data.frame(l)
+)
+```
+
+```{r}
+x <- sample(letters[1:5], 20, replace = T)
+my_factor <- function(x, levels) {
+  out <- match(x, levels)
+  levels(out) <- levels
+  class(out) <- "factor"
+  out
+}
+
+microbenchmark(
+  factor(x, letters[1:5]),
+  my_factor(x, letters[1:5])
+)
+```
+
+### Other people's code
+
+One of the easiest ways to speed up your code is to find someone who's already done it! Good idea to search for CRAN packages.
+
+Packages that [use Rcpp](http://cran.r-project.org/web/packages/Rcpp/index.html) are a good place to start, because it's likely that the bottlenecks have been reimplemented in high-performance C++ code.
+
+Stackoverflow can be a useful place to ask.
+
+### Vectorisation
+
+Vectorisation is a powerful tool. Doesn't mean using `apply()` or `lapply()` or even `Vectorise()`. Those just change the interface of the function without changing the performance. A vectorised function takes both vectors as inputs and does the loop in C. You'll learn how to write your own vectorised functions in [Rcpp](#rcpp). But taking advantage of already vectorised functions in R is also really important.
+
+* `apply()` is always slower than a specialised functions: be aware of
+  `rowSums()`, `colSums()`, `rowMeans()`, and `colMeans()`.
+
+* Be aware of the most efficient ways to convert continuous to categorical
+  values (`findInterval()`) and to re-name categorical values (character
+  subsetting).
+
+*  Matrix multiplication
+
+Not about eliminating for-loops, about thinking about the problem in a whole-object, vectorised way.
+
+But it's not always possible to apply it directly, and you may need to understand the underlying method. The following case study explores how to make many t-tests faster, following "Computing thousands of test statistics simultaneously in R" by Holger Schwender and Tina Müller in http://stat-computing.org/newsletter/issues/scgn-18-1.pdf - read the paper to see this method applied to other tests.
+
+Here we have a matrix with 50 columns and 1000 rows.
+
+```{r}
+m <- 1000
 n <- 50
 X <- matrix(rnorm(m * n, 10, 3), m)
 cl <- rep(0:1, e = n / 2)
+```
 
+There are two basic ways to use `t.test()` with a formula or with a vector of class labels
+
+```{r, cache = TRUE}
 system.time(for(i in 1:m) t.test(X[i, ] ~ cl)$stat)
-system.time(for(i in 1:m) t.test(X[i, cl == 0], X[i, cl== 1])$stat)
+system.time(for(i in 1:m) t.test(X[i, cl == 0], X[i, cl == 1])$stat)
+```
 
+Of course, a for loop just computes, but doesn't save, so we might want to use `apply()` instead. This adds little overhead:
+
+```{r}
 compT <- function(x, cl){
   t.test(x[cl == 0], x[cl == 1])$stat
 }
 system.time(apply(X, 1, compT, cl = cl))
+```
 
-rowtstat <- function(X, cl){
-  X0 <- X[, cl == 0]
-  m0 <- rowMeans(X0)
-  n0 <- sum(cl == 0)
-  s0 <- rowSums((X0 - m0) ^ 2)
-  s0 <- s0 / (n0 * (n0 - 1))
+How can we make this faster? But `stats:::t.test.default` does a lot more than just computing the t-statistic - it also computes the p-value and creates a nice output for printing. Maybe we can make our code faster by stripping out those pieces.
 
-  X1 <- X[, cl == 1]
-  m1 <- rowMeans(X1)
-  n1 <- sum(cl)
-  s1 <- rowSums((X1 - m1) ^ 2)
-  s1 <- s1 / (n1 * (n1 - 1))
+```{r}
+my_t <- function(x, cl) {
+  t_stat <- function(x) {
+    m <- mean(x)
+    length <- length(x)
+    var <- sum((x - m) ^ 2) / (n - 1)
 
-  (m0 - m1) / sqrt(s0 + s1)
+    list(m = m, n = n, var = var)
+  }
+
+  g1 <- t_stat(x[cl == 0])
+  g2 <- t_stat(x[cl == 1])
+
+  pooled_se <- sqrt(g1$var / g1$n + g2$var / g2$n)
+  (g1$m - g2$m) / pooled_se
 }
-system.time(rowtstat(X, cl))
+system.time(apply(X, 1, my_t, cl = cl))
+```
 
+Now that we have a fairly simple function, we can make it faster still by vectorising it. Instead of looping over the array outside the funtion, we do it inside by vectorising `t_stat()` so that it works with a matrix of values.
+
+```{r}
 rowtstat <- function(X, cl){
   t_stat <- function(X) {
     m <- rowMeans(X)
-    n <- length(m)
-
+    n <- ncol(X)
     var <- rowSums((X - m) ^ 2) / (n - 1)
 
     list(m = m, n = n, var = var)
@@ -152,12 +272,12 @@ rowtstat <- function(X, cl){
   g1 <- t_stat(X[, cl == 0])
   g2 <- t_stat(X[, cl == 1])
 
-  pooled_se <- sqrt(g1$var / g1$n + g2$var / g1$n)
+  pooled_se <- sqrt(g1$var / g1$n + g2$var / g2$n)
   (g1$m - g2$m) / pooled_se
 }
 system.time(rowtstat(X, cl))
-
 ```
+
 ## Case study speeding up bootstrap fits of linear model
 
 The `lm()` function is a good example.
@@ -255,11 +375,14 @@ All base R functions are byte code compiled by default.
 
 ## Trade space for time
 
+A very general optimisation technique is to trade space for time by caching results. Instead of computing repeatedly, you compute once and then look up again in the future. A special case of caching is memoisation.
+
+http://en.wikipedia.org/wiki/Dynamic_programming: "The idea behind dynamic programming is quite simple. In general, to solve a given problem, we need to solve different parts of the problem (subproblems), then combine the solutions of the subproblems to reach an overall solution. Often when using a more naive method, many of the subproblems are generated and solved many times. The dynamic programming approach seeks to solve each subproblem only once, thus reducing the number of computations: once the solution to a given subproblem has been computed, it is stored or "memo-ized": the next time the same solution is needed, it is simply looked up. This approach is especially useful when the number of repeating subproblems grows exponentially as a function of the size of the input."
+
 `readRDS`, `saveRDS`
 
-Caching packages
+Caching packages: memoise, hash, http://cran.r-project.org/web/packages/cacher/index.html, http://cran.r-project.org/web/packages/R.cache/index.html
 
-A special case of caching is memoisation.
 
 ## Brainstorming
 
