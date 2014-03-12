@@ -9,17 +9,17 @@ library(pryr)
 
 # Metaprogramming
 
-In [non-standard evaluation](#nse), you learned the basics of accessing the expressions underlying computation in R, and evaluating them in new ways. In this chapter, you'll learn how to manipulate those expressions with code. You're going to learn how to metaprogram: how to create programs with other programs!
+In [non-standard evaluation](#nse), you learned the basics of accessing and evaluating the expressions underlying computation in R. In this chapter, you'll learn how to manipulate these expressions with code. You're going to learn how to metaprogram: how to create programs with other programs!
 
-The chapter begins with a deep dive into the structure of expressions in [structure of expressions](#structure-of-expressions). You'll learn about the four components of an expression: constants, names, calls and pairlists. The following sections go into detail about names, [names](#names), and calls, [calls](#calls). [Capturing the current call](#capturing-call) takes a minor detour to discuss some common uses of calls in base R. [Pairlists](#pairlists) completes the discussion of the four major components of an expression, and shows how you can create functions from their component pieces. The chapter concludes with [walking the call tree with recursive functions](#ast-funs) which combines everything you've learned to write functions that can compute on and modify arbitrary R code.
+The chapter begins with a deep dive into the structure of expressions in [structure of expressions](#structure-of-expressions). You'll learn about the four components of an expression: constants, names, calls and pairlists. The sections on names, [names](#names), and calls, [calls](#calls), go into detail. [Capturing the current call](#capturing-call) takes a minor detour to discuss some common uses of calls in base R. [Pairlists](#pairlists) completes the discussion of the four major components of an expression, and shows how you can create functions from their component pieces. The chapter concludes with [walking the call tree with recursive functions](#ast-funs) which combines everything you've learned about writing functions that can compute on and modify arbitrary R code.
 
-##### Prereqs
+##### Prerequisites
 
-Thoroughout this chapter we're going to use tools from the `pryr` package to help see what's going on.  If you don't already have it, install it by running `devtools::install_github("hadley/pryr")`.
+Thoroughout this chapter we're going to use tools from the `pryr` package to help see what's going on. If you don't already have it, install it by running `devtools::install_github("hadley/pryr")`.
 
 ## Structure of expressions
 
-To compute on the language, we first need to understand the structure of the language. That will require some new vocabulary, some new tools and some new ways of thinking about R code. The first thing you need to understand is the distinction between an operation and its result:
+To compute on the language, we first need to understand the structure of the language. That will require some new vocabulary, some new tools and some new ways of thinking about R code. The first thing you'll need to understand is the distinction between an operation and a result:
 
 ```{r}
 x <- 4
@@ -27,16 +27,16 @@ y <- x * 10
 y
 ```
 
-We want to distinguish action of multiplying x by 10 and assigning the results to `y` from the actual result (40).  As you've seen in the previous chapter, we can capture the action with `quote()`:
+We want to distinguish the action of multiplying `x` by 10 and assigning that result to `y` from the actual result (40). As we've seen in the previous chapter, we can capture the action with `quote()`:
 
 ```{r}
 z <- quote(y <- x * 10)
 z
 ```
 
-`quote()` gives us back an __expression__, an object that represents an action that can be performed by R. (Unfortunately `expression()` does not return an expression in this sense. Instead it returns something more like a list of expressions. See [parsing and deparsing](#parsing-and-deparsing) for more details.)
+`quote()` returns an __expression__: an object that represents an action that can be performed by R (Unfortunately `expression()` does not return an expression in this sense. Instead, it returns something more like a list of expressions. See [parsing and deparsing](#parsing-and-deparsing) for more details.).
 
-An expression is also called an abstract syntax tree (AST) because it represents the abstract structure of the code in a tree form. We will use `pryr::ast()` to see the hierarchy more clearly:
+An expression is also called an abstract syntax tree (AST) because it represents the hierarchical tree structure of the code. We'll use `pryr::ast()` to see this more clearly:
 
 ```{r}
 ast(y <- x * 10)
@@ -61,7 +61,7 @@ There are four possible components of an expression: constants, names, calls and
     identical("test", quote("test"))
     ```
 
-* __names__, or symbols, represent the name of an object, not its value.
+* __names__, or symbols, represent the name of an object rather than its value.
    `ast()` prefixes names with a backtick.
 
     ```{r}
@@ -72,9 +72,9 @@ There are four possible components of an expression: constants, names, calls and
 
 * __calls__ represent the action of calling a function. Like lists, calls are
   recursive: they can contain constants, names, pairlists and other calls.
-  `ast()` prints `()` then lists the children. The first child is the
-  function to call, and the remaining children are the arguments to that
-  function.
+  `ast()` prints `()` and then lists the children. The first child is the
+  function that is called, and the remaining children are the function's 
+  arguments.
 
     ```{r}
     ast(f())
@@ -85,7 +85,7 @@ There are four possible components of an expression: constants, names, calls and
 
     As mentioned in
     [every operation is a function call](#every-operation-is-a-function-call),
-    even things that don't look like function calls still follow this
+    even things that don't look like function calls still have this
     hierarchical structure:
 
     ```{r}
@@ -93,7 +93,7 @@ There are four possible components of an expression: constants, names, calls and
     ast(if (x > 1) x else 1/x)
     ```
 
-* __pairlists__, short for dotted pair lists, are a remnant of R's past.
+* __pairlists__, short for dotted pair lists, are a legacy of R's past.
   They are only used in one place: the formal arguments of a function.
   `ast()` prints `[]` at the top-level of a pairlist. Like calls, pairlists
   are also recursive and can contain constants, names and calls.
@@ -103,14 +103,14 @@ There are four possible components of an expression: constants, names, calls and
     ast(function(x = 1, y = x * 2) {x / y})
     ```
 
-Note that `str()` does not follow these naming conventions when describing objects. It describes names as symbols and calls as language objects:
+Note that `str()` does not follow these naming conventions when describing objects. Instead, it describes names as symbols and calls as language objects:
 
 ```{r}
 str(quote(a))
 str(quote(a + b))
 ```
 
-Using low-level functions, it is possible to create call trees that contain objects other than constants, names, calls and pairlists. The following example uses `substitute()` to insert a data frame into a call tree. This is a bad idea because the object does not print correctly: while the printed call looks like it should return "list", it returns "data.frame" when evaluated.
+Using low-level functions, it is possible to create call trees that contain objects other than constants, names, calls and pairlists. The following example uses `substitute()` to insert a data frame into a call tree. This is a bad idea, however, because the object does not print correctly: the printed call looks like it should return "list" but when evaluated, it returns "data.frame".
 
 ```{r}
 class_df <- substitute(class(df), list(df = data.frame(x = 10)))
@@ -118,11 +118,11 @@ class_df
 eval(class_df)
 ```
 
-Together these four components define the structure of all R code, and are explained in more detail in the following sections.
+Together these four components define the structure of all R code. They are explained in more detail in the following sections.
 
 ### Exercises
 
-1.  There is no existing base function that checks where an element is
+1.  There's no existing base function that checks if an element is
     a valid component of an expression (i.e. it's a constant, name,
     call or pairlist). Implement one by guessing the names of the "is"
     functions for calls, names and pairlists.
@@ -130,19 +130,19 @@ Together these four components define the structure of all R code, and are expla
 1.  `pryr::ast()` uses non-standard evaluation. What's its escape hatch to
     standard evaluation?
 
-1.  What does the call tree for a if statement with multiple else conditions
+1.  What does the call tree of an if statement with multiple else conditions
     look like?
 
-1.  Compare `ast(x + y %+% z)` to `ast(x ^ y %+% z)`. What does that
+1.  Compare `ast(x + y %+% z)` to `ast(x ^ y %+% z)`. What do they
     tell you about the precedence of custom infix functions?
 
-1.  Why can't an expression contain an atomic vector of length greater than 1?
+1.  Why can't an expression contain an atomic vector of length greater than one?
     Which one of the six types of atomic vector can't appear in an expression?
     Why?
 
 ## Names
 
-As well as capturing names with `quote()`, you can convert a string to a name with `as.name()`. This is mostly useful when your function receives strings as input, as otherwise it's more typing than using `quote()`. Use `is.name()` to test if an object is a name.
+Typically, we use `quote()` to capture names. You can also convert a string to a name with `as.name()`. However, this is most useful only when your function receives strings as input. Otherwise it involves more typing than using `quote()`. (You can use `is.name()` to test if an object is a name.)
 
 ```{r}
 as.name("name")
@@ -162,7 +162,7 @@ as.name("a b")
 as.name("if")
 ```
 
-There's one special name that needs a little extra discussion: the empty name, used to represent missing arguments. This object behaves strangely. You can't bind it to a variable: if you do, it triggers an error about missing arguments. It's only useful if you want to programmatically create a function with missing arguments.
+There's one special name that needs a little extra discussion: the empty name. It is used to represent missing arguments. This object behaves strangely. You can't bind it to a variable. If you do, it triggers an error about missing arguments. It's only useful if you want to programmatically create a function with missing arguments.
 
 ```{r, error = TRUE}
 f <- function(x) 10
@@ -196,7 +196,7 @@ quote(expr =)
 1.  Write an equivalent to `get()` using `as.name()` and `eval()`. Write an
     equivalent to `assign()` using `as.name()`, `substitute()` and `eval()`.
     (Don't worry about the multiple ways of choosing an environment, assume
-    that the user supplies it explicitly.)
+    that the user supplies it explicitly.).
 
 ## Calls
 
@@ -250,7 +250,7 @@ y$file <- quote(paste0(filename, ".csv"))
 y
 ```
 
-Calls also support the `[` method, but use it with care: removing the first element is unlikely to create a useful call.
+Calls also support the `[` method. But use it with care. Removing the first element is unlikely to create a useful call.
 
 ```{r}
 x[-3] # remove the second argument
@@ -265,7 +265,7 @@ If you want a list of the unevaluated arguments (expressions), use explicit coer
 as.list(x[-1])
 ```
 
-Generally, getting or setting arguments by position is dangerous, because R's function calling semantics are so flexible. For example, the following three calls all have the same effect, even though the values at each position are different:
+Generally speaking, because R's function calling semantics are so flexible, getting or setting arguments by position is dangerous. For example, even though the values at each position are different, the following three calls all have the same effect:
 
 ```{r}
 m1 <- quote(read.delim("data.txt", sep = "|"))
@@ -283,14 +283,14 @@ standardise_call(m3)
 
 ### Creating a call from its components
 
-To create a new call from its components you can use `call()` or `as.call()`. The first argument to `call()` is a string giving a function name. The other arguments are expressions that represent the arguments of the call.
+To create a new call from its components, you can use `call()` or `as.call()`. The first argument to `call()` is a string which gives a function name. The other arguments are expressions that represent the arguments of the call.
 
 ```{r}
 call(":", 1, 10)
 call("mean", quote(1:10), na.rm = TRUE)
 ```
 
-`as.call()` is a minor variation of `call()` that takes a single list as input. The first element is a name or call, and the subsequent elements are the arguments.
+`as.call()` is a minor variant of `call()` that takes a single list as input. The first element is a name or call. The subsequent elements are the arguments.
 
 ```{r}
 as.call(list(quote(mean), quote(1:10)))
@@ -307,7 +307,7 @@ as.call(list(quote(adder(10)), 20))
     identical(a, b)
     ```
 
-    What's the difference and which one should you prefer?
+    What's the difference? Which one should you prefer?
 
 1.  Implement a pure R version of `do.call()`.
 
@@ -321,7 +321,7 @@ as.call(list(quote(adder(10)), 20))
     ```
 
 1.  Since `list()`s don't belong in expressions, we could create a more
-    convenient call constructor that automatically combined lists into the
+    convenient call constructor that automatically combines lists into the
     arguments. Implement `make_call()` so that the following code works.
 
     ```{r, eval = FALSE}
@@ -348,8 +348,8 @@ as.call(list(quote(adder(10)), 20))
 1.  Read the documentation for `pryr::modify_call()`. How do you think
     it works? Read the source code.
 
-1.  Use `ast()` and experimentation to figure out the three arguments to the
-    `if()` call. Which are components are required? What are the arguments to
+1.  Use `ast()` and experimentation to figure out the three arguments in an
+    `if()` call. Which components are required? What are the arguments to
     the `for()` and `while()` calls?
 
 ## Capturing the current call {#capturing-call}
@@ -360,7 +360,7 @@ names(find_uses(std, "sys.call"))
 names(find_uses(std, "match.call"))
 ```
 
-Many base R functions use the current call: expression that caused the current function to be run. There are two ways to capture the current call:
+Many base R functions use the current call: the expression that caused the current function to be run. There are two ways to capture a current call:
 
 * `sys.call()` captures exactly what the user typed.
 
@@ -368,7 +368,7 @@ Many base R functions use the current call: expression that caused the current f
   automatically calling `pryr::standardise_call()` on the result of
   `sys.call()`
 
-The following example illustrates the difference:
+The following example illustrates the difference between the two:
 
 ```{r}
 f <- function(abc = 1, def = 2, ghi = 3) {
@@ -404,9 +404,9 @@ update_model <- function(object, formula., ...) {
 update_model(mod, formula = . ~ . + cyl)
 ```
 
-The original `update()` has an `evaluate` argument that controls whether the function returns a call or the result, but I think it's good principle for a function to only return one type of object, not different types depending on the arguments.
+The original `update()` has an `evaluate` argument that controls whether the function returns the call or the result. But I think it's better, on principle, that a function returns only one type of object, rather than different types depending on the function's arguments.
 
-This rewrite also allows us to fix a small bug in `update()`: it evaluates the call in the global environment, when really we want to re-evaluate it in the environment where the model was originally fit. This happens to be stored in the formula.
+This rewrite also allows us to fix a small bug in `update()`: it re-evaluates the call in the global environment, when what we really want is to re-evaluate it in the environment where the model was originally fit - in the formula.
 
 ```{r, error = TRUE}
 f <- function() {
@@ -423,9 +423,9 @@ update_model <- function(object, formula., ...) {
 update_model(mod, data = mtcars)
 ```
 
-This is a good principle to remember: if you want to replay code captured with `match.call()`, you also need to capture the environment in which it was evaluated, usually the `parent.frame()`. There is a downside to this. Capturing the environment will capture any large objects in that environment, preventing their memory from being freed. This topic is explored in more detail in [garbage collection](#garbarge-collection).
+This is a important principle to remember: if you want to re-run code captured with `match.call()`, you also need to capture the environment in which it was evaluated, usually the `parent.frame()`. The downside to this is that capturing the environment also means capturing any large objects which happen to be in that environment, which prevents their memory from being released. This topic is explored in more detail in [garbage collection](#garbarge-collection).
 
-Some base R functions use `match.call()` where it's not necessary. For example,  `write.csv()` captures call to `write.csv()` and mangles it to call `write.table()` instead:
+Some base R functions use `match.call()` where it's not necessary. For example,  `write.csv()` captures the call to `write.csv()` and mangles it to call `write.table()` instead:
 
 ```{r}
 write.csv <- function (...) {
@@ -446,7 +446,7 @@ write.csv <- function (...) {
 }
 ```
 
-We could implement `write.csv()` using regular function call semantics:
+To fix this, we could implement `write.csv()` using regular function call semantics:
 
 ```{r}
 write.csv <- function(x, file = "", sep = ",", qmethod = "double", ...) {
@@ -454,19 +454,18 @@ write.csv <- function(x, file = "", sep = ",", qmethod = "double", ...) {
 }
 ```
 
-This is much easier to understand: it's just calling `write.table()` with different defaults. This also fixes a subtle bug in the original `write.csv()`: `write.csv(mtcars, row = FALSE)` raises an error, but `write.csv(mtcars, row.names = FALSE)` does not. Always want to use the simplest tool that will solve a problem.
+This is much easier to understand: it's just calling `write.table()` with different defaults. This also fixes a subtle bug in the original `write.csv()`: `write.csv(mtcars, row = FALSE)` raises an error, but `write.csv(mtcars, row.names = FALSE)` does not. The lesson here is that it's always better to solve a problem with the simplest tool possible.
 
 ### Exercises
 
-1.  Compare and contrast `update_model()` to `upate.default()`.
+1.  Compare and contrast `update_model()` with `upate.default()`.
 
 1.  Why doesn't `write.csv(mtcars, "mtcars.csv", row = FALSE)` work?
-    What property of argument matching has the original author forgotten
-    about?
+    What property of argument matching has the original author forgotten?
 
 1.  Rewrite `update.formula()` to use R code instead of C code.
 
-1.  Sometimes it's necessary to figure out the function that called the
+1.  Sometimes it's necessary to uncover the function that called the
     function that called the current function (i.e. the grandparent, not
     the parent). How can you use `sys.call()` or `match.call()` to find
     this function?
