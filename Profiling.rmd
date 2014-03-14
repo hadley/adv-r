@@ -65,43 +65,72 @@ Other tools:
 
 Again, remember that unless performance is important for the particular case you should always default to the code that is easier to understand. Use built-in functions that you know are slow if they more clearly express intent. Don't use more-performant but less-clear alternatives until you know they're helping with a bottleneck.
 
+Most important step is to brainstorm as many possible alternative approaches.
+
+Writing fast R code is part of a general task of becoming a better R programming. Reading this book has hopefully helped, but you'll generally need to broaden your education.
+
+Good to have a variety of approaches to call upon.
+
+* [Read blogs](http://www.r-bloggers.com/)
+
+* Take algorithm and data structure course, e.g. https://www.coursera.org/course/algs4partI
+
+* Read other R programming books, like
+  [The Art of R Programming](http://amzn.com/1593273843)
+
+* Read other people's R codes
+
 ## Use better tools
 
 
 ### Beware of modify in place
 
-* don't repeatedly paste together strings, or `cbind()` columns, or
-  `c()` vectors
+One of the most pernicious causes of slow code is inadvertently modifying an object in a loop in such a way that every modification requires the complete object to be copied. Sometimes this happens because R isn't always very good at picking up in place modifications, for example, if you modified a single element in a data frame the entire data frame is copied. Other times, it's because you have thought through the implications:
 
-* `df$x <- y` copies entire data frame.
+* every time you add a new element to a vector with `c()` or `append()` the
+  entire vector must be copied
+
+* every time you add on to an existing matrix with `cbind()` or `rbind()`
+  the entire matrix must be copied
+
+* every time you make a longer string with `paste()` the complete string
+  must be copied.
+
+Here's a little benchmark that illustrates the difference. We first generate some random strings, and then combine them either iteratively with a loop with `collapse()`, or once with `paste()`. Note that the peformance of `collapse()` get relatively worse as the number of strings grows: combining 100 strings takes almost 30 times longer than combining 10 strings.
 
 ```{r}
-f <- function(x) {
+random_string <- function() {
+  paste(sample(letters, 50, replace = TRUE), collapse = "")
+}
+strings10 <- replicate(10, random_string())
+strings100 <- replicate(100, random_string())
+
+collapse <- function(xs) {
   out <- ""
-  for (x in letters) {
+  for (x in xs) {
     out <- paste0(out, x)
   }
   out
 }
 
 microbenchmark(
-  f(),
-  paste(letters, collapse = "")
+  collapse(strings10),
+  collapse(strings100),
+  paste(strings10, collapse = ""),
+  paste(strings100, collapse = "")
 )
 ```
 
+[Modification in place]{#modification-in-place} shows some other more subtle examples of this phenomena, and gives you tools to determine whether an object is indeed being modified in place, or is being copied multiple times.
+
+This is Circle 2 in the [R inferno](http://www.burns-stat.com/pages/Tutor/R_inferno.pdf). More examples at https://gist.github.com/wch/7107695.
+
 ### Avoid slow functions
 
-* If you want to find if a vector contains a single value, `any(x == 10)`
+As you work more on speeding up your slow R code, you'll start to build up a personal list of slow base functions that are best avoided. Three functions that are on my personal list are:
+
+* If you want to see if a vector contains a single value, `any(x == 10)`
   is much faster than `10 %in% x` or `is.element(10, x).
-
-* Work with the simplest object possible. Data frames are particularly
-  expensive because modifying any value in a data frame will copy the
-  entire data frame. Lists and matrices don't suffer from this problem so
-  can be much faster.
-
-  Instead of splitting a data frame, split a vector of
-  indices and then use to index into the data frame when needed.
 
 * `ifelse()` is slow, particularly if you are testing multiple conditions.
   One trick to get around this is to assign a unique number to each combination
@@ -113,9 +142,7 @@ microbenchmark(
 * Writing to a `textConnection()` is very slow, use a temporary file on disk
   instead. (More details at http://rpubs.com/wch/13698).
 
-* If you're fitting many linear models (for example bootstrap replicates),
-  `lm()` is quite slow. Use `model = FALSE` to avoid copying the input data
-  in. Look at the biglm package. Try `RcppArmadillo::fastLm()`.
+You'll also learn about a lot of others that you can make faster in the course of working through [Rcpp](#Rcpp).
 
 ### Do as little as possible
 
@@ -171,26 +198,17 @@ microbenchmark(
 )
 ```
 
-```{r}
-x <- sample(letters[1:5], 20, replace = T)
-my_factor <- function(x, levels) {
-  out <- match(x, levels)
-  levels(out) <- levels
-  class(out) <- "factor"
-  out
-}
+In other cases, doing as little as possible, means work with the simplest possible object. Data frames are particularly expensive because modifying any value in a data frame will copy the entire data frame. Lists and matrices don't suffer from this problem so can be much faster.
 
-microbenchmark(
-  factor(x, letters[1:5]),
-  my_factor(x, letters[1:5])
-)
-```
+Instead of splitting a data frame, split a vector of indices and then use to index into the data frame when needed.
 
 ### Other people's code
 
 One of the easiest ways to speed up your code is to find someone who's already done it! Good idea to search for CRAN packages.
 
 Packages that [use Rcpp](http://cran.r-project.org/web/packages/Rcpp/index.html) are a good place to start, because it's likely that the bottlenecks have been reimplemented in high-performance C++ code.
+
+Become familiar with the [CRAN task view](http://cran.rstudio.com/web/views/) most closely related to your domain. That's a good place to look for new packages.
 
 Stackoverflow can be a useful place to ask.
 
@@ -205,7 +223,12 @@ Vectorisation is a powerful tool. Doesn't mean using `apply()` or `lapply()` or 
   values (`findInterval()`) and to re-name categorical values (character
   subsetting).
 
-*  Matrix multiplication
+* Matrix multiplication is very fast, so if you can figure out how to
+  frame your problem as matrix math, you may be able to get big speed
+  wins.
+
+* Whole object subsetting. `x[is.na(x)] <- 0` will replace all missing
+  values in `x` with 0 if `x` is a vector, matrix or data frame.
 
 Not about eliminating for-loops, about thinking about the problem in a whole-object, vectorised way.
 
@@ -278,71 +301,9 @@ rowtstat <- function(X, cl){
 system.time(rowtstat(X, cl))
 ```
 
-## Case study speeding up bootstrap fits of linear model
-
-The `lm()` function is a good example.
-
-1.  `model.frame()` handles non-standard evaluation to create a single
-    data frame containing all variables needed.
-
-2.  `model.matrix()` converts a formula and a data frame to a matrix.
-
-3.  `lm.fit()` performs the linear algebra
-
-4.  The final results and combined with intermediate pieces to create
-    an S3 object.
-
-```{r}
-fit_model <- function(df) {
-  coef(lm(mpg ~ disp + wt + cyl, data = df))
-}
-boot <- function(df) {
-  df[sample(nrow(df), replace = TRUE), , drop = FALSE]
-}
-system.time(replicate(1000, fit_model(boot(mtcars))))
-
-library(lineprof)
-l <- lineprof(replicate(1000, fit_model(boot(mtcars))))
-shine(l)
-```
-
-```{r}
-library(biglm)
-library(RcppArmadillo)
-
-mtcars$cyl <- factor(mtcars$cyl)
-mtcars_m <- model.matrix(mpg ~ disp + wt + cyl, mtcars)
-
-library(microbenchmark)
-microbenchmark(
-  mtcars_m <- model.matrix(mpg ~ disp + wt + cyl, mtcars),
-  coef(lm(mpg ~ disp + wt + cyl, data = mtcars)),
-  coef(lm.fit(mtcars_m, mtcars$mpg)),
-
-  coef(fastLm(mpg ~ disp + wt + cyl, data = mtcars)),
-  coef(fastLmPure(mtcars_m, mtcars$mpg))[, 1]
-)
-```
-
-```{r, eval = FALSE}
-data(diamonds, package = "ggplot2")
-diamonds_m <- model.matrix(price ~ carat + color, diamonds)
-
-library(microbenchmark)
-microbenchmark(
-  diamonds_m <- model.matrix(price ~ carat + color, diamonds),
-  coef(lm(price ~ carat + color, diamonds)),
-  coef(lm.fit(diamonds_m, diamonds$price)),
-
-  coef(fastLm(price ~ carat + color, diamonds)),
-  coef(fastLmPure(diamonds_m, diamonds$price))[, 1],
-  times = 10
-)
-```
-
 ### Byte code compilation
 
-R 2.13 introduced a new byte code compiler which can increase the speed of certain types of code 4-5 fold. This improvement is likely to get better in the future as the compiler implements more optimisations - this is an active area of research.
+R 2.13.0 introduced a new byte code compiler which can increase the speed of certain types of code 4-5 fold. This improvement is likely to get better in the future as the compiler implements more optimisations - this is an active area of research.
 
 ```{r}
 library(compiler)
@@ -382,19 +343,3 @@ http://en.wikipedia.org/wiki/Dynamic_programming: "The idea behind dynamic progr
 `readRDS`, `saveRDS`
 
 Caching packages: memoise, hash, http://cran.r-project.org/web/packages/cacher/index.html, http://cran.r-project.org/web/packages/R.cache/index.html
-
-
-## Brainstorming
-
-Most important step is to brainstorm as many possible alternative approaches.
-
-Can often recreate slow general purpose functions to fast special purpose functions. Can easily access faster languages.
-
-Good to have a variety of approaches to call upon.
-
-* Read blogs
-* Algorithm/data structure courses (https://www.coursera.org/course/algs4partI)
-* Book
-* Read R code
-
-We introduce a few at a high-level in the Rcpp chapter.
