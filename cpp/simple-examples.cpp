@@ -21,7 +21,7 @@ NumericVector f2(NumericVector x) {
 
   out[0] = x[0];
   for(int i = 1; i < n; ++i) {
-    out =+ out[i - 1] + x[i];
+    out[i] = out[i - 1] + x[i];
   }
   return out;
 }
