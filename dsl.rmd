@@ -319,40 +319,41 @@ If you want to access the R function overridden by an HTML tag with the same nam
 
 ## LaTeX
 
-The next DSL will convert R expression into their LaTeX math equivalents. (This is a bit like `?plotmath`, but for text instead of plots.) LaTeX is the lingua franca of mathematicians and statisticians: whenever you want to describe an equation in text (e.g. in an email) you write it as a LaTeX equation. Many reports are produced from R using LaTeX, so it might be useful to automatically convert from mathematical expressions from one language to the other.
+The next DSL will convert R expressions into their LaTeX math equivalents. (This is a bit like `?plotmath`, but for text instead of plots.) LaTeX is the lingua franca of mathematicians and statisticians: whenever you want to describe an equation in text (e.g. in an email), you write it as a LaTeX equation. Since many reports are produced using both R and LaTeX, it might be useful to be able to automatically convert mathematical expressions from one language to the other.
 
-This mathematical DSL will be more complicated than the HTML DSL, because we need to convert both functions and names. We'll also create a "default" conversion, so that functions we don't know about get a standard conversion. Like the HTML DSL, we'll also write functionals to make it easier to generate the translators.
+Because we need to convert both functions and names, this mathematical DSL will be more complicated than the HTML DSL. We'll also need to create a "default" conversion, so that functions we don't know about get a standard conversion. Like the HTML DSL, we'll also write functionals to make it easier to generate the translators.
 
 Before we begin, let's quickly cover how formulas are expressed in LaTeX.
 
 ### LaTeX mathematics
 
-LaTeX mathematics are complex, and [well documented](http://en.wikibooks.org/wiki/LaTeX/Mathematics). They have a fairly simple structure:
+LaTeX mathematics are complex. Fortunately, they are [well documented](http://en.wikibooks.org/wiki/LaTeX/Mathematics). That said, they have a fairly simple structure:
 
-* Most simple mathematical equations are represented in the way you'd type
-  them into R: `x * y`, `z ^ 5`.  Subscripts are written using `_`, e.g. `x_1`.
+* Most simple mathematical equations are written in the same way you'd type
+  them in R: `x * y`, `z ^ 5`. Subscripts are written using `_` (e.g. `x_1`).
 
 * Special characters start with a `\`: `\pi` = π, `\pm` = ±, and so on.
   There are a huge number of symbols available in LaTeX. Googling for
-  `latex math symbols` finds many [lists]
-  (http://www.sunilpatel.co.uk/latex-type/latex-math-symbols/), and there's
-  even [a service](http://detexify.kirelabs.org/classify.html) where you can
-  sketch a symbol in the browser and it will look it up for you.
+  `latex math symbols` will return many [lists]
+  (http://www.sunilpatel.co.uk/latex-type/latex-math-symbols/). There's
+  even [a service](http://detexify.kirelabs.org/classify.html) that will look up the   
+  symbol you sketch in the browser.
 
-* More complicated functions look like `\name{arg1}{arg2}`.  For example to
-  represent a fraction you use `\frac{a}{b}`, and a sqrt looks like `\sqrt{a}`.
+* More complicated functions look like `\name{arg1}{arg2}`. For example, to
+  write a fraction you'd use `\frac{a}{b}`. To write a square root, you'd use 
+  `\sqrt{a}`.
 
 * To group elements together use `{}`: i.e. `x ^ a + b` vs. `x ^ {a + b}`.
 
 * In good math typesetting, a distinction is made between variables and
-  functions, but without extra information, LaTeX doesn't know whether
+  functions. But without extra information, LaTeX doesn't know whether
   `f(a * b)` represents calling the function `f` with input `a * b`,
   or is shorthand for `f * (a * b)`. If `f` is a function, you can tell
   LaTeX to typeset it using an upright font with `\textrm{f}(a * b)`
 
 ### Goal
 
-Our goal is to use these rules to automatically convert from an R expression to a LaTeX representation of that expression. We will tackle it in four stages:
+Our goal is to use these rules to automatically convert an R expression to its appropriate LaTeX representation. We'll tackle this in four stages:
 
 * Convert known symbols: `pi` -> `\pi`
 
@@ -363,11 +364,11 @@ Our goal is to use these rules to automatically convert from an R expression to 
 
 * Wrap unknown functions with `\textrm`: `f(a)` -> `\textrm{f}(a)`
 
-We'll work in the opposite direction to the HTML DSL, starting with infrastructure that makes it easy to experiment with our DSL, and work our back down to generate the desired output.
+We'll code this translation in the opposite direction of what we did with the HTML DSL. We'll start with infrastructure, because that makes it easy to experiment with our DSL, and then work our way back down to generate the desired output.
 
 ### `to_math`
 
-To begin, we need a wrapper function that we'll use to convert R expressions into LaTeX math expressions. This will works the same way as `to_html()`: we capture the unevaluated expression and evaluate it in a special environment. However, the special environment is no longer fixed, and will vary depending on the expression. We need this in order to be able to deal with symbols and functions that we don't know about a priori.
+To begin, we need a wrapper function that will convert R expressions into LaTeX math expressions. This will work the same way as `to_html()`: capture the unevaluated expression and evaluate it in a special environment. However, the special environment is no longer fixed. It will vary depending on the expression. We do this in order to be able to deal with symbols and functions that we haven't yet seen.
 
 ```{r}
 to_math <- function(x) {
@@ -378,9 +379,9 @@ to_math <- function(x) {
 
 ### Known symbols
 
-Our first step is to create an environment that will convert the special LaTeX symbols used for Greek, e.g. `pi` to `\pi`. This is the same basic trick used in `subset` to make it possible to select column ranges by name (`subset(mtcars, , cyl:wt)`): we bind a name to a string in a special environment.
+Our first step is to create an environment that will convert the special LaTeX symbols used for Greek, e.g. `pi` to `\pi`. This is the same basic trick used in `subset` that makes it possible to select column ranges by name (`subset(mtcars, , cyl:wt)`): bind a name to a string in a special environment.
 
-We create that environment by naming vector, converting that vector into a list, and converting the list into an environment.
+We create that environment by naming a vector, converting the vector into a list, and converting the list into an environment.
 
 ```{r}
 greek <- c(
@@ -407,7 +408,7 @@ to_math(beta)
 
 ### Unknown symbols
 
-If a symbol isn't greek, we want to leave it as is. This is trickier because we don't know in advance what symbols will be used, and we can't possibly generate them all. So we'll use a little bit of metaprogramming to find out what symbols are present in an expression. The `all_names` function takes an expression: if it's a name, it converts it to a string; if it's a call, it recurses down through its arguments.
+If a symbol isn't Greek, we want to leave it as is. This is tricky because we don't know in advance what symbols will be used, and we can't possibly generate them all. So we'll use a little bit of metaprogramming to find out what symbols are present in an expression. The `all_names` function takes an expression and does the following: if it's a name, it converts it to a string; if it's a call, it recurses down through its arguments.
 
 ```{r}
 all_names <- function(x) {
@@ -426,7 +427,7 @@ all_names <- function(x) {
 all_names(quote(x + y + f(a, b, c, 10)))
 ```
 
-We now want to take that list of symbols, and convert it to an environment so that each symbol is mapped to a string representing itself (e.g. so `eval(quote(x), env)` yields `"x"`). We again use the pattern of converting a named character vector to a list, then an environment.
+We now want to take that list of symbols, and convert it to an environment so that each symbol is mapped to its corresponding string representation (e.g. so `eval(quote(x), env)` yields `"x"`). We again use the pattern of converting a named character vector to a list, then converting the list to an environment.
 
 ```{r}
 latex_env <- function(expr) {
@@ -442,7 +443,7 @@ to_math(longvariablename)
 to_math(pi)
 ```
 
-This works, but we need to combine it with the Greek symbols enviroment. Since we want to prefer Greek to the defaults (e.g. `to_math(pi)` should give `"\\pi"`, not `"pi"`), `symbol_env` needs to be the parent of `greek_env`, and thus we need to make a copy of `greek_env` with a new parent. R doesn't come with a function for cloning environments, but we can easily create one by combining two existing functions:
+This works, but we need to combine it with the Greek symbols environment. Since we want to give preference to Greek over defaults (e.g. `to_math(pi)` should give `"\\pi"`, not `"pi"`), `symbol_env` needs to be the parent of `greek_env`. To do that, we need to make a copy of `greek_env` with a new parent. While R doesn't come with a function for cloning environments, we can easily create one by combining two existing functions:
 
 ```{r}
 clone_env <- function(env, parent = parent.env(env)) {
@@ -470,7 +471,7 @@ to_math(pi)
 
 ### Known functions
 
-Next we'll add functions to our DSL. We'll start with a couple of helper closures that make it easy to add new unary and binary operators. These functions are very simple since they only have to assemble strings. (Again we use `force()` to make sure the arguments are evaluated at the right time.)
+Next we'll add functions to our DSL. We'll start with a couple of helper closures that make it easy to add new unary and binary operators. These functions are very simple: they only assemble strings. (Again we use `force()` to make sure the arguments are evaluated at the right time.)
 
 ```{r}
 unary_op <- function(left, right) {
@@ -489,7 +490,7 @@ binary_op <- function(sep) {
 }
 ```
 
-Using these helpers, we can map a few illustrative examples from R to LaTeX. Note how the lexical scoping rules of R help us: we can easily provide new meanings for standard functions like `+`, `-` and `*`, and even `(` and `{`.
+Using these helpers, we can map a few illustrative examples of converting R to LaTeX. Note that with R's lexical scoping rules help us, we can easily provide new meanings for standard functions like `+`, `-` and `*`, and even `(` and `{`.
 
 ```{r}
 # Binary operators
@@ -520,7 +521,7 @@ f_env$hat <- unary_op("\\hat{", "}")
 f_env$tilde <- unary_op("\\tilde{", "}")
 ```
 
-We again modify `latex_env()` to include this environment. It should be the last environment in which names are looked for, so that `sin(sin)` works.
+We again modify `latex_env()` to include this environment. It should be the last environment R looks for names: in other words, `sin(sin)` should work.
 
 ```{r}
 latex_env <- function(expr) {
@@ -543,7 +544,7 @@ to_math(sin(sin))
 
 ### Unknown functions
 
-Finally, we'll add a default for functions that we don't know about. Like the unknown names, we can't know in advance what these will be, so we again use a little computing on the language to figure them out:
+Finally, we'll add a default for functions that we don't yet know about. Like the unknown names, we can't know in advance what these will be, so we again use a little computing on the language to figure them out:
 
 ```{r}
 all_calls <- function(x) {
@@ -563,7 +564,7 @@ all_calls <- function(x) {
 all_calls(quote(f(g + b, c, d(a))))
 ```
 
-And we need a closure that will generate the functions for each unknown call
+And we need a closure that will generate the functions for each unknown call.
 
 ```{r}
 unknown_op <- function(op) {
@@ -600,21 +601,22 @@ to_math(f(a * b))
 
 ### Exercises
 
-1.  Add escaping. Special symbols that should be escaped by adding a backslash
-    in front of them are `\`, `$` and `%`.  Like for HTML, you'll need to make
-    sure you don't end up double-escaping, so you'll need to create a small S3
-    class and then use that in function operators. That will also allow you to
-    embed arbitrary LaTeX if needed.
+1.  Add escaping. The special symbols that should be escaped by adding a backslash
+    in front of them are `\`, `$` and `%`. Just as with HTML, you'll need to 
+    make sure you don't end up double-escaping. So you'll need to create a small 
+    S3 class and then use that in function operators. That will also allow you 
+    to embed arbitrary LaTeX if needed.
 
 1.  Complete the DSL to support all the functions that `plotmath` supports.
 
 1.  There's a repeating pattern in `latex_env()`: we take a character vector,
-    do something to each piece, then convert it to a list, and then an
-    environment. Write a function to automate this task, and then rewrite
+    do something to each piece, convert it to a list, and then convert the list 
+    to an environment. Write a function that automates this task, and then rewrite
     `latex_env()`.
 
-1.  Study the source code for dplyr. An important part of the structure is
-    `partial_eval()` which helps manage expressions where some of the
-    components refer to variables in the database and some refer to local R
-    objects. You could use very similar ideas if you needed to translate
-    small R expressions into other languages, like JavaScript or Python.
+1.  Study the source code for `dplyr`. An important part of its structure is
+    `partial_eval()` which helps manage expressions when some of the
+    components refer to variables in the database while others refer to local R
+    objects. Note that you could use very similar ideas if you needed to 
+    translate small R expressions into other languages, like JavaScript or 
+    Python.
