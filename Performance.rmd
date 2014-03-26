@@ -12,43 +12,43 @@ options("microbenchmark.unit" = "ns")
 
 ## Introduction
 
-R is not a fast computer language. This is not an accident: R has been thoughtfully designed to make it easier for you to solve data analysis and statistics challenges, not to make your computer's life easier. While R is slow compared to other programming languages, it certainly can be fast enough for most purposes. The goal of this part of the book is to give you a deeper understanding of R's performance characteristics. You'll learn where R is fast, where it's slow, and how you can improve R's performance if it becomes a problem.
+R is not a fast computer language. This is not an accident. R was purposely designed to make data analysis and statistics easier for you to do. It was not designed to make your computer's life easier. While R is slow compared to other programming languages, for most purposes, it's certainly fast enough. The goal of this part of the book is to give you a deeper understanding of R's performance characteristics. You'll learn where R is fast, where it's slow, and how you can improve R's performance if it becomes a problem.
 
-This chapter explores some of the reasons why R is slow, breaking them down into causes related to the design of the language and causes related to the current implementation. While the language can't be changed without breaking code, it's possible to change the implementation, and I'll conclude by discussing some of the exciting new implementations of R which promise considerable performance improvements. Throughout the chapter I'll use microbenchmarking to quantitatively explore R's performance characteristics.
+The reasons why R is slow can be broken down into causes related to the design of the language, and causes related to the implementation of the language. While the language itself can't be changed without breaking code, it is possible to change implementation. I'll conclude by discussing some of the exciting new implementations which promise considerable performance improvements. Throughout the chapter, I'll use microbenchmarking to quantitatively explore R's performance characteristics.
 
-The following four chapters will give you the skills to improve slow code:
+The following four chapters will give you the skills to improve the speed of your code:
 
-* In [Profiling](#profiling), you'll learn how to make your code faster
-  by first systematically figuring what is slow and then applying some
-  general techniques that are often useful for improving performance.
+* In [Profiling](#profiling), you'll learn how to systematically make your 
+  code faster: by first figuring what parts are slow and then by applying 
+  some general techniques that can improve performance.
 
-* In [Memory](#memory), you'll learn about how R uses memory, and the
-  impact of garbage collection and modification in place on R's performance
+* In [Memory](#memory), you'll learn about how R uses memory, and how
+  garbage collection and modification in place affect performance
   and memory usage.
 
 * For really high-performance code, you can move outside of R and use
   another programming language. [Rcpp](#rcpp) will teach you the absolute
-  minimum you need to know about C++ in order to write fast code using the
+  minimum you need to know about C++ so you can write fast code using the
   Rcpp package.
 
-* Finally, if you want to deeply understand the performance of built in
-  base functions, you'll need to learn a little bit about R's C api. In
-  [R's C interface](#c-api), you'll learn more about R's C internals
+* To really understand the performance of built-in base functions, 
+  you'll need to learn a little bit about R's C API. In [R's C 
+  interface](#c-api), you'll learn more about R's C internals
   and see how some common built-in functions work.
 
 Let's get started by learning more about why R is slow.
 
 ## Why is R slow?
 
-To understand R's performance it helps to think about R in two ways: as a language and an implementation. The R-language is abstract. It defines what R code means and how it should work. An implementation is concrete: you give it R code and it computes the result. The most popular implementation of R is the one you download from [r-project.org](http://r-project.org). I'll call it GNU-R to distinguish it from the R-language, and from the other implementations we'll talk about later in the chapter.
+To understand R's performance, it helps to think about R as both a language and as an implementation of that language. The R-language is abstract: it defines what R code means and how it should work. The implementation is concrete: it reads R code and computes a result. The most popular implementation is the one from [r-project.org](http://r-project.org). I'll call it GNU-R to distinguish it from the R-language, and from the other implementations I'll discuss in the chapter.
 
-The distinction between language and implementation is a bit murky for R because the R-language is not formally defined. R has the [R language definition](http://cran.r-project.org/doc/manuals/R-lang.html), but it is informal and incomplete: the R-language is mostly defined in terms of how GNU-R works. Other languages, like [C++](http://isocpp.org/std/the-standard) and [javascript](http://www.ecma-international.org/publications/standards/Ecma-262.htm) make the distinction more clear. They have formal specifications that describe in minute detail how every aspect of the language should work. Even though the distinction between R-language and GNU-R isn't clear cut, it's still useful because poor performance due to the implementation can be fixed relatively easily, while poor performance related to the language is hard to fix without changing what R code means.
+For R, the distinction between language and implementation is a bit murky. This is because the R-language is not formally defined. While there is the [R language definition](http://cran.r-project.org/doc/manuals/R-lang.html), it is informal and incomplete. The R-language is mostly defined in terms of how GNU-R works. This is in direct contrast to other languages, like [C++](http://isocpp.org/std/the-standard) and [javascript](http://www.ecma-international.org/publications/standards/Ecma-262.htm), that make a clear distinction between language and implementation by laying out formal specifications that describe in minute detail how every aspect of the language should work. Nevertheless, the distinction between the R-language and GNU-R is still useful: while poor performance due to the language cannot be easily fixed without changing the language itself, poor performance due to implementation can be fixed relatively easily.
 
-[Language performance](#language-performance) discusses some of the ways in which the design of the R language imposes fundamental constraints on R's speed. While language design constrains the maximum possible performance, GNU-R is currently far from the optimum. [Implementation performance](#implementation-performance) discusses why and why performance improvements happen so slowly. It's hard to know exactly how much faster a better implementation could be, but a >10x improvement in speed seems achievable. In [alternative implementations](#faster-r), I'll discuss some of the promising new implementations, and describe one important technique they use to make R code faster.
+In [Language performance](#language-performance), I discuss some of the ways in which the design of the R language imposes fundamental constraints on R's speed. In [Implementation performance](#implementation-performance), I discuss why GNU-R is currently far from that theoretical maximum, let alone being optimal, and why improvements in performance happen so slowly. While it's hard to know exactly how much faster a better implementation could be, a >10x improvement in speed seems achievable. In [alternative implementations](#faster-r), I discuss some of the promising new implementations, and describe one important technique they use to make R code faster.
 
-As well as performance limitations imposed by the language design and current implementation, a lot of R code is slow because it's poorly written. Few R users have any formal training in programming or software development, and fewer still write R code for a living. Most people coding in R use it to better understand their data: it's more important to get an answer quickly than to develop a system that will work for a wide variety of inputs. This sounds like a huge negative for R, but it's really a huge positive because it shows that R is useful for non-programmers. It also means that it's relatively easy to make most R code much faster, as described in the following chapters.
+Beyond performance limitations due to design and implementation, it has to be said that a lot of R code is slow simply because it's poorly written. Few R users have any formal training in programming or software development. Fewer still write R code for a living. Most people use R to better understand their data: it's more important to get an answer quickly than to develop a system that will work in a wide variety of situations. This sounds like a huge negative for R, but it's really a huge positive. It shows that R is useful for non-programmers. But as we'll see in the following chapters, it also means that it's relatively easy to make most R code much faster.
 
-Before we continue on to explore some of the slow parts of the R-language and GNU-R, we need to learn a little about benchmarking, so that we can make our intuition about performance concrete.
+Before we examine some of the slower parts of the R-language and GNU-R, we need to learn a little about benchmarking so that we can give our intuitions about performance a concrete foundation.
 
 ## Microbenchmarking
 
