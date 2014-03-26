@@ -82,21 +82,21 @@ Other tools:
 
 ## Improving performance
 
-The rest of the chapter gives some general advice on writing faster R code. There are four techniques that I've found apply to the many performance problems:
+Once you've identified one specific bottleneck, you need to make that bottleneck faster. There are four techniques that I've found apply to many performance problems:
 
 1. Look for existing solutions
 1. Do less work
 1. Vectorise
 1. Avoid copies
 
-It's also often useful to rewrite in a faster language like C++. This is a big topic so is subject of a complete chapter, [Rcpp](#rcpp). Two other techniques are less commonly used but are good to know about:
+It's also often useful to rewrite in a faster language like C++. This is a big topic so is subject of a complete chapter, [Rcpp](#rcpp). Two other techniques are slightly less important, but still useful to know about:
 
 1. Byte-code compile
 1. Trade space for time
 
 Don't forget that clarity and readibility are more important than speed. Your intution for bottlenecks is likely to be bad, so don't sacrifice readability for performance unless you _know_ it will have a significant impact on run-time.
 
-Before we get into the specific techniques, first I'll describe my strategy and code organisation when optimising performance.
+Before we get into the specific techniques, first I'll describe a general strategy and organisation style when working on performance.
 
 ### Code organisation
 
@@ -105,44 +105,41 @@ There are two traps that it's easy to fall into when making your code faster:
 1. Making it faster by making it incorrect
 1. Thinking you've made it faster, but you've actually make it slower.
 
-You can avoid both these pitfalls with a good strategy. I recommend organising your code like this:
+You can avoid both these pitfalls with a good strategy. I recommend organising as follows.
+
+Start by writing a function for each variation. The function should encapsulate all relevant behaviour, making it easy to test and time. Record everything you try, even if it ends up being slower: if you come back to problem in the future, it's useful to see both successful and unsuccessful strategies. I often work in a Rmarkdown file so that I can more easily intermingle code and explanation.
+
+Start with your original function, and include any other variations that you've brainstormed.
 
 ```{r}
 mean1 <- function(x) mean(x)
 mean2 <- function(x) sum(x) / length(x)
+```
 
+Next, generate a representative test case. This should ideally take a couple of seconds to run, while capturing the essence of your problem. You are going to run this very frequently during testing so you don't want it to take too long, but you want it be as similar as possible to your real data. You may need to generate more than one test case if you're intersted in behaviour for different sized inputs.
+
+```{r}
 x <- runif(100)
-stopifnot(all.equal(mean1(x), mean2(x)))
+```
 
+Use this test case to make sure that all variants return the same result with `stopifnot()` and `all.equal()`. If your problem has fewer possible outputs, you may need multiple tests.
+
+```{r}
+stopifnot(all.equal(mean1(x), mean2(x)))
+```
+
+Finally, use the microbenchmark package to precisely compare how long each variation takes to run. For bigger problems, you may need to reduce the `times` paramater so that it only takes a couple of seconds to run the benchmark.
+
+```{r}
 microbenchmark(
   mean1(x),
   mean2(x)
 )
 ```
 
-Here I have:
+You should also note your target speed: how fast does the algorithm need to perform so that it's no longer the bottleneck. It's important to determine this so that you don't waste time optimising code that is no longer a bottleneck.
 
-* Written a function for each variation. The function encapsulates all
-  relevant behaviour and makes it easy to test and time. I record everything
-  I try, even if it ends up being slower. It can be useful to work in a
-  Rmarkdown file so that you can easily mingle the code and your
-  reactions.
-
-* Created a representative test case. This should ideally take a couple of
-  seconds to run, while capturing the essence of your problem. You are
-  going to run this very frequently during testing so you don't want it
-  to take too long, but you want it be as similar as possible to your
-  real data.
-
-* Made sure all methods return the same answer for my test case. If you're
-  working on a more complicated problem that has fewer output states, you
-  may need multiple tests.
-
-* Used the microbenchmark package to precisely compare how long each variation
-  takes to run. For bigger problems, you may need to reduce the `times`
-  paramater so that it only takes a couple of seconds to run the benchmark.
-
-You can see examples of this strategy in some of my stackoverflow answers to performance related questions:
+If you'd like to see this strategy in action, here are some stackoverflow questions that use it:
 
 * http://stackoverflow.com/questions/22515525#22518603
 * http://stackoverflow.com/questions/22515175#22515856
@@ -150,7 +147,7 @@ You can see examples of this strategy in some of my stackoverflow answers to per
 
 ### Has someone already solved the problem?
 
-One of the easiest ways to speed up your code is to find existing faster code. You are part of a large community, and it's quite possible that someone else has had the same problem as you. If your bottleneck is in another package, two good places to start looking at:
+Once you've organised your code, capturing the variations you've thought up, it's natual to see what others have down. One of the easiest ways to speed up your code is to find existing faster code. You are part of a large community, and it's quite possible that someone else has had the same problem as you. If your bottleneck is in another package, two good places to start looking at:
 
 * [CRAN task views](http://cran.rstudio.com/web/views/). If there is a
   CRAN task view related to your problem domain, it's worth looking for
@@ -161,20 +158,32 @@ One of the easiest ways to speed up your code is to find existing faster code. Y
   packages use C++, it's possible they have implemented your bottleneck
   in a higher performance language.
 
-Otherwise the challenge is describing your bottleneck in a way that helps you find related problems. You will be aided if you know what the name of the problem is and some common synonyms. It's hard to search for this knowledge (because you don't know what it's called!) but you can build it up over time by reading about statistics and algorithms, or you can ask others. Make sure you know good ways of restricting your search to R. For google, try [rseek](http://www.rseek.org/); for stackoverflow, restrict your searches to the R tag with `[R]`.
+Otherwise the challenge is describing your bottleneck in words in a way that helps you search for related problems and solutions. You will be aided if you know what the name of the problem is and some common synonyms. It's hard to search for this knowledge (because you don't know what it's called!) but you can build it up over time by reading broadly about statistics and algorithms, or you can ask others. Once you've brainstormed some possible names, search on google and stackoverflow. Make sure you know good ways of restricting your search to R. For google, try [rseek](http://www.rseek.org/); for stackoverflow, restrict your searches to the R tag with `[R]`.
 
-Record all solutions that you find, not just the ones that are already faster. Some solutions might slower to start with, but easier to optimise using the techniques below, and so end up faster than your original technique. You may also be able to combine the fastest parts of different approaches.
+Include each solution you find in your file. You want to record all solutions, not just those that are already faster. Some solutions might slower to start with, but easier to optimise using the techniques below, and so end up faster than your original technique. You may also be able to combine the fastest parts of different approaches.
 
 ### Exercises
 
 1.  What faster alternatives to `lm` are available?
 
+1.  What package implements a version of `match()` that's faster for
+    repeated look ups? How much faster is it?
+
+1.  List four functions (not just in base R) that convert a string into a
+    date time? What are their strengths and weaknesses?
+
+1.  How many different ways can you compute a 1d density estimate in R?
+
+1.  What packages provide the ability to compute a rolling mean?
+
+1.  What alternatives to `optim()` are available?
+
 ### Do as little as possible
 
-The most important programming technique for making R code faster is to make it do less work. The easiest way to do less work is use a more specific function:
+The second easiest way to make code faster is to make it do less work. Sometimes you can use a faster, more specific function:
 
-* `vapply()` is usually faster than `sapply()`, because you tell it type of the
-   output to expect in advance.
+* `vapply()` is faster than `sapply()`, because you pre-specified the output
+  type.
 
 * `rowSums()`, `colSums()`, `rowMeans()`, and `colMeans()` are faster than
   the equivalent `apply()` invocations because they are vectorised (the topic
@@ -184,17 +193,22 @@ The most important programming technique for making R code faster is to make it 
   is much faster than `10 %in% x` because testing equality is simpler than
   testing for inclusion in a set.
 
-* `interaction(drop = TRUE)`
+Having these specific functiosn at your fingertips is a matter of having a good R [vocabulary](#vocabulary). The best way to expand your vocabulary over time is to regularly regularly read R code, like on R-help or on [stackoverflow](stackoverflow.com/questions/tagged/r).
 
-Knowing which specific functions are available is a function of improving your R [vocabulary](#vocabulary). Other base functions can be made to do less work by giving them more information about the problem. Often if you read the documentation carefully, you'll find ways to make the function faster:
+Other functions will do less work if you give them more information about the problem. It's always worthwhile to carefully read the documentation and experiment with different arguments. Some examples that I've discovered in the past:
 
-* tell `read.csv()` what sort of columns you expect with `colClasses`
+* `read.csv()`: specify known the columns types with `colClasses`
 
-* tell `factor()` the known possible levels with `levels`
+* `factor()`: specify known levels with `levels`
 
-* make `cut()` faster by telling it not generate `labels` if you don't need them
+* `cut()`: don't generate labels with `labels = FALSE` if you don't need them
+  (or even better use `findInterval()` as mentioned in the see also section of
+  the documentation.)
 
-Sometimes you can make a function faster by avoid method dispatch. As we've seen ([Extreme dynamism](#extreme-dynamism)) method dispatch in R can be costly and so you're calling a method in a tight loop, you can avoid some of the cost by doing method lookup once, and then calling the method directly. For S3, you can do this manually by calling `generic.class()` instead of `generic()`. For S4, you can use `findMethod()` to find the method, then save it in a local variable. For example, calling `mean.default()` instead of `mean()` is quite a bit faster for small vectors:
+* `interaction()`: if you only need combinations that exist in the data, use
+  `drop = TRUE`
+
+Sometimes you can make a function faster by avoiding method dispatch. As we've seen ([Extreme dynamism](#extreme-dynamism)) method dispatch in R can be costly, so if you're calling a method in a tight loop, you can avoid some of the cost by doing method lookup once. For S3, you can do this manually by calling `generic.class()` instead of `generic()`. For S4, you can use `findMethod()` to find the method, then save it in a local variable. For example, calling `mean.default()` instead of `mean()` is quite a bit faster for small vectors:
 
 ```{r}
 x <- runif(1e2)
@@ -205,18 +219,9 @@ microbenchmark(
 )
 ```
 
-`mean()` is safest but slowest. `mean.default()` assumes that `x` is a numeric vector, and will fail in possibly surprising ways if not. Note that the speed-up is closely related to the length of the vector. If we make the input a hundred times bigger, the difference barely matters. This is why you shouldn't optimise unless you've correctly identified the code. You may save hardly any time at the cost of introducing bugs.
+`mean()` is safe, but slow; `mean.default()` is almost twice as faster, but will fail in surprising ways if `x` is not a vector.
 
-```{r}
-x <- runif(1e4)
-
-microbenchmark(
-  mean(x),
-  mean.default(x)
-)
-```
-
-Other times, if you know you're dealing with a specific type of input, you can use an alternative strategy that's much faster. For example, `as.data.frame()` is quite slow because it first coerces each element to a data frame and then `rbinds()` altogether. If have a named list with vectors of equal lengths, you can turn it into a data frame more efficiently. With the strong assumption that we have a list that's ok as is, of `as.data.frame()` around 20x faster than the default. Writing this sort of code typically requires carefully re-writing of the source code of base R functions, remove unused functionality while preserve functionality.
+Other times, if you know you're dealing with a specific type of input, you can a faster strategy. For example, `as.data.frame()` is quite slow because it first coerces each element to a data frame and then `rbind()`s them together. If have a named list with vectors of equal lengths, you can turn it into a data frame directly. With the strong assumption that we have a list that's ok as is, we can generate a method that's about 20x faster than the default.
 
 ```{r}
 quickdf <- function(l) {
@@ -235,19 +240,20 @@ microbenchmark(
 )
 ```
 
-To come up with this minimal method, I carefully read through then rewrote the source code for `as.data.frame.list()` and `data.frame()`. I made many small changes, each time checking that I hadn't broken existing behaviour. After several hours work, I'd isolated the minimal code shown above. Again, this method is fast because it is dangerous: if you give bad inputs you'll get a corrupt data frame.
+Note the common tradeoff: this method is fast because it's dangerous. If you give bad inputs you'll get a corrupt data frame.
 
 ```{r}
 quickdf(list(x = 1, y = 1:2))
 ```
 
-Read the source code. It will often be complex and confusing. Don't give up! If you're working through a special case, you'll often be able to remove large swathes of code because they don't apply.
+To come up with this minimal method, I carefully read through then rewrote the source code for `as.data.frame.list()` and `data.frame()`. I made many small changes, each time checking that I hadn't broken existing behaviour. After several hours work, I'd isolated the minimal code shown above.
 
-This technique for rewriting base R function is very useful. Often base R functions take many different types of input and spends time figuring out what input you've given it. If you know in advance the type of input, rewrite the function to expect that. Or perhaps the function produces a rich output structure, and you're just extracting a single piece. You might be able to make the code much faster by only computing the bits that you need.
+This is a very useful technique. Most base R functions are written for flexiblity and functionality, not performance, and often rewriting for your specific need can yield substantial speed ups. To do this, you'll need to read the source code. It will often be complex and confusing, but don't give up!
 
-The following example shows a progressive simplification of the `diff()` function. If you only care about computing difference between adjacent values in a vector, then you can make `diff()` about twice as fast by removing code that doesn't apply. Below I show a progressive simplification of `diff()`. Each time I remove one of the input arguments, then check that the function still works. The initial function is long and complicated, but by restricting the arguments I not only make it easier to understand, I also make it faster.
+The following example shows a progressive simplification of the `diff()` function for the special case of computing differences between adjacent values in a vector. At each step, I replace one arguments with a specific case, then check that the function still works. The initial function is long and complicated, but by restricting the arguments I not only make it around twice as fast, I also make it easier to understand.
 
 ```{r}
+# The original function, reformatted after typing diff
 diff1 <- function (x, lag = 1L, differences = 1L) {
   ismat <- is.matrix(x)
   xlen <- if (ismat) dim(x)[1L] else length(x)
@@ -274,7 +280,8 @@ diff1 <- function (x, lag = 1L, differences = 1L) {
   r
 }
 
-# Assume vector input
+# Step 1: Assume vector input. This allows me to remove the is.matrix()
+# test and the method that use matrix subsetting.
 diff2 <- function (x, lag = 1L, differences = 1L) {
   xlen <- length(x)
   if (length(lag) > 1L || length(differences) > 1L || lag < 1L || differences < 1L)
@@ -292,7 +299,8 @@ diff2 <- function (x, lag = 1L, differences = 1L) {
 }
 diff2(cumsum(0:10))
 
-# Assume only 1 difference
+# Step 2: assume difference = 1L. This simplifies input checking
+# and eliminates the for loop
 diff3 <- function (x, lag = 1L) {
   xlen <- length(x)
   if (length(lag) > 1L || lag < 1L)
@@ -307,7 +315,8 @@ diff3 <- function (x, lag = 1L) {
 }
 diff3(cumsum(0:10))
 
-# Assume single lag
+# Step 3: assume lag = 1L. This eliminates input checking and simplifies
+# subsetting.
 diff4 <- function (x) {
   xlen <- length(x)
   if (xlen <= 1) return(x[0L])
@@ -325,9 +334,14 @@ microbenchmark(
 )
 ```
 
-In the next chapter, we'll see that we can make this function faster still by using a little C++.
+Once you've read [Rcpp](#rcpp) you'll be able to make `diff()` considerably faster for this special case.
 
 A final example of doing less work is to work with a simpler data structure. For example, if you subsetting rows from a data frame, instead of working with data frames it's often much faster to work with indices. For example, if you wanted to compute a bootstrap estimate of the mean, there are two basic approaches:
+
+1. Resample the entire data frame
+1. Resample column indices
+
+These two strategies are implemented below:
 
 ```{r}
 boot_indices <- function(df, i) sample.int(nrow(df), i, replace = TRUE)
@@ -343,9 +357,12 @@ microbenchmark(
 )
 ```
 
-Working with indices instead of with data frames is about 8 times faster. Data frames are one of the slowest data structures in R, so if you can avoid using them do it. One way is to work with a few vectors, a list or a matrix.
+Working with indices instead of with data frames is more complicated, but is about 8 times faster. Data frames are one of the slowest data structures in R, so if you can avoid using them it will often make your code faster, at the cost of making it harder to understand.
 
 ### Exercises
+
+1.  How do the results change if you compare `mean()` and `mean.default()`
+    on 10,000 observations, rather than on 100?
 
 1.  Make a faster version of `chisq.test()` that only computes the Chi-square
     test statistic when the input is two numeric vectors with no missing
@@ -356,7 +373,6 @@ Working with indices instead of with data frames is about 8 times faster. Data f
 1.  Can you make a faster version of `table()` for the special case of
     two integer input vectors with no missing values? Can you use it to
     speed up your Chi-square test?
-
 
 ### Vectorisation
 
