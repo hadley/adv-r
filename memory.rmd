@@ -246,22 +246,23 @@ rm(z)
 
 ## Memory profiling with lineprof
 
-As well as using `mem_change()` to explicitly capture the change in memory caused by running a block of code, we can use memory profiling to automatically capture memory usage every few milliseconds. This functionality is provided by the `utils::Rprof()`, but it doesn't provide a very useful display of the results. Instead, we'll use the [lineprof](https://github.com/hadley/lineprof) package; it's powered by `Rprof()`, but displays the results in a more informative manner.
+`mem_change()` captures the net change in memory use when running a block of code. Sometimes, however, we may want to measure incremental change. One way to do this is to use memory profiling to capture usage every few milliseconds. This functionality is provided by the `utils::Rprof()`. However, because it doesn't provide a very useful display of the results, we'll use the [lineprof](https://github.com/hadley/lineprof) package instead; it's powered by `Rprof()`, but displays the results in a more informative manner.
 
-To demonstrate lineprof, we're going to explore a minimal implementation of `read.delim` with only three arguments:
+To demonstrate `lineprof`, we're going to explore a bare-bones implementation of `read.delim` with only three arguments:
 
 ```{r read_delim}
 ```
 
-We'll also create a sample csv file to load in:
+We'll also create a sample csv file:
 
 ```{r}
 library(ggplot2)
 write.csv(diamonds, "diamonds.csv", row.names = FALSE)
 ```
 
-Using lineprof is straightforward. We source the code, then use `lineprof()` with the expression we're interested in, then use `shine()` to view the results.
-You _must_ use `source()` to load the code: you can not create it on the command line. This is because lineprof uses srcrefs to match up the code and run times, and needed srcrefs are only created when you load code from disk.
+Using lineprof is straightforward. Source the code, apply `lineprof()` to an expression, and use `shine()` to view the results.
+
+Note that you _must_ use `source()` to load the code: you can not do this on the command line. This is because lineprof uses srcrefs to match up the code and run times, and the needed srcrefs are only created when you load code from disk.
 
 ```{r, eval = FALSE}
 library(lineprof)
@@ -271,7 +272,7 @@ prof <- lineprof(read_delim("diamonds.csv"))
 shine(prof)
 ```
 
-`shine()` starts a shiny app which will block your R session. To exit, you'll need to stop the process using escape or ctrl + break. `shine()` will also open a new web page (or if you're using Rstudio, a new pane) that shows your source code annotated with information about memory usage:
+`shine()` starts a shiny app which will "block" your R session. To exit, you'll need to stop the process using escape or ctrl + break. `shine()` will also open a new web page (or if you're using RStudio, a new pane) that shows your source code annotated with information about memory usage:
 
 ![line profiling](memory-lineprof.png)
 
@@ -281,25 +282,25 @@ As well as your original source code, there are four columns:
 
 * `a`, the memory (in megabytes) allocated by that line of code.
 
-* `r`, the memory (in megabytes) released by that line of code. While memory allocation is deterministic, memory release is stochastic: it depends on when the GC was run. This means memory release only tells you that the memory release was no longer needed before this line.
+* `r`, the memory (in megabytes) released by that line of code. While memory allocation is deterministic, memory release is stochastic: it depends on when the GC was run. This means that memory release only tells you that the memory released was no longer needed before this line.
 
-* `d`, the number of vector duplications that occured. A vector duplication occurs when R copies a vector to preserve its copy-on-modify semantics.
+* `d`, the number of vector duplications that occurred. A vector duplication occurs when R copies a vector as a result of its copy on modify semantics.
 
-You can hover over any of the bars to get the exact numbers. For this example, looking at the allocations tells us most of the story:
+You can hover over any of the bars to get the exact numbers. In this example, looking at the allocations tells us most of the story:
 
-* `scan()` allocates about 2.5 MB of memory, which is very close to the 2.8 MB of space that the file takes up on disk. You wouldn't expect the numbers to be exactly equal because R doesn't need to store the commas, and the global string pool will save some memory.
+* `scan()` allocates about 2.5 MB of memory, which is very close to the 2.8 MB of space that the file occupies on disk. You wouldn't expect the two numbers to be identical because R doesn't need to store the commas and because the global string pool will save some memory.
 
 * Converting the columns allocates another 0.6 MB of memory. You'd also expect this step to free some memory because we've converted string columns into integer and numeric columns (which occupy less space), but we can't see those releases because GC hasn't been triggered yet.
 
-* Finally, calling `as.data.frame()` on a list allocates about 1.6 megabytes of memory and performs over 600 duplications. This is because `as.data.frame()` isn't terribly efficient and ends up copying the input multiple times. We'll discuss duplications more in the next section.
+* Finally, calling `as.data.frame()` on a list allocates about 1.6 megabytes of memory and performs over 600 duplications. This is because `as.data.frame()` isn't terribly efficient and ends up copying the input multiple times. We'll discuss duplication more in the next section.
 
 There are two downsides to profiling:
 
-1. `read_delim()` only takes around half a second, and the profile can only capture memory usage at most every 1ms, so we only get about 500 samples.
+1. `read_delim()` only takes around half a second, but profiling can, at best, only capture memory usage every 1ms. So we'll only get about 500 samples.
 
 2. Since GC is lazy, we can never tell exactly when memory is no longer needed.
 
-One way to work around both problems is to use `torture = TRUE`, which forces R to run GC after every allocation (see `gctorture()` for more details). This helps with both problems because memory is freed as soon as possible, and R runs 10-100x more slowly, so the resolution of the timer is effectively much greater. This allows you to see smaller allocations and exactly when memory is no longer needed.
+One way to work around both problems is to use `torture = TRUE`, which forces R to run GC after every allocation (see `gctorture()` for more details). This helps with both problems because memory is freed as soon as possible, and R runs 10-100x slower. So the resolution of the timing is greater: you can see smaller allocations and exactly when memory is no longer needed.
 
 If we re-run our `read_delim()` example with `torture = TRUE` we get:
 
@@ -310,11 +311,11 @@ shine(prof)
 
 ![line profiling with torture](memory-torture.png)
 
-The basic messages remain the same, but we now we see a big memory release on line 14. Line 14 is the first line after type conversion, so the release represents the memory saved by converting strings to numbers. We still see the large number of duplications with `as.data.frame()` which we'll explore in the next section.
+The basic pattern remains the same, but we now we see a big memory release on line 14. Line 14 is the first line after a type conversion, so the release represents the memory saved by converting strings to numbers. We still see the large number of duplications with `as.data.frame()`, however. We'll explore this in the next section.
 
 ### Exercises
 
-* We can make a more efficient `as.data.frame()` when the input is a list by using special knowledge about the structure of a data frame. A data frame is a list with class `data.frame` and special attribute `row.names`. `row.names` is either a character vector with length matching the columns, or when the row names are sequential integers, the row names are stored in a special format created by `.set_row_names()`. This leads to an alternative `as.data.frame()`:
+* When the input is a list, we can make a more efficient `as.data.frame()` by using special knowledge about data frame. A data frame is a list with class `data.frame` and a special attribute `row.names`. `row.names` is either a character vector specifying a column of names or a vector of sequential integers. The row names are stored in a special format created by `.set_row_names()`. This leads to an alternative `as.data.frame()`:
 
     ```{r}
     to_df <- function(x) {
@@ -324,9 +325,9 @@ The basic messages remain the same, but we now we see a big memory release on li
     }
     ```
 
-    What impact does using this function have on `read_delim()`?  What are the downsides of this function?
+    What impact does this function have on `read_delim()`?  What are the downsides of this function?
 
-* Line profile the following very simple function with `torture = TRUE`. What is surprising? Read the source code of `gc()` to figure out what's going on.
+* Line profile the following function with `torture = TRUE`. What is surprising? Read the source code of `gc()` to figure out what's going on.
 
     ```{r}
     f <- function(n = 1e5) {
@@ -345,13 +346,13 @@ x[5] <- 10
 x
 ```
 
-There's two possibilities:
+There are two possibilities:
 
-1. R modifies the existing `x` in place.
+1. R modifies `x` in place.
 
-2. R makes a copy of `x` in a new location, modifies that new vector, and then changes the name `x` to point to the new location.
+2. R makes a copy of `x` to a new location, modifies the copy, and then uses the name `x` to point to the new location.
 
-It turns out that R can do either depending on the circumstances. In the example above, it will modify in place, but if another variable also points to x, then it will copy it to a new location: To explore what's going on in more detail we need some new tools found in the `pryr` package. Given the name of a variable, `address()` tells us its location in memory, and `refs()` tells us how many names point to that same location.
+It turns out that R can do either depending on the circumstances. In the example above, it will modify in place. But if another variable also points to `x`, then R will copy it to a new location. To explore what's going on in greater detail, we use the tools found in the `pryr` package. Given the name of a variable, `address()` will tell us the variable's location in memory and `refs()` will tell us how many names point to that location.
 
 ```{r, eval = FALSE}
 library(pryr)
@@ -364,25 +365,25 @@ c(address(y), refs(y))
 # [1] "0x103100060" "2"
 ```
 
-(Note that if you're using Rstudio this `refs()` will always return two: the environment browser makes a reference to every object you create on the command line, but not inside a function.)
+(Note that if you're using RStudio, `refs()` will always return 2: the environment browser makes a reference to every object you create on the command line, but not inside a function.)
 
-Note that refs is only an estimate and it can only distinguish between 1 and more than 1 references. This means that `refs()` returns 2 in both of the following cases:
+Note that `refs()` is only an estimate. It can only distinguish between 1 and more than 1 reference. This means that `refs()` returns 2 in both of the following cases:
 
 ```{r}
 x <- 1:5
 y <- x
 rm(y)
-# Should really be one, because we've deleted y
+# Should really be 1, because we've deleted y
 refs(x)
 
 x <- 1:5
 y <- x
 z <- x
-# Should really be three
+# Should really be 3
 refs(x)
 ```
 
-When `refs(x)` is one, modification will occur in place; when `refs(x)` is two, it will make a copy (so that the other pointers to the object contined unchanged).  Note that in the following example, `y` keeps pointing to the same location while `x` changes.
+When `refs(x)` is 1, modification will occur in place. When `refs(x)` is 2, R will make a copy (this ensures that other pointers to the object remain unaffected). Note that in the following example, `y` keeps pointing to the same location while `x` changes.
 
 ```{r}
 x <- 1:10
@@ -393,7 +394,7 @@ x[5] <- 6L
 c(address(x), address(y))
 ```
 
-Another useful function is `tracemem()`, which will print a message every time the traced object is copied:
+Another useful function is `tracemem()`. It prints a message every time the traced object is copied:
 
 ```{r tracemem, eval = FALSE}
 x <- 1:10
@@ -409,9 +410,9 @@ x[5] <- 6L
 # tracemem[0x7feeaaa1c6b8 -> 0x7feeaaa1c768]:
 ```
 
-It's slightly more useful for interactive use than `refs()`, but it's harder to program with (because it just prints a message). (I don't use it very much in this book because it interacts poorly with [knitr](http://yihui.name/knitr/), the tool used to insert the results of R code into the text).
+It's slightly more useful for interactive use than `refs()`, but, because it just prints a message, it's harder to program with. (I don't use it very much in this book because it interacts poorly with [knitr](http://yihui.name/knitr/), the tool used to insert the output of executed R code into the text.)
 
-Non-primitive functions that touch the object always increment the ref count. Primitive functions are usually written in such a way that they don't increment the ref count. (The reasons are a little complicated, but see the R-devel thread [confused about NAMED](http://r.789695.n4.nabble.com/Confused-about-NAMED-td4103326.html))
+Non-primitive functions that touch the object always increment the ref count. Primitive functions are usually written in such a way that they don't. (The reasons are a little complicated, but see the R-devel thread [confused about NAMED](http://r.789695.n4.nabble.com/Confused-about-NAMED-td4103326.html).)
 
 ```{r, eval = FALSE}
 x <- 1:10
@@ -426,11 +427,11 @@ f <- function(x) x
 x <- 1:10; f(x); refs(x)
 # [1] 2
 
-# Sum is primitive, so doesn't increment
+# Sum is primitive, so no increment
 x <- 1:10; sum(x); refs(x)
 # [1] 1
 
-# f() and g() never evaluate x so refs doesn't increment
+# f() and g() never evaluate x, so refs don't increment
 f <- function(x) 10
 x <- 1:10; f(x); refs(x)
 # [1] 1
@@ -440,13 +441,13 @@ x <- 1:10; g(x); refs(x)
 # [1] 1
 ```
 
-Generally, any primitive replacement function will modify in place, provided that the object is not referred to elsewhere. This includes `[[<-`, `[<-`, `@<-`, `$<-`, `attr<-`, `attributes<-`, `class<-`, `dim<-`, `dimnames<-`, `names<-`, and `levels<-`. To be precise, all non-primitive functions increment refs, but a primitive function may be written in such a way that it doesn't increment refs.  The rules are sufficiently complicated that there's not a lot of point in trying to memorise them; instead approach the problem practically; use `refs()` and `tracemem()` to figure out when objects are being copied.
+Generally, provided that the object is not referred to elsewhere, any primitive replacement function will modify in place. This includes `[[<-`, `[<-`, `@<-`, `$<-`, `attr<-`, `attributes<-`, `class<-`, `dim<-`, `dimnames<-`, `names<-`, and `levels<-`. To be precise, all non-primitive functions increment refs, but a primitive function may be written in such a way that it doesn't. The rules are sufficiently complicated that there's little point in trying to memorise them. Instead, you should approach the problem practically by using `refs()` and `tracemem()` to figure out when objects are being copied.
 
-Once you have determined that copies are being made, it can be hard to prevent them. If you find yourself resorting to exotic tricks to avoid copies, it may be time to rewrite your function in C++, as described in [Rcpp](#rcpp).
+While determining that copies are being made is not hard, preventing such behavior is. If you find yourself resorting to exotic tricks to avoid copies, it may be time to rewrite your function in C++, as described in [Rcpp](#rcpp).
 
 ### Loops
 
-For loops in R have a reputation for being slow, but often this slowness is because instead of modifying in place, you're modifying a copy. Take the following code that subtracts the median from each column of a large data.frame:
+For loops in R have a reputation for being slow. Often that slowness is due to the fact that you're modifying a copy instead of modifying in place. Consider the following code. It subtracts the median from each column of a large data frame:
 
 ```{r, cache = TRUE}
 x <- data.frame(matrix(runif(100 * 1e4), ncol = 100))
@@ -459,7 +460,7 @@ system.time({
 })
 ```
 
-It's rather slow - we only have 100 columns and 10,000 rows, but it's taking almost five seconds. We can use `address()` and `refs()` to see what's going on for a small sample of the loop:
+It's rather slow. With 100 columns and 10,000 rows, it takes almost five seconds. We can use `address()` and `refs()` to see what's going on for a small sample of the loop:
 
 ```{r}
 for(i in 1:5) {
@@ -468,7 +469,7 @@ for(i in 1:5) {
 }
 ```
 
-In each iteration `x` is moved to a new location (copying the complete data frame) and `refs(x)` is always 2. This is because `[<-.data.frame` is not a primitive function, so it always increments the refs. We can make the function substantially more efficient by using either a list or matrix instead of a data frame. Modifying lists and matrices use primitive functions, so the refs are not incremented and all modifications are in place.
+For each iteration, `x` is moved to a new location (copying the complete data frame) so `refs(x)` is always 2. This occurs because `[<-.data.frame` is not a primitive function, so it always increments the refs. We can make the function substantially more efficient by using either a list or a matrix instead of a data frame. Modifying lists and matrices use primitive functions, so the refs are not incremented and all modifications occur in place.
 
 ```{r}
 y <- as.list(x)
