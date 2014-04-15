@@ -7,57 +7,28 @@ layout: default
 source("code/microbenchmark.R")
 ```
 
-# Profiling and performance optimisation {#profiling}
+# Making code faster {#profiling}
 
-> "We should forget about small efficiencies, say about 97% of the time:
-> premature optimization is the root of all evil" --- Donald Knuth.
+> "Programmers waste enormous amounts of time thinking about, or worrying 
+> about, the speed of noncritical parts of their programs, and these attempts 
+> at efficiency actually have a strong negative impact when debugging and 
+> maintenance are considered. We should forget about small efficiencies, say 
+> about 97% of the time: premature optimization is the root of all evil" 
+> --- Donald Knuth.
 
-The key idea in this chapter can be summed up simply: "Find out what's slow then make it fast".  The first part of this chapter introduces you to tools to help understand what makes your code slow. The second part introduces you to some general tools for making your code faster.
+Making code fast is an iterative process:
 
-Unfortunately optimisations are typically tightly coupled with the problem. It's hard to give give advice that will work in every situation, but I'll do my best. I include some general techniques, and so
+1. Find the biggest bottleneck, the slowest part of your code.
+1. Eliminate the bottleneck by modifying the code
+1. Repeat until your code is fast enough.
 
-Explore
+This process is simple, but not easy. Firstly, your intuition for bottlenecks is likely to be bad. Even experienced programmers have a hard time identifying bottlenecks from code because there are so many layers between R code and the processor. Instead of trying to guess where performance bottlenecks are, it's better to __profile__ code, running it on realistic inputs and timining how long each individual operation takes.  This is the subject of the first part of this chapter, [profiling](#profiling). Optimising code before you've figured out what's actually slow is called premature optimisation.
 
-Your code should be correct, maintainable and fast. Notice that speed comes last - if your function is incorrect or unmaintainable (i.e. will eventually become incorrect) it doesn't matter if it's fast. As computers get faster and R is optimised, your code will get faster all by itself. Your code is never going to automatically become correct or elegant if it is not already.
+Once you've identified a specific bottleneck you need to rewrite so it runs faster. It's difficult to provide general advice on how to do this. In [improving performance](#improve-perf) you'll learn five techniques that can be applied to many different problems. The focus of this chapter is improving performance within R. In [Rcpp](#rcpp), you'll learn another powerful technique for improving performance: re-writing R bottlenecks in C++. You'll also learn a general strategy for tackling bottlenecks that helps ensure you make your code faster without making it incorrect. As computers get faster and R is optimised, your code will get faster all by itself. Your code is never going to automatically become correct or elegant if it is not already.
 
-When making code faster be careful not to make it incorrect.
-
-
-Like javascript, the vast majority of R code is poorly written and slow. This sounds bad but it's actually a positive! There's no point in optimising code until it's actually a bottleneck - most R code should be incredibly inefficient because even inefficient code is usually fast enough. If most R code was efficient, it would be a strong signal that R programmers are prematurely optimising, spend time making their code faster instead of solving real problems. Additionally, most people writing R code are not programmers. Many of them don't have any formal training in programming or computer science, but are using R because it helps them solve their data analysis problems.
-
-This means that the vast majority of R code can be re-written in R to be more efficient. This often means vectorising code, or avoiding some of the most obvious traps discussed in the [R inferno] (http://www.burns-stat.com/documents/books/the-r-inferno/). There are also other strategies like caching/memoisation that trade space for time. Otherwise, a basic knowledge of data structures and algorithms can help come up with alternative strategies.
-
-This applies not only to packages, but also to base R code. The focus on R code has been making a useful tool, not a blazingly fast programming language. There is huge room for improvement, and base R is only going to get faster over time.
-
-That said, sometimes there are times where you need to make your code faster: spending several hours of your day might save days of computing time for others. The aim of this chapter is to give you the skills to figure out why your code is slow, what you can do to improve it, and ensure that you don't accidentally make it slow again in the future.  You may already be familiar with `system.time`, which tells you how long a block of code takes to run. This is a useful building block, but is a crude tool.
-
-Along the way, you'll also learn about the most common causes of poor performance in R, and how to address them. Sometimes there's no way to improve performance within R, and you'll need to use C++, the topic of [Rcpp](#rcpp).
-
-Having a good test suite is important when tuning the performance of your code: you don't want to make your code fast at the expense of making it incorrect. We won't discuss testing any further in this chapter, but we strongly recommend having a good set of test cases written before you begin optimisation.
-
-Additionally, most people writing R code are not programmers. Many of don't have any formal training in programming or computer science, but are using R because it helps them solve their data analysis problems. This means that the vast majority of R code can be re-written in R to be more efficient. This often means vectorising code, or avoiding some of the most obvious traps discussed later in this chapter. There are also other strategies like caching/memoisation that trade space for time. Otherwise, a basic knowledge of data structures and algorithms can help come up with alternative strategies.
-
-[Mature optimisation](http://carlos.bueno.org/optimization/mature-optimization.pdf) (PDF)
+Everytime you eliminate a new bottleneck, a new bottleneck will arise. For this reason, you need to identify how fast the code needs to be before you start. You need to balance the time spend optimising code with time spend runnining it. You want to spend several hours of your time to save days of computation, not seconds.
 
 A recurring theme throughout this part of the book is the importance of differentiating between absolute and relative speed, and fast vs fast enough. First, whenever you compare the speed of two approaches to a problem, be very wary of just looking at a relative differences. One approach may be 10x faster than another, but if that difference is between 1ms and 10ms, it's unlikely to have any real impact. You also need to think about the costs of modifying your code. For example, if it takes you an hour to implement a change that makes you code 10x faster, saving 9 s each run, then you'll have to run at least 400 times before you'll see a net benefit.  At the end of the day, what you want is code that's fast enough to not be a bottleneck, not code that is fast in any absolute sense.  Be careful that you don't spend hours to save seconds.
-
-Writing fast R code is part of the general task of becoming a better R programmer. As well as a the specific hints in this chapter, if you want to write fast R code, you'll need to generally improve your programming skills. Some ways to do this are to:
-
-* [Read R blogs](http://www.r-bloggers.com/) to see what performance
-  problems other people have struggled with, and how they have made their
-  code faster.
-
-* Read other R programming books, like
-  [The Art of R Programming](http://amzn.com/1593273843).
-
-* Take an algorithms and data structure course to learn some theory and
-  well known ways of tackling certain classes of problems. I have heard
-  good things about Princeton's
-  [Algorithms](https://www.coursera.org/course/algs4partI) course offered by
-  coursera.
-
-You can also reach out to the community for help. Stackoverflow can be a useful place to ask, but you'll need to put some effort into creating an example that captures the salient features of your problem while being easily digestible. If it's too complex few people will have the time and motivation to attempt a solution. If it's too simple, you'll get answers that solve the toy problem, not the real problem. If you also try to answer questions on stackoverflow, you'll quickly get a feel for what makes a good question.
-
 
 ##### Prerequisites
 
@@ -80,7 +51,7 @@ Things you can't profile with the line profiler:
 Other tools:
 * https://github.com/ltierney/Rpkg-proftools - show flamegraph and call graph
 
-## Improving performance
+## Improving performance {#improve-perf}
 
 Once you've used profiling to identify a bottleneck, you need to make it faster. The following sections introduce you to a number of techniques that I've found broadly useful:
 
@@ -602,3 +573,29 @@ microbenchmark(
 ```
 
 For this example, it doesn't help at all.
+
+### Other techniques
+
+Writing fast R code is part of the general task of becoming a better R programmer. As well as a the specific hints in this chapter, if you want to write fast R code, you'll need to generally improve your programming skills. Some ways to do this are to:
+
+You can also reach out to the community for help. Stackoverflow can be a useful place to ask, but you'll need to put some effort into creating an example that captures the salient features of your problem while being easily digestible. If it's too complex few people will have the time and motivation to attempt a solution. If it's too simple, you'll get answers that solve the toy problem, not the real problem. If you also try to answer questions on stackoverflow, you'll quickly get a feel for what makes a good question.
+
+* [Read R blogs](http://www.r-bloggers.com/) to see what performance
+  problems other people have struggled with, and how they have made their
+  code faster.
+
+* Read other R programming books, like
+  [The Art of R Programming](http://amzn.com/1593273843). Read the
+  [R inferno](http://www.burns-stat.com/documents/books/the-r-inferno/) to
+  learn about common traps.
+
+* Take an algorithms and data structure course to learn some theory and
+  well known ways of tackling certain classes of problems. I have heard
+  good things about Princeton's
+  [Algorithms](https://www.coursera.org/course/algs4partI) course offered by
+  coursera.
+  
+* Read general books about optimisation like 
+  [Mature optimisation](http://carlos.bueno.org/optimization/mature-optimization.pdf)
+  by Carlos Bueno, or the [Pragmatic Programmer](http://amzn.com/020161622X) by
+  Andrew Hunt and David Thomas.
