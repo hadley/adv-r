@@ -6,6 +6,10 @@ png <- function(path, dpi = NULL) {
   structure(meta, class = "png")
 }
 knit_print.png <- function(x, options) {
+  # To get more formatting info, see:
+  # opts_knit$get('rmarkdown.pandoc.to')
+  # opts_knit$get('out.format')
+
   knitr::asis_output(paste0(
     "<img src='", x$path, "'",
     " width=", x$dim[1] / (x$dpi[1] / 96),
