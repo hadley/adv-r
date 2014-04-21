@@ -5,9 +5,10 @@ layout: default
 
 ```{r, echo = FALSE}
 source("code/microbenchmark.R")
+source("_plugins/png.R")
 ```
 
-# Making code faster {#profiling}
+# Optimising code {#profiling}
 
 > "Programmers waste enormous amounts of time thinking about, or worrying 
 > about, the speed of noncritical parts of their programs, and these attempts 
@@ -16,13 +17,13 @@ source("code/microbenchmark.R")
 > about 97% of the time: premature optimization is the root of all evil" 
 > --- Donald Knuth.
 
-Making code fast is an iterative process:
+Optimising code to make it run faster is an iterative process:
 
 1. Find the biggest bottleneck, the slowest part of your code.
-1. Eliminate the bottleneck by modifying the code
+1. Eliminate the bottleneck.
 1. Repeat until your code is fast enough.
 
-This process is simple, but not easy. Firstly, your intuition for bottlenecks is likely to be bad. Even experienced programmers have a hard time identifying bottlenecks from code because there are so many layers between R code and the processor. Instead of trying to guess where performance bottlenecks are, it's better to __profile__ code, running it on realistic inputs and timining how long each individual operation takes.  This is the subject of the first part of this chapter, [profiling](#profiling). Optimising code before you've figured out what's actually slow is called premature optimisation.
+This process is simple, but not easy. Firstly, your intuition for bottlenecks is likely to be bad. Even experienced programmers have a hard time identifying bottlenecks from code because there are so many layers between R code and the processor. Instead of trying to guess where performance bottlenecks are, it's better to __profile__ code, running it on realistic inputs and timining how long each individual operation takes.  This is the subject of the first part of this chapter, [profiling](#measure-perf). Optimising code before you've figured out what's actually slow is called premature optimisation.
 
 Once you've identified a specific bottleneck you need to rewrite so it runs faster. It's difficult to provide general advice on how to do this. In [improving performance](#improve-perf) you'll learn five techniques that can be applied to many different problems. The focus of this chapter is improving performance within R. In [Rcpp](#rcpp), you'll learn another powerful technique for improving performance: re-writing R bottlenecks in C++. You'll also learn a general strategy for tackling bottlenecks that helps ensure you make your code faster without making it incorrect. As computers get faster and R is optimised, your code will get faster all by itself. Your code is never going to automatically become correct or elegant if it is not already.
 
@@ -32,24 +33,113 @@ It's important to differentiate between absolute and relative speed, and fast vs
 
 ##### Prerequisites
 
-In this chapter we'll be using the lineprof to understand performance of R code, so make sure you've installed it before continuing: `devtools::install_github("hadley/lineprof")`.
+In this chapter we'll be using the lineprof to understand performance of R code, so make sure you've installed it before continuing: 
 
-## Understanding performance
+```{r, eval = FALSE}
+devtools::install_github(c("wch/shiny-slickgrid", "hadley/lineprof"))
+```
 
-R provides a built in tool for profiling: `Rprof`. When active, this records the current call stack to disk every `interval` seconds. This provides a fine grained report showing how long each function takes. The function `summaryRprof` provides a way to turn this list of call stacks into useful information. But I don't think it's terribly useful, because it makes it hard to see the entire structure of the program at once. Instead, we'll use the `profr` package, which turns the call stack into a data.frame that is easier to manipulate and visualise.
+## Measuring performance {#measure-perf}
 
-Example showing how to use profr.
+To understand performance you use a profiler. There are a number of types of profiler, but R uses a fairly simple sort called a sampling or statistical profiler. A sampling profiler stops code every few milliseconds and records which function is currently being called, along with the function that called that function and so on. For example, consider the following function `f()`
 
-Sample pictures.
+```{r}
+library(lineprof)
+f <- function() {
+  pause(0.1)
+  g()
+  h()
+}
+g <- function() {
+  pause(0.1)
+  h()
+}
+h <- function() {
+  pause(0.1)
+}
 
-Things you can't profile with the line profiler:
+tmp <- tempfile()
+Rprof(tmp, interval = 0.1)
+f()
+Rprof(NULL)
+```
 
-* C/C++ code
-* "special" primitives
-* byte code compiled code
+(Note that we're using a `lineprof::pause()` instead of `Sys.sleep()` because it's implemented in such away that it doesn't appear in profiling output.)
 
-Other tools:
-* https://github.com/ltierney/Rpkg-proftools - show flamegraph and call graph
+Conceptually, the profiler produces output like this:
+
+```
+f() 
+f() > g()
+f() > g() > h()
+f() > h()
+```
+
+Each line represents one "tick" of the profiler, 0.1s in this case. You can see the code first spends 0.1 in f, then 0.1 in g (called from inside f).
+
+In the real world, you're unlikely to get a result this nice. That's because profiling is hard to do accurately without slowing your code down many orders of magnitude. `RProf()` uses a very well established approximation technique: sampling! Basically, R stops itself every `interval` seconds and inspects what the current call is. There's some variability in the how accurate timer is, and how much time each operation takes so each time you profile code you'll get a slightly different answer. Fortunately, pinpoint accuracy is not needed to identify the slowest parts of your code. 
+
+Instead of looking at the individual records, we'll aggregate and display them using the lineprof package. There are a number of ways to visualise this data. For example, `summaryRprof()`, the proftools and the profr package. These are useful, but relatively sophisticated tools. I think the lineprof package is most useful, because it shows you performance information in the same context as your code. When profiling, you want to find the slowest parts of your code and understand their context. lineprof is relatively unsophisticated (e.g. doesn't deal well with recursion) but is great at showing you context.
+
+To use lineprof, we'll first put the code above in a separate file.  We do this because it makes it easier to see the context of the code (normally this step isn't necessary because your code is already in a file). We then use `lineprof()` to run out function and capture the timing output. As the name suggests, the fundamental unit of analysis in `lineprof()` is a line of code. This is a bit more complex than a function call, but it's easier to see the code in its context. If you have a lot going on one line, you probably want to break it up into multiple steps anyway. Printing this object shows that we haven't exactly captured how long it takes each to run each function, but the ratios look about right. For now, we'll just focus on the time column which estimates how long each line took to run, and the ref, which tells us which line of code was run.
+
+```{r, messsage = FALSE, cache = TRUE}
+library(lineprof)
+source("code/profiling.R")
+l <- lineprof(f())
+l
+```
+
+Lineprof does provide some tools to navigate through this data structure (like `focus()`), but we'll instead work with an interactive explorer which can be run with `shine(l)`. `shine()` starts a shiny app which will "block" your R session. To exit, you'll need to stop the process using escape or ctrl + break. `shine()` will also open a new web page (or if you're using RStudio, a new pane) that shows your source code annotated with information about how long each line took to run:
+
+```{r, echo = FALSE}
+png("profiling-lineprof-f.png", dpi = 220)
+```
+
+This view shows how much time is spend on each line of `f()`. At a glance, you can see that twice as much time is `spent()` in `g()` as `h()`, so that it would make sense to drill down into that function to find a bottleneck.
+
+You can click on the function names to drill down into `g()`:
+
+```{r, echo = FALSE}
+png("profiling-lineprof-g.png", dpi = 220)
+```
+
+Then `h()`:
+
+```{r, echo = FALSE}
+png("profiling-lineprof-h.png", dpi = 220)
+```
+
+### Limitations
+
+There are some other limitations to profiling:
+
+* you only see the top-level C/C++ function, not what functions they call
+
+* primitive functions or byte code compiled code. 
+
+* anonymous functions can be hard to track down (because they don't have names)
+
+* lazy evaluation mean that arguments are often evaluated inside another 
+  function. For example, in the following code, profiling would make it seem
+  like `i()` was called by `j()` because the argument isn't evaluated until it's
+  needed inside of `j().
+
+    ```{r, eval = FALSE}
+    i <- function() {
+      pause(0.1)
+      10
+    }
+    j <- function(x) {
+      x + 10
+    }
+    j(i())
+    ```
+
+### Exercises
+
+1 `Rprof()` doesn't very accurately track time spend in `Sys.sleep()` 
+  (presumably because it's not actually doing any computation.)
 
 ## Improving performance {#improve-perf}
 
