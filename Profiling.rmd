@@ -165,41 +165,41 @@ Once you've used profiling to identify a bottleneck, you need to make it faster.
 1. Avoid copies
 1. Byte-code compile
 
-A final technique is to rewrite in a faster language, like C++. This is a big topic and is convered in the next chapter, [Rcpp](#rcpp).
+A final technique is to rewrite in a faster language, like C++. This is a big topic and is covered in the next chapter, [Rcpp](#rcpp).
 
-Before we get into the specific techniques, first I'll describe a general strategy and organisation style when working on performance. As always, remember that clarity and readibility are more important than speed. Your intution for bottlenecks is likely to be bad, so don't sacrifice readability for performance unless you _know_ it will have a significant impact on run-time.
+Before we get into specific techniques, I'll first describe a general strategy and organisation style that’s useful when working on performance. As always, remember that clarity and readability are more important than speed. Your intuition for bottlenecks is likely to be bad, so don't sacrifice readability for performance unless you _know_ it will have a significant impact on run-time.
 
 ### Code organisation
 
-There are two traps that it's easy to fall into when making your code faster:
+There are two traps that are easy to fall into when trying to make your code faster:
 
-1. Making it faster by making it incorrect.
-1. Thinking you've made it faster, when you've actually make it slower.
+1. Writing fast but incorrect code.
+1. Assuming your code is fast.
 
-You can avoid these pitfalls with a good strategy, as outlined below. In this trivial example, we'll compare two approaches to computing the mean.
+You can avoid these pitfalls by adopting the strategy outlined below. In this trivial example, we'll compare two approaches to computing the mean.
 
-When tackling a bottleneck, you're going to come up with multiple approaches. Start by writing a function for each approach. The function should encapsulate all relevant behaviour, making it easy to check that it returns the correct result and time how long it takes to run. For our example, computing the mean, two approaches come to mind:
+When tackling a bottleneck, you're likely to come up with multiple approaches. Write a function for each approach. Each function should encapsulate all relevant behaviour. This will make it easier to check whether a function returns the correct result. Then, time how long each function takes to run. For our example of computing a mean, two approaches come to mind:
 
 ```{r}
 mean1 <- function(x) mean(x)
 mean2 <- function(x) sum(x) / length(x)
 ```
 
-I recommend that you record everything you try, even approaches are slower: if you come back to problem in the future, it's useful to see both successes and failures. I often work in a Rmarkdown file to make it easy to intermingle code and explanation.
+I recommend that you keep a record of everything you try, even the failures. If you come back to problem in the future, it'll be useful to see everything you've tried. To do this, I often use an R Markdown file, which makes it easy to intermingle code with detailed comments and notes.
 
-Next, generate a representative test case. The test case should be big enough to capture the essence of your problem, but small enough that it only takes a few seconds to run with your variations. You don't want it to take too long because you're going to run it many times as you compare approaches. Equally, you don't want it to be too small, otherwise the results might not generalise to the real problem. If you're interested in the performance so different sized inputs, you may need to generate more than one test case.
+Next, generate a representative test case. The case should be big enough to capture the essence of your problem but small enough that it takes only a few seconds to run. You don't want it to take too long because, to compare approaches, you'll need to run the case many times. That said, you don't want the case to be too small and abstract because the results might not generalise to the real problem. If you're interested in the performance of differently sized inputs, you may need to generate more than one test case.
 
 ```{r}
 x <- runif(100)
 ```
 
-Use this test case to quickly check that all variants return the same result with `stopifnot()` and `all.equal()`. For real problems that have fewer possible outputs, you'll need more tests to make sure that an appraoch doesn't accidentally return the correct answer.
+Use this test case to quickly check that all variants return the same result. Check this by using `stopifnot()` and `all.equal()`. For real problems that have fewer possible outputs, you may need more tests to make sure that an approach doesn't accidentally return the correct answer.
 
 ```{r}
 stopifnot(all.equal(mean1(x), mean2(x)))
 ```
 
-Finally, use the microbenchmark package to precisely compare how long each variation takes to run. For bigger problems, reduce `times` paramater so that it only takes a couple of seconds to run the benchmark. Remember to focus on the median time, and use the upper and lower quartiles to gauge the varibility of the measurement.
+Finally, use the `microbenchmark` package to compare how long each variation takes to run. For bigger problems, reduce the `times` paramater so that it only takes a couple of seconds to run. Focus on the median time, and use the upper and lower quartiles to gauge the variability of the measurement.
 
 ```{r}
 microbenchmark(
@@ -208,11 +208,11 @@ microbenchmark(
 )
 ```
 
-(You might be surprised by the results here - `mean(x)` is considerably slower than `sum(x) / length(x)` because it makes two passes over the vector in order to be more accurate.)
+(You might be surprised by the results here. `mean(x)` is considerably slower than `sum(x) / length(x)`. This is because, for the sake of accuracy, `mean(x)` makes two passes over the vector.)
 
-Before you start experimenting, also note your target speed. How fast does a new approach need to be so that it's no longer the bottleneck? You want to know this so that you don't spend time optimising code that's no longer a bottleneck.
+Before you start experimenting, you should have a target speed that defines when the bottleneck is no longer a problem. Setting such a goal is important because you don't want to spend valuable time over-optimising your code.
 
-If you'd like to see this strategy in action, I've used it a few times on stackoverflow. 
+If you'd like to see this strategy in action, I've used it a few times on Stack Overflow. 
 
 * http://stackoverflow.com/questions/22515525#22518603
 * http://stackoverflow.com/questions/22515175#22515856
@@ -220,37 +220,37 @@ If you'd like to see this strategy in action, I've used it a few times on stacko
 
 ### Has someone already solved the problem?
 
-Once you've organised your code and captured the variations you've already thought of, it's natural to see what others have down. You are part of a large community, and it's quite possible that someone else has had the same problem as you. If your bottleneck is in function in a package, it's worth looking for other packages that do that same thing. Two good places to start looking at:
+Once you've organised your code and captured all the variations you can think of, it's natural to see what others have done. Remember, you are part of a large community. So it's quite possible that someone has already tried to tackle the same problem. If your bottleneck is a function in a package, it's worth looking at other packages that do the same thing. Two good places to start are:
 
-* [CRAN task views](http://cran.rstudio.com/web/views/). If there is a
-  CRAN task view related to your problem domain, it's worth looking for
-  alternative packages.
+* [CRAN task views](http://cran.rstudio.com/web/views/). If there's a
+  CRAN task view related to your problem's domain, it's worth looking at
+  the packages included there.
 
 * Reverse dependencies of Rcpp, as listed on its
   [CRAN page](http://cran.r-project.org/web/packages/Rcpp). Since these
-  packages use C++, it's possible they have implemented your bottleneck
-  in a higher performance language.
+  packages use C++, it's possible to find a solution to your bottleneck
+  written in a higher performance language.
 
-Otherwise the challenge is describing your bottleneck in a way that helps you search for related problems and solutions. You'll find this much easier if you know the name of the  problem is and some common synonyms. It's hard to search for this knowledge (because you don't know what it's called!) but you can build it up over time by reading broadly about statistics and algorithms, or you can ask others. Talk to your colleagues and brainstorm some possible names, then search on google and stackoverflow. It's often helpful to restrict your search to R related pages. For google, try [rseek](http://www.rseek.org/); for stackoverflow, restrict your searches to the R tag by including `[R]` in your search term.
+Otherwise, the challenge is describing your bottleneck in a way that helps you find related problems and solutions. Knowing the name of the problem or its synonyms will make this search much easier. But because you don't know what it's called, it's hard to search for this knowledge! By reading broadly about statistics and algorithms, you can build up your own knowledge base over time. Alternatively, you can ask others. Talk to your colleagues and brainstorm some possible names, then search on Google and Stack Overflow. Note that it's often helpful to restrict your search to R related pages. For Google, try [rseek](http://www.rseek.org/). For Stack Overflow, restrict your search by including the R tag, `[R]`, in your search.
 
-Record all solutions that you find, not just those that are already faster. Some solutions might be initially slower, but easier to optimise, so end up faster. You may also be able to combine the fastest parts of different approaches. If you've found a solution that's fast enough, congratulations! Otherwise, read on to learn ways to make your R code faster.
+As discussed above, record all solutions that you find, not just those that immediately appear to be fast. Some solutions might initially be slower, but because they are easier to optimise they can end up being faster. You may also be able to combine the fast parts from different approaches. If you've found a solution that's fast enough, congratulations! Otherwise, read on.
 
 ### Exercises
 
-1.  What faster alternatives to `lm` are available? What alternatives are
+1.  What are the faster available alternatives to `lm`? Which are
     specifically designed to work with larger datasets?
 
 1.  What package implements a version of `match()` that's faster for
     repeated look ups? How much faster is it?
 
-1.  List four functions (not just in base R) that convert a string into a
+1.  List four functions (not just those in base R) that convert a string into a
     date time object? What are their strengths and weaknesses?
 
 1.  How many different ways can you compute a 1d density estimate in R?
 
 1.  What packages provide the ability to compute a rolling mean?
 
-1.  What alternatives to `optim()` are available?
+1.  What are the available alternatives to `optim()`?
 
 ### Do as little as possible
 
