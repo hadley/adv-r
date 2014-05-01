@@ -11,7 +11,7 @@ library(inline)
 
 ## Introduction
 
-Reading the source code of R is an extremely powerful technique for improving your R programming. However, at some point you will hit a brick wall: many base R functions are implemented in C. This chapter will give you a basic introduction R's C api. You'll need some basic C knowledge (familiarity with "[Kernigan and Ritchie](http://amzn.com/0131101633?tag=devtools-20)" is recommended), and a lot of patience. But it is possible to read R's C source code, and you will learn a lot doing it.
+Reading the source code of R is an extremely powerful technique for improving your R programming. However, at some point you will hit a brick wall: many base R functions are implemented in C. This chapter will give you a basic introduction R's C API. You'll need some basic C knowledge (familiarity with "[Kernigan and Ritchie](http://amzn.com/0131101633?tag=devtools-20)" is recommended), and a lot of patience. But it is possible to read R's C source code, and you will learn a lot doing it.
 
 Even if you've never used C before, you can still puzzle out much of what's going on because the basic syntax of C is similar to R. Some important differences:
 
@@ -28,16 +28,16 @@ Even if you've never used C before, you can still puzzle out much of what's goin
 
 * Assignment is done with `=`, not `<-`.
 
-The contents of this draw heavily from Section 5 ("System and foreign language interfaces") of [Writing R extensions](http://cran.r-project.org/doc/manuals/R-exts.html), but focus on best practices and modern tools. This means it does not cover the old `.C` interface, the old api defined in `Rdefines.h` or rarely used language features. You are unlikely to see these in modern R code. 
+The contents of this draw heavily from Section 5 ("System and foreign language interfaces") of [Writing R extensions](http://cran.r-project.org/doc/manuals/R-exts.html), but focus on best practices and modern tools. This means it does not cover the old `.C` interface, the old API defined in `Rdefines.h` or rarely used language features. You are unlikely to see these in modern R code. 
 
-To see the complete C api provided by R, look at the header file `Rinternals.h`. It's easiest to find and display this file from within R:
+To see the complete C API provided by R, look at the header file `Rinternals.h`. It's easiest to find and display this file from within R:
 
 ```{r, eval = FALSE}
 rinternals <- file.path(R.home("include"), "Rinternals.h")
 file.show(rinternals)
 ```
 
-All functions are defined with either the prefix `Rf_` or `R_` but are exported without it. 
+All functions are defined with either the prefix `Rf_` or `R_` but are exported without it. You can can write `#define R_NO_REMAP` before `#include`ing Rinternals to force access to the R API using the `Rf_` and `R_` prefixes.
 
 I do not recommend using C for writing new high-performance code. Instead use Rcpp and write C++. The Rcpp API protects you from many of the historical idiosyncracies of the R API, takes care of memory management for you, and provides many useful helper methods.
 
@@ -45,7 +45,7 @@ You'll start by learning how to call R functions from C in [calling C](#calling-
 
 ### Prerequisites
 
-To understand existing C code, it's useful to generate simple examples of your own that you can experiment with. To that end, all examples in this chapter use the inline package, which makes it extremely easy to compile and link C code to your current R session.  Get it by running `install.packages("Rcpp")`.
+To understand existing C code, it's useful to generate simple examples of your own that you can experiment with. To that end, all examples in this chapter use the `inline` package, which makes it extremely easy to compile and link C code to your current R session.  Get it by running `install.packages("Rcpp")` in your R session.
 
 You'll also need a C compiler. Windows users can use Duncan Murdoch's [Rtools](http://cran.r-project.org/bin/windows/Rtools/). Mac users will need the [Xcode command line tools](http://developer.apple.com/). Most Linux distributions will come with the necessary compilers.
 
@@ -171,7 +171,7 @@ sexp_type(pairlist(a = 1))
 
 At the heart of every C function will be a set of conversions between R data structures and C data structures. Inputs and output will always be R data structures (`SEXP`s) and you will need to convert them to C data structures in order to do any work. This section focusses on vectors because they're the type of object you're most often working with.
 
-An additional complication is the garbage collector: if you don't claim every R object you create, the garbage collector will think they are unused and delete them.
+An additional complication is the garbage collector: if you don't protect every R object you create, the garbage collector will think they are unused and delete them.
 
 ### Creating vectors and garbage collection
 
@@ -199,6 +199,8 @@ dummy()
 You might wonder what all the `PROTECT()` calls do. They tell R that we're currently using each object, and not to delete it if the garbage collector is activated. (We don't need to protect objects that R already knows we're using, like function arguments.)
 
 You also need to make sure that every protected object is unprotected. `UNPROTECT()` takes a single integer argument, `n`, and unprotects the last n objects that were protected. The number of protects and unprotects must match, if not, R will warn about a "stack imbalance in .Call".  Other specialised forms protection needed in some circumstances: `UNPROTECT_PTR()` unprotects the object pointed to by the `SEXP` s, `PROTECT_WITH_INDEX()` saves an index of the protection location that can be used to replace the protected value using `REPROTECT()`. Consult the R externals section on [garbage collection](http://cran.r-project.org/doc/manuals/R-exts.html#Garbage-Collection) for more details.
+
+Properly protecting the R objects you allocate is extremely important! Improper protection leads to difficult to diagnose errors, typically segfaults, but other corruption is possible as well. In general -- if you allocate a new R object, you must `PROTECT` it.
 
 If you run `dummy()` a few times, you'll notice the output is basically random. This is because `allocVector()` assigns memory to each output, but it doesn't clean it out first. For real functions, you'll may want to loop through each element in the vector and zero it out. The most efficient way to do that is to use `memset`:
 
@@ -320,6 +322,8 @@ On my computer, `add_two` is about twice as fast as `add_one` for a million elem
 
 Strings and lists are more complicated because the individual elements are `SEXP`s. The elements of a `STRSXP` are all `CHARSXP`s, which are immutable objects that contains a C string and a stored in a global pool. Use `STRING_ELT(x, i)` to extract the `CHARSXP`, and `CHAR(STRING_ELT(x, i))` to get the actual `const char*` string. Set values with `SET_STRING_ELT(x, i, value)`. Use `mkChar()` to turn a C string into a `CHARSXP`.
 
+Be careful not to confuse `mkChar()` with `mkString()`: `mkString()` will turn a C string into a `STRSXP` containing a single `CHARSXP`, which might be suitable for insertion into a vector with `SET_VECTOR_ELT`.
+
 The following function shows how to make a character vector containing known strings:
 
 ```{r, cache = TRUE}
@@ -397,9 +401,9 @@ These all create R-level objects, so need to be `PROTECT()`ed.
 
 ## Pairlists {#c-pairlists}
 
-In R code, there are very places where you need to care about the difference between a pairlist and a list (as described in [Pairlists](#pairlists)). Working with pairlists is much more important for C code because they are used for calls, unevaluated arguments, attributes and in `...`. There are two primary differences between lists and pairlists at the C level: how you access and name elements.
+In R code, there are places where you need to care about the difference between a pairlist and a list (as described in [Pairlists](#pairlists)). Working with pairlists is much more important for C code because they are used for calls, unevaluated arguments, attributes and in `...`. There are two primary differences between lists and pairlists at the C level: how you access and name elements.
 
-Unlike lists (`VECSXP`s), pairlists (`LISTSXP`s) have no way to index into an arbitrary location. Instead, R provides a set of helper functions that navigate along a linked list. The basic helpers are `CAR()` which extracts the first element of the list, and `CDR()` which extracts the rest. These can be composed to get `CAAR()`, `CDAR()`, `CADDR()`, `CADDR()` and so on. As well as the getters, R also provides `SETCAR()`, `SETCDR()` etc, to modify elements of a pairlist.
+Unlike lists (`VECSXP`s), pairlists (`LISTSXP`s) have no way to index into an arbitrary location. Instead, R provides a set of helper functions that navigate along a linked list. The basic helpers are `CAR()` which extracts the first element of the list, and `CDR()` which extracts the rest. These can be composed to get `CAAR()`, `CDAR()`, `CADDR()`, `CADDDR()` and so on. As well as the getters, R also provides `SETCAR()`, `SETCDR()` etc, to modify elements of a pairlist.
 
 The following example shows how `CAR()` and `CDR()` pull out pieces of a quoted function call:
 
@@ -434,20 +438,41 @@ count(quote(f(a, b, c)))
 count(quote(f()))
 ```
 
-You can make new pairlists with `CONS()` and new calls with `LCONS()`. Remember to set the last value to `R_NilValue`.
+You can make new pairlists with `CONS()` and new calls with `LCONS()`. Remember to set the last value to `R_NilValue`. Since these are R objects as well, they are eligible for garbage collection and must be `PROTECT`ed. In fact, it is unsafe to write code like the following:
 
 ```{r, cache = TRUE}
 new_call <- cfunction(NULL, '
   SEXP out;
-
   out = LCONS(install("+"), LCONS(
     ScalarReal(10), LCONS(
-      ScalarReal(5), R_NilValue)
+      ScalarReal(5), R_NilValue
     )
-  );
+  ));
   return out;
 ')
-new_call();
+gctorture(TRUE)
+new_call()
+gctorture(FALSE)
+```
+
+On my machine, I get the result `5 + 5` -- highly unexpected! In fact, to be safe, we must `PROTECT` each `ScalarReal` that is generated, as every R object allocation can trigger the garbage collector.
+
+```{r, cache = TRUE}
+new_call <- cfunction(NULL, '
+  SEXP out;
+  SEXP REALSXP_10 = PROTECT(ScalarReal(10));
+  SEXP REALSXP_5 = PROTECT(ScalarReal(5));
+  out = PROTECT(LCONS(install("+"), LCONS(
+    REALSXP_10, LCONS(
+      REALSXP_5, R_NilValue
+    )
+  )));
+  UNPROTECT(3);
+  return out;
+')
+gctorture(TRUE)
+new_call()
+gctorture(FALSE)
 ```
 
 `TAG()` and `SET_TAG()` allow you to get and set the tag (aka name) associated with an element of a pairlist. The tag should be a symbol. To create a symbol (the equivalent of `as.symbol()` or `as.name()` in R), use `install()`. 
