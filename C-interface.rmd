@@ -535,6 +535,7 @@ SEXP attribute_hidden do_tabulate(SEXP call, SEXP op, SEXP args, SEXP rho) {
   if (TYPEOF(in) != INTSXP)  error("invalid input");
 
   R_xlen_t n = XLENGTH(in);
+  /* FIXME: could in principle be a long vector */
   int nb = asInteger(nbin);
   if (nb == NA_INTEGER || nb < 0)
     error(_("invalid '%s' argument"), "nbin");
@@ -574,6 +575,7 @@ tabulate2 <- cfunction(c(bin = "SEXP", nbins = "SEXP"), '
   if (TYPEOF(bin) != INTSXP)  error("invalid input");
   
   R_xlen_t n = XLENGTH(bin);
+  /* FIXME: could in principle be a long vector */
   int nb = asInteger(nbins);
   if (nb == NA_INTEGER || nb < 0)
     error("invalid \'%s\' argument", "nbin");
@@ -594,19 +596,20 @@ tabulate2(c(1L, 1L, 1L, 2L, 2L), 3)
 
 To get this to compile, I also removed the call to `_()` which is an internal R function used to translate error messages between different languages.
 
-The final version below moves more of the coercion logic into an accompanying R function, as does some minor restructuring to make the code a little easier to understand.
+The final version below moves more of the coercion logic into an accompanying R function, as does some minor restructuring to make the code a little easier to understand. I also added a `PROTECT()`; this is probably missing in the original because the author knew that it would be safe.
 
 ```{r, cache = TRUE}
 tabulate_ <- cfunction(c(bin = "SEXP", nbins = "SEXP"), '  
   int nb = asInteger(nbins);
 
-  // Allocate 
+  // Allocate vector for output - assumes that there are less than 2^32 bins,
+  // and that each bin has less than 2^32 elements in it.
   SEXP out = PROTECT(allocVector(INTSXP, nb));
   int *pbin = INTEGER(bin), *pout = INTEGER(out);
   memset(pout, 0, nb * sizeof(int));
 
   R_xlen_t n = xlength(bin);
-  for(int i = 0; i < n; i++) {
+  for(R_xlen_t i = 0; i < n; i++) {
     int val = pbin[i];
     if (val != NA_INTEGER && val > 0 && val <= nb) {
       pout[val - 1]++; // C is zero-indexed
@@ -620,7 +623,7 @@ tabulate_ <- cfunction(c(bin = "SEXP", nbins = "SEXP"), '
 tabulate3 <- function(bin, nbins) {
   bin <- as.integer(bin)
   if (length(nbins) != 1 || nbins <= 0 || is.na(nbins)) {
-    stop("nbins must be ")
+    stop("nbins must be a positive integer", call. = FALSE)
   }
   tabulate_(bin, nbins)
 }
