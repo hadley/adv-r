@@ -57,9 +57,7 @@ Generally, calling a C function from R requires two pieces: a C function, and an
 #include <Rinternals.h>
 
 SEXP add(SEXP a, SEXP b) {
-  SEXP result;
-
-  PROTECT(result = allocVector(REALSXP, 1));
+  SEXP result = PROTECT(allocVector(REALSXP, 1));
   REAL(result)[0] = asReal(a) + asReal(b);
   UNPROTECT(1);
 
@@ -80,9 +78,7 @@ In this chapter we'll produce the two pieces in one step by using the `inline` p
 
 ```{r, cache = TRUE}
 add <- cfunction(c(a = "integer", b = "integer"), "
-  SEXP result;
-
-  PROTECT(result = allocVector(REALSXP, 1));
+  SEXP result = PROTECT(allocVector(REALSXP, 1));
   REAL(result)[0] = asReal(a) + asReal(b);
   UNPROTECT(1);
 
@@ -177,15 +173,13 @@ The simplest way to create an new R-level object is `allocVector()`. It takes tw
 
 ```{r, cache = TRUE}
 dummy <- cfunction(body = '
-  SEXP vec, lgl, ints;
+  SEXP dbls = PROTECT(allocVector(REALSXP, 4));
+  SEXP lgls = PROTECT(allocVector(LGLSXP, 4));
+  SEXP ints = PROTECT(allocVector(INTSXP, 4));
 
-  PROTECT(real = allocVector(REALSXP, 4));
-  PROTECT(lgl = allocVector(LGLSXP, 4));
-  PROTECT(ints = allocVector(INTSXP, 4));
-
-  PROTECT(vec = allocVector(VECSXP, 3));
-  SET_VECTOR_ELT(vec, 0, real);
-  SET_VECTOR_ELT(vec, 1, lgl);
+  SEXP vec = PROTECT(allocVector(VECSXP, 3));
+  SET_VECTOR_ELT(vec, 0, dbls);
+  SET_VECTOR_ELT(vec, 1, lgls);
   SET_VECTOR_ELT(vec, 2, ints);
 
   UNPROTECT(4);
@@ -205,9 +199,8 @@ If you run `dummy()` a few times, you'll notice the output varies. This is becau
 ```{r, cache = TRUE}
 zeroes <- cfunction(c(n_ = "integer"), '
   int n = asInteger(n_);
-  SEXP out;
 
-  PROTECT(out = allocVector(INTSXP, n));
+  SEXP out = PROTECT(allocVector(INTSXP, n));
   memset(INTEGER(out), 0, n * sizeof(int));
   UNPROTECT(1);
 
@@ -230,10 +223,9 @@ We can use this knowledge to make a simple version of `is.NA()`:
 
 ```{r, cache = TRUE}
 is_na <- cfunction(c(x = "ANY"), '
-  SEXP out;
   int n = length(x);
 
-  PROTECT(out = allocVector(LGLSXP, n));
+  SEXP out = PROTECT(allocVector(LGLSXP, n));
 
   for (int i = 0; i < n; i++) {
     switch(TYPEOF(x)) {
@@ -271,10 +263,9 @@ There is a helper function for each atomic vector that allows you to access the 
 
 ```{r, cache = TRUE}
 add_one <- cfunction(c(x = "numeric"), "
-  SEXP out;
   int n = length(x);
-
-  PROTECT(out = allocVector(REALSXP, n));
+  SEXP out = PROTECT(allocVector(REALSXP, n));
+  
   for (int i = 0; i < n; i++) {
     REAL(out)[i] = REAL(x)[i] + 1;
   }
@@ -289,11 +280,10 @@ When working with longer vectors, there's a performance advantage to using the h
 
 ```{r, cache = TRUE}
 add_two <- cfunction(c(x = "numeric"), "
-  SEXP out;
   int n = length(x);
   double *px, *pout;
 
-  PROTECT(out = allocVector(REALSXP, n));
+  SEXP out = PROTECT(allocVector(REALSXP, n));
 
   px = REAL(x);
   pout = REAL(out);
@@ -324,8 +314,7 @@ The following function shows how to make a character vector containing known str
 
 ```{r, cache = TRUE}
 abc <- cfunction(NULL, '
-  SEXP out;
-  PROTECT(out = allocVector(STRSXP, 3));
+  SEXP out = PROTECT(allocVector(STRSXP, 3));
 
   SET_STRING_ELT(out, 0, mkChar("a"));
   SET_STRING_ELT(out, 1, mkChar("b"));
@@ -362,8 +351,7 @@ Not only has it modified the value of `x`, but it has also modified `y`! This ha
 
 ```{r, cache = TRUE}
 add_four <- cfunction(c(x = "numeric"), '
-  SEXP x_copy;
-  PROTECT(x_copy = duplicate(x));
+  SEXP x_copy = PROTECT(duplicate(x));
   REAL(x_copy)[0] = REAL(x_copy)[0] + 4;
   UNPROTECT(1);
   return x_copy;
@@ -438,13 +426,11 @@ You can make new pairlists with `CONS()` and new calls with `LCONS()`. Remember 
 
 ```{r, cache = TRUE}
 new_call <- cfunction(NULL, '
-  SEXP out;
-  out = LCONS(install("+"), LCONS(
+  return LCONS(install("+"), LCONS(
     ScalarReal(10), LCONS(
       ScalarReal(5), R_NilValue
     )
   ));
-  return out;
 ')
 gctorture(TRUE)
 new_call()
@@ -455,10 +441,9 @@ On my machine, I get the result `5 + 5` -- highly unexpected! In fact, to be saf
 
 ```{r, cache = TRUE}
 new_call <- cfunction(NULL, '
-  SEXP out;
   SEXP REALSXP_10 = PROTECT(ScalarReal(10));
   SEXP REALSXP_5 = PROTECT(ScalarReal(5));
-  out = PROTECT(LCONS(install("+"), LCONS(
+  SEXP out = PROTECT(LCONS(install("+"), LCONS(
     REALSXP_10, LCONS(
       REALSXP_5, R_NilValue
     )
@@ -497,9 +482,7 @@ If the user provides unexpected input to your function (e.g. a list instead of a
 
 ```{r, cache = TRUE}
 add_ <- cfunction(signature(a = "integer", b = "integer"), "
-  SEXP result;
-
-  PROTECT(result = allocVector(REALSXP, 1));
+  SEXP result = PROTECT(allocVector(REALSXP, 1));
   REAL(result)[0] = asReal(a) + asReal(b);
   UNPROTECT(1);
 
