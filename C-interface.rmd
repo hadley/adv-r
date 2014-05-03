@@ -11,22 +11,7 @@ library(inline)
 
 ## Introduction
 
-Reading R's source code is an extremely powerful technique for improving your programming skills. However, many base R functions, and many functions in older packages, are written in C. It's useful to be able to figure out how those functions work, so this chapter will introduce you to R's C API. You'll need some basic C knowledge (familiarity with "[Kernigan and Ritchie](http://amzn.com/0131101633?tag=devtools-20)" is recommended), and a lot of patience. But it is possible to read R's C source code, and you will learn a lot doing it.
-
-Even if you've never used C before, you can often puzzle out much of what's going on because the basic syntax of C is similar to R. Some important differences:
-
-* Variables can only store specific types of data, and must be declared before 
-  use.
-
-* Objects are modified in place, unless you specifically copy the object.
-
-* Indices start at 0, not 1.
-
-* You must use a semi-colon at end of each expression.
-
-* You must have an explicit return statement.
-
-* Assignment is done with `=`, not `<-`.
+Reading R's source code is an extremely powerful technique for improving your programming skills. However, many base R functions, and many functions in older packages, are written in C. It's useful to be able to figure out how those functions work, so this chapter will introduce you to R's C API. You'll need some basic C knowledge, which you can get from a standard C text (e.g. "[Kernigan and Ritchie](http://amzn.com/0131101633?tag=devtools-20)"), or from [Rcpp](#Rcpp). You'll need a little patient, but it is possible to read R's C source code, and you will learn a lot doing it.
 
 The contents of this chapter draw heavily from Section 5 ("System and foreign language interfaces") of [Writing R extensions](http://cran.r-project.org/doc/manuals/R-exts.html), but focus on best practices and modern tools. This means it does not cover the old `.C` interface, the old API defined in `Rdefines.h` or rarely used language features. You are unlikely to see these in modern R code. I do not recommend using C for writing new high-performance code. Instead write C++ with Rcpp. The Rcpp API protects you from many of the historical idiosyncracies of the R API, takes care of memory management for you, and provides many useful helper methods.
 
@@ -37,13 +22,33 @@ rinternals <- file.path(R.home("include"), "Rinternals.h")
 file.show(rinternals)
 ```
 
-All functions are defined with either the prefix `Rf_` or `R_` but are exported without it, unless `#define R_NO_REMAP` has been used.
+All functions are defined with either the prefix `Rf_` or `R_` but are exported without it (unless `#define R_NO_REMAP` has been used).
 
-In this chapter, you'll first learn how to call R functions from C in [calling C](#calling-c). Next, in [C data structures](#c-data-structures), you'll learn how to translate data structure names from R to C. Unforutnately the R API harkens back to early years of R so this is not very consistent and there are many special cases. Once you know what vectors are called in C you'll want to create, coerce and modify them, as described in [creating and modifying vectors](#c-vectors). The distinction between pairlists and list is more important in C than R; [pairlists](#c-pairlists) provides the details. It's easy to crash R if you make invalid assumptions about the type of data supplied to your function, so [input validation](#c-input-validation) gives you the basics on input validation. The chapter concludes by teaching you how to find the C source code corresponding to an R function, [finding the C source for a function](#c-find-source).
+### Outline
+
+* [Calling C](#calling-c) shows to basics of creating and calling C functions 
+  with the inline package.
+
+* [C data structures](#c-data-structures) shows how to translate data 
+  structure names from R to C. 
+
+* [Creating and modifying vectors](#c-vectors) teaches you how to create, 
+  modify and coerce vectors in C.
+  
+* [Pairlists](#c-pairlists) shows you how to work with pairlists. You need
+  to know this because the distinction between pairlists and list is more 
+  important in C than R.
+
+* [Input validation](#c-input-validation) talks about the importance of 
+  input validation so that you C function doesn't crash R.
+
+* [Finding the C source for a function](#c-find-source) concludes the 
+  chapter by showing you how to find the C source code for internal and
+  primitive R functions.
 
 ### Prerequisites
 
-To understand existing C code, it's useful to generate simple examples of your own that you can experiment with. To that end, all examples in this chapter use the `inline` package, which makes it extremely easy to compile and link C code to your current R session.  Get it by running `install.packages("inline")` in your R session.
+To understand existing C code, it's useful to generate simple examples of your own that you can experiment with. To that end, all examples in this chapter use the `inline` package, which makes it extremely easy to compile and link C code to your current R session. Get it by running `install.packages("inline")` in your R session. To easily find the C code associated with internal and primitive functions, you'll need a function from pryr. Get the package with `install_github("hadley/pryr")`
 
 You'll also need a C compiler. Windows users can use Duncan Murdoch's [Rtools](http://cran.r-project.org/bin/windows/Rtools/). Mac users will need the [Xcode command line tools](http://developer.apple.com/). Most Linux distributions will come with the necessary compilers.
 
@@ -120,38 +125,11 @@ And `SEXP`s for internal objects, objects that are usually only created and used
 * `PROMSXP`: promises, lazily evaluated function arguments
 * `EXPRSXP`: expressions
 
-There's no built-in R function to easily access these names, but we can write one: 
+There's no built-in R function to easily access these names, but pryr provides `sexp_type()`:
   
-```{r, cache = TRUE}
-sexp_type <- cfunction(c(x = "ANY"), '
-  switch (TYPEOF(x)) {
-    case NILSXP:      return mkString("NILSXP");
-    case SYMSXP:      return mkString("SYMSXP");
-    case LISTSXP:     return mkString("LISTSXP");
-    case CLOSXP:      return mkString("CLOSXP");
-    case ENVSXP:      return mkString("ENVSXP");
-    case PROMSXP:     return mkString("PROMSXP");
-    case LANGSXP:     return mkString("LANGSXP");
-    case SPECIALSXP:  return mkString("SPECIALSXP");
-    case BUILTINSXP:  return mkString("BUILTINSXP");
-    case CHARSXP:     return mkString("CHARSXP");
-    case LGLSXP:      return mkString("LGLSXP");
-    case INTSXP:      return mkString("INTSXP");
-    case REALSXP:     return mkString("REALSXP");
-    case CPLXSXP:     return mkString("CPLXSXP");
-    case STRSXP:      return mkString("STRSXP");
-    case DOTSXP:      return mkString("DOTSXP");
-    case ANYSXP:      return mkString("ANYSXP");
-    case VECSXP:      return mkString("VECSXP");
-    case EXPRSXP:     return mkString("EXPRSXP");
-    case BCODESXP:    return mkString("BCODESXP");
-    case EXTPTRSXP:   return mkString("EXTPTRSXP");
-    case WEAKREFSXP:  return mkString("WEAKREFSXP");
-    case S4SXP:       return mkString("S4SXP");
-    case RAWSXP:      return mkString("RAWSXP");
-    default:          return mkString("<unknown>");
-}')
-sexp_type(10)
+```{r}
+library(pryr)
+
 sexp_type(10L)
 sexp_type("a")
 sexp_type(T)
@@ -159,11 +137,9 @@ sexp_type(list(a = 1))
 sexp_type(pairlist(a = 1))
 ```
 
-(This code was adapated from R's `inspect.c` and is copyright The R Core Team. It is licensed as GPL-2.)
-
 ## Creating and modifying vectors {#c-vectors}
 
-At the heart of every C function will be a set of conversions between R data structures and C data structures. Inputs and output will always be R data structures (`SEXP`s) and you will need to convert them to C data structures in order to do any work. This section focusses on vectors because they're the type of object you're most likely to work with.
+At the heart of every C function are conversions between R data structures and C data structures. Inputs and output will always be R data structures (`SEXP`s) and you will need to convert them to C data structures in order to do any work. This section focusses on vectors because they're the type of object you're most likely to work with.
 
 An additional complication is the garbage collector: if you don't protect every R object you create, the garbage collector will think they are unused and delete them.
 
@@ -383,6 +359,10 @@ And helpers for the opposite direction:
 
 These all create R-level objects, so need to be `PROTECT()`ed.
 
+### Long vectors
+
+As of R 3.0.0, R vectors can have length greater than 2 ^ 32. If you want your code to work with long vectors, this means you shouldn't write code like `int n = length(x)`. Instead use the `x_len_t` type and the `xlength()` function, and write `x_len_t = xlength(x)`.
+
 ## Pairlists {#c-pairlists}
 
 In R code, there are few places where you need to care about the difference between a pairlist and a list (as described in [Pairlists](#pairlists)). Working with pairlists is much more important for C code because they are used for calls, unevaluated arguments, attributes and in `...`. In C, lists and pairlists differ primarily in how you access and name elements.
@@ -539,45 +519,110 @@ Note that some of these functions behave differently to the R-level functions wi
 
 ## Finding the C source code for a function {#c-find-source}
 
-To read the source for an arbitrary function, you'll first need a copy of the R source code. You can get it from [CRAN](http://cran.rstudio.com/sources.html), or try one of the github mirrors:
+R code in the base package doesn't use `.Call()`. Instead it uses two special functions: `.Internal()` or `.Primitive()`. Finding the source code for these functions is a somewhat arduous process (you first need to look there C function name in `src/main/names.c` then search the R sources), but `pryr::show_c_source()` automates the process (using github code search).
 
-* <https://github.com/wch/r-source> tracks every commit that R-core make to the
-  main subversion repository.
+```{r}
+tabulate
+pryr::show_c_source(.Internal(tabulate(bin, nbins)))
+```
+
+This reveals the following C source code (slighted edited for clarity):
+
+```c
+SEXP attribute_hidden do_tabulate(SEXP call, SEXP op, SEXP args, SEXP rho) {
+  checkArity(op, args);
+  SEXP in = CAR(args), nbin = CADR(args);
+  if (TYPEOF(in) != INTSXP)  error("invalid input");
+
+  R_xlen_t n = XLENGTH(in);
+  int nb = asInteger(nbin);
+  if (nb == NA_INTEGER || nb < 0)
+    error(_("invalid '%s' argument"), "nbin");
   
-* <https://github.com/SurajGupta/r-source/> is only updated when a new version
-  of R is released. That makes it useful for seeing what's changed between
-  versions.
+  SEXP ans = allocVector(INTSXP, nb);
+  int *x = INTEGER(in), *y = INTEGER(ans);
+  memset(y, 0, nb * sizeof(int));
+  for(R_xlen_t i = 0 ; i < n ; i++) {
+    if (x[i] != NA_INTEGER && x[i] > 0 && x[i] <= nb) {
+      y[x[i] - 1]++;
+    }
+  }
+     
+  return ans;
+}
+```
 
-Once you've got the source code on disk, there are three steps:
+Interval and primitive functions have a somewhat different interface than `.Call()` functions. They all have four arguments: 
 
-1. Look at the source code for the R function and find the name of the 
-   corresponding C function. For example, the source code for `findInterval()`
-   contains `.Internal(findInterval(...))` so that C function name is
-   `findInterval()`. (It's common for the R and C function names to be the 
-   same.)
+* `SEXP call`: the complete call to the function. `CAR(call)` gives
+  the name of the function (as a symbol), `CDR(call)` gives the arguments.
 
-1. Open [src/main/names.c](https://github.com/wch/r-source/blob/trunk/src/main/names.c) 
-   and search for the name of the function.  You'll find an entry that tells 
-   you the name of the function that's actually called. It always starts with 
-   `do_` and is lowercase. For example, `findInterval()` is on line 902
-   and calls internal function `do_findinterval()`.
-
-1. Next, search the R source code for that name. To make it easier to find 
-   where it's defined (rather than everywhere it's used), you can add `(SEXP`.
-   For example, to find where `do_findinterval()` is defined, search for
-   `do_findinterval(SEXP`.
-
-Interval and primitive functions have a somewhat different interface to `.Call` functions. They all have four arguments: 
-
-* `SEXP call`: the complete call to the function. `CAR(call)` would give
-  the name of the function (as a symbol).
-
-* `SEXP op`: many an optional argument used to distinguish between multiple R 
-  functions that use the same C function. For example `do_logic()` implements 
-  `&`, `|` and `!`. This value is the third column in `names.c`.
+* `SEXP op`: a "offset pointer". This is used when multiple R functions use the
+  same same C function. For example `do_logic()` implements `&`, `|` and `!`.
+  `show_c_source()` prints this out for you.
 
 * `SEXP args` a pairlist containing the unevaluated arguments to the function.
 
 * `SEXP rho` the environment in which the call was executed.
 
-This gives internal functions an incredible amount of flexibility as to how and when the arguments are evaluated. For example, internal S3 generics call `DispatchOrEval()` which either calls the appropriate S3 method or evaluates all the arguments in place.  This flexibility does come at a cost which makes the code harder to understand, but usually evaluating the arguments is the first step and the rest of the function is more straightforward.
+This gives internal functions an incredible amount of flexibility as to how and when the arguments are evaluated. For example, internal S3 generics call `DispatchOrEval()` which either calls the appropriate S3 method or evaluates all the arguments in place. This flexibility does come at a cost which makes the code harder to understand, but usually evaluating the arguments is the first step and the rest of the function is more straightforward.
+
+The following code shows `do_tabulate()` converted into standard a `.Call()` interface:
+
+```{r, cache = TRUE}
+tabulate2 <- cfunction(c(bin = "SEXP", nbins = "SEXP"), '
+  if (TYPEOF(bin) != INTSXP)  error("invalid input");
+  
+  R_xlen_t n = XLENGTH(bin);
+  int nb = asInteger(nbins);
+  if (nb == NA_INTEGER || nb < 0)
+    error("invalid \'%s\' argument", "nbin");
+
+  SEXP ans = allocVector(INTSXP, nb);
+  int *x = INTEGER(bin), *y = INTEGER(ans);
+  memset(y, 0, nb * sizeof(int));
+  for(R_xlen_t i = 0 ; i < n ; i++) {
+    if (x[i] != NA_INTEGER && x[i] > 0 && x[i] <= nb) {
+      y[x[i] - 1]++;
+    }
+  }
+     
+  return ans;
+')
+tabulate2(c(1L, 1L, 1L, 2L, 2L), 3)
+```
+
+To get this to compile, I also removed the call to `_()` which is an internal R function used to translate error messages between different languages.
+
+The final version below moves more of the coercion logic into an accompanying R function, as does some minor restructuring to make the code a little easier to understand.
+
+```{r, cache = TRUE}
+tabulate_ <- cfunction(c(bin = "SEXP", nbins = "SEXP"), '  
+  int nb = asInteger(nbins);
+
+  // Allocate 
+  SEXP out = PROTECT(allocVector(INTSXP, nb));
+  int *pbin = INTEGER(bin), *pout = INTEGER(out);
+  memset(pout, 0, nb * sizeof(int));
+
+  R_xlen_t n = xlength(bin);
+  for(int i = 0; i < n; i++) {
+    int val = pbin[i];
+    if (val != NA_INTEGER && val > 0 && val <= nb) {
+      pout[val - 1]++; // C is zero-indexed
+    }
+  }
+  UNPROTECT(1);   
+  
+  return out;
+')
+
+tabulate3 <- function(bin, nbins) {
+  bin <- as.integer(bin)
+  if (length(nbins) != 1 || nbins <= 0 || is.na(nbins)) {
+    stop("nbins must be ")
+  }
+  tabulate_(bin, nbins)
+}
+tabulate3(c(1, 1, 1, 2, 2), 3)
+```
