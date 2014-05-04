@@ -147,7 +147,7 @@ On my 64-bit computer, the size of a vector containing "banana" is 96 bytes, but
 
 ## Total memory use
 
-`object.size()` tells you the size of a single object; `gc()` (among other things) tells you the total size of all objects in memory:
+While `object.size()` tells you the size of a single object, `gc()` tells you the total size of all objects in memory (among other things):
 
 ```{r}
 gc()
@@ -155,7 +155,9 @@ gc()
 
 (we'll get to why it's called `gc()` in the next section)
 
-R breaks down memory usage into Vcells (memory used by vectors) and Ncells (memory used by everything else). But this distinction isn't usually important, and neither are the gc trigger and max used columns. What you're usually most interested in is the total memory used. The function below wraps around `gc()` to return just the amount of memory (in megabytes) that R is currently using.
+R breaks down memory usage into Vcells (memory used by vectors) and Ncells (memory used by everything else). However, neither this distinction nor the "gc trigger" and "max used" columns are typically important. What we're usually most interested in is the the first column: the total memory used. 
+
+The function below wraps around `gc()` to return the total amount of memory (in megabytes) that R is currently using.
 
 ```{r}
 mem <- function() {
@@ -172,15 +174,15 @@ mem <- function() {
 mem()
 ```
 
-Don't expect this number to agree with the amount of memory that your operating system says that R is using:
+Don't expect this number to agree with the amount of memory reported by your operating system:
 
-* Some overhead associated with the R interpreter is not captured by these numbers.
+* Some overhead associated with the R interpreter is not captured.
 
-* Both R and the operating system are lazy: they won't try and reclaim memory until it's actually needed. So R might be holding on to memory because the OS hasn't asked for it back yet.
+* Both R and the operating system are lazy: they won't reclaim memory until it's actually needed. So R might be holding on to memory because the OS hasn't yet asked for it back.
 
-* R counts the memory occupied by objects; there may be gaps from objects that have been deleted. This problem is known as memory fragmentation.
+* R counts the memory occupied by objects. Thus, there may be gaps due to deleted objects. This problem is known as memory fragmentation.
 
-We can build a function on top of `mem()` that tells us how memory changes during the execution of a block of code. We use a little special evaluation to make the code behave in the same way as running it directly. Positive numbers represent an increase in the memory used by R, and negative numbers a decrease.
+We can build a function on top of `mem()` to tells us how memory changes during the execution of a block of code. We use a little special evaluation to make the code behave in the same way as running it directly. Positive numbers represent an increase in the memory used by R, and negative numbers represent a decrease.
 
 ```{r}
 mem_change <- function(code) {
@@ -198,13 +200,13 @@ mem_change(x <- 1:1e6)
 mem_change(rm(x))
 ```
 
-In the next section, we'll use `mem_change()` to explore how memory is allocated and released by R, and memory is released lazily by the "garbage collector".
+In the next section, we'll use `mem_change()` to explore how memory is allocated and released by R, and how memory is released lazily by the "garbage collector".
 
 ## Garbarge collection
 
-In some languages you have to explicitly delete unnused objects so that their memory can be returned. R uses an alternative approach, called garbage collection (GC for short), which automatically released memory when an object is no longer used. It does this based on environments and the regular scoping rules: when an environment goes out of scope (for example, when a function finishes executing), all of the contents of that environment are deleted and their memory is freed.
+In some languages, you have to explicitly delete unused objects for their memory to be returned. R uses an alternative approach: garbage collection (or GC for short). GC automatically releases memory when an object is no longer used. It does this based on environments and the regular scoping rules: when an environment goes out of scope (for example, when a function finishes executing), all of the contents of that environment are deleted and their memory is released.
 
-For example, in the following code, a million integers are allocated inside the function, but are automatically removed up when the function terminates. This results in a net change of zero:
+For example, in the following code, a million integers are allocated inside the function and are automatically deleted once the function terminates. This results in a net change of zero:
 
 ```{r}
 f <- function() {
@@ -213,13 +215,13 @@ f <- function() {
 mem_change(f())
 ```
 
-This is a little bit of a simplification because in order to find out how much memory is available, our `mem()` function calls `gc()`. As well as returning the amount of memory currently used, `gc()` also triggers garbage collection. Garbage collection normally happens lazily: R calls `gc()` when it needs more space. In reality, that R might hold onto the memory after the function has terminated, but it will release it as soon as it's needed.
+This is a bit of an oversimplification: in order to find out how much memory is available, our `mem()` function actually calls `gc()`. As well as returning the amount of memory currently used, `gc()` also triggers garbage collection. Garbage collection normally happens lazily: R calls `gc()` when it needs more space. In reality, R might hold onto the memory after the function has terminated. But once it's needed, it will be released.
 
-Despite what you might have read elsewhere, there's never any point in calling `gc()` yourself, apart to see how much memory is in use. R will automatically run garbage collection whenever it needs more space; if you want to see when that is, call `gcinfo(TRUE)`. The only reason you _might_ want to call `gc()` is that it also requests that R should return memory to the operating system. Even that might not have any effect: older versions of Windows had no way for a program to return memory to the OS.
+Despite what you might have read elsewhere, apart from seeing how much memory is in use, there's never any need to call `gc()` yourself. R will automatically run garbage collection whenever it needs more space; if you want to see when that is, call `gcinfo(TRUE)`. The only reason you _might_ want to call `gc()` is to ask R to return memory to the operating system. However, even that might not have any effect: older versions of Windows had no way for a program to return memory to the OS.
 
-Generally, GC takes care of releasing previously used memory. However, you do need to be aware of situations that can cause memory leaks: when you think you've removed all references to an object, but some are still hanging around so the object never gets freed. In R, the two main causes of memory leaks are formulas and closures. They both capture the enclosing environment, so objects in that environment will not be reclaimed automatically.
+Generally, GC takes care of releasing previously used memory. However, you do need to be aware of possible memory leaks: for example, you might think you've removed all references to an object, but because some of those references may still be hanging around, the object never gets freed. In R, the two main causes of such memory leaks are formulas and closures. Since they both capture the enclosing environment, objects in that environment will not be reclaimed automatically.
 
-The following code illustrates the problem. `f1()` returns the object `10`, so the large vector allocated inside the function will go out of scope and get reclaimed, and the net memory change is 0. `f2()` and `f3()` both return objects that capture environments, and so the net memory change is almost 4 megabytes.
+The following code illustrates the problem. `f1()` returns the object `10`, so the large vector allocated inside the function will go out of scope and get reclaimed. The net memory change will be 0. `f2()` and `f3()` both return objects that capture environments. Here, the net memory change is almost 4 megabytes.
 
 ```{r}
 f1 <- function() {
