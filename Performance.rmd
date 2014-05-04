@@ -262,15 +262,15 @@ In most other programming languages there is little overhead for adding extra ar
 
 ## Implementation performance
 
-The design of R-language limits its maximum theoretical performance. But GNU-R is currently nowhere close to that maximum, and there are many things that can (and will) be done to speed it up. This section discusses some of the parts of GNU-R that are currently slow not because of the language, but because no one has had the time to make them fast.
+The design of the R language limits its maximum theoretical performance. But GNU-R is currently nowhere near that maximum. There are many things that can (and will) be done to improve performance. This section discusses some aspects of GNU-R that are slow not because of the language, but because of their implementation.
 
-R is over 20 years old, and contains nearly 800,000 lines of code (about 45% C, 19% R, and 17% fortran). Changes to base R can only be made by members of the R Core Team (or R-core for short). R-core contains [20 members](http://www.r-project.org/contributors.html), but only six are actively involved in day-to-day development. No one on R-core is paid to work on R full time. Most are statistics professors, and can only spend a relatively small amount of their time working on R. Because of the care that must be taken to avoid breaking existing code, R-core tends to be very conservative about accepting new code. It can be frustrating to see obvious performance improvements rejected by R-core, but the driving motivation for R-core is not to make R faster, it's to build a stable platform for statistical computing.
+R is over 20 years old. It contains nearly 800,000 lines of code (about 45% C, 19% R, and 17% fortran). Changes to base R can only be made by members of the R Core Team (or R-core for short). R-core contains [20 members](http://www.r-project.org/contributors.html), but only six are active in day-to-day development. No one on R-core works full time on R. Most are statistics professors who can only spend a relatively small amount of their time on R. Because of the care that must be taken to avoid breaking existing code, R-core tends to be very conservative about accepting new code. While it can be frustrating to see proposals which can obviously lead to performance improvements rejected by R-core, we need to remember that the driving motivation for R-core is not to make R fast. Rather, it's to build a stable platform for statistical computing.
 
-Next, I'll show two small, but illustrative, parts of R that are currently slow but could be made faster with some effort. They are not critical parts of base R, but they have frustrated me in the past. As with all microbenchmarks, these won't affect the performance of most code, but can be important for special cases.
+Below, I'll show two small, but illustrative examples of parts of R that are currently slow but could, with some effort, be made faster. While they are not critical parts of base R, they have been sources of frustration for me in the past. As with all microbenchmarks, these won't affect the performance of most code, but can be important for special cases.
 
 ### Extracting a single value from a data frame
 
-The following microbenchmark shows seven ways to access a single value (the number in the bottom-right corner) from the built-in `mtcars` dataset. The variation in performance is startling: the slowest method takes 30x longer than the fastest method. There's no reason for there to be such a huge difference in performance, but no one has spent the time to make the slowest methods faster.
+The following microbenchmark shows seven ways to access a single value (the number in the bottom-right corner) from the built-in `mtcars` dataset. The variation in performance is startling: the slowest method takes 30x longer than the fastest. There's no reason that there has to be such a huge difference in performance. It's simply that no one has spent the time to fix it.
 
 ```{r}
 microbenchmark(
@@ -284,7 +284,7 @@ microbenchmark(
 
 ### `ifelse()`, `pmin()`, and `pmax()`.
 
-Some base functions are known to be slow. For example, look at the following three implementations of a function to `squish()` a vector to ensure that the smallest value is at least `a` and the largest value is at most `b`. The first implementation, `squish_ife()` uses `ifelse()`. `ifelse()` is known to be slow because it is relatively general, and must evaluate all arguments fully. The second implementation, `squish_p()`, uses `pmin()` and `pmax()` which should be much faster because they're so specialised. But they're actually rather slow because they can take any number of arguments and have to do some relatively complicated checks to determine which method to use. The final implementation uses basic subassignment.
+Some base functions are known to be slow. For example, look at the following three implementations of `squish()`, a function that ensures that the smallest value in a vector is at least `a` and its largest value is at most `b`. The first implementation, `squish_ife()` uses `ifelse()`. `ifelse()` is known to be slow because it's relatively general and must evaluate all arguments fully. The second implementation, `squish_p()`, uses `pmin()` and `pmax()`. Because these two functions are so specialised, one might expect that they would be fast. However, they're actually rather slow. This is because they can take any number of arguments and they have to do some relatively complicated checks to determine which method to use. The final implementation uses basic subassignment.
 
 ```{r}
 squish_ife <- function(x, a, b) {
@@ -307,7 +307,7 @@ microbenchmark(
 )
 ```
 
-There's quite a variation in speed: using `pmin()` and `pmax()` is about 3x faster than using `ifelse()`, and using subsetting directly is about twice as fast again. As we'll see in [Rcpp](#rcpp), we can often do even better by calling out to C++. The following example compares the best R implementation to a relatively simple (if verbose) implementation in C++. Even if you've never used C++, you should be able to follow the basic strategy: we loop over every element in the vector and perform a different action depending on whether the value is less than `a`, greater than `b`, or is ok. The C++ implementation is around 3x faster than the best pure R implementation.
+There's quite a variation in speed: using `pmin()` and `pmax()` is about 3x faster than `ifelse()`, and using subsetting directly is about twice as fast again. As we'll see in [Rcpp](#rcpp), we can often do even better by going to C++. The following example compares the best R implementation to a relatively simple, if verbose, implementation in C++. Even if you've never used C++, you should still be able to follow the basic strategy: loop over every element in the vector and perform a different action depending on whether or not the value is less than `a` and/or greater than `b`. The C++ implementation is around 3x faster than the best pure R implementation.
 
 ```{r, engine = "Rcpp"}
 #include <Rcpp.h>
@@ -344,18 +344,18 @@ microbenchmark(
 
 * The performance characteristics of `squish_ife()`, `squish_p()` and
   `squish_in_place()` vary considerably with the size of `x`. Explore the
-  differences. For what sizes of input is the difference biggest? Smallest?
+  differences. Which sizes lead to the biggest and smallest differences?
 
-* Compare the performance costs of extract an element from a list, a
-  column from a matrix, and a column from a data frame. What about a row?
+* Compare the performance costs of extracting an element from a list, a
+  column from a matrix, and a column from a data frame. Do the same for rows.
 
 ## Alternative R implementations {#faster-r}
 
-There are some exciting new implementations of R. They all try to stick as closely as possible to the existing language definition, but implement ideas from modern interpreter design to make the implementation as fast as possible. The four most mature open-source projects are:
+There are some exciting new implementations of R. While they all try to stick as closely as possible to the existing language definition, they improve speed by using implementing ideas from modern interpreter design. The four most mature open-source projects are:
 
-* [pqR](http://www.pqr-project.org/) (pretty quick R), by Radford Neal. It's
-  built on top of the existing R code base (2.15.0), and fixes many obvious
-  performance issues. It provides better memory management, and some
+* [pqR](http://www.pqr-project.org/) (pretty quick R) by Radford Neal. Built on  
+  top of the existing R code base (2.15.0), it fixes many obvious
+  performance issues, and provides better memory management and some
   support for automatic multithreading.
 
 * [Renjin](http://www.renjin.org/) by BeDataDriven. Renjin uses the
@@ -367,29 +367,30 @@ There are some exciting new implementations of R. They all try to stick as close
   is somewhat less mature.
 
 * [Riposte](https://github.com/jtalbot/riposte), by Justin Talbot and
-  Zachary DeVito. Riposte is experimental and ambitious, and
-  for the parts of R it implements is extremely fast. Riposte is
-  described in more detail in [Riposte: A Trace-Driven Compiler and Parallel
-  VM for Vector Code in R](http://www.justintalbot.com/wp-content/uploads/2012/10/pact080talbot.pdf).
+  Zachary DeVito. Riposte is experimental and ambitious. For the parts of R it 
+  implements, it is extremely fast. Riposte is described in more detail in 
+  [Riposte: A Trace-Driven Compiler and Parallel VM for Vector Code in 
+  R](http://www.justintalbot.com/wp-content/uploads/2012/10/pact080talbot.pdf).
 
-These are roughly ordered in from most practical to most ambitious. These projects promise considerable speed ups over base R. However, bear in mind that the worst bottlenecks in R have often already been re-written in C or Fortran. This means that even if R did get 10x or 100x faster, the overall impact on your code is likely to be much smaller.
+These are roughly ordered from most practical to most ambitious. These projects promise considerable speed improvements over base R. However, bearing in mind that the worst bottlenecks in R have often already been re-written in C or Fortran, even if R did get 10x or 100x faster, the overall impact on your code is likely to be much smaller.
 
-Another project, [CXXR](http://www.cs.kent.ac.uk/projects/cxxr/) by Andrew Runnalls, does not provide any performance improvements, but instead aims to refactor R's internal C code into a stronger foundation for future development. It aims to have identical behaviour to GNU-R, but has better documentation of internals and is more extensible.
+Another project, [CXXR](http://www.cs.kent.ac.uk/projects/cxxr/) by Andrew Runnalls, does not provide any performance improvements. Instead, it aims to refactor R's internal C code in order to build a stronger foundation for future development, to keep behaviour identical to GNU-R, and to create better, more extensible documentation of its internals.
 
-R is a huge language and it's not clear whether any of these approaches will even become mainstream. It's a hard task to make an alternative implementation run all R code in the same way as GNU-R. Can you imagine having to reimplement every function in base R to not only be faster, but to have exactly the same documented bugs? However, even if these implementations never make a dent in the use of GNU-R, they have other benefits:
+R is a huge language and it's not clear whether any of these approaches will ever become mainstream. It's a hard task to make an alternative implementation run all R code in the same way as GNU-R. Can you imagine having to reimplement every function in base R to be not only faster, but also to have exactly the same documented bugs? However, even if these implementations never make a dent in the use of GNU-R, they still provide benefits:
 
 * Simpler implementations make it easy to validate new approaches before
   porting to GNU-R.
 
-* Gain understanding about which aspects of language could be changed
-  with minimal impact to existing code and maximal impact on performance.
+* Knowledge about which aspects of the language could be changed with minimal 
+  impact on existing code and maximal impact on performance can help to guide 
+  us to where we should direct our attention.
 
 * Alternative implementations put pressure on the R-core to incorporate
   performance improvements.
 
-One of the most important approaches that pqR, renjin, fastR and riposte are exploring is the idea of deferred evaluation. As Justin Talbot, the author of riposte, points out "for long vectors, R's execution is completely memory bound. It spends almost all of its time reading and writing vector intermediates to memory". If you can eliminate intermediate vectors, you can not only decrease memory usage, you can also considerably improve performance.
+One of the most important approaches that pqR, renjin, fastR and riposte are exploring is the idea of deferred evaluation. As Justin Talbot, the author of riposte, points out: "for long vectors, R's execution is completely memory bound. It spends almost all of its time reading and writing vector intermediates to memory". If we could eliminate these intermediate vectors, we could both decrease memory usage and improve performance.
 
-The following example shows a very simple example of where deferred evaluation might help. We have three vectors, `x`, `y`, `z` each containing 1 million elements, and we want to find the sum of `x` + `y` where `z` is TRUE. (This represents a simplification of a pretty common sort of data analysis question.)
+The following example shows a very simple example of how deferred evaluation can help. We have three vectors, `x`, `y`, `z` each containing 1 million elements, and we want to find the sum of `x` + `y` where `z` is TRUE. (This represents a simplification of a pretty common sort of data analysis question.)
 
 ```{r, results = "hide"}
 x <- runif(1e6)
@@ -399,9 +400,9 @@ z <- sample(c(T, F), 1e6, rep = TRUE)
 sum((x + y)[z])
 ```
 
-In R, this creates two big temporary vectors: `x + y`, 1 million elements long, and `(x + y)[z]`, about 500,000 elements long. This means you need to have extra memory free for the intermediate calculation, and you have to shuttle the data back and forth between the CPU and memory. This slows computation down because the CPU can't work at maximum efficiency if it's always waiting for more data to come in.
+In R, this creates two big temporary vectors: `x + y`, 1 million elements long, and `(x + y)[z]`, about 500,000 elements long. This means you need to have extra memory available for the intermediate calculation, and you have to shuttle the data back and forth between the CPU and memory. This slows computation down because the CPU can't work at maximum efficiency if it's always waiting for more data to come in.
 
-If we rewrote the function using a loop in a language like C++, we could recognise that we only need one intermediate value: the sum of all the values we've seen:
+However, if we rewrote the function using a loop in a language like C++, we would see that we only need one intermediate value: the sum of all the values we've seen:
 
 ```{r, engine = "Rcpp"}
 #include <Rcpp.h>
