@@ -12,19 +12,16 @@ options("microbenchmark.unit" = "ns")
 
 ## Introduction
 
-R is not a fast computer language. This is not an accident. R was purposely designed to make data analysis and statistics easier for you to do. It was not designed to make your computer's life easier. While R is slow compared to other programming languages, for most purposes, it's certainly fast enough. The goal of this part of the book is to give you a deeper understanding of R's performance characteristics. You'll learn where R is fast, where it's slow, and how you can improve R's performance if it becomes a problem.
+R is not a fast language. This is not an accident. R was purposely designed to make data analysis and statistics easier for you to do. It was not designed to make the life of your computer easier. While R is slow compared to other programming languages, for most purposes, it's fast enough. The goal of this part of the book is to give you a deeper understanding of R's performance characteristics. 
 
-The reasons why R is slow can be broken down into causes related to the design of the language, and causes related to the implementation of the language. While the language itself can't be changed without breaking code, it is possible to change implementation. I'll conclude by discussing some of the exciting new implementations which promise considerable performance improvements. Throughout the chapter, I'll use microbenchmarking to quantitatively explore R's performance characteristics.
-
-The following four chapters will give you the skills to improve the speed of your code:
+In this chapter, you'll learn about some of the tradeoffs that R has made, valuing flexibility over performance. The following four chapters will give you the skills to improve the speed of your code:
 
 * In [Profiling](#profiling), you'll learn how to systematically make your 
-  code faster: by first figuring what parts are slow and then by applying 
-  some general techniques that can improve performance.
+  code faster. First figuring what is slow, and then apply some general 
+  techniques to make the slow parts faster.
 
 * In [Memory](#memory), you'll learn about how R uses memory, and how
-  garbage collection and modification in place affect performance
-  and memory usage.
+  garbage collection and copy-on-modify affect performance and memory usage.
 
 * For really high-performance code, you can move outside of R and use
   another programming language. [Rcpp](#rcpp) will teach you the absolute
@@ -40,21 +37,21 @@ Let's get started by learning more about why R is slow.
 
 ## Why is R slow?
 
-To understand R's performance, it helps to think about R as both a language and as an implementation of that language. The R-language is abstract: it defines what R code means and how it should work. The implementation is concrete: it reads R code and computes a result. The most popular implementation is the one from [r-project.org](http://r-project.org). I'll call it GNU-R to distinguish it from the R-language, and from the other implementations I'll discuss in the chapter.
+To understand R's performance, it helps to think about R as both a language and as an implementation of that language. The R-language is abstract: it defines what R code means and how it should work. The implementation is concrete: it reads R code and computes a result. The most popular implementation is the one from [r-project.org](http://r-project.org). I'll call that implementation GNU-R to distinguish it from R-language, and from the other implementations I'll discuss in the chapter.
 
-For R, the distinction between language and implementation is a bit murky. This is because the R-language is not formally defined. While there is the [R language definition](http://cran.r-project.org/doc/manuals/R-lang.html), it is informal and incomplete. The R-language is mostly defined in terms of how GNU-R works. This is in direct contrast to other languages, like [C++](http://isocpp.org/std/the-standard) and [javascript](http://www.ecma-international.org/publications/standards/Ecma-262.htm), that make a clear distinction between language and implementation by laying out formal specifications that describe in minute detail how every aspect of the language should work. Nevertheless, the distinction between the R-language and GNU-R is still useful: while poor performance due to the language cannot be easily fixed without changing the language itself, poor performance due to implementation can be fixed relatively easily.
+The distinction between R-language and GNU-R is a bit murky. This is because the R-language is not formally defined. While there is the [R language definition](http://cran.r-project.org/doc/manuals/R-lang.html), it is informal and incomplete. The R-language is mostly defined in terms of how GNU-R works. This is in direct contrast to other languages, like [C++](http://isocpp.org/std/the-standard) and [javascript](http://www.ecma-international.org/publications/standards/Ecma-262.htm), that make a clear distinction between language and implementation by laying out formal specifications that describe in minute detail how every aspect of the language should work. Nevertheless, the distinction between R-language and GNU-R is still useful: poor performance due to the language is hard to fix without breaking existing code, poor performance due to the implementation is easier to fix.
 
-In [Language performance](#language-performance), I discuss some of the ways in which the design of the R language imposes fundamental constraints on R's speed. In [Implementation performance](#implementation-performance), I discuss why GNU-R is currently far from that theoretical maximum, let alone being optimal, and why improvements in performance happen so slowly. While it's hard to know exactly how much faster a better implementation could be, a >10x improvement in speed seems achievable. In [alternative implementations](#faster-r), I discuss some of the promising new implementations, and describe one important technique they use to make R code faster.
+In [Language performance](#language-performance), I discuss some of the ways in which the design of R-language imposes fundamental constraints on R's speed. In [Implementation performance](#implementation-performance), I discuss why GNU-R is currently far from the theoretical maximum, and why improvements in performance happen so slowly. While it's hard to know exactly how much faster a better implementation could be, a >10x improvement in speed seems achievable. In [alternative implementations](#faster-r), I discuss some of the promising new implementations of R, and describe one important technique they use to make R code run faster.
 
-Beyond performance limitations due to design and implementation, it has to be said that a lot of R code is slow simply because it's poorly written. Few R users have any formal training in programming or software development. Fewer still write R code for a living. Most people use R to better understand their data: it's more important to get an answer quickly than to develop a system that will work in a wide variety of situations. This sounds like a huge negative for R, but it's really a huge positive. It shows that R is useful for non-programmers. But as we'll see in the following chapters, it also means that it's relatively easy to make most R code much faster.
+Beyond performance limitations due to design and implementation, it has to be said that a lot of R code is slow simply because it's poorly written. Few R users have any formal training in programming or software development. Fewer still write R code for a living. Most people use R to understand data: it's more important to get an answer quickly than to develop a system that will work in a wide variety of situations. This means that it's relatively easy to make most R code much faster, as we'll see in the following chapters.
 
 Before we examine some of the slower parts of the R-language and GNU-R, we need to learn a little about benchmarking so that we can give our intuitions about performance a concrete foundation.
 
 ## Microbenchmarking
 
-A microbenchmark is a measurement of the performance of a very small piece of code, something that might take microseconds (Âµs) or nanoseconds (ns) to run. I'm going to use microbenchmarks to demonstrate the performance of very low-level pieces of R code, to help develop your intuition for how R works. This intuition, by-and-large, is not useful for increasing the speed of real code. In the same way that understanding subatomic physics doesn't help you understand practical applications of chemistry, the observed differences in execution time of code measured in microbenchmarks will, with real code, typically be dominated by higher-order effects. Don't change the way you code because of these microbenchmarks. Instead wait until the next chapter to see how to improve the performance of real code.
+A microbenchmark is a measurement of the performance of a very small piece of code, something that might take microseconds (µs) or nanoseconds (ns) to run. I'm going to use microbenchmarks to demonstrate the performance of very low-level pieces of R code, which help develop your intuition for how R works. This intuition, by-and-large, is not useful for increasing the speed of real code. In the same way that understanding subatomic physics doesn't help you understand practical chemistry, the observed differences in microbenchmarks will typically be dominated by higher-order effects in real code. Don't change the way you code because of these microbenchmarks. Instead wait until the next chapter to see how to improve the performance of real code.
 
-The best tool for microbenchmarking in R is the [microbenchmark](http://cran.r-project.org/web/packages/microbenchmark/) package. It provides very precise timings and makes it possible to compare operations that only take a tiny amount of time. For example, the following code compares the speed of two ways of computing a square root.
+The best tool for microbenchmarking in R is the [microbenchmark](http://cran.r-project.org/web/packages/microbenchmark/) package. It provides very precise timings, making it possible to compare operations that only take a tiny amount of time. For example, the following code compares the speed of two ways of computing a square root.
 
 ```{r}
 library(microbenchmark)
@@ -66,69 +63,68 @@ microbenchmark(
 )
 ```
 
-In this example, you can see that using the special purpose `sqrt()` function is faster than the general exponentiation operator. As with all microbenchmarks, pay careful attention to the units: each computation takes about 800 ns, 800 billionths of a second. To help calibrate the impact of a microbenchmark on run time, it's useful to think about how many times a function needs to run before it takes a second. If a microbenchmark takes:
+By default, `microbenchmark()` runs each expression 100 times (controlled by the `times` parameter). In the process, it also randomises the order of the expressions. It summarises the results with a minimum (`min`), lower quartile (`lq`), median, upper quartile (`uq`) and maximum (`max`). You normally want to focus on the median, but the upper and lower quartiles (`lq` and `uq`) are also useful to get a feel for the variability. In this example, you can see that using the special purpose `sqrt()` function is faster than the general exponentiation operator. 
+
+As with all microbenchmarks, pay careful attention to the units: each computation takes about 800ns, 800 billionths of a second. To help calibrate the impact of a microbenchmark on run time, it's useful to think about how many times a function needs to run before it takes a second. If a microbenchmark takes:
 
 * 1 ms, then one thousand calls takes a second
 * 1 µs, then one million calls takes a second
 * 1 ns, then one billion calls takes a second
 
-The `sqrt()` function takes about 800 ns, or 0.8 µs, to compute the square root of 100 numbers. That means if you repeated the operation a million times, it would take 0.8s. This is unlikely to be a bottleneck in real code.
-
-`microbenchmark()` takes multiple expressions as input, and displays summaries of the distribution of execution times. By default, `microbenchmark()` runs each expression 100 times (controlled by the `times` parameter). In the process, it also randomises the order of the expressions. It summarises the results with a minimum (`min`), lower quartile (`lq`), median, upper quartile (`uq`) and maximum (`max`). You normally want to focus on the median, but the upper and lower quartiles (`lq` and `uq`) are also useful to get a feel for the variability. You can see the complete distribution with the `boxplot()` method, or if ggplot2 is loaded, with `autoplot()`.
+The `sqrt()` function takes about 800 ns, or 0.8 µs, to compute the square root of 100 numbers. That means if you repeated the operation a million times, it would take 0.8s. Changing the way you compute the square root is unlikely to significantly affect real code.
 
 ### Exercises
 
-* Instead of using `microbenchmark()`, you could use the built-in function
-  `system.time()`. But `system.time()` is much less precise, so you'll
-  need to repeat each operation many times with a loop, and then divide
-  to find the average time of each operation, as in the code below.
-  How do the estimates from `system.time()` compare to those from
-  `microbenchmark()`? Why are they different?
+1. Instead of using `microbenchmark()`, you could use the built-in function
+   `system.time()`. But `system.time()` is much less precise, so you'll
+   need to repeat each operation many times with a loop, and then divide
+   to find the average time of each operation, as in the code below.
 
     ```{r, eval = FALSE}
     n <- 1:1e6
     system.time(for (i in n) sqrt(x)) / length(n)
     system.time(for (i in n) x ^ 0.5) / length(n)
     ```
+    
+    How do the estimates from `system.time()` compare to those from
+    `microbenchmark()`? Why are they different?
 
-* Here are two other ways to compute the square root of a vector. Which
-  do you think will be fastest? Which will be slowest? Use microbenchmarking
-  to test your answers.
+1.  Here are two other ways to compute the square root of a vector. Which
+    do you think will be fastest? Which will be slowest? Use microbenchmarking
+    to test your answers.
 
     ```{r, eval = FALSE}
     x ^ (1 / 2)
     exp(log(x) / 2)
     ```
 
-* Use microbenchmarking to rank the basic arithmetic operators (`+`, `-`,
-  `*`, `/`, and `^`) in terms of speed. Visualise the results. Compare
-  the speed of operating on integers vs. doubles.
+1.  Use microbenchmarking to rank the basic arithmetic operators (`+`, `-`,
+    `*`, `/`, and `^`) in terms of their speed. Visualise the results. Compare
+    the speed of operating on integers vs. doubles.
 
-* You can change the units in which the microbenchmark results are
-  expressed with the `unit` parameter. Use `unit = "eps"` to show
-  the number of evaluations needed to take 1 second. Repeat the benchmarks
-  above with the eps unit. How does it change your intuition for performance?
+1.  You can change the units in which the microbenchmark results are
+    expressed with the `unit` parameter. Use `unit = "eps"` to show
+    the number of evaluations needed to take 1 second. Repeat the benchmarks
+    above with the eps unit. How does it change your intuition for performance?
 
 ## Language performance
 
-In this section, I'll explore three trade-offs that limit the performance of the R-language: extreme dynamism, name lookup with mutable environments, and lazy evaluation of function arguments. I'll illustrate each trade-off with a microbenchmark, showing how it slows GNU-R down. Since a language is an abstract construct, you can't benchmark a language. So the results are only suggestive of the cost of these design decisions to the language. They are nevertheless useful. Designing a useful language is a delicate balancing act. There are many options and tradeoffs: you need to balance speed, flexibility, and ease of implementation. I hope these three examples will give you a sense of this balance.
+In this section, I'll explore three trade-offs that limit the performance of the R-language: extreme dynamism, name lookup with mutable environments, and lazy evaluation of function arguments. I'll illustrate each trade-off with a microbenchmark, showing how it slows GNU-R down. I benchmark GNU-R, because you can't benchmark R-language. This means that the results are only suggestive of the cost of these design decisions, but are nevertheless useful. I've picked these three examples to illustrate some of the tradeoffs  that are key to language design: the designer must balance speed, flexibility, and ease of implementation. 
 
-If you'd like to learn more about the performance characteristics of the R-language and how they affect real code, I highly recommend [Evaluating the Design of the R Language](https://www.cs.purdue.edu/homes/jv/pubs/ecoop12.pdf) by Floreal Morandat, Brandon Hill, Leo Osvald and Jan Vitek. Using a modified R interpreter and a wide set of code found in the wild, it discusses a powerful methodology for understanding the performance characteristics of GNU-R.
+If you'd like to learn more about the performance characteristics of the R-language and how they affect real code, I highly recommend [Evaluating the Design of the R Language](https://www.cs.purdue.edu/homes/jv/pubs/ecoop12.pdf) by Floreal Morandat, Brandon Hill, Leo Osvald and Jan Vitek. It uses a powerful methodology that combines a modified R interpreter and a wide set of code found in the wild.
 
 ### Extreme dynamism
 
 R is an extremely dynamic programming language. Almost anything can be modified after it is created. To give just a few examples, you can:
 
-* change the body, arguments and environment of functions
-* change the S4 methods for a generic
-* add new fields to an S3 object, or even change its class
-* modify objects outside of the local environment with `<<-`
+* Change the body, arguments and environment of functions.
+* Change the S4 methods for a generic.
+* Add new fields to an S3 object, or even change its class.
+* Modify objects outside of the local environment with `<<-`.
 
-Pretty much the only thing you can't change are objects in sealed namespaces. After a package is loaded its namespace is sealed and it is hard, though not impossible to change objects defined by the package.
+Pretty much the only thing you can't change are objects in sealed namespaces. After a package is loaded its namespace is sealed. After that it's hard, although not impossible, to change objects defined by the package.
 
-The advantage of dynamism is that you don't need to do any upfront planning, and you don't need to do an initial compilation step. You can change your mind at any time, iterating you way to a solution without having to start afresh.
-
-The disadvantage of dynamism is that it makes it difficult to predict exactly what will happen with a given function call. The easier it is to predict what's going to happen, the more likely an interpreter or compiler can jump directly to the correct method. (If you'd like more details, Charles Nutter expands on this idea at [On Languages, VMs, Optimization, and the Way of the World](http://blog.headius.com/2013/05/on-languages-vms-optimization-and-way.html).) If an interpreter can't predict what's going to happen, it has to look through many options to find the right one, a slow operation. For example, code like the following loop is slow in R, because R can't know that `x`'s type never changes. That means R has to look for the right `+` method (i.e., is it adding doubles, or integers?) in every iteration of the loop.
+The advantage of dynamism is that you need minimal upfront planning, and you don't need an initial compilation step. You can change your mind at any time, iterating you way to a solution without having to start afresh. The disadvantage of dynamism is that it's difficult to predict exactly what will happen with a given function call. This is a problem because the easier it is to predict what's going to happen, the more likely an interpreter or compiler make optimisations. (If you'd like more details, Charles Nutter expands on this idea at [On Languages, VMs, Optimization, and the Way of the World](http://blog.headius.com/2013/05/on-languages-vms-optimization-and-way.html).) If an interpreter can't predict what's going to happen, it has to look through many options to find the right one, a slow operation. For example, code like the following loop is slow in R, because R doesn't know that `x`'s type never changes. That means R has to look for the right `+` method (i.e., is it adding doubles, or integers?) in every iteration of the loop.
 
 ```{r, eval = FALSE}
 x <- 0L
@@ -164,11 +160,11 @@ microbenchmark(
 )
 ```
 
-On my computer, the function call takes about 280 ns. S3 method dispatch takes an additional 3,000 ns; S4 dispatch, 13,000 ns; and RC dispatch, 11,000 ns. S3 and S4 method dispatch are expensive because R must search for the right method every time the generic is called; it might have changed between this call and the last. R could do better by caching methods between calls, but caching is hard to do correctly and a notorious source of bugs.
+On my computer, the function call takes about 280 ns. S3 method dispatch takes an additional 2,000 ns; S4 dispatch, 11,000 ns; and RC dispatch, 10,000 ns. S3 and S4 method dispatch are expensive because R must search for the right method every time the generic is called; it might have changed between this call and the last. R could do better by caching methods between calls, but caching is hard to do correctly and a notorious source of bugs.
 
 ### Name lookup with mutable environments
 
-It's surprisingly difficult to find the value associated with a name in the R-language. This is because of R's combination of lexical scoping and extreme dynamism. Take the following example. Each time we print `a` it comes from a different environment:
+It's surprisingly difficult to find the value associated with a name in the R-language. This is due to combination of lexical scoping and extreme dynamism. Take the following example. Each time we print `a` it comes from a different environment:
 
 ```{r}
 a <- 1
@@ -213,21 +209,21 @@ microbenchmark(
   f2(1, 2),
   f3(1, 2),
   f4(1, 2),
-  times = 1000
+  times = 10000
 )
 ```
 
-Each additional environment between `f()` and the base environment makes the function slower by about 50ns.
+Each additional environment between `f()` and the base environment makes the function slower by about 30ns.
 
-It might be possible to implement a caching system so that R only needs to look up the value of each name once. This is hard because there are so many ways to change the value associated with a name: `<<-`, `assign()`, `eval()`, and so on. Any caching system would have to connect to each of these tools to make sure the cache was correctly invalidated and you didn't get an old (incorrect) value.
+It might be possible to implement a caching system so that R only needs to look up the value of each name once. This is hard because there are so many ways to change the value associated with a name: `<<-`, `assign()`, `eval()`, and so on. Any caching system would have to know about these functions to make sure the cache was correctly invalidated and you didn't get an out-of-date value.
 
-Another simple fix would be to add more built-in constants that you can't override. This, for example, would mean that you always know exactly what `+`, `-`, `{` and `(` mean, and you don't need to repeatedly look up their definitions. The costs of that decision would be that writing the interpreter becomes a little harder (because there are more special cases), and the language won't be quite as flexible. While this would change the R-language, it would be unlikely to affect much existing code because it's such a bad idea to override functions like `{` and `(`.
+Another simple fix would be to add more built-in constants that you can't override. This, for example, would mean that you always know exactly what `+`, `-`, `{` and `(` mean, and you don't need to repeatedly look up their definitions. That would make it the interpreter more complicated (because there are more special cases) and hence harder to maintain, and the language less flexible. This would change the R-language, but it would be unlikely to affect much existing code because it's such a bad idea to override functions like `{` and `(`.
 
 ### Lazy evaluation overhead
 
-In R, functions arguments are evaluated lazily (as discussed in [lazy evaluation](#lazy-evaluation) and [capturing expressions](#capturing-expressions)). To implement lazy evaluation, R uses a promise object that contains the expression needed to compute the result, and the environment in which to perform the computation. Creating these objects has some overhead, so with each added argument the speed of an R function will be reduced a little.
+In R, functions arguments are evaluated lazily (as discussed in [lazy evaluation](#lazy-evaluation) and [capturing expressions](#capturing-expressions)). To implement lazy evaluation, R uses a promise object that contains the expression needed to compute the result, and the environment in which to perform the computation. Creating these objects has some overhead, so each additional argument to a function decreases its speed a little.
 
-The following microbenchmark compares the runtime of a very simple function. Each version of the function has one additional argument. This suggests that adding an additional argument slows the function down by 20 ns.
+The following microbenchmark compares the runtime of a very simple function. Each version of the function has one additional argument. This suggests that adding an additional argument slows the function down by ~20 ns.
 
 ```{r promise-cost}
 f0 <- function() NULL
@@ -236,35 +232,35 @@ f2 <- function(a = 1, b = 1) NULL
 f3 <- function(a = 1, b = 2, c = 3) NULL
 f4 <- function(a = 1, b = 2, c = 4, d = 4) NULL
 f5 <- function(a = 1, b = 2, c = 4, d = 4, e = 5) NULL
-microbenchmark(f0(), f1(), f2(), f3(), f4(), f5(), times = 1000)
+microbenchmark(f0(), f1(), f2(), f3(), f4(), f5(), times = 10000)
 ```
 
 In most other programming languages there is little overhead for adding extra arguments. Many compiled languages will even warn you if arguments are never used (like in the above example), and automatically remove them from the function.
 
 ### Exercises
 
-* How does the performance of S3 method dispatch change with the length
-  of the class vector? How does performance of S4 method dispatch change
-  with number of superclasses? How about RC?
+1.  How does the performance of S3 method dispatch change with the length
+    of the class vector? How does performance of S4 method dispatch change
+    with number of superclasses? How about RC?
 
-* What is the cost of multiple inheritance and multiple dispatch on
-  S4 method dispatch?
+1.  What is the cost of multiple inheritance and multiple dispatch on
+    S4 method dispatch?
 
-* Why is the cost of lookup less for for functions in the base package?
+1.  Why is the cost of name lookup less for functions in the base package?
 
-* `scan()` has the most arguments (21) of any base function. About how
-  much time does it take to make 21 promises each time scan is called?
-  Given a simple input (e.g. `scan(text = "1 2 3", quiet = T)`) what
-  proportion of the total run time is due to creating those promises?
+1.  `scan()` has the most arguments (21) of any base function. About how
+    much time does it take to make 21 promises each time scan is called?
+    Given a simple input (e.g. `scan(text = "1 2 3", quiet = T)`) what
+    proportion of the total run time is due to creating those promises?
 
-* Read [Evaluating the Design of the R Language](https://www.cs.purdue.edu/homes/jv/pubs/ecoop12.pdf). What other aspects of the R-language slow it
-  down? Construct microbenchmarks to illustrate. 
+1.  Read [Evaluating the Design of the R Language](https://www.cs.purdue.edu/homes/jv/pubs/ecoop12.pdf). What other aspects of the R-language slow it
+    down? Construct microbenchmarks to illustrate. 
 
 ## Implementation performance
 
-The design of the R language limits its maximum theoretical performance. But GNU-R is currently nowhere near that maximum. There are many things that can (and will) be done to improve performance. This section discusses some aspects of GNU-R that are slow not because of the language, but because of their implementation.
+The design of the R language limits its maximum theoretical performance. But GNU-R is currently nowhere near that maximum. There are many things that can (and will) be done to improve performance. This section discusses some aspects of GNU-R that are slow not because of their definition, but because of their implementation.
 
-R is over 20 years old. It contains nearly 800,000 lines of code (about 45% C, 19% R, and 17% fortran). Changes to base R can only be made by members of the R Core Team (or R-core for short). R-core contains [20 members](http://www.r-project.org/contributors.html), but only six are active in day-to-day development. No one on R-core works full time on R. Most are statistics professors who can only spend a relatively small amount of their time on R. Because of the care that must be taken to avoid breaking existing code, R-core tends to be very conservative about accepting new code. While it can be frustrating to see proposals which can obviously lead to performance improvements rejected by R-core, we need to remember that the driving motivation for R-core is not to make R fast. Rather, it's to build a stable platform for statistical computing.
+R is over 20 years old. It contains nearly 800,000 lines of code (about 45% C, 19% R, and 17% fortran). Changes to base R can only be made by members of the R Core Team (or R-core for short). R-core has [20 members](http://www.r-project.org/contributors.html), but only six are active in day-to-day development. Noone on R-core works full time on R. Most are statistics professors who can only spend a relatively small amount of their time on R. Because of the care that must be taken to avoid breaking existing code, R-core tends to be very conservative about accepting new code. While it can be frustrating to see proposals which can obviously lead to performance improvements rejected by R-core, we need to remember that the driving motivation for R-core is not to make R fast. Rather, the motivation is to build a stable platform for statistical computing.
 
 Below, I'll show two small, but illustrative examples of parts of R that are currently slow but could, with some effort, be made faster. While they are not critical parts of base R, they have been sources of frustration for me in the past. As with all microbenchmarks, these won't affect the performance of most code, but can be important for special cases.
 
@@ -275,16 +271,16 @@ The following microbenchmark shows seven ways to access a single value (the numb
 ```{r}
 microbenchmark(
   mtcars[32, 11],
+  mtcars$carb[32],
   mtcars[[c(11, 32)]],
   mtcars[[11]][32],
-  mtcars$carb[32],
   .subset2(mtcars, 11)[32]
 )
 ```
 
 ### `ifelse()`, `pmin()`, and `pmax()`.
 
-Some base functions are known to be slow. For example, look at the following three implementations of `squish()`, a function that ensures that the smallest value in a vector is at least `a` and its largest value is at most `b`. The first implementation, `squish_ife()` uses `ifelse()`. `ifelse()` is known to be slow because it's relatively general and must evaluate all arguments fully. The second implementation, `squish_p()`, uses `pmin()` and `pmax()`. Because these two functions are so specialised, one might expect that they would be fast. However, they're actually rather slow. This is because they can take any number of arguments and they have to do some relatively complicated checks to determine which method to use. The final implementation uses basic subassignment.
+Some base functions are known to be slow. For example, take the following three implementations of `squish()`, a function that ensures that the smallest value in a vector is at least `a` and its largest value is at most `b`. The first implementation, `squish_ife()` uses `ifelse()`. `ifelse()` is known to be slow because it is relatively general and must evaluate all arguments fully. The second implementation, `squish_p()`, uses `pmin()` and `pmax()`. Because these two functions are so specialised, one might expect that they would be fast. However, they're actually rather slow. This is because they can take any number of arguments and they have to do some relatively complicated checks to determine which method to use. The final implementation uses basic subassignment.
 
 ```{r}
 squish_ife <- function(x, a, b) {
@@ -342,16 +338,16 @@ microbenchmark(
 
 ### Exercises
 
-* The performance characteristics of `squish_ife()`, `squish_p()` and
-  `squish_in_place()` vary considerably with the size of `x`. Explore the
-  differences. Which sizes lead to the biggest and smallest differences?
+1.  The performance characteristics of `squish_ife()`, `squish_p()` and
+   `squish_in_place()` vary considerably with the size of `x`. Explore the
+   differences. Which sizes lead to the biggest and smallest differences?
 
-* Compare the performance costs of extracting an element from a list, a
-  column from a matrix, and a column from a data frame. Do the same for rows.
+1.  Compare the performance costs of extracting an element from a list, a
+    column from a matrix, and a column from a data frame. Do the same for rows.
 
 ## Alternative R implementations {#faster-r}
 
-There are some exciting new implementations of R. While they all try to stick as closely as possible to the existing language definition, they improve speed by using implementing ideas from modern interpreter design. The four most mature open-source projects are:
+There are some exciting new implementations of R. While they all try to stick as closely as possible to the existing language definition, they improve speed by using ideas from modern interpreter design. The four most mature open-source projects are:
 
 * [pqR](http://www.pqr-project.org/) (pretty quick R) by Radford Neal. Built on  
   top of the existing R code base (2.15.0), it fixes many obvious
@@ -362,19 +358,17 @@ There are some exciting new implementations of R. While they all try to stick as
   java virtual machine, and has an extensive
   [test suite](http://packages.renjin.org/).
 
-* [fastr](https://github.com/allr/fastr), by a team from Purdue. fastr
+* [fastr](https://github.com/allr/fastr) by a team from Purdue. fastr
   is similar to Renjin, but it makes more ambitious optimisations and
   is somewhat less mature.
 
-* [Riposte](https://github.com/jtalbot/riposte), by Justin Talbot and
+* [Riposte](https://github.com/jtalbot/riposte) by Justin Talbot and
   Zachary DeVito. Riposte is experimental and ambitious. For the parts of R it 
   implements, it is extremely fast. Riposte is described in more detail in 
   [Riposte: A Trace-Driven Compiler and Parallel VM for Vector Code in 
   R](http://www.justintalbot.com/wp-content/uploads/2012/10/pact080talbot.pdf).
 
-These are roughly ordered from most practical to most ambitious. These projects promise considerable speed improvements over base R. However, bearing in mind that the worst bottlenecks in R have often already been re-written in C or Fortran, even if R did get 10x or 100x faster, the overall impact on your code is likely to be much smaller.
-
-Another project, [CXXR](http://www.cs.kent.ac.uk/projects/cxxr/) by Andrew Runnalls, does not provide any performance improvements. Instead, it aims to refactor R's internal C code in order to build a stronger foundation for future development, to keep behaviour identical to GNU-R, and to create better, more extensible documentation of its internals.
+These are roughly ordered from most practical to most ambitious. These projects promise considerable speed improvements over base R. Another project, [CXXR](http://www.cs.kent.ac.uk/projects/cxxr/) by Andrew Runnalls, does not provide any performance improvements. Instead, it aims to refactor R's internal C code in order to build a stronger foundation for future development, to keep behaviour identical to GNU-R, and to create better, more extensible documentation of its internals.
 
 R is a huge language and it's not clear whether any of these approaches will ever become mainstream. It's a hard task to make an alternative implementation run all R code in the same way as GNU-R. Can you imagine having to reimplement every function in base R to be not only faster, but also to have exactly the same documented bugs? However, even if these implementations never make a dent in the use of GNU-R, they still provide benefits:
 
