@@ -1,4 +1,4 @@
-png <- function(path, dpi = NULL) {
+embed_png <- function(path, dpi = NULL) {
   meta <- attr(png::readPNG(path, native = TRUE, info = TRUE), "info")
   if (!is.null(dpi)) meta$dpi <- rep(dpi, 2)
   meta$path <- path
