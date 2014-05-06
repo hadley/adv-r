@@ -7,29 +7,35 @@ layout: default
 library(pryr)
 knitr::read_chunk("code/read-delim.r")
 source("_plugins/png.R")
+options(scipen = 9)
 ```
 
 # Memory
 
-Understanding how memory works in R can help you do things like analysing larger datasets within the same amount of memory. It can even help you write faster code (accidental copies are a major cause of slow code).
-
-The details of memory management in R are not documented in a single place. Most of the information in this chapter was gleaned from a close reading of the documentation (particularly `?Memory` and `?gc`), the [memory profiling](http://cran.r-project.org/doc/manuals/R-exts.html#Profiling-R-code-for-memory-use) section of R-exts, and the [SEXPs](http://cran.r-project.org/doc/manuals/R-ints.html#SEXPs) section of R-ints. The rest I figured out by reading the C source code, performing small experiments and asking questions on R-devel. Any mistakes are entirely my fault.
+A solid understanding of R's memory management helps you predict how much memory you'll need for a given task and helps you make the most of the memory you have. It can even help you write faster code (accidental copies are a major cause of slow code). The goal is this chapter is to help you understand the basics of memory management in R, moving from individual objects to functions to large blocks of code. Along the way, you'll learn about some common myths like that you need to call `gc()` to free up memory, or that for loops are always slow.
 
 ##### Outline
 
-* how to use `object.size()` to measure the amount of memory taken up by vectors 
+* [Object size](#object-size) shows you how to use `object_size()` to see 
+  how much memory an object occupies, and uses that as a launching point to
+  improve your understanding of how R objects are stored in memory.
+  
+* [Memory usage and garbage collection](#gc) introduces you to the `mem_used()`
+  and `mem_changed()` functions that will help you understand how R allocates 
+  and frees memory.
+  
+* [Memory profiling with lineprof](#memory-profiling) shows you how to use
+  the lineprof package to understand how memory is allocated and released in 
+  larger code blocks.
 
-* how to use the output from `gc()` to explore the net impact of a sequence of operations on memory
+* [Modification in place](#modification) introduces you to the `address()` and
+  `refs()` functions so that you can understand when R modifies in place and 
+  when R modifies a copy. Understanding when objects are copied is very 
+  important for writing efficient R code.
 
-* what garbage collection does, and why you never need to explicitly call `gc()`
+##### Prerequisites
 
-* how to use the `lineprof` package to see a line-by-line breakdown of memory usage in larger scripts
-
-* how to determine when R copies an object even though it looks like you're modifying-in-place
-
-##### Prereqs
-
-In this chapter, we'll use tools from the pryr package to explore small scale memory usage, and the lineprof package to explore large scale memory use. We'll also use a sample dataset from ggplot2. To get the packages you need, run the following code:
+In this chapter, we'll use tools from the pryr and lineprof packages to understand memory usage, and a sample dataset from ggplot2. Run this code to get the packages you need:
 
 ```{r, eval = FALSE}
 install.packages("ggplot2")
@@ -37,45 +43,58 @@ devtools::install_github("hadley/pryr")
 devtools::install_github("hadley/lineprof")
 ```
 
+##### Sources
+
+The details of R's memory management are not documented in a single place. Most of the information in this chapter was gleaned from a close reading of the documentation (particularly `?Memory` and `?gc`), the [memory profiling](http://cran.r-project.org/doc/manuals/R-exts.html#Profiling-R-code-for-memory-use) section of R-exts, and the [SEXPs](http://cran.r-project.org/doc/manuals/R-ints.html#SEXPs) section of R-ints. The rest I figured out by reading the C source code, performing small experiments and asking questions on R-devel. Any mistakes are entirely my fault.
+
 ## Object size
 
-One of the most useful tools for understanding memory usage in R is `object.size()`. It tells you how much memory an object occupies. This section uses `object.size()` to look at the size of some simple vectors. By exploring some unusual findings, you'll start to understand some important aspects of memory allocation in R.
-
-We'll start with a surprising plot: a line plot of vector length vs. memory size (in bytes) for an integer vector. You might expect that the size of an empty vector would be zero and that memory usage would grow proportionately with length. Neither of those things are true!
-
-```{r size-q}
-sizes <- sapply(0:50, function(n) object.size(seq_len(n)))
-plot(0:50, sizes, xlab = "Length", ylab = "Bytes", type = "s")
-```
-
-This isn't just an artefact of integer vectors. Every vector of length 0 occupies 40 bytes of memory:
+To understand memory usage in R, we will start with `pryr::object_size()`. This function tells you how many bytes of memory an object occupies:
 
 ```{r}
-object.size(numeric())
-object.size(logical())
-object.size(raw())
-object.size(list())
+library(pryr)
+object_size(1:10)
+object_size(mean)
+object_size(mtcars)
 ```
 
-What are those 40 bytes of memory used for? The answer lies in the fact that every object in R has four components:
+(This function is better than the built-in `object.size()` because it does a better job accounting for shared elements within an object and includes the size of environments.)
 
-* object metadata, the _sxpinfo_ (4 bytes). These metadata include the 
-  base type and information used for debugging and memory management.
+Something interesting occurs if we use `object_size()` to systematically explore the size of an integer vector. The code below computes and plots the memory usage of integer vectors ranging in length from 0 to 50 elements. You might expect that the size of an empty vector would be zero and that memory usage would grow proportionately with length. Neither of those things are true!
+
+```{r size-q, fig.height = 4, fig.width = 6}
+sizes <- sapply(0:50, function(n) object_size(seq_len(n)))
+plot(0:50, sizes, xlab = "Length", ylab = "Size (bytes)", type = "s")
+```
+
+This isn't just an artefact of integer vectors. Every length 0 vector occupies 40 bytes of memory:
+
+```{r}
+object_size(numeric())
+object_size(logical())
+object_size(raw())
+object_size(list())
+```
+
+Those 40 bytes are used to store four components possessed by every object in R:
+
+* Object metadata (4 bytes). These metadata store the base type (e.g. integer) 
+  and information used for debugging and memory management.
 
 * Two pointers: one to the next object in memory and one to the previous 
   object (2 * 8 bytes). This doubly-linked list makes it easy for internal 
   R code to loop through every object in memory.
 
-* A pointer to an object's attributes (8 bytes).
+* A pointer to the attributes (8 bytes).
 
-All vector types (i.e., atomic vectors and lists), have three additional components:
+All vectors have three additional components:
 
-* The length of the vector (4 bytes). By using only 4 bytes, one would expect 
+* The length of the vector (4 bytes). By using only 4 bytes, you might expect 
   that R could only support vectors up to 2 ^ (4 * 8 - 1) (2 ^ 31, about 
-  two billion) elements long. But in R 3.0.0 and later, you can actually have 
-  vectors up to 2 ^ 52 long. Read R-internals to see how support for 
-  [long vectors](http://cran.r-project.org/doc/manuals/R-ints.html#Long-vectors) 
-  was added without having to change the size of this field.
+  two billion) elements. But in R 3.0.0 and later, you can actually have 
+  vectors up to 2 ^ 52 elements. [Read R-internals][long vectors] to see how 
+  support for long vectors was added without having to change the size of this 
+  field.
 
 * The "true" length of the vector (4 bytes). This is basically never used, 
   except when the object is the hash table used for an environment. In that 
@@ -85,11 +104,11 @@ All vector types (i.e., atomic vectors and lists), have three additional compone
 * The data (?? bytes). An empty vector has 0 bytes of data, but it's 
   obviously very important otherwise!
 
-If you're keeping count you'll notice that only this adds up to 36 bytes. The remaining 4 bytes are reserved for padding after the sxpinfo. This ensures that the pointers start on 8 byte (= 64-bit) boundaries. Most cpu architectures require this alignment for pointers. Even if it weren't required, accessing non-aligned pointers tends to be rather slow. (If you're interested, you can read more about [C structure package](http://www.catb.org/esr/structure-packing/).)
+If you're keeping count you'll notice that only this adds up to 36 bytes. The remaining 4 bytes are used for padding so that the pointers start on 8 byte (= 64-bit) boundaries. Most cpu architectures require pointers to be aligned in this way, and even if they don't require it, accessing non-aligned pointers tends to be rather slow. (If you're interested, you can read more about it in [C structure packing](http://www.catb.org/esr/structure-packing/).)
 
-This explains the intercept on the graph. But why does the memory size grow as an irregular step function? To understand that, you need to know a little bit about how R requests memory from the operating system. Requesting memory (done via the `malloc()` function) is a relatively expensive operation. Having to request memory every time a small vector is created would slow R down considerably. Instead, R asks for a big block of memory and then manages that block itself. This block is called the small vector pool. R uses this pool for vectors less than 128 bytes long. For efficiency and simplicity, it only allocates vectors that are 8, 16, 32, 48, 64 or 128 bytes long. If we adjust our previous plot by removing the 40 bytes of overhead, we can see that those values correspond to the jumps in memory use.
+This explains the intercept on the graph. But why does the memory size grow irregularly? To understand why, you need to know a little bit about how R requests memory from the operating system. Requesting memory (with `malloc()`) is a relatively expensive operation. Having to request memory every time a small vector is created would slow R down considerably. Instead, R asks for a big block of memory and then manages that block itself. This block is called the small vector pool and is used for vectors less than 128 bytes long. For efficiency and simplicity, it only allocates vectors that are 8, 16, 32, 48, 64 or 128 bytes long. If we adjust our previous plot to remove the 40 bytes of overhead, we can see that those values correspond to the jumps in memory use.
 
-```{r size-a}
+```{r size-a, fig.height = 4, fig.width = 6}
 plot(0:50, sizes - 40, xlab = "Length", ylab = "Bytes excluding overhead", type = "n")
 abline(h = 0, col = "grey80")
 abline(h = c(8, 16, 32, 48, 64, 128), col = "grey80")
@@ -97,49 +116,52 @@ abline(a = 0, b = 4, col = "grey90", lwd = 4)
 lines(sizes - 40, type = "s")
 ```
 
-Beyond 128 bytes, it no longer makes sense for R to manage vectors. After all, allocating big chunks of memory is something that operating systems are very good at. So beyond 128 bytes, R will ask for memory in multiples of 8 bytes. This ensures good alignment for the data, in the same way we needed good alignment for pointers.
+Beyond 128 bytes, it no longer makes sense for R to manage vectors. After all, allocating big chunks of memory is something that operating systems are very good at. Beyond 128 bytes, R will ask for memory in multiples of 8 bytes. This ensures good alignment.
 
-A subtlety of `object.size()` is that it only gives an estimate of the memory usage, not its actual usage. This is because it's obvious how much memory more complex objects occupy. For example, take environments. Using `object.size()` on an environment tells you the size of the environment, not the size of its contents. It's possible to write a function that iterates through every element of an environment:
-
-```{r}
-env_size <- function(x) {
-  if (!is.environment(x)) return(object.size(x))
-
-  objs <- ls(x, all = TRUE)
-  sizes <- vapply(objs, function(o) env_size(get(o, x)), double(1))
-  structure(sum(sizes) + object.size(x), class = "object_size")
-}
-object.size(environment())
-env_size(environment())
-```
-
-However, it's very hard to make such a function cover every special case. For example, you might have an object with an attribute that's an environment that contains a formula which has an environment containing a large object, etc. Even if you could resolve that problem, there's one that's much harder to solve. Environment objects are reference based so you can point to the same object from multiple locations. In the following example, what should the size of `b` be?
+A subtlety of the size of an object is that components can be shared across multiple objects. For example, look at the following code:
 
 ```{r}
-a <- new.env()
-a$x <- 1:1e6
+x <- 1:1e6
+object_size(x)
 
-b <- new.env()
-b$a <- a
-
-env_size(a)
-env_size(b)
+y <- list(x, x, x)
+object_size(y)
 ```
 
-You could argue that `b` is actually only 56 bytes, because if you remove `b`, that's how much memory will be freed. But if you deleted `a` first, and then deleted `b`, 4000152 bytes would be freed. So is the size of `b` 56 or 4000152 bytes? The answer depends on the context.
+`y` isn't three times as big as `x` because R is smart enough to not to copy `x` three times, instead it just points to the same location in memory. This makes it complicated to say exactly how much memory an object needs. 
 
-Another challenge for `object.size()` is strings:
+It's also misleading to look at the sizes of `x` and `y` individually. If you want to know how much space they take up together, you have to supply them to the same `object_size()` call:
 
 ```{r}
-object.size("banana")
-object.size(rep("banana", 100))
+object_size(x, y)
 ```
 
-On my 64-bit computer, the size of a vector containing "banana" is 96 bytes, but the size of a vector containing 100 "banana"s is 888 bytes. Why the difference? The key is 888 = 96 + 99 * 8. R uses a global string pool. This means that every unique string is stored only once in memory. Every other instance of that string is just a pointer, and consequently only needs 8 bytes of storage. `object.size()` tries to take this into account for individual vectors, but as with environments it's not obvious how the accounting should work.
+In this case, `x` and `y` together take up the same amount of space as `y` alone. This is not always the case. If there are no shared components, as in the following example, then you can add up the sizes of individual components to find out the total size:
+
+```{r}
+x1 <- 1:1e6
+y1 <- list(1:1e6, 1:1e6, 1:1e6)
+
+object_size(x1)
+object_size(y1)
+object_size(x1, y1)
+object_size(x1) + object_size(y1) == object_size(x1, y1)
+```
+
+The same issue also comes up with strings, because R has a global string pool. This means that each unique string is only stored in one place, and therefor character vectors take up less memory than you might expect:
+
+```{r}
+object_size("banana")
+object_size(rep("banana", 10))
+```
 
 ### Exercises
 
 1.  Repeat the analysis above for numeric, logical, and complex vectors.
+
+1.  If a data frame has 1 million rows, and three variables (two numeric, and 
+    one integer), how much space will it take up? Work out it out from theory, 
+    then verify your work by creating a data frame and measuring its size.
 
 1.  Compare the sizes of the elements in the following two lists. Each 
     contains basically the same data, but one contains vectors of small 
@@ -154,9 +176,9 @@ On my 64-bit computer, the size of a vector containing "banana" is 96 bytes, but
 
 1.  Explain the difference in size between `1:5` and `list(1:5)`.
 
-## Total memory use
+## Memory usage and garbage collection {#gc}
 
-While `object.size()` tells you the size of a single object, `pryr::mem_used()` tells you the total size of all objects in memory:
+While `object_size()` tells you the size of a single object, `pryr::mem_used()` tells you the total size of all objects in memory:
 
 ```{r}
 library(pryr)
@@ -165,13 +187,13 @@ mem_used()
 
 This number won't agree with the amount of memory reported by your operating system for a number of reasons:
 
-1. Some overhead associated with the R interpreter is not captured.
+1. It only includes objects created by R, not the R interpreter itself.
 
 1. Both R and the operating system are lazy: they won't reclaim memory 
    until it's actually needed. So R might be holding on to memory because 
    the OS hasn't yet asked for it back.
 
-1. R counts the memory occupied by objects. Thus, there may be gaps due to 
+1. R counts the memory occupied by objects but there may be gaps due to 
    deleted objects. This problem is known as memory fragmentation.
 
 `mem_change()` builds on top of `mem()` to tells us how memory changes during the execution of a block of code. Positive numbers represent an increase in the memory used by R, and negative numbers represent a decrease.
@@ -182,10 +204,6 @@ mem_change(x <- 1:1e6)
 # We get that memory back when we delete it
 mem_change(rm(x))
 ```
-
-In the next section, we'll use `mem_change()` to explore how memory is allocated and released by R, and how memory is released lazily by the "garbage collector".
-
-## Garbarge collection
 
 In some languages, you have to explicitly delete unused objects for their memory to be returned. R uses an alternative approach: garbage collection (or GC for short). GC automatically releases memory when an object is no longer used. It does this based on environments and the regular scoping rules: when an environment goes out of scope (e.g. when a function finishes executing), all of the contents of that environment are deleted and their memory is released.
 
@@ -198,13 +216,11 @@ f <- function() {
 mem_change(f())
 ```
 
-This explanation slightly oversimplifies what happens. Memory is not automatically released after a function is run. It's released when garbage collection occurs. In the above example, because `mem_change()` explicitly calls `gc()`, `mem_change()` triggers garbage collection and forces what is normally a lazy process to run immediately. More typically, R holds onto memory, even after the function has terminated, and releases it only when needed.
+This explanation slightly oversimplifies what happens. Memory is not automatically released after a function is run. It's released when garbage collection occurs. In the above example, because `mem_change()` explicitly calls `gc()`, `mem_change()` triggers garbage collection and forces what is normally a lazy process to run immediately. More typically, R holds onto the memory after the function has terminated, and releases it only when needed.
 
 Despite what you might have read elsewhere, apart from seeing how much memory is in use, there's never any need to call `gc()` yourself. R will automatically run garbage collection whenever it needs more space; if you want to see when that is, call `gcinfo(TRUE)`. The only reason you _might_ want to call `gc()` is to ask R to return memory to the operating system. However, even that might not have any effect: older versions of Windows had no way for a program to return memory to the OS.
 
-Generally, GC takes care of releasing previously used memory. However, you do need to be aware of possible memory leaks: for example, you might think you've removed all references to an object, but because some of those references may still be hanging around, the object never gets freed. In R, the two main causes of such memory leaks are formulas and closures. Since they both capture the enclosing environment, objects in that environment will not be reclaimed automatically.
-
-The following code illustrates the problem. `f1()` returns the object `10`, so the large vector allocated inside the function will go out of scope and get reclaimed. The net memory change will be 0. `f2()` and `f3()` both return objects that capture environments. Here, the net memory change is almost 4 megabytes.
+Generally, GC takes care of releasing previously used memory. However, you do need to be aware of possible memory leaks. You might think you've removed all references to an object, but if some are still hanging around, the object will never get freed. In R, the two main causes of such memory leaks are formulas and closures because they both capture the enclosing environment. The following code illustrates the problem. `f1()` returns the object `10`, so the large vector allocated inside the function will go out of scope and get reclaimed. The net memory change will be 0. `f2()` and `f3()` both return objects that capture environments. Here, the net memory change is almost 4 megabytes.
 
 ```{r}
 f1 <- function() {
@@ -234,9 +250,9 @@ rm(y, z)
 
 ## Memory profiling with lineprof {#memory-profiling}
 
-`mem_change()` captures the net change in memory use when running a block of code. Sometimes, however, we may want to measure incremental change. One way to do this is to use memory profiling to capture usage every few milliseconds. This functionality is provided by the `utils::Rprof()`. However, because it doesn't provide a very useful display of the results, we'll use the [lineprof](https://github.com/hadley/lineprof) package instead; it's powered by `Rprof()`, but displays the results in a more informative manner.
+`mem_change()` captures the net change in memory use when running a block of code. Sometimes, however, we may want to measure incremental change. One way to do this is to use memory profiling to capture usage every few milliseconds. This functionality is provided by `utils::Rprof()` but it doesn't provide a very useful display of the results. Instead we'll use the [lineprof](https://github.com/hadley/lineprof) package. It is powered by `Rprof()`, but displays the results in a more informative manner.
 
-To demonstrate `lineprof`, we're going to explore a bare-bones implementation of `read.delim` with only three arguments:
+To demonstrate `lineprof`, we're going to explore a bare-bones implementation of `read.delim()` with only three arguments:
 
 ```{r read_delim}
 ```
@@ -248,7 +264,7 @@ library(ggplot2)
 write.csv(diamonds, "diamonds.csv", row.names = FALSE)
 ```
 
-Using lineprof is straightforward. `source()` the code, apply `lineprof()` to an expression, and use `shine()` to view the results. Note that you _must_ use `source()` to load the code: you can not do this on the command line. This is because lineprof uses srcrefs to match up the code and run times, and the needed srcrefs are only created when you load code from disk.
+Using lineprof is straightforward. `source()` the code, apply `lineprof()` to an expression, then use `shine()` to view the results. Note that you _must_ use `source()` to load the code: you can not do this on the command line. This is because lineprof uses srcrefs to match up the code and run times, and the needed srcrefs are only created when you load code from disk.
 
 ```{r, eval = FALSE}
 library(lineprof)
@@ -258,15 +274,16 @@ prof <- lineprof(read_delim("diamonds.csv"))
 shine(prof)
 ```
 
-`shine()` starts a shiny app which will "block" your R session. To exit, you'll need to stop the process using escape or ctrl + break. `shine()` will also open a new web page (or if you're using RStudio, a new pane) that shows your source code annotated with information about memory usage:
-
-```{r}
+```{r, echo = FALSE}
 embed_png("memory-lineprof.png", dpi = 220)
 ```
 
-As well as your original source code, there are four columns:
+`shine()` starts a shiny app which will "block" your R session. To exit, you'll need to stop the process using escape or ctrl + break. `shine()` will also open a new web page (or if you're using RStudio, a new pane) that shows your source code annotated with information about memory usage:
 
-* `t`, the time (in seconds) spent on that line of code
+Next to the source code, four columns provide details about the performance of the code:
+
+* `t`, the time (in seconds) spent on that line of code (explained in 
+  [measuring performance](#measure-perf)).
 
 * `a`, the memory (in megabytes) allocated by that line of code.
 
@@ -298,11 +315,11 @@ You can hover over any of the bars to get the exact numbers. In this example, lo
 There are two downsides to profiling:
 
 1. `read_delim()` only takes around half a second, but profiling can, at best, 
-   only capture memory usage every 1ms. So we'll only get about 500 samples.
+   capture memory usage every 1ms. This means we'll only get about 500 samples.
 
 1. Since GC is lazy, we can never tell exactly when memory is no longer needed.
 
-One way to work around both problems is to use `torture = TRUE`, which forces R to run GC after every allocation (see `gctorture()` for more details). This helps with both problems because memory is freed as soon as possible, and R runs 10-100x slower. So the resolution of the timing is greater: you can see smaller allocations and exactly when memory is no longer needed. 
+One way to work around both problems is to use `torture = TRUE`, which forces R to run GC after every allocation (see `gctorture()` for more details). This helps with both problems because memory is freed as soon as possible, and R runs 10-100x slower. This effectively makes the resolution of the timer greater, so that you can see smaller allocations and exactly when memory is no longer needed. 
 
 ### Exercises
 
@@ -334,7 +351,7 @@ One way to work around both problems is to use `torture = TRUE`, which forces R 
     }
     ```
 
-## Modification in place
+## Modification in place {#modification}
 
 What happens to `x` in the following code?
 
@@ -364,9 +381,9 @@ c(address(y), refs(y))
 # [1] "0x103100060" "2"
 ```
 
-(Note that if you're using RStudio, `refs()` will always return 2: the environment browser makes a reference to every object you create on the command line, but not inside a function.)
+(Note that if you're using RStudio, `refs()` will always return 2: the environment browser makes a reference to every object you create on the command line.)
 
-Note that `refs()` is only an estimate. It can only distinguish between 1 and more than 1 reference. This means that `refs()` returns 2 in both of the following cases:
+Note that `refs()` is only an estimate. It can only distinguish between one and more than one reference (future versions of R might do better). This means that `refs()` returns 2 in both of the following cases:
 
 ```{r}
 x <- 1:5
@@ -409,35 +426,24 @@ x[5] <- 6L
 # tracemem[0x7feeaaa1c6b8 -> 0x7feeaaa1c768]:
 ```
 
-It's slightly more useful for interactive use than `refs()`, but, because it just prints a message, it's harder to program with. I don't use it in this book because it interacts poorly with [knitr](http://yihui.name/knitr/), the tool used to interleave text and R code.
+It's slightly more useful for interactive use than `refs()`, but, because it just prints a message, it's harder to program with. I don't use it in this book because it interacts poorly with [knitr](http://yihui.name/knitr/), the tool I use to interleave text and code.
 
-Non-primitive functions that touch the object always increment the ref count. Primitive functions are usually written in such a way that they don't. (The reasons are a little complicated, but see the R-devel thread [confused about NAMED](http://r.789695.n4.nabble.com/Confused-about-NAMED-td4103326.html).)
+Non-primitive functions that touch the object always increment the ref count. Primitive functions usually don't. (The reasons are a little complicated, but see the R-devel thread [confused about NAMED](http://r.789695.n4.nabble.com/Confused-about-NAMED-td4103326.html).)
 
-```{r, eval = FALSE}
-x <- 1:10
-refs(x)
-# [1] 1
-mean(x)
-refs(x)
-# [1] 2
-
+```{r}
 # Touching the object forces an increment
 f <- function(x) x
 x <- 1:10; f(x); refs(x)
-# [1] 2
 
 # Sum is primitive, so no increment
 x <- 1:10; sum(x); refs(x)
-# [1] 1
 
 # f() and g() never evaluate x, so refs don't increment
 f <- function(x) 10
-x <- 1:10; f(x); refs(x)
-# [1] 1
-
 g <- function(x) substitute(x)
+
+x <- 1:10; f(x); refs(x)
 x <- 1:10; g(x); refs(x)
-# [1] 1
 ```
 
 Generally, provided that the object is not referred to elsewhere, any primitive replacement function will modify in place. This includes `[[<-`, `[<-`, `@<-`, `$<-`, `attr<-`, `attributes<-`, `class<-`, `dim<-`, `dimnames<-`, `names<-`, and `levels<-`. To be precise, all non-primitive functions increment refs, but a primitive function may be written in such a way that it doesn't. The rules are sufficiently complicated that there's little point in trying to memorise them. Instead, you should approach the problem practically by using `refs()` and `tracemem()` to figure out when objects are being copied.
@@ -446,17 +452,15 @@ While determining that copies are being made is not hard, preventing such behavi
 
 ### Loops
 
-For loops in R have a reputation for being slow. Often that slowness is due to the fact that you're modifying a copy instead of modifying in place. Consider the following code. It subtracts the median from each column of a large data frame:
+For loops in R have a reputation for being slow. Often that slowness is because you're modifying a copy instead of modifying in place. Consider the following code. It subtracts the median from each column of a large data frame:
 
 ```{r, cache = TRUE}
 x <- data.frame(matrix(runif(100 * 1e4), ncol = 100))
 medians <- vapply(x, median, numeric(1))
 
-system.time({
-  for(i in seq_along(medians)) {
-    x[, i] <- x[, i] - medians[i]
-  }
-})
+for(i in seq_along(medians)) {
+  x[, i] <- x[, i] - medians[i]
+}
 ```
 
 You may be surprised to realise that every iteration of the loop copies the data frame. We can see that more clearly by using `address()` and `refs()` for a small sample of the loop:
@@ -479,7 +483,7 @@ for(i in 1:5) {
 }
 ```
 
-This behaviour was substantially more problematic prior to R 3.1.0, because every copy of the dataframe was a deep copy. This made the complete loop over the data frame take over 5s, compared to 0.01s that it takes today.
+This behaviour was substantially more problematic prior to R 3.1.0, because every copy of the dataframe was a deep copy. This made the motivating example take around 5s, compared to 0.01s that it takes today.
 
 ### Exercises
 
@@ -495,3 +499,6 @@ This behaviour was substantially more problematic prior to R 3.1.0, because ever
 
 1.  The implementation of `as.data.frame()` in the previous section has one 
     big downside. What is it and how could you avoid it?
+
+
+[long-vectors]: http://cran.r-project.org/doc/manuals/R-ints.html#Long-vectors
