@@ -10,7 +10,7 @@ knit_print.png <- function(x, options) {
   # opts_knit$get('rmarkdown.pandoc.to')
   # opts_knit$get('out.format')
 
-  if (doc_type() == "latex") {
+  if (identical(doc_type(), "latex")) {
     knitr::asis_output(paste0(
       "\\includegraphics[",
       "width=", round(x$dim[1] / x$dpi[1], 2), "in,",
