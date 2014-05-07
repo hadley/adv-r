@@ -1,47 +1,19 @@
+library(knitr)
 library(stringr)
 
 print.html <- function(x, ...) {
   cat("<HTML> ", paste0(strwrap(x, width = 65), collapse = "\n"), "\n", sep = "")
 }
 
-
 # Convert an Rmd file to a md file using custom knitr options
 # Inputs and outputs paths
 rmd2md <- function(in_path, out_path = tempfile(fileext = ".md"), out = "mdhtml") {
-  library(knitr)
-
-  collapse <- function(x, options) {
-    paste0("\n", paste0(x, collapse = "\n"))
-  }
-
   set.seed(1410)
   options(digits = 3)
-  knit_hooks$set(
-    source = function(x, options) paste(x, collapse = "\n"),
-    output = collapse,
-    warning = collapse,
-    error = collapse,
-    message = collapse,
-    plot = if (out == "mdhtml") plot_html else plot_tex,
-    chunk = function(x, options) {
-      ind <- options$indent
-      x <- add_trailing_nl(x)
-      out <- paste0("```", options$engine, "\n", x, "```")
-
-      if (is.null(ind)) return(out)
-      paste0(ind, gsub("\n", paste0("\n", ind), out))
-    },
-    document = function(x, options) {
-      x <- paste0(x, collapse = "\n")
-      # Remove empty blocks (produced by plot)
-      x <- gsub("\n```R\n+```\n", "", x)
-      x
-    }
-  )
   opts_chunk$set(
     comment = "#>",
+    collapse = TRUE,
     error = FALSE,
-    tidy = FALSE,
     cache.path = "_cache/",
     fig.width = 4,
     fig.height = 4,
