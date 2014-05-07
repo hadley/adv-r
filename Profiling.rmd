@@ -478,15 +478,6 @@ microbenchmark(
 1.  How do the results change if you compare `mean()` and `mean.default()`
     on 10,000 observations, rather than on 100?
 
-1.  Make a faster version of `chisq.test()` that only computes the Chi-square
-    test statistic when the input is two numeric vectors with no missing
-    values. You can try by starting with either `chisq.test()`, making it 
-    simpler, or with the formal [definition][chi-square].
-
-1.  Can you make a faster version of `table()` for the case of an input of
-    two integer vectors with no missing values? Can you use it to
-    speed up your Chi-square test?
-    
 1.  The following code provides an alternative implementation of `rowSums()`.
     Why is it faster for this input?
 
@@ -506,20 +497,46 @@ microbenchmark(
     system.time(rowSums2(df))
     ```
 
+1.  What's the difference between `rowSums()` and `.rowSums()`?
+
+1.  Make a faster version of `chisq.test()` that only computes the Chi-square
+    test statistic when the input is two numeric vectors with no missing
+    values. You can try simplifying `chisq.test()` or by coding up the 
+    [mathematical definition][chi-square].
+
+1.  Can you make a faster version of `table()` for the case of an input of
+    two integer vectors with no missing values? Can you use it to
+    speed up your Chi-square test?
+
+1.  Imagine you want to compute the bootstrap distribution of a sample
+    correlation using `cor_df()` and the data in the example below. Given that you 
+    want to run this many times, how can you make this code faster? (Hint: the 
+    function has three components that you can speed up.)
+
+    ```{r, eval = FALSE}
+    n <- 1e6
+    df <- data.frame(a = rnorm(n), b = rnorm(n))
+
+    cor_df <- function(i) {
+      i <- sample(seq(n), n * 0.01)
+      cor(q[i, , drop = FALSE])[2,1]
+    }
+    ```
+
+    Is there a way to vectorise this procedure?
 
 ### Vectorise
 
-If you've used R for any length of time, you've probably heard the admonishment to "vectorise your code". But what does that actually mean? Vectorising your code is not just about avoiding for loops (although that's often a step), it's more about using functions that work with a vector as a whole, rather than with the vector's components. There are two key attributes of a vectorised function:
+If you've used R for any length of time, you've probably heard the admonishment to "vectorise your code". But what does that actually mean? Vectorising your code is not just about avoiding for loops, although that's often a step. Vectorising is about taking a "whole object" approach to a problem, thinking about vectors, not thinking about scalars. There are two key attributes of a vectorised function:
 
 * It makes many problems simpler. Instead of having to think about the 
   components of a vector, you only think about vectors as a single 
   objects.
 
-* Most vectorised functions still use for loops, but they are written in C 
-  instead of R. For loops in C are much faster because they have much less 
-  overhead.
+* The loops in a vectorised function are written in C instead of R. Loops in C 
+  are much faster because they have much less overhead.
 
-[Functionals](#functionals) stressed the importance of vectorised code as a higher level abstraction. Vectorisation is also important for writing fast R code. This, however, doesn't simply mean using `apply()` or `lapply()`, or even `Vectorise()`. Those functions just improve the interface of a function by using vectorised syntax. They don't fundamentally change performance. In R, using vectorisation for performance reasons really means finding the existing R function that most closely applies to your problem and that is already implemented in C. 
+[Functionals](#functionals) stressed the importance of vectorised code as a higher level abstraction. Vectorisation is also important for writing fast R code. This, however, doesn't simply mean using `apply()` or `lapply()`, or even `Vectorise()`. Those functions just improve the interface of a function by using vectorised syntax. They don't fundamentally change the performance. Using vectorisation for performance means finding the existing R function that is implemented in C and most closely applies to your problem. 
 
 Vectorised functions that apply to many common performance bottlenecks include:
 
@@ -531,19 +548,22 @@ Vectorised functions that apply to many common performance bottlenecks include:
     rowAny <- function(x) rowSums(x) > 0
     rowAll <- function(x) rowSums(x) == ncol(x)
     ```
+    
 * Vectorised subsetting can lead to big improvements in speed. Remember the 
   techniques behind lookup tables ([lookup tables](#lookup-tables)) and matching 
   and merging by hand ([matching and merging by hand](#matching-merging)). Also 
   remember that you can use subsetting assignment to replace multiple values in 
-  a single step: `x[is.na(x)] <- 0` will replace all missing values in `x` with 
-  0 if `x` is a vector, matrix or data frame.
+  a single step. If `x` is a vector, matrix or data frame then 
+  `x[is.na(x)] <- 0` will replace all missing values with 0.
 
-* If you're converting continuous to categorical values make sure you know
+* If you're converting continuous values to categorical make sure you know
   how to use `cut()` and `findInterval()`.
 
 * Be aware of vectorised functions like `cumsum()` and `diff()`.
 
-That said, vectorisation is challenging because it's hard to predict how different operations will scale. The following example measures how long it takes to use character subsetting to lookup 1, 10 and 100 elements from a list. You might expect that looking up 10 elements would take 10x as long as looking up 1, and that looking up 100 elements would take 10x longer than looking up 10. In fact, the following example shows that it only takes about 8 times longer to lookup 100 elements than it does to lookup 1.
+Matrix algebra is general example of vectorisation. There loops are executed by highly tuned external libraries like BLAS. If you can figure out a way to use matrix algebra to solve your problem, you'll often get a very fast solution. Unfortunately, the ability to solve problems with matrix algebra is a product of experience. While this skill is something you'll develop over time, a good place to start is ask people with experience in your domain.
+
+The downside of vectorisation is that it makes it harder to predict how different operations will scale. The following example measures how long it takes to use character subsetting to lookup 1, 10 and 100 elements from a list. You might expect that looking up 10 elements would take 10x as long as looking up 1, and that looking up 100 elements would take 10x longer again. In fact, the following example shows that it only takes about 8 times longer to look up 100 elements than it does to look up 1.
 
 ```{r}
 lookup <- setNames(as.list(sample(100, 26)), letters)
@@ -559,20 +579,24 @@ microbenchmark(
 )
 ```
 
-There is one special case of vectorisation. With matrix algebra, loops are executed by highly tuned external libraries like BLAS. So, if you can figure out a way to use matrix algebra to solve your problem, you'll often get a very fast solution. Unfortunately, the ability to recognise that your problem can be solved using matrix algebra is a product of experience. While this skill is something you'll develop over time, a good place to start may be to ask for help from those with experience in your domain.
-
 Vectorisation won't solve every problem, and rather than torturing an existing algorithm into one that uses a vectorised approach, you're often better off writing your own vectorised function in C++. You'll learn how to do so in [Rcpp](#rcpp). 
 
 ### Exercises
 
-* How can you use `crossprod()` to compute a weighted sum? How much faster is
-  it than the naive `sum(x * w)`?
+1.  The density functions, e.g. `dnorm()`, have a common interface. Which 
+    arguments are vectorised over? What does `rnorm(10, mean = c(10:1))` do?
+
+1.  Compare the speed of `apply(x, 1, sum)` with `rowSums(x)` for varying sizes
+    of `x`.
+  
+1.  How can you use `crossprod()` to compute a weighted sum? How much faster is
+    it than the naive `sum(x * w)`?
 
 ### Avoid copies
 
-A pernicious source of slow R code is growing an object with a loop. Whenever you use `c()`, `append()`, `cbind()`, `rbind()` or `paste()` to create a bigger object, R must first allocate space for the new object and then copy the old object to its new home. If you're repeating this many times, as with a for loop, this can be quite expensive. This is known as Circle 2 in the [R inferno](http://www.burns-stat.com/pages/Tutor/R_inferno.pdf).
+A pernicious source of slow R code is growing an object with a loop. Whenever you use `c()`, `append()`, `cbind()`, `rbind()` or `paste()` to create a bigger object, R must first allocate space for the new object and then copy the old object to its new home. If you're repeating this many times, like in a for loop, this can be quite expensive. This is known as Circle 2 of the [R inferno](http://www.burns-stat.com/pages/Tutor/R_inferno.pdf).
 
-Here's a little example that benchmarks the difference in execution time. We first generate some random strings, and then combine them either iteratively with a loop using `collapse()`, or in a single pass using `paste()`. Note that the performance of `collapse()` gets relatively worse as the number of strings grows: combining 100 strings takes almost 30 times longer than combining 10 strings.
+Here's a little example that shows the problem. We first generate some random strings, and then combine them either iteratively with a loop using `collapse()`, or in a single pass using `paste()`. Note that the performance of `collapse()` gets relatively worse as the number of strings grows: combining 100 strings takes almost 30 times longer than combining 10 strings.
 
 ```{r}
 random_string <- function() {
@@ -597,13 +621,11 @@ microbenchmark(
 )
 ```
 
-Modifying an object in a loop, e.g. `x[i] <- y`, can also create copies, depending on `x`'s class. [Modification in place]{#modification-in-place} discusses this problem in more depth and gives you tools to determine when you're making copies. Data frames are particularly bad offenders.
-
-Note that vectorised code avoids both of these potential problems by modifying or creating an object just once.
+Modifying an object in a loop, e.g. `x[i] <- y`, can also create a copy, depending on the class of `x`. [Modification in place]{#modification-in-place} discusses this issue in more depth and gives you some tools to determine when you're making copies. Data frames are particularly bad offenders.
 
 ### Byte code compilation {#byte-code}
 
-R 2.13.0 introduced a byte code compiler which can increase the speed of certain types of code. Using the compiler is an easy way to get improvements in speed. It's also easy to do. So if it doesn't work well for your function, you won't have invested a lot of time in the effort. The following example shows the pure R version of `lapply()` from [functionals](#lapply). Compiling it gives a considerable speedup, although it's still not quite as fast as the C version provided by base R.
+R 2.13.0 introduced a byte code compiler which can increase the speed of certain types of code. Using the compiler is an easy way to get improvements in speed. Even if doesn't work well for your function, you won't have invested a lot of time in the effort. The following example shows the pure R version of `lapply()` from [functionals](#lapply). Compiling it gives a considerable speedup, although it's still not quite as fast as the C version provided by base R.
 
 ```{r}
 lapply2 <- function(x, f, ...) {
@@ -624,40 +646,19 @@ microbenchmark(
 )
 ```
 
-This is a relatively good example of byte code compilation. In most cases, however, you're more likely to get a 5-10 % improvement. This particular example optimises well because it uses a for loop, something that is generally rare in R.
-
-Note that all base R functions are now byte code compiled by default.
-
-### Exercises
-
-1.  Imagine you want to compute the bootstrap distribution of a sample
-    correlation using `cor_df()` and the data in the example below. Given that you 
-    want to run this many times, how can you make this code faster? (Hint: the 
-    function has three components that you can speed up.)
-
-    ```{r, eval = FALSE}
-    n <- 1e6
-    df <- data.frame(a = rnorm(n), b = rnorm(n))
-
-    cor_df <- function(i) {
-      i <- sample(seq(n), n * 0.01)
-      cor(q[i, , drop = FALSE])[2,1]
-    }
-    ```
-
-    Is there a way to vectorise this procedure?
+This is a good example of where byte code compilation really helps. In most cases you're more likely to get a 5-10% improvement. All base R functions are byte code compiled by default. 
 
 ### Case study: t-test {#t-test}
 
-The following case study explores how to make t-tests faster by exploiting only vectorised functions. This case study is based on an example in [Computing thousands of test statistics simultaneously in R](http://stat-computing.org/newsletter/issues/scgn-18-1.pdf) by Holger Schwender and Tina Müller. I thoroughly recommend reading the paper in full to see the same idea applied to other tests.
+The following case study shows how to make t-tests faster by exploiting vectorised functions. It's based on an example in [Computing thousands of test statistics simultaneously in R](http://stat-computing.org/newsletter/issues/scgn-18-1.pdf) by Holger Schwender and Tina Müller. I thoroughly recommend reading the paper in full to see the same idea applied to other tests.
 
-Imagine we have run 1000 experiments, each of which collects data on 50 individuals. The first 25 individuals in each experiment are assigned to group 1 and the rest to group 2. We'll generate some random data to represent this data.
+Imagine we have run 1000 experiments (rows), each of which collects data on 50 individuals (columns). The first 25 individuals in each experiment are assigned to group 1 and the rest to group 2. We'll first generate some random data to represent this problem:
 
 ```{r}
 m <- 1000
 n <- 50
 X <- matrix(rnorm(m * n, mean = 10, sd = 3), nrow = m)
-grp <- rep(1:2, length = n)
+grp <- rep(1:2, each = n / 2)
 ```
 
 For data in this form, there are two basic ways to use `t.test()`. We can either use the formula interface or provide two vectors, one for each group. Timing reveals that the formula interface is considerably slower.
@@ -667,7 +668,7 @@ system.time(for(i in 1:m) t.test(X[i, ] ~ grp)$stat)
 system.time(for(i in 1:m) t.test(X[i, grp == 1], X[i, grp == 2])$stat)
 ```
 
-Of course, a for loop just computes but doesn't save values. So we probably actually want to use `apply()`. This will add a little overhead:
+Of course, a for loop computes but doesn't the save values. We'll use `apply()` to save the values which adds a little overhead:
 
 ```{r}
 compT <- function(x, grp){
@@ -699,7 +700,7 @@ system.time(apply(X, 1, my_t, grp = grp))
 
 This gives us about a 5x speed improvement.
 
-Now that we have a fairly simple function, we can make it faster still by vectorisation. Instead of looping over the array outside the function, we vectorise the function by modifying `t_stat()` to work with a matrix of values instead of a vector. Thus, `mean()` becomes `rowMeans()`, `length()` becomes `ncol()`, and `sum()` becomes `rowSums()`. The rest of the code stays the same.
+Now that we have a fairly simple function, we can make it faster still by vectorising it. Instead of looping over the array outside the function, we will modify `t_stat()` to work with a matrix of values. Thus, `mean()` becomes `rowMeans()`, `length()` becomes `ncol()`, and `sum()` becomes `rowSums()`. The rest of the code stays the same.
 
 ```{r}
 rowtstat <- function(X, grp){
@@ -737,14 +738,14 @@ In this example, byte code compilation doesn't help at all.
 
 ### Parallelise
 
-Parallelising your code doesn't save computer time, it saves your time. Parallelisation works because multiple processors or cores are used to simultaneously work on different parts of you problem. Parallel computing is a complex field, and there's no way to cover it in depth here. Some resources I recommend are:
+Parallelisation uses multiple cores to work simultaneously on different parts of a problem. It doesn't reduce the computing time, but it saves your time because you're using more of your computer's resources. Parallel computing is a complex field, and there's no way to cover it in depth here. Some resources I recommend are:
 
 * [Parallel R](http://amazon.com/B005Z29QT4) by Q. Ethan McCallum and Stephen Weston.
 
 * [Parallel computing for data science](http://heather.cs.ucdavis.edu/paralleldatasci.pdf), by
   Norm Matloff.
 
-What I want to focus on is a simple application of parallel computing to what are called embarrassingly parallel problems. When your problem has many simple parts that can be solved independently, it's very easy to spread computation across the cores on your computer. For example, if you have a for loop, or equivalent `lapply()`, you can easily run each operation in parallel. This is particularly easy in Linux and Mac OS because you simply substitute `mclapply()` for `lapply()`. The following code snippet runs a trivial (but slow) function on all cores of your computer.
+What I want to focus on is a simple application of parallel computing to what are called "embarrassingly parallel problems". An embarrassingly parallel problem is one that's made up of many simple problems that can be solved independently. A great example of this is `lapply()`. It's very easy to parallelise `lapply()` on Linux and the Mac because you simply substitute `mclapply()` for `lapply()`. The following code snippet runs a trivial (but slow) function on all cores of your computer.
 
 ```{r}
 library(parallel)
@@ -765,7 +766,7 @@ system.time(mclapply(1:10, pause(0.25), mc.cores = cores))
 Life is a bit harder in Windows. You need to first set up a local cluster and then use `parLapply()`:
 
 ```{r, cache = TRUE}
-cluster <- parallel::makePSOCKcluster(cores)
+cluster <- makePSOCKcluster(cores)
 system.time(parLapply(cluster, 1:10, function(i) Sys.sleep(1)))
 ```
 
@@ -780,7 +781,7 @@ clusterExport(psock, "x")
 clusterEvalQ(psock, x)
 ```
 
-Note there is some communication overhead with parallel computing. If the subproblems are very small, then parallelisation might actually hurt rather than help. It's also possible to distribute computation over a network of computers (not just the cores on your local computer) but that's beyond the scope of this book. (It gets increasingly complicated to balance computation against the costs of communication.) A good place to start for more information is the [High performance computing](http://cran.r-project.org/web/views/HighPerformanceComputing.html) CRAN task view.
+There is some communication overhead with parallel computing. If the subproblems are very small, then parallelisation might actually hurt rather than help. It's also possible to distribute computation over a network of computers (not just the cores on your local computer) but that's beyond the scope of this book. (It gets increasingly complicated to balance computation against the costs of communication.) A good place to start for more information is the [High performance computing](http://cran.r-project.org/web/views/HighPerformanceComputing.html) CRAN task view.
 
 ## Other techniques {#more-techniques}
 
@@ -806,6 +807,6 @@ Being able to write fast R code is part of being a good R programmer. Beyond the
   by Carlos Bueno, or the [Pragmatic Programmer](http://amazon.com/020161622X) 
   by Andrew Hunt and David Thomas.
   
-You can also reach out to the community for help. Stack Overflow can be a useful resource. But you'll need to put some effort into creating an easily digestible example that also captures the salient features of your problem. If your example is too complex, few people will have the time and motivation to attempt a solution. If it's too simple, you'll get answers that solve the toy problem but not the real problem. If you try to answer questions on Stack Overflow, you'll quickly get a feel for what makes a good question.  
+You can also reach out to the community for help. Stack Overflow can be a useful resource. You'll need to put some effort into creating an easily digestible example that also captures the salient features of your problem. If your example is too complex, few people will have the time and motivation to attempt a solution. If it's too simple, you'll get answers that solve the toy problem but not the real problem. If you also try to answer questions on Stack Overflow, you'll quickly get a feel for what makes a good question.  
 
 [chi-square]: http://en.wikipedia.org/wiki/Pearson%27s_chi-squared_test
