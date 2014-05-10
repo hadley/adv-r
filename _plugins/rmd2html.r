@@ -1,6 +1,8 @@
 library(knitr)
 library(stringr)
 
+source("options.R")
+
 print.html <- function(x, ...) {
   cat("<HTML> ", paste0(strwrap(x, width = 65), collapse = "\n"), "\n", sep = "")
 }
@@ -8,17 +10,8 @@ print.html <- function(x, ...) {
 # Convert an Rmd file to a md file using custom knitr options
 # Inputs and outputs paths
 rmd2md <- function(in_path, out_path = tempfile(fileext = ".md"), out = "mdhtml") {
-  set.seed(1410)
-  options(digits = 3)
-  opts_chunk$set(
-    comment = "#>",
-    collapse = TRUE,
-    error = FALSE,
-    cache.path = "_cache/",
-    fig.width = 4,
-    fig.height = 4,
-    dev = if (out == "mdhtml") "png" else "pdf"
-  )
+  set_knitr_options()
+  knitr::opts_chunk$set(dev = if (out == "mdhtml") "png" else "pdf")
 
   knit(in_path, out_path, quiet = TRUE)
   out_path
