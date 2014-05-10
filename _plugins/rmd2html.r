@@ -1,7 +1,7 @@
 library(knitr)
 library(stringr)
 
-source("options.R")
+source("_plugins/options.R")
 
 print.html <- function(x, ...) {
   cat("<HTML> ", paste0(strwrap(x, width = 65), collapse = "\n"), "\n", sep = "")
