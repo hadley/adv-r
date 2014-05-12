@@ -10,3 +10,22 @@ set_knitr_options <- function() {
     fig.height = 4
   )
 }
+
+begin_sidebar <- function(x, options) {
+  if (identical(doc_type(), "latex")) {
+    knitr::asis_output("\\begin{sidebar}")
+  } else {
+    knitr::asis_output("<div class = 'well'>\n")
+  }
+}
+
+end_sidebar <- function(x, options) {
+  if (identical(doc_type(), "latex")) {
+    knitr::asis_output("\\end{sidebar}")
+  } else {
+    knitr::asis_output("</div>\n")
+  }
+}
+
+doc_type <- function() knitr::opts_knit$get('rmarkdown.pandoc.to')
+
