@@ -11,6 +11,8 @@ set_knitr_options <- function() {
   )
 }
 
+knit_print.knit_asis <- function(x, ...) x
+
 begin_sidebar <- function(x, options) {
   if (identical(doc_type(), "latex")) {
     knitr::asis_output("\\begin{sidebar}")
