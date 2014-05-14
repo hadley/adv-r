@@ -11,11 +11,11 @@ library(inline)
 
 ## Introduction
 
-Reading R's source code is an extremely powerful technique for improving your programming skills. However, many base R functions, and many functions in older packages, are written in C. It's useful to be able to figure out how those functions work, so this chapter will introduce you to R's C API. You'll need some basic C knowledge, which you can get from a standard C text (e.g. "[Kernigan and Ritchie](http://amzn.com/0131101633?tag=devtools-20)"), or from [Rcpp](#rcpp). You'll need a little patience, but it is possible to read R's C source code, and you will learn a lot doing it.
+Reading R source code is an extremely powerful way to improve your programming skills. However, because many base R functions, as well as many functions in older packages, are written in C, to understand how those functions work, you'll need some knowledge of C and an understanding of R's C API. You can learn the basics of C from a standard C text (e.g. "[Kernigan and Ritchie](http://amzn.com/0131101633?tag=devtools-20)") or from [Rcpp](#rcpp). With a little effort and patience, you'll be able read R's C source code. In the process, you'll really learn a lot.
 
-The contents of this chapter draw heavily from Section 5 ("System and foreign language interfaces") of [Writing R extensions](http://cran.r-project.org/doc/manuals/R-exts.html), but focus on best practices and modern tools. This means it does not cover the old `.C` interface, the old API defined in `Rdefines.h` or rarely used language features. You are unlikely to see these in modern R code. I do not recommend using C for writing new high-performance code. Instead write C++ with Rcpp. The Rcpp API protects you from many of the historical idiosyncracies of the R API, takes care of memory management for you, and provides many useful helper methods.
+The contents of this chapter draw heavily upon Section 5 ("System and foreign language interfaces") of [Writing R extensions](http://cran.r-project.org/doc/manuals/R-exts.html). However, the focus is on best practices and modern tools. This means the chapeter does not cover the old `.C` interface, the old API defined in `Rdefines.h` or other rarely used language features. You're unlikely to see these in modern R code. Moreover, I do not recommend using C to write new high-performance code. Instead, you should be using `Rcpp` to write code in C++. The Rcpp API protects you from many of the historical idiosyncracies of the R API, takes care of memory management, and provides many useful helper methods.
 
-To see the complete C API provided by R, look at the header file `Rinternals.h`. It's easiest to find and display this file from within R:
+To see R's C API, look at the header file `Rinternals.h`. It's easiest to find and display this file from within R:
 
 ```{r, eval = FALSE}
 rinternals <- file.path(R.home("include"), "Rinternals.h")
@@ -27,7 +27,7 @@ All functions are defined with either the prefix `Rf_` or `R_` but are exported 
 ##### Outline
 
 * [Calling C](#calling-c) shows the basics of creating and calling C functions 
-  with the inline package.
+  with the `inline` package.
 
 * [C data structures](#c-data-structures) shows how to translate data 
   structure names from R to C. 
@@ -36,27 +36,26 @@ All functions are defined with either the prefix `Rf_` or `R_` but are exported 
   modify and coerce vectors in C.
   
 * [Pairlists](#c-pairlists) shows you how to work with pairlists. You need
-  to know this because the distinction between pairlists and list is more 
-  important in C than R.
+  to know this because the distinction between pairlists and lists is more 
+  important in C than in R.
 
 * [Input validation](#c-input-validation) talks about the importance of 
   input validation so that your C function doesn't crash R.
 
-* [Finding the C source for a function](#c-find-source) concludes the 
-  chapter by showing you how to find the C source code for internal and
-  primitive R functions.
+* [Finding the C source for a function](#c-find-source) shows you how to find 
+  the C source code for internal and primitive R functions.
 
 ##### Prerequisites
 
-To understand existing C code, it's useful to generate simple examples of your own that you can experiment with. To that end, all examples in this chapter use the `inline` package, which makes it extremely easy to compile and link C code to your current R session. Get it by running `install.packages("inline")` in your R session. To easily find the C code associated with internal and primitive functions, you'll need a function from pryr. Get the package with `install_github("hadley/pryr")`
+To understand existing C code, it's useful to generate simple examples of your own that you can experiment with. To that end, all examples in this chapter use the `inline` package, which makes it extremely easy to compile and link C code to your current R session. You can get it by running `install.packages("inline")` in your R session. To easily find the C code associated with internal and primitive functions, you'll need a function from `pryr`. Get that package by running `install_github("hadley/pryr")`
 
 You'll also need a C compiler. Windows users can use Duncan Murdoch's [Rtools](http://cran.r-project.org/bin/windows/Rtools/). Mac users will need the [Xcode command line tools](http://developer.apple.com/). Most Linux distributions will come with the necessary compilers.
 
-Under Windows it is necessary that the Rtools executables directory (typically `C:\Rtools\bin`) and the C compiler executables directory (typically `C:\Rtools\gcc-4.6.3\bin`) are included in the Windows `PATH` environment variable. You may need to reboot Windows before R can recognise these values.
+In Windows, it's necessary that the Rtools executables directory (typically `C:\Rtools\bin`) and the C compiler executables directory (typically `C:\Rtools\gcc-4.6.3\bin`) are included in the Windows `PATH` environment variable. You may need to reboot Windows before R can recognise these values.
 
 ## Calling C functions from R {#calling-c}
 
-Generally, calling a C function from R requires two pieces: a C function, and an R wrapper function that uses `.Call()`. The simple function below adds two numbers together and illustrates some of the complexities of coding in C:
+Generally, calling a C function from R requires two parts: a C function and an R wrapper function that uses `.Call()`. The simple function below adds two numbers together and illustrates some of the complexities of coding in C:
 
 ```c
 // In C ----------------------------------------
@@ -79,9 +78,9 @@ add <- function(a, b) {
 }
 ```
 
-(An alternative to using `.Call` is to use `.External`.  It is used almost identically, except that the C function will recieve a single argument containing a `LISTSXP`, a pairlist from which the arguments can be extracted. This makes it possible to write functions that take a variable number of arguments. However, it's not commonly used in base R and `inline` does not currently support `.External` functions so I don't discuss it further in this chapter).
+(An alternative to using `.Call` is to use `.External`. `.External` is used almost identically to `.Call`, except that the C function will receive a single argument containing a `LISTSXP`, a pairlist from which the arguments can be extracted. This makes it possible to write functions that take a variable number of arguments. However, it's not commonly used in base R and `inline` does not currently support `.External` functions so I won't discuss it further).
 
-In this chapter we'll produce the two pieces in one step by using the `inline` package. This allows us to write:
+In this chapter we'll produce the two parts in one step by using the `inline` package. This allows us to write:
 
 ```{r, cache = TRUE}
 add <- cfunction(c(a = "integer", b = "integer"), "
@@ -94,7 +93,7 @@ add <- cfunction(c(a = "integer", b = "integer"), "
 add(1, 5)
 ```
 
-Before we begin writing and reading C code, we need to know a little about the basic data structures.
+Before we begin reading and writing C code, we need to know a little about the basic data structures in C.
 
 ## C data structures
 
@@ -110,7 +109,7 @@ At the C-level, all R objects are stored in a common datatype, the `SEXP`. (Tech
 
 __Beware:__ In C, lists are called `VECSXP`s not `LISTSXP`s. This is because early implementations of lists were Lisp-like linked lists, which are now known as "pairlists".
 
-Character vectors are a little more complicated than the other atomic vectors. A `STRSXP`s contains a vector of `CHARSXP`s, where each `CHARSXP` points to C-style string stored in a global pool. This design allows individual `CHARSXP`'s to be shared between multiple character vectors, reducing memory usage. See [object size](#object-size) for more details.
+Character vectors are a little more complicated than the other atomic vectors. A `STRSXP`s contains a vector of `CHARSXP`s, where each `CHARSXP` points to C-style string stored in a global pool. This design allows individual `CHARSXP`'s to be shared between multiple character vectors, which reduces memory usage. See [object size](#object-size) for more details.
 
 There are also `SEXP`s for less common object types:
 
@@ -127,7 +126,7 @@ And `SEXP`s for internal objects, objects that are usually only created and used
 * `PROMSXP`: promises, lazily evaluated function arguments
 * `EXPRSXP`: expressions
 
-There's no built-in R function to easily access these names, but pryr provides `sexp_type()`:
+There's no built-in R function to easily access these names, but `pryr` provides `sexp_type()`:
   
 ```{r}
 library(pryr)
