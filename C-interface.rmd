@@ -13,9 +13,7 @@ library(inline)
 
 Reading R's source code is an extremely powerful technique for improving your programming skills. However, many base R functions, and many functions in older packages, are written in C. It's useful to be able to figure out how those functions work, so this chapter will introduce you to R's C API. You'll need some basic C knowledge, which you can get from a standard C text (e.g. "[Kernigan and Ritchie](http://amzn.com/0131101633?tag=devtools-20)"), or from [Rcpp](#rcpp). You'll need a little patience, but it is possible to read R's C source code, and you will learn a lot doing it.
 
-The contents of this chapter draw heavily from Section 5 ("System and foreign language interfaces") of [Writing R extensions](http://cran.r-project.org/doc/manuals/R-exts.html), but focus on best practices and modern tools. This means it does not cover the old `.C` interface, the old API defined in `Rdefines.h` or rarely used language features. You are unlikely to see these in modern R code. I do not recommend using C for writing new high-performance code. Instead write C++ with Rcpp. The Rcpp API protects you from many of the historical idiosyncracies of the R API, takes care of memory management for you, and provides many useful helper methods.
-
-To see the complete C API provided by R, look at the header file `Rinternals.h`. It's easiest to find and display this file from within R:
+The contents of this chapter draw heavily from Section 5 ("System and foreign language interfaces") of [Writing R extensions](http://cran.r-project.org/doc/manuals/R-exts.html), but focus on best practices and modern tools. This means it does not cover the old `.C` interface, the old API defined in `Rdefines.h` or rarely used language features. To see the complete C API provided by R, look at the header file `Rinternals.h`. It's easiest to find and display this file from within R:
 
 ```{r, eval = FALSE}
 rinternals <- file.path(R.home("include"), "Rinternals.h")
@@ -23,6 +21,8 @@ file.show(rinternals)
 ```
 
 All functions are defined with either the prefix `Rf_` or `R_` but are exported without it (unless `#define R_NO_REMAP` has been used).
+
+I do not recommend using C for writing new high-performance code. Instead write C++ with Rcpp. The Rcpp API protects you from many of the historical idiosyncracies of the R API, takes care of memory management for you, and provides many useful helper methods.
 
 ##### Outline
 
@@ -50,7 +50,7 @@ All functions are defined with either the prefix `Rf_` or `R_` but are exported 
 
 To understand existing C code, it's useful to generate simple examples of your own that you can experiment with. To that end, all examples in this chapter use the `inline` package, which makes it extremely easy to compile and link C code to your current R session. Get it by running `install.packages("inline")` in your R session. To easily find the C code associated with internal and primitive functions, you'll need a function from pryr. Get the package with `install_github("hadley/pryr")`
 
-You'll also need a C compiler. Windows users can use Duncan Murdoch's [Rtools](http://cran.r-project.org/bin/windows/Rtools/). Mac users will need the [Xcode command line tools](http://developer.apple.com/). Most Linux distributions will come with the necessary compilers.
+You'll also need a C compiler. Windows users can use [Rtools](http://cran.r-project.org/bin/windows/Rtools/). Mac users will need the [Xcode command line tools](http://developer.apple.com/). Most Linux distributions will come with the necessary compilers.
 
 Under Windows it is necessary that the Rtools executables directory (typically `C:\Rtools\bin`) and the C compiler executables directory (typically `C:\Rtools\gcc-4.6.3\bin`) are included in the Windows `PATH` environment variable. You may need to reboot Windows before R can recognise these values.
 
@@ -168,7 +168,14 @@ dummy()
 
 You might wonder what all the `PROTECT()` calls do. They tell R that we're currently using each object, and not to delete it if the garbage collector is activated. (We don't need to protect objects that R already knows we're using, like function arguments.)
 
-You also need to make sure that every protected object is unprotected. `UNPROTECT()` takes a single integer argument, `n`, and unprotects the last n objects that were protected. The number of protects and unprotects must match. If not, R will warn about a "stack imbalance in .Call".  Other specialised forms of protection are needed in some circumstances: `UNPROTECT_PTR()` unprotects the object pointed to by the `SEXP` s, `PROTECT_WITH_INDEX()` saves an index of the protection location that can be used to replace the protected value using `REPROTECT()`. Consult the R externals section on [garbage collection](http://cran.r-project.org/doc/manuals/R-exts.html#Garbage-Collection) for more details.
+You also need to make sure that every protected object is unprotected. `UNPROTECT()` takes a single integer argument, `n`, and unprotects the last n objects that were protected. The number of protects and unprotects must match. If not, R will warn about a "stack imbalance in .Call".  Other specialised forms of protection are needed in some circumstances: 
+
+* `UNPROTECT_PTR()` unprotects the object pointed to by the `SEXP`s. 
+
+* `PROTECT_WITH_INDEX()` saves an index of the protection location that can 
+  be used to replace the protected value using `REPROTECT()`. 
+  
+Consult the R externals section on [garbage collection](http://cran.r-project.org/doc/manuals/R-exts.html#Garbage-Collection) for more details.
 
 Properly protecting the R objects you allocate is extremely important! Improper protection leads to difficult to diagnose errors, typically segfaults, but other corruption is possible as well. In general, if you allocate a new R object, you must `PROTECT` it.
 
@@ -237,7 +244,7 @@ Note that `base::is.na()` returns `TRUE` for both `NA` and `NaN`s in a numeric v
 
 ### Accessing vector data
 
-There is a helper function for each atomic vector that allows you to access the C array which stores the data in a vector. Use `REAL()`, `INTEGER()`, `LOGICAL()`, `COMPLEX()` and `RAW() to access the C array inside numeric, interger, logical, complex and raw vetors. The following example shows how to use `REAL()` to inspect and modify a numeric vector:
+There is a helper function for each atomic vector that allows you to access the C array which stores the data in a vector. Use `REAL()`, `INTEGER()`, `LOGICAL()`, `COMPLEX()` and `RAW()` to access the C array inside numeric, interger, logical, complex and raw vetors. The following example shows how to use `REAL()` to inspect and modify a numeric vector:
 
 ```{r, cache = TRUE}
 add_one <- cfunction(c(x = "numeric"), "
@@ -363,7 +370,7 @@ These all create R-level objects, so need to be `PROTECT()`ed.
 
 ### Long vectors
 
-As of R 3.0.0, R vectors can have length greater than 2 ^ 32. If you want your code to work with long vectors, this means you shouldn't write code like `int n = length(x)`. Instead use the `x_len_t` type and the `xlength()` function, and write `x_len_t = xlength(x)`.
+As of R 3.0.0, R vectors can have length greater than $2 ^ 32$. This means that vector lengths can no longer be reliably stored in an `int` and if you want your code to work with long vectors, you can't write code like `int n = length(x)`. Instead use the `x_len_t` type and the `xlength()` function, and write `x_len_t n = xlength(x)`.
 
 ## Pairlists {#c-pairlists}
 

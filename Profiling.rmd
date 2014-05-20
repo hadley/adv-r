@@ -1,6 +1,7 @@
 ---
 title: Profiling and benchmarking
 layout: default
+output: bookdown::html_chapter
 ---
 
 ```{r, echo = FALSE}
@@ -25,7 +26,7 @@ This sounds easy, but it's not.
 
 Even experienced programmers have a hard time identifying bottlenecks in their code. Instead of relying on your intuition, you should __profile__ your code: use realistic inputs and measure the run-time of each individual operation. Only once you've identified the most important bottlenecks can you attempt to eliminate them. It's difficult to provide general advice on improving performance, but I try my best with six techniques that can be applied in many situations. I'll also suggest a general strategy for performance optimisation that helps ensure that your faster code will still be correct code.
 
-It's easy to get caught up in trying to remove all bottlenecks. Don't! Your time is valuable and is better spent analysing your data, not eliminating possible inefficiencies in your code. Be pragmatic: don't spend hours of your time to save seconds of computer time. To enforce this advice, you should set a goal time for your code and only optimise only up to that goal. This means you will not eliminate all bottlenecks. Some you will not get to because you've met your goal. Others you may need to pass over and accept either because there is no quick and easy solution or because the code is already well-optimized and no significant improvement is possible. Accept these possibilities and move on to the next candidate.
+It's easy to get caught up in trying to remove all bottlenecks. Don't! Your time is valuable and is better spent analysing your data, not eliminating possible inefficiencies in your code. Be pragmatic: don't spend hours of your time to save seconds of computer time. To enforce this advice, you should set a goal time for your code and optimise only up to that goal. This means you will not eliminate all bottlenecks. Some you will not get to because you've met your goal. Others you may need to pass over and accept either because there is no quick and easy solution or because the code is already well-optimized and no significant improvement is possible. Accept these possibilities and move on to the next candidate.
 
 ##### Outline
 
@@ -87,8 +88,9 @@ h <- function() {
 }
 ```
 
-If we profiled the execution of `f()`, stopping the execution of code every 0.1s, we'd expect a profile like below. Each line represents one "tick" of the profiler (0.1s in this case). You can see the code spends 0.1s running `f()`, then 0.2 running `g()`, then 0.1s running `h()`.
+(I use `pause()` instead of `Sys.sleep()` because `Sys.sleep()` does not appear in profiling outputs because as far as R can tell, it doesn't use up any computing time).
 
+If we profiled the execution of `f()`, stopping the execution of code every 0.1s, we'd see a profile like below. Each line represents one "tick" of the profiler (0.1s in this case), and function calls are nested with `>`. It shows that the code spends 0.1s running `f()`, then 0.2 running `g()`, then 0.1s running `h()`.
 
 ```
 f() 
@@ -97,7 +99,7 @@ f() > g() > h()
 f() > h()
 ```
 
-If we actually profile `f()`, using the code below, we're unlikely to get a result that nice. 
+If we actually profile `f()`, using the code below, we're unlikely to get such a clear result.
 
 ```{r, eval = FALSE}
 tmp <- tempfile()
@@ -108,13 +110,13 @@ Rprof(NULL)
 
 That's because profiling is hard to do accurately without slowing your code down by many orders of magnitude. The compromise that `RProf()` makes, sampling, only has minimal impact on the overall performance, but is fundamentally stochastic. There's some variability in both the accuracy of the timer and in the time taken by each operation, so each time you profile you'll get a slightly different answer. Fortunately, pinpoint accuracy is not needed to identify the slowest parts of your code. 
 
-Rather than focussing on individual calls, we'll visualise aggregates using the lineprof package. There are a number of other options, like `summaryRprof()`, the proftools package and the profr package, but these tools are rather sophisticated. I wrote the `lineprof` package as a simpler way to visualise profiling data. As the name suggests, the fundamental unit of analysis in `lineprof()` is a line of code. This makes lineprof less precise than the alternatives (because a line of code can contain multiple function calls), but it's easier to understand the context.
+Rather than focussing on individual calls, we'll visualise aggregates using the lineprof package. There are a number of other options, like `summaryRprof()`, the proftools package and the profr package, but these tools are beyond the scope of this book. I wrote the `lineprof` package as a simpler way to visualise profiling data. As the name suggests, the fundamental unit of analysis in `lineprof()` is a line of code. This makes lineprof less precise than the alternatives (because a line of code can contain multiple function calls), but it's easier to understand the context.
 
-To use `lineprof`, we first save the code in a file and `source()` it. We then use `lineprof()` to run our function and capture the timing output. Printing this object shows some basic information. For now, we'll just focus on the time column which estimates how long each line took to run and the ref column which tells us which line of code was run. The estimates aren't perfect, but the ratios look about right.  
+To use `lineprof`, we first save the code in a file and `source()` it. Here `profiling-example.R` contains the definition of `f()`, `g()` and `h()`. Note that you _must_ use `source()` to load the code. This is because lineprof uses srcrefs to match up the code to the profile, and the needed srcrefs are only created when you load code from disk. We then use `lineprof()` to run our function and capture the timing output. Printing this object shows some basic information. For now, we'll just focus on the time column which estimates how long each line took to run and the ref column which tells us which line of code was run. The estimates aren't perfect, but the ratios look about right.  
 
 ```{r, eval = FALSE}
 library(lineprof)
-source("code/profiling.R")
+source("profiling-example.R")
 l <- lineprof(f())
 l
 #>    time alloc release dups           ref     src
@@ -216,9 +218,9 @@ mean1 <- function(x) mean(x)
 mean2 <- function(x) sum(x) / length(x)
 ```
 
-I recommend that you keep a record of everything you try, even the failures. If you come back to problem in the future, it'll be useful to see everything you've tried. To do this I often use R Markdown, which makes it easy to intermingle code with detailed comments and notes.
+I recommend that you keep a record of everything you try, even the failures. If a similar problem occurs in the future, it'll be useful to see everything you've tried. To do this I often use R Markdown, which makes it easy to intermingle code with detailed comments and notes.
 
-Next, generate a representative test case. The case should be big enough to capture the essence of your problem but small enough that it takes only a few seconds to run. You don't want it to take too long because you'll need to run the test case many times to compare approaches. On the other hand, you don't want the case to be too small because then results might not generalise to the real problem. 
+Next, generate a representative test case. The case should be big enough to capture the essence of your problem but small enough that it takes only a few seconds to run. You don't want it to take too long because you'll need to run the test case many times to compare approaches. On the other hand, you don't want the case to be too small because then results might not scale up to the real problem. 
 
 Use this test case to quickly check that all variants return the same result. An easy way to do so if with `stopifnot()` and `all.equal()`. For real problems with fewer possible outputs, you may need more tests to make sure that an approach doesn't accidentally return the correct answer. That's unlikely for the mean.
 
@@ -261,7 +263,7 @@ Once you've organised your code and captured all the variations you can think of
 
 Otherwise, the challenge is describing your bottleneck in a way that helps you find related problems and solutions. Knowing the name of the problem or its synonyms will make this search much easier. But because you don't know what it's called, it's hard to search for it! By reading broadly about statistics and algorithms, you can build up your own knowledge base over time. Alternatively, ask others. Talk to your colleagues and brainstorm some possible names, then search on Google and Stack Overflow. It's often helpful to restrict your search to R related pages. For Google, try [rseek](http://www.rseek.org/). For Stack Overflow, restrict your search by including the R tag, `[R]`, in your search.
 
-As discussed above, record all solutions that you find, not just those that immediately appear to be faster. Some solutions might be initially slower, but because they are easier to optimise they end up being faster. You may also be able to combine the fastest parts from different approaches. If you've found a solution that's fast enough, congratulations! Otherwise, read on.
+As discussed above, record all solutions that you find, not just those that immediately appear to be faster. Some solutions might be initially slower, but because they are easier to optimise they end up being faster. You may also be able to combine the fastest parts from different approaches. If you've found a solution that's fast enough, congratulations! If appropriate, you may want to share your solution with the R community. Otherwise, read on.
 
 ### Exercises
 
@@ -312,7 +314,14 @@ Other functions will do less work if you give them more information about the pr
 * `interaction()`: if you only need combinations that exist in the data, use
   `drop = TRUE`.
 
-Sometimes you can make a function faster by avoiding method dispatch. As we saw in ([Extreme dynamism](#extreme-dynamism)), method dispatch in R can be costly. If you're calling a method in a tight loop, you can avoid some of the costs by doing the method lookup only once. For S3, you can do this by calling `generic.class()` instead of `generic()`. For S4, you can do this by using `findMethod()` to find the method, saving it to a variable, and then calling that function. For example, calling `mean.default()` quite a bit faster than calling `mean()` for small vectors:
+Sometimes you can make a function faster by avoiding method dispatch. As we saw in ([Extreme dynamism](#extreme-dynamism)), method dispatch in R can be costly. If you're calling a method in a tight loop, you can avoid some of the costs by doing the method lookup only once: 
+
+* For S3, you can do this by calling `generic.class()` instead of `generic()`. 
+
+* For S4, you can do this by using `findMethod()` to find the method, saving 
+  it to a variable, and then calling that function. 
+
+For example, calling `mean.default()` quite a bit faster than calling `mean()` for small vectors:
 
 ```{r}
 x <- runif(1e2)
@@ -323,7 +332,7 @@ microbenchmark(
 )
 ```
 
-This optimisation is a little risky. While `mean.default()` is almost twice as fast, it'll fail in surprising ways if `x` is not a numeric vector. You should only use it if know for sure what `x` is.
+This optimisation is a little risky. While `mean.default()` is almost twice as fast, it'll fail in surprising ways if `x` is not a numeric vector. You should only use it if you know for sure what `x` is.
 
 Knowing that you're dealing with a specific type of input can be another way to write faster code. For example, `as.data.frame()` is quite slow because it coerces each element into a data frame and then `rbind()`s them together. If you have a named list with vectors of equal length, you can directly transform it into a data frame. In this case, if you're able to make strong assumptions about your input, you can write a method that's about 20x faster than the default.
 
@@ -354,7 +363,7 @@ To come up with this minimal method, I carefully read through and then rewrote t
 
 The following example shows a progressive simplification of the `diff()` function if you only want computing differences between adjacent values. At each step, I replace one argument with a specific case, and then check to see that the function still works. The initial function is long and complicated, but by restricting the arguments I not only make it around twice as fast, I also make it easier to understand.
 
-First, I take output of `diff` and reformat it to my style:
+First, I take the code of `diff()` and reformat it to my style:
 
 ```{r}
 diff1 <- function (x, lag = 1L, differences = 1L) {
@@ -384,7 +393,7 @@ diff1 <- function (x, lag = 1L, differences = 1L) {
 }
 ```
 
-Next, I assume assume vector input. This allows me to remove the `is.matrix()` test and the method that use matrix subsetting.
+Next, I assume assume vector input. This allows me to remove the `is.matrix()` test and the method that uses matrix subsetting.
 
 ```{r}
 diff2 <- function (x, lag = 1L, differences = 1L) {
@@ -499,14 +508,14 @@ microbenchmark(
 
 1.  What's the difference between `rowSums()` and `.rowSums()`?
 
-1.  Make a faster version of `chisq.test()` that only computes the Chi-square
+1.  Make a faster version of `chisq.test()` that only computes the chi-square
     test statistic when the input is two numeric vectors with no missing
     values. You can try simplifying `chisq.test()` or by coding from the 
     [mathematical definition](http://en.wikipedia.org/wiki/Pearson%27s_chi-squared_test).
 
 1.  Can you make a faster version of `table()` for the case of an input of
     two integer vectors with no missing values? Can you use it to
-    speed up your Chi-square test?
+    speed up your chi-square test?
 
 1.  Imagine you want to compute the bootstrap distribution of a sample
     correlation using `cor_df()` and the data in the example below. Given that you 
@@ -555,14 +564,18 @@ Vectorised functions that apply to many common performance bottlenecks include:
   a single step. If `x` is a vector, matrix or data frame then 
   `x[is.na(x)] <- 0` will replace all missing values with 0.
 
+* If you're extracting or replacing values in scattered locations in a matrix
+  or data frame, subset with an integer matrix. 
+  See [matrix-indexing](#matices-and-arrays) for more details.
+
 * If you're converting continuous values to categorical make sure you know
   how to use `cut()` and `findInterval()`.
 
 * Be aware of vectorised functions like `cumsum()` and `diff()`.
 
-Matrix algebra is general example of vectorisation. There loops are executed by highly tuned external libraries like BLAS. If you can figure out a way to use matrix algebra to solve your problem, you'll often get a very fast solution. Unfortunately, the ability to solve problems with matrix algebra is a product of experience. While this skill is something you'll develop over time, a good place to start is ask people with experience in your domain.
+Matrix algebra is general example of vectorisation. There loops are executed by highly tuned external libraries like BLAS. If you can figure out a way to use matrix algebra to solve your problem, you'll often get a very fast solution. The ability to solve problems with matrix algebra is a product of experience. While this skill is something you'll develop over time, a good place to start is ask people with experience in your domain.
 
-The downside of vectorisation is that it makes it harder to predict how operations will scale. The following example measures how long it takes to use character subsetting to lookup 1, 10 and 100 elements from a list. You might expect that looking up 10 elements would take 10x as long as looking up 1, and that looking up 100 elements would take 10x longer again. In fact, the following example shows that it only takes about 8 times longer to look up 100 elements than it does to look up 1.
+The downside of vectorisation is that it makes it harder to predict how operations will scale. The following example measures how long it takes to use character subsetting to lookup 1, 10 and 100 elements from a list. You might expect that looking up 10 elements would take 10x as long as looking up 1, and that looking up 100 elements would take 10x longer again. In fact, the following example shows that it only takes about 9 times longer to look up 100 elements than it does to look up 1.
 
 ```{r}
 lookup <- setNames(as.list(sample(100, 26)), letters)
@@ -673,7 +686,7 @@ Of course, a for loop computes, but doesn't save the values. We'll use `apply()`
 compT <- function(x, grp){
   t.test(x[grp == 1], x[grp == 2])$stat
 }
-system.time(apply(X, 1, compT, grp = grp))
+system.time(t1 <- apply(X, 1, compT, grp = grp))
 ```
 
 How can we make this faster? First, we could try doing less work. If you look at the source code of `stats:::t.test.default()`, you'll see that it does a lot more than just compute the t-statistic. It also computes the p-value and formats the output for printing. We can try to make our code faster by stripping out those pieces.
@@ -682,7 +695,7 @@ How can we make this faster? First, we could try doing less work. If you look at
 my_t <- function(x, grp) {
   t_stat <- function(x) {
     m <- mean(x)
-    length <- length(x)
+    n <- length(x)
     var <- sum((x - m) ^ 2) / (n - 1)
 
     list(m = m, n = n, var = var)
@@ -691,13 +704,14 @@ my_t <- function(x, grp) {
   g1 <- t_stat(x[grp == 1])
   g2 <- t_stat(x[grp == 2])
 
-  pooled_se <- sqrt(g1$var / g1$n + g2$var / g2$n)
-  (g1$m - g2$m) / pooled_se
+  se_total <- sqrt(g1$var / g1$n + g2$var / g2$n)
+  (g1$m - g2$m) / se_total
 }
-system.time(apply(X, 1, my_t, grp = grp))
+system.time(t2 <- apply(X, 1, my_t, grp = grp))
+stopifnot(all.equal(t1, t2))
 ```
 
-This gives us about a 5x speed improvement.
+This gives us about a 6x speed improvement.
 
 Now that we have a fairly simple function, we can make it faster still by vectorising it. Instead of looping over the array outside the function, we will modify `t_stat()` to work with a matrix of values. Thus, `mean()` becomes `rowMeans()`, `length()` becomes `ncol()`, and `sum()` becomes `rowSums()`. The rest of the code stays the same.
 
@@ -714,10 +728,11 @@ rowtstat <- function(X, grp){
   g1 <- t_stat(X[, grp == 1])
   g2 <- t_stat(X[, grp == 2])
 
-  pooled_se <- sqrt(g1$var / g1$n + g2$var / g2$n)
-  (g1$m - g2$m) / pooled_se
+  se_total <- sqrt(g1$var / g1$n + g2$var / g2$n)
+  (g1$m - g2$m) / se_total
 }
-system.time(rowtstat(X, grp))
+system.time(t3 <- rowtstat(X, grp))
+stopifnot(all.equal(t1, t3))
 ```
 
 That's much faster! It's at least 40x faster than our previous effort, and around 1000x faster than where we started.
