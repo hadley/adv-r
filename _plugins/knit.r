@@ -15,7 +15,7 @@ if (file.access(path, 4) != 0) {
 }
 
 # FIXME: run update_links(md_path)
-html_path <- render(path, html_chapter(), quiet = TRUE)
+html_path <- render(path, html_chapter(raw = TRUE), quiet = TRUE)
 
 read_file <- function(path) {
   size <- file.info(path)$size
