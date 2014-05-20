@@ -1,6 +1,5 @@
 library(bookdown)
 library(rmarkdown)
-library(tools)
 
 # Render chapters into tex  ----------------------------------------------------
 needs_update <- function(src, dest) {
@@ -27,16 +26,19 @@ lapply(chapters, render_chapter)
 pandoc_convert(wd = "book",
   "advanced-r.md", output = "tex/advanced-r.tex",
   options = c(
-    "--template", system.file("book-template.tex", package = "bookdown")
+    "--template", system.file("book-template.tex", package = "bookdown"),
+    "--table-of-contents"
   )
 )
 file.copy("diagrams/", "book/tex/", recursive = TRUE)
 file.copy("screenshots/", "book/tex/", recursive = TRUE)
+file.rename("figures", "book/tex/figures")
 
-pandoc_convert(wd = "book/tex", "advanced-r.tex", output = "advanced-r.pdf",
-  options = c("--latex-engine=xelatex"))
-
-# Build entire latex file
+# Build tex file ---------------------------------------------------------------
+# (build with Rstudio to find/diagnose errors)
 old <- setwd("book/tex")
-texi2pdf("advanced-r.tex", quiet = FALSE, clean = FALSE)
-# setwd(old)
+system("xelatex advanced-r -interaction=batchmode")
+system("xelatex advanced-r -interaction=batchmode")
+setwd(old)
+
+file.copy("book/tex/advanced-r.pdf", "book/advanced-r.pdf")
