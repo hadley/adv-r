@@ -1,6 +1,6 @@
 #!/usr/bin/Rscript
-source("_plugins/rmd2html.r")
-source("_plugins/index.R")
+library(rmarkdown)
+library(bookdown)
 library(methods)
 
 args <- commandArgs(trailingOnly = TRUE)
@@ -14,5 +14,11 @@ if (file.access(path, 4) != 0) {
   stop("Can't read path ", path, call. = FALSE)
 }
 
-html_path <- rmd2html(path, cache = TRUE)
+# FIXME: run update_links(md_path)
+html_path <- render(path, html_chapter(), quiet = TRUE)
+
+read_file <- function(path) {
+  size <- file.info(path)$size
+  readChar(path, size, useBytes = TRUE)
+}
 cat(read_file(html_path))
