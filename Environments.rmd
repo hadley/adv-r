@@ -8,17 +8,36 @@ output: bookdown::html_chapter
 
 ## Introduction
 
-The environment is the data structure that powers scoping in R. An environment binds names to values, and understanding how they work will help you understand scoping more deeply. Environments are also useful because they have reference semantics. 
+The environment is the data structure that powers scoping in R. This chapter dives deep into environments, describing their structure in depth, and using them to explain in detail the four rules of scoping described in [lexical scoping](#lexical-scoping).
 
-The binding between names and values are usually created with `<-` or `assign()`. Other functions, like `delayedBinding()` and `activeBinding()`, allow you to create special bindings that work in a different way. These are rarely useful, but are fun to learn about and play with.
+Environments are can also be useful data structures because they have reference semantics. This is not needed most of the time, but can be handy for some problems that are hard to solve otherwise. There are also a few details of names and binding 
 
 ##### Outline
+
+* [Environment basics](#env-basics) introduces you to the basic properties
+  of an environment and shows how to create your own.
+  
+* [Recursing over environments](#env-recursion) provides a useful recursive
+  template for computing with environments, illustrating the idea with a useful
+  function.
+  
+* [Function environments](#function-envs) revises R's scoping rules in more 
+  depth, showing how they correspond to four types of environment associated 
+  with functions.
+  
+* [Binding names to values](#binding) describes the rules that names must
+  follow (and how to bend them), and shows some variations on binding a 
+  name and value.
+
+* [Explicit environments](#explicit-envs) discusses three problems where
+  environments are useful data structures in their own right, independent
+  of the role they place in scoping.
 
 ##### Prerequisities
 
 This chapter uses many functions from the `pryr` package to pry open R and look inside at the messy details. You can install `pryr` by running `devtools::install_github("hadley/pryr")`
 
-## Environment basics
+## Environment basics {#env-basics}
 
 The job of an environment is to associate, or __bind__, a set of names to a set of values. You can think of an environment as a bag of names:
 
@@ -200,7 +219,7 @@ globalenv() == environment()
     ancestors of `globalenv()` include `baseenv()` and `emptyenv()`. Use the 
     same basic idea to implement your own version of `search()`.
 
-## Recursing over environments
+## Recursing over environments {#env-recursion}
 
 Environments form a tree, so it's often convenient to write a recursive function. This section shows you how by applying your new knowledge of environments to understand the helpful `plyr::where()`. Given a name, `where()` that finds the environment _where_ it's defined, using R's regular scoping rules:
 
@@ -317,7 +336,7 @@ end_sidebar()
 1.  Write your own version of `exists(inherits = FALSE)` (Hint: use `ls()`). 
     Write a recursive version that behaves like `exists(inherits = TRUE)`.
 
-## Function environments
+## Function environments {#function-envs}
 
 Most of the time, you do not create environments directly. They are created as a consequence of working with functions. This section discusses the four types of environments associated with a function: enclosing, binding, execution, and calling. 
 
@@ -536,7 +555,128 @@ Looking up variables in the calling environment rather than in the enclosing env
     about functions. Show where the function was found and what environment 
     it was defined in.
 
-## Explicit environments
+## Binding names to values {#binding}
+
+Assignment is the act of binding (or rebinding) a name to a value in an environment. It is the counterpart to scoping, the set of rules that determines how to find the value associated with a name. Compared to most languages, R has extremely flexible tools for binding names to values. In fact, you can not only bind values to names, but you can also bind expressions (promises) or even functions, so that every time you access the value associated with a name, you get something different!
+
+You have probably used regular assignment in R thousands of times. Regular assignment creates a binding between a name and an object in the current environment. Names usually consist of letters, digits, `.` and `_`, and can't with `_`.  If you try to use a name that doesn't follow these rules, you get an error:
+
+```{r, eval = FALSE}
+_abc <- 1
+# Error: unexpected input in "_"
+```
+
+Reserved words (like `TRUE`, `NULL`, `if`, and `function`) follow these rules but are reserved by R for other purposes:
+
+```{r, eval = FALSE}
+if <- 10
+#> Error: unexpected assignment in "if <-"
+```
+
+(A complete list of reserved words can be found in `?Reserved`)
+
+It's possible to override the usual rules and use a name with any sequence of characters by surrounding the name with backticks:
+
+```{r, eval = FALSE}
+`a + b` <- 3
+`:)` <- "smile"
+`    ` <- "spaces"
+ls()
+#  [1] "    "   ":)"     "a + b"
+`:)`
+#  [1] "smile"
+```
+
+```{r, echo = FALSE}
+begin_sidebar("Quotes")
+```
+You can also create non-syntactic bindings using single and double quotes instead of backticks, but I don't recommend it. The ability to use strings on the left hand side of the assignment error is a historical artefact, needed before R supported backticks.
+
+```{r, echo = FALSE}
+end_sidebar()
+```
+
+The regular assignment arrow, `<-`, always creates a variable in the current environment. The deep assignment arrow, `<<-`, never creates a variable in the current environment, but instead modifies an existing variable found by walking up the parent environments. You can also do deep binding with `assign()`: `name <<- value` is equivalent to `assign("name", value, inherits = TRUE)`.
+
+```{r}
+x <- 0
+f <- function() {
+  x <<- 1
+}
+f()
+x
+```
+
+If `<<-` doesn't find an existing variable, it will create one in the global environment. This is usually undesirable, because global variables introduce non-obvious dependencies between functions. 
+
+`<<-` is most often used in conjunction with a closure, as described in [Closures](#closures).
+
+There are two other special types of binding: delayed and active:
+
+*  Rather than assigning the result of an expression immediately, a 
+   __delayed binding__ creates and stores a promise to evaluate the expression
+   when needed. We can create delayed bindings with the special assignment
+   operator `%<d-%`, provided by the pryr package.
+
+  ```{r, cache = TRUE}
+  library(pryr)
+  system.time(b %<d-% {Sys.sleep(1); 1})
+  system.time(b)
+  ```
+
+  `%<d-%` is a wrapper around the base `delayedAssign()` function, which you 
+  may need to use directly if you need more control. 
+  
+  Delayed bindings are used to implement `autoload()`, which makes R behave as 
+  if the package data is in memory, even though it's only loaded from disk when
+  you ask for it.
+  
+* __Active__ are not bound to a constant object. Instead, they're re-computed
+  every time they're accessed:
+
+  ```{r}
+  x %<a-% runif(1)
+  x
+  x
+  ```
+
+  `%<a-%` is a wrapper for the base function `makeActiveBinding()`. You may 
+  want to use this function directly if you want more control. Active 
+  bindings are used to implement reference class fields.
+
+### Exercises
+
+1.  What does this function do? How does it differ from `<<-` and why
+    might you prefer it?
+    
+    ```{r, error = TRUE}
+    rebind <- function(name, value, env = parent.frame()) {
+      if (identical(env, emptyenv())) {
+        stop("Can't find ", name, call. = FALSE)
+      } else if (exists(name, envir = env, inherits = FALSE)) {
+        assign(name, value, envir = env)
+      } else {
+        rebind(name, value, parent.env(env))
+      }
+    }
+    rebind("a", 10)
+    a <- 5
+    rebind("a", 10)
+    a
+    ```
+
+1.  Create a version of `assign()` that will only bind new names, never 
+    re-bind old names. Some programming languages only do this, and are known 
+    as [single assignment laguages][single assignment].
+
+1.  Write an assignment function that can do active, delayed and locked 
+    bindings. What might you call it? What arguments should it take? Can you 
+    guess which sort of assignment it should do based on the input?
+
+[single assignment]:http://en.wikipedia.org/wiki/Assignment_(computer_science)#Single_assignment
+
+
+## Explicit environments {#explicit-envs}
 
 As well as powering scoping, environments are also useful data structures in their own right because they have __reference semantics__.  Unlike most objects in R, when you modify an environment, it does not make a copy. For example, look at this `modify()` function.
 
@@ -613,148 +753,3 @@ Returning the old value from setter functions is a good pattern because it makes
 ### As a hashmap
 
 A hashmap is a data structure that takes constant, O(1), time to find an object based on its name. Environments provide this behaviour by default, so can be used to simulate a hashmap. See the CRAN package `hash` for a complete development of this idea.
-
-## Binding names to values {#binding}
-
-Assignment is the act of binding (or rebinding) a name to a value in an environment. It is the counterpart to scoping, the set of rules that determines how to find the value associated with a name. Compared to most languages, R has extremely flexible tools for binding names to values. In fact, you can not only bind values to names, but you can also bind expressions (promises) or even functions, so that every time you access the value associated with a name, you get something different!
-
-The remainder of this section will discuss the four main ways of binding names to values in R:
-
-* With the regular behaviour, `name <- value`, the name is immediately 
-  associated with the value in the current environment. `assign("name", value)` 
-  works similarly, but allows assignment in any environment.
-
-* The double arrow, `name <<- value`, assigns in a similar way to variable 
-  lookup, so that `i <<- i + 1` modifies the binding of the original `i`, which 
-  is not necessarily in the current environment.
-
-* Lazy assignment, `delayedAssign("name", expression)`, binds an expression 
-  that isn't evaluated until you look up the name.
-
-* Active assignment, `makeActiveBinding("name", function, environment)` binds 
-  the name to a function, so it is "active" and can return a different value 
-  each time the name is found.
-
-### Regular binding
-
-You have probably used regular assignment in R thousands of times. Regular assignment creates a binding between a name and an object in the current environment. Names usually consist of letters, digits, `.` and `_`, and can't with `_`.  If you try to use a name that doesn't follow these rules, you get an error:
-
-```{r, eval = FALSE}
-_abc <- 1
-# Error: unexpected input in "_"
-```
-
-Reserved words (like `TRUE`, `NULL`, `if`, and `function`) follow these rules but are reserved by R for other purposes:
-
-```{r, eval = FALSE}
-if <- 10
-#> Error: unexpected assignment in "if <-"
-```
-
-(A complete list of reserved words can be found in `?Reserved`)
-
-It's possible to override the usual rules and use a name with any sequence of characters by surrounding the name with backticks:
-
-```{r, eval = FALSE}
-`a + b` <- 3
-`:)` <- "smile"
-`    ` <- "spaces"
-ls()
-#  [1] "    "   ":)"     "a + b"
-`:)`
-#  [1] "smile"
-```
-
-
-```{r, echo = FALSE}
-begin_sidebar("Quotes")
-```
-You can also create non-syntactic bindings using single and double quotes instead of backticks, but I don't recommend it. The ability to use strings on the left hand side of the assignment error is a historical artefact, needed before R supported backticks.
-
-```{r, echo = FALSE}
-end_sidebar()
-```
-
-There are three variations of regular binding: deep binding, delayed binding and active binding.
-
-### Deep binding
-
-The regular assignment arrow, `<-`, always creates a variable in the current environment. The deep assignment arrow, `<<-`, never creates a variable in the current environment, but instead modifies an existing variable found by walking up the parent environments. You can also do deep binding with `assign()`: `name <<- value` is equivalent to `assign("name", value, inherits = TRUE)`.
-
-```{r}
-x <- 0
-f <- function() {
-  x <<- 1
-}
-f()
-x
-```
-
-If `<<-` doesn't find an existing variable, it will create one in the global environment. This is usually undesirable, because global variables introduce non-obvious dependencies between functions.
-
-[Closures](#closures) shows why you might want to use `<<-` in practice.
-
-### Delayed bindings
-
-Another special type of assignment is a delayed binding: rather than assigning the result of an expression immediately, it creates and stores a promise to evaluate the expression when needed (much like the default lazy evaluation of arguments in R functions). We can create delayed bindings with the special assignment operator `%<d-%`, provided by the pryr package.
-
-```{r, cache = TRUE}
-library(pryr)
-system.time(b %<d-% {Sys.sleep(1); 1})
-system.time(b)
-```
-
-Note that we need to be careful with more complicated expressions because user-created infix functions have very high precedence. They're higher in precedence than every other infix operator apart from `^`, `$`, `@`, and `::`. For example, `x %<d-% a + b` is interpreted as `(x %<d-% a) + b`, so we need to use parentheses ourselves:
-
-```{r}
-x %<d-% (a + b)
-a <- 5
-b <- 5
-x
-```
-
-`%<d-%` is a wrapper around the base `delayedAssign()` function, which you may need to use directly if you need more control. One application of delayed bindings `autoload()`, a function that powers `library()`. `autoload()` makes R behave as if the code and data in a package is loaded in memory, but it doesn't actually load it until you call one of the functions or access a dataset. This is the way that data sets in most packages work. You can call (e.g.) `diamonds` after `library(ggplot2)` and it just works, but `diamonds` isn't loaded into memory until you ask for it..
-
-### Active bindings
-
-You can create __active__ bindings where the value is recomputed every time you access the name:
-
-```{r}
-x %<a-% runif(1)
-x
-x
-```
-
-`%<a-%` is a wrapper for the base function `makeActiveBinding()`. You may want to use this function directly if you want more control. Active bindings are fun to play with, but aren't often that useful.
-
-### Exercises
-
-1.  What does this function do? How does it differ from `<<-` and why
-    might you prefer it?
-    
-    ```{r, error = TRUE}
-    rebind <- function(name, value, env = parent.frame()) {
-      if (identical(env, emptyenv())) {
-        stop("Can't find ", name, call. = FALSE)
-      } else if (exists(name, envir = env, inherits = FALSE)) {
-        assign(name, value, envir = env)
-      } else {
-        rebind(name, value, parent.env(env))
-      }
-    }
-    rebind("a", 10)
-    a <- 5
-    rebind("a", 10)
-    a
-    ```
-
-1.  Create a version of `assign()` that will only bind new names, never 
-    re-bind old names. Some programming languages only do this, and are known 
-    as [single assignment laguages][single assignment].
-
-1.  Write an assignment function that can do active, delayed and locked 
-    bindings. What might you call it? What arguments should it take? Can you 
-    guess which sort of assignment it should do based on the input?
-
-
-[single assignment]:http://en.wikipedia.org/wiki/Assignment_(computer_science)#Single_assignment
