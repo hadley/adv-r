@@ -1,6 +1,7 @@
 ---
 title: Exceptions and debugging
 layout: default
+output: bookdown::html_chapter
 ---
 
 # Debugging, condition handling and defensive programming
@@ -27,9 +28,17 @@ Conditions are usually displayed prominently, in a bold font or coloured red dep
 
 Condition handling tools, like `try()`, `tryCatch()` and `withCallingHandlers()`, allow you to take specific actions when a condition occurs. For example, if you're fitting many models, you might want to continue fitting the others even if one fails to converge. R offers an exceptionally powerful condition handling system based on ideas from Common Lisp, but it's currently not very well documented or often used. This chapter will introduce you to the most important basics, but if you want to learn more, I recommend the following two sources:
 
-* [A prototype of a condition system for R](http://homepage.stat.uiowa.edu/~luke/R/exceptions/simpcond.html) by Robert Gentleman and Luke Tierney. This describes an early version of R's condition system. While the implementation has changed somewhat since this document was written, it provides a good overview of how the pieces fit together, and some motivation for its design.
+* [A prototype of a condition system for R](http://homepage.stat.uiowa.edu/~luke/R/exceptions/simpcond.html) by Robert Gentleman and Luke Tierney. 
+  This describes an early version of R's condition system. While the 
+  implementation has changed somewhat since this document was written, it
+  provides a good overview of how the pieces fit together, and some 
+  motivation for its design.
 
-* [Beyond Exception Handling: Conditions and Restarts](http://www.gigamonkeys.com/book/beyond-exception-handling-conditions-and-restarts.html) by Peter Seibel. This describes exception handling in Lisp, which happens to be very similar to R's approach. It provides useful motivation and more sophisticated examples. I have provided an R translation of the chapter at <http://adv-r.had.co.nz/beyond-exception-handling.html>.
+* [Beyond Exception Handling: Conditions and Restarts](http://www.gigamonkeys.com/book/beyond-exception-handling-conditions-and-restarts.html) 
+  by Peter Seibel. This describes exception handling in Lisp, which happens 
+  to be very similar to R's approach. It provides useful motivation and 
+  more sophisticated examples. I have provided an R translation of the 
+  chapter at <http://adv-r.had.co.nz/beyond-exception-handling.html>.
 
 The chapter concludes with a discussion of "defensive" programming: ways to avoid common errors before they occur. In the short run you'll spend more time writing code, but in the long run you'll save time because error messages will be more informative and will let you narrow in on the root cause more quickly. The basic principle of defensive programming is to "fail fast", to raise an error as soon as something goes wrong. In R, this takes three particular forms: checking that inputs are correct, avoiding non-standard evaluation, and avoiding functions that can return different types of output.
 
@@ -37,8 +46,7 @@ The chapter concludes with a discussion of "defensive" programming: ways to avoi
 
 > Finding your bug is a process of confirming the many things
 > that you believe are true — until you find one which is not
-> true. \
-> — Norm Matloff
+> true. — Norm Matloff
 
 Debugging code is challenging. Many bugs are subtle and hard to find. Indeed, if a bug was obvious, you probably would've been able to avoid it in the first place. While it's true that with a good technique, you can productively debug a problem with just `print()`, there are times when additional help would be welcome. In this section, we'll discuss some useful tools, which R and RStudio provide, and outline a general procedure for debugging.
 
@@ -133,23 +141,27 @@ f(10)
 
 When we run this code in Rstudio we see:
 
-![Initial traceback display](screenshots/traceback-hidden.png)
+```{r, echo = FALSE}
+embed_png("screenshots/traceback-hidden.png", dpi = 220)
+```
 
-f(10) produced an error in "i".  To the right of the error message, two options appear: "Show Traceback" and "Rerun with Debug".  If you click "Show traceback" you see:
+Two options appear to the right of the error message: "Show Traceback" and "Rerun with Debug".  If you click "Show traceback" you see:
 
-![Traceback display after clicking "show traceback"](screenshots/traceback-shown.png)
+```{r, echo = FALSE}
+embed_png("screenshots/traceback-shown.png", dpi = 220)
+```
 
 If you're not using Rstudio, you can use `traceback()` to get the same information:
 
 ```{r, eval = FALSE}
 traceback()
-# 4: i(c) at error.R#3
-# 3: h(b) at error.R#2
-# 2: g(a) at error.R#1
+# 4: i(c) at exceptions-example.R#3
+# 3: h(b) at exceptions-example.R#2
+# 2: g(a) at exceptions-example.R#1
 # 1: f(10)
 ```
 
-You read the call stack from bottom to top: the initial call is `f()`, which eventually calls `i()` which triggers the error. If you're calling code that you `source()`d into R, the traceback will also display the location of the function, in the form `filename.r#linenumber`. These are clickable in Rstudio, and will take you to the corresponding line of code in the editor.
+Read the call stack from bottom to top: the initial call is `f()`, which calls `g()`, then `h()`, then `i()`, which triggers the error. If you're calling code that you `source()`d into R, the traceback will also display the location of the function, in the form `filename.r#linenumber`. These are clickable in Rstudio, and will take you to the corresponding line of code in the editor.
 
 Sometimes this is enough information to let you track down the error and fix it. However, it's usually not. `traceback()` shows you where the error occurred, but not why. The next useful tool is the interactive debugger, which allows you to pause execution of a function and interactively explore its state.
 
@@ -157,10 +169,17 @@ Sometimes this is enough information to let you track down the error and fix it.
 
 The easiest way to enter the interactive debugger is through RStudio's "Rerun with Debug" tool. This reruns the command that created the error, pausing execution where the error occurred. You're now in an interactive state inside the function, and you can interact with any object defined there. You'll see the corresponding code in the editor (with the statement that will be run next highlighted), objects in the current environment in the "Environment" pane, the call stack in a "Traceback" pane, and you can run arbitrary R code in the console.
 
-As well as any regular R function, there are a few special commands you can use in debug mode. You can access them either with the Rstudio toolbar (![](screenshots/debug-toolbar.png)) or with the keyboard:
+As well as any regular R function, there are a few special commands you can use in debug mode. You can access them either with the Rstudio toolbar (`r embed_png("screenshots/debug-toolbar.png", dpi = 220)`) or with the keyboard:
 
 * Next, `n`: executes the next step in the function. Be careful if you have a
   variable named `n`; to print it you'll need to do `print(n)`.
+
+* Step into, `r embed_png("screenshots/step-into.png", dpi = 220)` or `s`: 
+  works like next, but if the next step is a function, it will step into that
+  function so you can work through each line.
+
+* Finish, `r embed_png("screenshots/finish-loop.png", dpi = 220)` or `f`: 
+  finishes execution of the current loop or function.
 
 * Continue, `c`: leaves interactive debugging and continues regular execution
   of the function. This is useful if you've fixed the bad state and want to
@@ -230,12 +249,13 @@ To reset error behaviour to the default, use `options(error = NULL)`. Then error
 
 ### Browsing arbitrary code
 
-As well as entering an interactive console on error, you can enter it at an arbitrary code location by using either an Rstudio breakpoint or `browser()`. You can set a breakpoint in Rstudio by clicking to the left of the line number, or pressing `Shift + F9`, or equivalently, add `browser()` when you want execution to pause. Breakpoints behave similarly to `browser()` but they are easier to set (one click instead of nine key presses), and you don't run the risk of accidentally including a `browser()` statement in your source code. There are two small downsides to breakpoints:
+As well as entering an interactive console on error, you can enter it at an arbitrary code location by using either an Rstudio breakpoint or `browser()`. You can set a breakpoint in Rstudio by clicking to the left of the line number, or pressing `Shift + F9`. Equivalently, add `browser()` where you want execution to pause. Breakpoints behave similarly to `browser()` but they are easier to set (one click instead of nine key presses), and you don't run the risk of accidentally including a `browser()` statement in your source code. There are two small downsides to breakpoints:
 
-* There are a few unusual situations in which breakpoints will not work: read [breakpoint troubleshooting](http://www.rstudio.com/ide/docs/debugging/breakpoint-troubleshooting) for more details.
+* There are a few unusual situations in which breakpoints will not work: 
+  read [breakpoint troubleshooting](http://www.rstudio.com/ide/docs/debugging/breakpoint-troubleshooting) for more details.
 
-* RStudio currently does not support conditional breakpoints, whereas you can
-  always put `browser()` inside an `if` statement.
+* RStudio currently does not support conditional breakpoints, whereas you 
+  can always put `browser()` inside an `if` statement.
 
 As well as adding `browser()` yourself, there are two other functions that will add it to code:
 
@@ -309,7 +329,7 @@ There are other ways for a function to fail apart from throwing an error or retu
     # 1: message2error(g())
     ```
 
-    As with warnings, you'll need to ignore some of the calls on the tracback
+    As with warnings, you'll need to ignore some of the calls on the traceback
     (i.e. the first two and the last seven).
 
 * A function might never return. This is particularly hard to debug
@@ -399,7 +419,7 @@ results <- lapply(elements, log)
 results <- lapply(elements, function(x) try(log(x)))
 ```
 
-There isn't a built-in function for testing for this class, so we'll define one. Then you can easily find the locations of errors with `sapply()` (as discussed in [Functions](#functions)), and extract the successes or look at the inputs that lead to failures.
+There isn't a built-in function to test for the try-error class, so we'll define one. Then you can easily find the locations of errors with `sapply()` (as discussed in [Functionals](#functionals)), and extract the successes or look at the inputs that lead to failures.
 
 ```{r}
 is.error <- function(x) inherits(x, "try-error")
@@ -419,13 +439,13 @@ default <- NULL
 try(default <- read.csv("possibly-bad-input.csv"), silent = TRUE)
 ```
 
-There is also `failwith()`, which makes this strategy even easier to implement. (See [Function Operators](#output-fos) for more details).
+There is also `plyr::failwith()`, which makes this strategy even easier to implement. See [Function Operators](#output-fos) for more details.
 
 ### Handle conditions with `tryCatch()`
 
 `tryCatch()` is a general tool for handling conditions: in addition to errors, you can take different actions for warnings, messages and interrupts.  You've seen errors (made by `stop()`), warnings (`warning()`) and messages (`message()`) before, but interrupts are new. They can't be generated directly by the programmer, but are raised when the user attempts to terminate execution by pressing Ctrl + Break, Escape, or Ctrl + C (depending on the platform).
 
-With `tryCatch()` you map conditions to handlers, named functions that are passed the condition as an input. If a condition is signalled, `tryCatch` will call the first handler whose name matches one of the classes of the condition. The only useful built-in names are `error`, `warning`, `message`, `interrupt` and the catch-all `condition`. A handler function can do anything, but typically it will either return a value or create a more informative error message. For example, the `show_condition()` function below sets up handlers that return the type of condition signalled:
+With `tryCatch()` you map conditions to __handlers__, named functions that are passed the condition as an input. If a condition is signalled, `tryCatch()` will call the first handler whose name matches one of the classes of the condition. The only useful built-in names are `error`, `warning`, `message`, `interrupt` and the catch-all `condition`. A handler function can do anything, but typically it will either return a value or create a more informative error message. For example, the `show_condition()` function below sets up handlers that return the type of condition signalled:
 
 ```{r}
 show_condition <- function(code) {
@@ -464,7 +484,7 @@ As well as returning default values when a condition is signalled, handlers can 
 ```{r, error = TRUE}
 read.csv2 <- function(file, ...) {
   tryCatch(read.csv(file, ...), error = function(c) {
-    c$message <- paste0(c$message, " ( in ", file, ")")
+    c$message <- paste0(c$message, " (in ", file, ")")
     stop(c)
   })
 }
