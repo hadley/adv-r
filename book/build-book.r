@@ -23,16 +23,11 @@ lapply(chapters, render_chapter)
 
 
 # Copy across additional files -------------------------------------------------
-pandoc_convert(wd = "book",
-  "advanced-r.md", output = "tex/advanced-r.tex",
-  options = c(
-    "--template", system.file("book-template.tex", package = "bookdown"),
-    "--table-of-contents"
-  )
-)
+file.copy("book/advanced-r.tex", "book/tex/", recursive = TRUE)
+file.copy("book/krantz.cls", "book/tex/", recursive = TRUE)
 file.copy("diagrams/", "book/tex/", recursive = TRUE)
 file.copy("screenshots/", "book/tex/", recursive = TRUE)
-file.rename("figures", "book/tex/figures")
+file.copy("figures", "book/tex/", recursive = TRUE)
 
 # Build tex file ---------------------------------------------------------------
 # (build with Rstudio to find/diagnose errors)
