@@ -9,6 +9,7 @@ title: Advanced R
 \include{Data-structures}
 \include{Subsetting}
 \include{Vocabulary}
+\include{Style}
 \include{Functions}
 \include{OO-essentials}
 \include{Environments}
