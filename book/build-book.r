@@ -16,8 +16,6 @@ render_chapter <- function(src) {
   if (!needs_update(src, dest)) return()
 
   message("Rendering ", src)
-  env <- new.env(parent = globalenv())
-
   render(src, tex_chapter(), output_dir = "book/tex", quiet = TRUE)
 }
 
