@@ -21,6 +21,28 @@ render_chapter <- function(src) {
 chapters <- dir(".", pattern = "\\.rmd$")
 lapply(chapters, render_chapter)
 
+# Apply regular expressions to files -------------------------------------------
+apply_regexp <- function(file, regexps) {
+  lines <- readLines(file)
+  for (i in seq_along(regexps)) {
+    lines <- gsub(escape(names(regexps)[i]), escape(regexps[[i]]), lines)
+  }
+
+  writeLines(lines, file)
+}
+apply_regexps <- function(regexps) {
+  files <- dir("book/tex/", "\\.tex$", full.names = TRUE)
+  lapply(files, apply_regexp, regexps = regexps)
+}
+escape <- function(x) {
+  x <- gsub("\\\\", "\\\\\\\\", x)
+  gsub("([{}])", "\\\\\\1", x)
+}
+apply_regexps(c(
+  "\\begin{SIDEBAR}" =    "\\begin{shortbox}\\Boxhead{",
+  "\\end{SIDEBAR}"   = "}",
+  "\\begin{ENDSIDEBAR}\\end{ENDSIDEBAR}" = "\\end{shortbox}"
+))
 
 # Copy across additional files -------------------------------------------------
 file.copy("book/advanced-r.tex", "book/tex/", recursive = TRUE)
