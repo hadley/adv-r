@@ -1,6 +1,9 @@
 library(bookdown)
 library(rmarkdown)
 
+# Things to make loading quieter
+library(pryr)
+
 # Render chapters into tex  ----------------------------------------------------
 needs_update <- function(src, dest) {
   if (!file.exists(dest)) return(TRUE)
