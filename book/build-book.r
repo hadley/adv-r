@@ -61,4 +61,4 @@ system("xelatex advanced-r -interaction=batchmode")
 system("xelatex advanced-r -interaction=batchmode")
 setwd(old)
 
-file.copy("book/tex/advanced-r.pdf", "book/advanced-r.pdf")
+file.copy("book/tex/advanced-r.pdf", "book/advanced-r.pdf", overwrite = TRUE)
