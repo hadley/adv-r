@@ -1,9 +1,6 @@
 library(bookdown)
 library(rmarkdown)
 
-# Things to make loading quieter
-library(pryr)
-
 # Render chapters into tex  ----------------------------------------------------
 needs_update <- function(src, dest) {
   if (!file.exists(dest)) return(TRUE)
@@ -16,7 +13,11 @@ render_chapter <- function(src) {
   if (!needs_update(src, dest)) return()
 
   message("Rendering ", src)
-  render(src, tex_chapter(), output_dir = "book/tex", quiet = TRUE)
+  command <- bquote(rmarkdown::render(.(src), bookdown::tex_chapter(),
+    output_dir = "book/tex", quiet = TRUE, env = globalenv()))
+  writeLines(deparse(command), "run.r")
+  on.exit(unlink("run.r"))
+  devtools::clean_source("run.r", quiet = TRUE)
 }
 
 chapters <- dir(".", pattern = "\\.rmd$")
