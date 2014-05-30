@@ -17,7 +17,19 @@ render_chapter <- function(src) {
     output_dir = "book/tex", quiet = TRUE, env = globalenv()))
   writeLines(deparse(command), "run.r")
   on.exit(unlink("run.r"))
-  devtools::clean_source("run.r", quiet = TRUE)
+  source_clean("run.r")
+}
+
+source_clean <- function(path) {
+  r_path <- file.path(R.home("bin"), "R")
+  cmd <- paste0(shQuote(r_path), " --quiet --file=", shQuote(path))
+
+  out <- system(cmd, intern = TRUE)
+  status <- attr(out, "status")
+  if (is.null(status)) status <- 0
+  if (!identical(as.character(status), "0")) {
+    stop("Command failed (", status, ")", call. = FALSE)
+  }
 }
 
 chapters <- dir(".", pattern = "\\.rmd$")
