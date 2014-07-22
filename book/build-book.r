@@ -68,8 +68,10 @@ file.copy("figures", "book/tex/", recursive = TRUE)
 # Build tex file ---------------------------------------------------------------
 # (build with Rstudio to find/diagnose errors)
 old <- setwd("book/tex")
-system("xelatex advanced-r -interaction=batchmode")
-system("xelatex advanced-r -interaction=batchmode")
+system("xelatex advanced-r -interaction=errorstopmode")
+system("makeindex advanced-r")
+system("xelatex advanced-r -interaction=errorstopmode")
+system("xelatex advanced-r -interaction=errorstopmode")
 setwd(old)
 
 file.copy("book/tex/advanced-r.pdf", "book/advanced-r.pdf", overwrite = TRUE)
