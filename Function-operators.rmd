@@ -6,7 +6,7 @@ output: bookdown::html_chapter
 
 # Function operators {#function-operators}
 
-In this chapter, you'll learn about function operators (FOs). A function operator is function that takes one (or more) functions as input and returns a function as output. In some ways, function operators are similar to functionals: there's nothing you can't do without them, but they can make your code more readable and expressive, and they can help you write code faster. The main difference is that functionals extract common patterns of loop use, where function operators extract common patterns of anonymous function use.
+In this chapter, you'll learn about function operators (FOs). A function operator is a function that takes one (or more) functions as input and returns a function as output. In some ways, function operators are similar to functionals: there's nothing you can't do without them, but they can make your code more readable and expressive, and they can help you write code faster. The main difference is that functionals extract common patterns of loop use, where function operators extract common patterns of anonymous function use.
 
 The following code shows a simple function operator, `chatty()`. It wraps a function, making a new function that prints out its first argument. It's useful because it gives you a window to see how functionals, like `vapply()`, work.
 
@@ -25,7 +25,7 @@ chatty(f)(1)
 vapply(s, chatty(f), numeric(1))
 ```
 
-In the last chapter, we saw that many built-in functionals, like `Reduce()`, `Filter()` and `Map()`, have very few arguments, so we had to use anonymous functions to modify how they worked. In this chapter, we'll build specialised substitutes for standard anonymous that allow us to communicate our intent more clearly. For example, in [multiple inputs](#map) we used an anonymous function with `Map()` to supply fixed arguments:
+In the last chapter, we saw that many built-in functionals, like `Reduce()`, `Filter()`, and `Map()`, have very few arguments, so we had to use anonymous functions to modify how they worked. In this chapter, we'll build specialised substitutes for common anonymous functions that allow us to communicate our intent more clearly. For example, in [multiple inputs](#map) we used an anonymous function with `Map()` to supply fixed arguments:
 
 ```{r, eval = FALSE}
 Map(function(x, y) f(x, y, zs), xs, ys)
@@ -39,12 +39,12 @@ Map(partial(f, zs = zs), xs, yz)
 
 This is an important use of FOs: by transforming the input function, you eliminate parameters from a functional. In fact, as long as the inputs and outputs of the function remain the same, this approach allows your functionals to be more extensible, often in ways you haven't thought of.
 
-The chapter covers four important types of FO: behaviour, input, output and combining. For each type, I'll show you some useful FOs, and how you can use as another to decompose problems: as combinations of multiple functions instead of combinations of arguments. The goal is not to exhaustively list every possible FO, but to show a selection that demonstrate how they work together with other FP techniques. For your own work, you'll need to think about and experiment with how function operators can help you solve recurring problems.
+The chapter covers four important types of FO: behaviour, input, output, and combining. For each type, I'll show you some useful FOs, and how you can use as another to decompose problems: as combinations of multiple functions instead of combinations of arguments. The goal is not to exhaustively list every possible FO, but to show a selection that demonstrate how they work together with other FP techniques. For your own work, you'll need to think about and experiment with how function operators can help you solve recurring problems.
 
 ##### Outline
 
 * [Behavioural FOs](#behavioural-fos) introduces you to FOs that change the
-  behaviour a function like automatically logging usage to disk or ensuring 
+  behaviour of a function like automatically logging usage to disk or ensuring 
   that a function is run only once.
 
 * [Output FOs](#output-fos) shows you how to write FOs that manipulate the
@@ -57,9 +57,9 @@ The chapter covers four important types of FO: behaviour, input, output and comb
 * [Combining FOs](#combining-fos) shows the power of FOs that combine multiple
   functions with function composition and logical operations.
 
-##### Prequisites
+##### Prerequisites
 
-As well as writing FOs from scratch, this chapter uses function operators from the memoise, plyr and pryr packages. Install them by running `install.packages(c("memoise", "plyr", "pryr"))`.
+As well as writing FOs from scratch, this chapter uses function operators from the memoise, plyr, and pryr packages. Install them by running `install.packages(c("memoise", "plyr", "pryr"))`.
 
 <!--
 ### In other languages
@@ -75,16 +75,18 @@ Behavioural FOs leave the inputs and outputs of a function unchanged, but add so
 * Print to console every n invocations to check on a long running process.
 * Cache previous computations to improve performance.
 
-To motivate these behaviours, imagine we want to download a long vector of urls. That's pretty simple with `lapply()` and `download_file()`:
+To motivate these behaviours, imagine we want to download a long vector of URLs. That's pretty simple with `lapply()` and `download_file()`:
 
 ```{r, eval = FALSE}
-download_file <- function(url, ...) download.file(url, basename(url), ...)
+download_file <- function(url, ...) {
+  download.file(url, basename(url), ...)
+}
 lapply(urls, download_file)
 ```
 
 (`download_file()` is a simple wrapper around `utils::download.file()` which provides a reasonable default for the file name.)
 
-There are number of useful behaviours we might want to this function. If the list was long, we might want to print a `.` every ten urls so we know that the function's still working. If we're downloading files over the internet, we might want to add a small delay between each request to avoid hammering the server. Implementing these behaviors in a for loop is rather complicated. We can no longer use `lapply()` because we need an external counter:
+There are a number of useful behaviours we might want to add to this function. If the list was long, we might want to print a `.` every ten URLs so we know that the function's still working. If we're downloading files over the internet, we might want to add a small delay between each request to avoid hammering the server. Implementing these behaviours in a for loop is rather complicated. We can no longer use `lapply()` because we need an external counter:
 
 ```{r, eval = FALSE}
 i <- 1
@@ -96,7 +98,7 @@ for(url in urls) {
 }
 ```
 
-Understanding this code is hard because different concerns (iteration, printing and downloading) are interleaved. In the remainder of this section we'll create FOs that encapsulate each behavour and allow us to write code like this:
+Understanding this code is hard because different concerns (iteration, printing, and downloading) are interleaved. In the remainder of this section we'll create FOs that encapsulate each behaviour and allow us to write code like this:
 
 ```{r, eval = FALSE}
 lapply(urls, dot_every(10, delay_by(1, download_file)))
@@ -144,7 +146,7 @@ download <- dot_every(delay_by(download_file, 1), 10)
 
 That's harder to follow because (e.g.) the argument of `dot_every()` is far away from its call. This is sometimes called the [Dagwood sandwich](http://en.wikipedia.org/wiki/Dagwood_sandwich) problem: you have too much filling (too many long arguments) between your slices of bread (parentheses). 
 
-I've also tried to give the FOs descriptive names: delay by 1 (second), (print a) dot every 10 (invocations). The more clearly the function names used in your code expresses your intent, the easier it will be for others (including future you) to read and understand the code.
+I've also tried to give the FOs descriptive names: delay by 1 (second), (print a) dot every 10 (invocations). The more clearly the function names used in your code express your intent, the easier it will be for others (including future you) to read and understand the code.
 
 ### Memoisation
 
@@ -165,7 +167,7 @@ system.time(fast_function())
 system.time(fast_function())
 ```
 
-Memoisation is an example of the classic computer sciecen tradeoff of memory versus speed. A memoised function can run much faster because it stores all of the previous inputs and outputs, using more memory.
+Memoisation is an example of the classic computer science tradeoff of memory versus speed. A memoised function can run much faster because it stores all of the previous inputs and outputs, using more memory.
 
 A realistic use of memoisation is computing the Fibonacci series. The Fibonacci series is defined recursively: the first two values are 1 and 1, then f(n) = f(n - 1) + f(n - 2). A naive version implemented in R would be very slow because, for example, `fib(10)` computes `fib(9)` and `fib(8)`, and `fib(9)` computes `fib(8)` and `fib(7)`, and so on. As a result, the value for each value in the series gets computed many, many times. Memoising `fib()` makes the implementation much faster because each value is computed only once.
 
@@ -205,7 +207,7 @@ This gives a function that we can easily use with `lapply()`. However, if someth
 
 One challenge with functionals is that it can be hard to see what's going on inside of them. It's not easy to pry open their internals like it is with a for loop. Fortunately we can use FOs to peer behind the curtain with `tee()`. 
 
-`tee()`, defined below, has three arguments, all functions: `f`, the function to modify; `on_input`, a function that's called with the inputs to `f`, and `on_output` a function that's called with the output from `f`.
+`tee()`, defined below, has three arguments, all functions: `f`, the function to modify; `on_input`, a function that's called with the inputs to `f`; and `on_output`, a function that's called with the output from `f`.
 
 ```{r}
 ignore <- function(...) NULL
@@ -234,7 +236,7 @@ zero <- uniroot(tee(g, on_input = show_x), c(-5, 5))
 zero <- uniroot(tee(g, on_output = show_x), c(-5, 5))
 ```
 
-`cat()` allows us to see what's happening as the function runs, but it doesn't give us a way to work with the values after the funtion as completed. To do that, we could capture the sequence of calls by creating a function, `remember()`, that records every argument called and retrieves them when coerced into a list. The small amount of S3 code needed is explained in [S3](#s3).
+`cat()` allows us to see what's happening as the function runs, but it doesn't give us a way to work with the values after the function as completed. To do that, we could capture the sequence of calls by creating a function, `remember()`, that records every argument called and retrieves them when coerced into a list. The small amount of S3 code needed is explained in [S3](#s3).
 
 ```{r}
 remember <- function() {
@@ -268,7 +270,7 @@ plot(x, type = "b"); abline(h = 0.739, col = "grey50")
 plot(error, type = "b"); abline(h = 0, col = "grey50")
 ```
 
-### Lazynesss
+### Laziness
 
 The function operators we've seen so far follow a common pattern:
 
@@ -393,7 +395,7 @@ I often use this idea to make a function, `compact()`, that removes all null ele
 compact <- function(x) Filter(Negate(is.null), x)
 ```
 
-`plyr::failwith()` turns a function that throws an error into a function that returns a default value when there's an error. Again, the essence of `failwith()` is simple, it's just a wrapper around `try()`, the function that captures errors and allows execution to continue.
+`plyr::failwith()` turns a function that throws an error into a function that returns a default value when there's an error. Again, the essence of `failwith()` is simple; it's just a wrapper around `try()`, the function that captures errors and allows execution to continue.
 
 ```{r, error = TRUE}
 failwith <- function(default = NULL, f, quiet = FALSE) {
@@ -482,21 +484,21 @@ In this example, there's not a huge benefit to using function operators, because
     function to which it is applied.
 
 1.  The `evaluate` package makes it easy to capture all the outputs (results, 
-    text, messages, warnings, errors and plots) from an expression. Create a 
+    text, messages, warnings, errors, and plots) from an expression. Create a 
     function like `capture_it()` that also captures the warnings and errors 
     generated by a function.
 
 1.  Create a FO that tracks files created or deleted in the working directory 
-    (Hint: use `dir()` and `setdiff()`). What other global effects of 
+    (Hint: use `dir()` and `setdiff()`.) What other global effects of 
     functions might you want to track?
 
 ## Input FOs {#input-fos}
 
-The next step up in complexity is to modify the inputs of a function. Again, you can modify how a function works in a minor way (e.g., setting default argument values), or in a major way (e.g. converting inputs from scalars to vectors, or vectors to matrices).
+The next step up in complexity is to modify the inputs of a function. Again, you can modify how a function works in a minor way (e.g., setting default argument values), or in a major way (e.g., converting inputs from scalars to vectors, or vectors to matrices).
 
 ### Prefilling function arguments: partial function application
 
-A common use of anonymous functions is to make a variant of a function that has certain arguments "filled in" already. This is called "partial function application", and is implemented by `pryr::partial()`. Once you have read [metaprogramming](#metaprogramming), I encourage you to read the source code for `partial()` and figure out how it works - it's only 5 lines of code!
+A common use of anonymous functions is to make a variant of a function that has certain arguments "filled in" already. This is called "partial function application", and is implemented by `pryr::partial()`. Once you have read [metaprogramming](#metaprogramming), I encourage you to read the source code for `partial()` and figure out how it works --- it's only 5 lines of code!
 
 `partial()` allows us to replace code like
 
@@ -524,7 +526,7 @@ funs2 <- list(
 )
 ```
 
-We can write:
+we can write:
 
 ```{r}
 library(pryr)
@@ -535,11 +537,11 @@ funs2 <- list(
 )
 ```
 
-Using partial function application is a straightforward task in many functional programming languages, but it's not entirely clear how it should interact with R's lazy evaluation rules. The approach `plyr::partial()` takes is to create a function that is as similar as possible to the anonymous function that you'd create by hand. Peter Meilstrup takes a different approach in his [ptools package](https://github.com/crowding/ptools/). If you're interested in the topic., you might want to read about the binary operators he created: `%()%`, `%>>%` and `%<<%`.
+Using partial function application is a straightforward task in many functional programming languages, but it's not entirely clear how it should interact with R's lazy evaluation rules. The approach `plyr::partial()` takes is to create a function that is as similar as possible to the anonymous function that you'd create by hand. Peter Meilstrup takes a different approach in his [ptools package](https://github.com/crowding/ptools/). If you're interested in the topic, you might want to read about the binary operators he created: `%()%`, `%>>%`, and `%<<%`.
 
 ### Changing input types
 
-It's also possible to make a major change to a functions input, making a function work with fundamentally different types of data. There are a few existing functions that work along these lines:
+It's also possible to make a major change to a function's input, making a function work with fundamentally different types of data. There are a few existing functions that work along these lines:
 
 *   `base::Vectorize()` converts a scalar function to a vector function. It takes 
     a non-vectorised function and vectorises it with respect to the arguments 
@@ -602,11 +604,11 @@ It's also possible to make a major change to a functions input, making a functio
 1.  Read the source code for `plyr::colwise()`. How does the code work? What 
     are `colwise()`'s three main tasks? How could you make `colwise()` simpler 
     by implementing each task as a function operator? (Hint: think about 
-    `partial()`)
+    `partial()`.)
 
 1.  Write FOs that convert a function to return a matrix instead of a data 
     frame, or a data frame instead of a matrix. If you understand S3, 
-    call them `as.data.frame.function()` and `as.matrix.function()`
+    call them `as.data.frame.function()` and `as.matrix.function()`.
 
 1.  You've seen five functions that modify a function to change its output 
     from one form to another. What are they? Draw a table of the various 
@@ -646,7 +648,7 @@ compose <- function(f, g) {
 }
 ```
 
-(`pryr::compose()` provides a more full-featured alternative that can accept multiple functions and is used for rest of the examples).
+(`pryr::compose()` provides a more full-featured alternative that can accept multiple functions and is used for the rest of the examples.)
 
 This allows us to write:
 
@@ -683,7 +685,7 @@ sd2(1:10)
 
 This type of programming is called tacit or point-free programming. (The term point-free comes from the use of "point" to refer to values in topology; this style is also derogatorily known as pointless). In this style of programming, you don't explicitly refer to variables. Instead, you focus on the high-level composition of functions rather than the low-level flow of data. The focus is on what's being done, not on objects it's being done to. Since we're using only functions and not parameters, we use verbs and not nouns. This style is common in Haskell, and is the typical style in stack based programming languages like Forth and Factor. It's not a terribly natural or elegant style in R, but it is fun to play with.
 
-`compose()` is particularly useful in conjunction with `partial()`, because `partial()` allows you to supply additional arguments to the functions being composed. One nice side effect of this style of programming is that it keeps the a function's arguments near its name. This is important because as the size of the chunk of code you have to hold in your head grows code becomes harder to understand.
+`compose()` is particularly useful in conjunction with `partial()`, because `partial()` allows you to supply additional arguments to the functions being composed. One nice side effect of this style of programming is that it keeps a function's arguments near its name. This is important because as the size of the chunk of code you have to hold in your head grows code becomes harder to understand.
 
 Below I take the example from the first section of the chapter and modify it to use the two styles of function composition described above. Both results are longer than the original code, but they may be easier to understand because the function and its arguments are closer together. Note that we still have to read them from right to left (bottom to top): the first function called is the last one written. We could define `compose()` to work in the opposite direction, but in the long run, this is likely to lead to confusion since we'd create a small part of the langugage that reads differently from every other part.
 
@@ -748,14 +750,14 @@ And we now have a boolean algebra on functions, not on the results of functions.
     bonus points, do it without calling `function`.
 
 1.  Extend `and()` and `or()` to deal with any number of input functions. Can 
-    you do it with `Reduce()`? Can you keep them lazy (e.g. for `and()`, the 
+    you do it with `Reduce()`? Can you keep them lazy (e.g., for `and()`, the 
     function returns once it sees the first `FALSE`)?
 
 1.  Implement the `xor()` binary operator. Implement it using the existing 
     `xor()` function. Implement it as a combination of `and()` and `or()`. What 
     are the advantages and disadvantages of each approach? Also think about 
     what you'll call the resulting function to avoid a clash with the existing
-    `xor()` function, and how you might change the names of `and()`, `not()` 
+    `xor()` function, and how you might change the names of `and()`, `not()`, 
     and `or()` to keep them consistent.
 
 1.  Above, we implemented boolean algebra for functions that return a logical 
