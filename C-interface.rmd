@@ -1,6 +1,7 @@
 ---
 title: R's C interface
 layout: default
+output: bookdown::html_chapter
 ---
 
 ```{r, echo = FALSE, message = FALSE}
@@ -9,11 +10,9 @@ library(inline)
 
 # R's C interface {#c-api}
 
-## Introduction
+Reading R's source code is an extremely powerful technique for improving your programming skills. However, many base R functions, and many functions in older packages, are written in C. It's useful to be able to figure out how those functions work, so this chapter will introduce you to R's C API. You'll need some basic C knowledge, which you can get from a standard C text (e.g. [_The C Programming Language_](http://amzn.com/0131101633?tag=devtools-20) by Kernigan and Ritchie), or from [Rcpp](#rcpp). You'll need a little patience, but it is possible to read R's C source code, and you will learn a lot doing it.
 
-Reading R's source code is an extremely powerful technique for improving your programming skills. However, many base R functions, and many functions in older packages, are written in C. It's useful to be able to figure out how those functions work, so this chapter will introduce you to R's C API. You'll need some basic C knowledge, which you can get from a standard C text (e.g. "[Kernigan and Ritchie](http://amzn.com/0131101633?tag=devtools-20)"), or from [Rcpp](#rcpp). You'll need a little patience, but it is possible to read R's C source code, and you will learn a lot doing it.
-
-The contents of this chapter draw heavily from Section 5 ("System and foreign language interfaces") of [Writing R extensions](http://cran.r-project.org/doc/manuals/R-exts.html), but focus on best practices and modern tools. This means it does not cover the old `.C` interface, the old API defined in `Rdefines.h` or rarely used language features. To see the complete C API provided by R, look at the header file `Rinternals.h`. It's easiest to find and display this file from within R:
+The contents of this chapter draw heavily from Section 5 ("System and foreign language interfaces") of [Writing R extensions](http://cran.r-project.org/doc/manuals/R-exts.html), but focus on best practices and modern tools. This means it does not cover the old `.C` interface, the old API defined in `Rdefines.h`, or rarely used language features. To see the complete C API provided by R, look at the header file `Rinternals.h`. It's easiest to find and display this file from within R:
 
 ```{r, eval = FALSE}
 rinternals <- file.path(R.home("include"), "Rinternals.h")
@@ -33,7 +32,7 @@ I do not recommend using C for writing new high-performance code. Instead write 
   structure names from R to C. 
 
 * [Creating and modifying vectors](#c-vectors) teaches you how to create, 
-  modify and coerce vectors in C.
+  modify, and coerce vectors in C.
   
 * [Pairlists](#c-pairlists) shows you how to work with pairlists. You need
   to know this because the distinction between pairlists and list is more 
@@ -48,7 +47,7 @@ I do not recommend using C for writing new high-performance code. Instead write 
 
 ##### Prerequisites
 
-To understand existing C code, it's useful to generate simple examples of your own that you can experiment with. To that end, all examples in this chapter use the `inline` package, which makes it extremely easy to compile and link C code to your current R session. Get it by running `install.packages("inline")` in your R session. To easily find the C code associated with internal and primitive functions, you'll need a function from pryr. Get the package with `install.packages("pryr")`
+To understand existing C code, it's useful to generate simple examples of your own that you can experiment with. To that end, all examples in this chapter use the `inline` package, which makes it extremely easy to compile and link C code to your current R session. Get it by running `install.packages("inline")` in your R session. To easily find the C code associated with internal and primitive functions, you'll need a function from pryr. Get the package with `install.packages("pryr")`.
 
 You'll also need a C compiler. Windows users can use [Rtools](http://cran.r-project.org/bin/windows/Rtools/). Mac users will need the [Xcode command line tools](http://developer.apple.com/). Most Linux distributions will come with the necessary compilers.
 
@@ -56,7 +55,7 @@ Under Windows it is necessary that the Rtools executables directory (typically `
 
 ## Calling C functions from R {#calling-c}
 
-Generally, calling a C function from R requires two pieces: a C function, and an R wrapper function that uses `.Call()`. The simple function below adds two numbers together and illustrates some of the complexities of coding in C:
+Generally, calling a C function from R requires two pieces: a C function and an R wrapper function that uses `.Call()`. The simple function below adds two numbers together and illustrates some of the complexities of coding in C:
 
 ```c
 // In C ----------------------------------------
@@ -79,7 +78,7 @@ add <- function(a, b) {
 }
 ```
 
-(An alternative to using `.Call` is to use `.External`.  It is used almost identically, except that the C function will recieve a single argument containing a `LISTSXP`, a pairlist from which the arguments can be extracted. This makes it possible to write functions that take a variable number of arguments. However, it's not commonly used in base R and `inline` does not currently support `.External` functions so I don't discuss it further in this chapter).
+(An alternative to using `.Call` is to use `.External`.  It is used almost identically, except that the C function will receive a single argument containing a `LISTSXP`, a pairlist from which the arguments can be extracted. This makes it possible to write functions that take a variable number of arguments. However, it's not commonly used in base R and `inline` does not currently support `.External` functions so I don't discuss it further in this chapter.)
 
 In this chapter we'll produce the two pieces in one step by using the `inline` package. This allows us to write:
 
@@ -98,7 +97,7 @@ Before we begin writing and reading C code, we need to know a little about the b
 
 ## C data structures {#c-data-structures}
 
-At the C-level, all R objects are stored in a common datatype, the `SEXP`, or S-expression. All R objects are S-expressions so every C function that you create must return a `SEXP` as output and take `SEXP`s as inputs. (Technically, this is a pointer to a structure with typedef `SEXPREC`). A `SEXP` is a variant type, with subtypes for all R's data structures. The most important types are:
+At the C-level, all R objects are stored in a common datatype, the `SEXP`, or S-expression. All R objects are S-expressions so every C function that you create must return a `SEXP` as output and take `SEXP`s as inputs. (Technically, this is a pointer to a structure with typedef `SEXPREC`.) A `SEXP` is a variant type, with subtypes for all R's data structures. The most important types are:
 
 * `REALSXP`: numeric vector
 * `INTSXP`: integer vector
@@ -115,7 +114,7 @@ Character vectors are a little more complicated than the other atomic vectors. A
 There are also `SEXP`s for less common object types:
 
 * `CPLXSXP`: complex vectors
-* `LISTSXP`: "pair" lists. At the R level, you only need to care about the distinction lists and pairlists for function arguments, but internally they are used in many more places.
+* `LISTSXP`: "pair" lists. At the R level, you only need to care about the distinction lists and pairlists for function arguments, but internally they are used in many more places
 * `DOTSXP`: '...'
 * `SYMSXP`: names/symbols
 * `NILSXP`: `NULL`
@@ -147,7 +146,7 @@ An additional complication is the garbage collector: if you don't protect every 
 
 ### Creating vectors and garbage collection
 
-The simplest way to create a new R-level object is `allocVector()`. It takes two arguments, the type of `SEXP` (or `SEXPTYPE`) to create, and the length of the vector. The following code creates a three element list containing a logical vector, a numeric vector and an integer vector, all of length four:
+The simplest way to create a new R-level object is `allocVector()`. It takes two arguments, the type of `SEXP` (or `SEXPTYPE`) to create, and the length of the vector. The following code creates a three element list containing a logical vector, a numeric vector, and an integer vector, all of length four:
 
 ```{r, cache = TRUE}
 dummy <- cfunction(body = '
@@ -177,9 +176,9 @@ You also need to make sure that every protected object is unprotected. `UNPROTEC
   
 Consult the R externals section on [garbage collection](http://cran.r-project.org/doc/manuals/R-exts.html#Garbage-Collection) for more details.
 
-Properly protecting the R objects you allocate is extremely important! Improper protection leads to difficult to diagnose errors, typically segfaults, but other corruption is possible as well. In general, if you allocate a new R object, you must `PROTECT` it.
+Properly protecting the R objects you allocate is extremely important! Improper protection leads to difficulty diagnosing errors, typically segfaults, but other corruption is possible as well. In general, if you allocate a new R object, you must `PROTECT` it.
 
-If you run `dummy()` a few times, you'll notice the output varies. This is because `allocVector()` assigns memory to each output, but it doesn't clean it out first. For real functions, you'll may want to loop through each element in the vector and set it to a constant. The most efficient way to do that is to use `memset()`:
+If you run `dummy()` a few times, you'll notice the output varies. This is because `allocVector()` assigns memory to each output, but it doesn't clean it out first. For real functions, you may want to loop through each element in the vector and set it to a constant. The most efficient way to do that is to use `memset()`:
 
 ```{r, cache = TRUE}
 zeroes <- cfunction(c(n_ = "integer"), '
@@ -202,7 +201,7 @@ Each atomic vector has a special constant for getting or setting missing values:
 * `LGLSXP`: `NA_LOGICAL`
 * `STRSXP`: `NA_STRING`
   
-Missing values are somewhat more complicated for `REALSXP` because there is an existing protocol for missing values defined by the floating point standard ([IEEE 754](http://en.wikipedia.org/wiki/IEEE_floating_point)). In doubles, an `NA` is `NaN` with a special bit pattern (the lowest word is 1954, the year Ross Ihaka was born), and there are other special values for positive and negative infinity. Use `ISNA()`, `ISNAN()`, and `!R_FINITE()` macros to check for missing, NaN or non-finite values. Use the constants `NA_REAL`, `R_NaN`, `R_PosInf` and `R_NegInf` to set those values.
+Missing values are somewhat more complicated for `REALSXP` because there is an existing protocol for missing values defined by the floating point standard ([IEEE 754](http://en.wikipedia.org/wiki/IEEE_floating_point)). In doubles, an `NA` is `NaN` with a special bit pattern (the lowest word is 1954, the year Ross Ihaka was born), and there are other special values for positive and negative infinity. Use `ISNA()`, `ISNAN()`, and `!R_FINITE()` macros to check for missing, NaN, or non-finite values. Use the constants `NA_REAL`, `R_NaN`, `R_PosInf`, and `R_NegInf` to set those values.
 
 We can use this knowledge to make a simple version of `is.NA()`:
 
@@ -244,7 +243,7 @@ Note that `base::is.na()` returns `TRUE` for both `NA` and `NaN`s in a numeric v
 
 ### Accessing vector data
 
-There is a helper function for each atomic vector that allows you to access the C array which stores the data in a vector. Use `REAL()`, `INTEGER()`, `LOGICAL()`, `COMPLEX()` and `RAW()` to access the C array inside numeric, integer, logical, complex and raw vetors. The following example shows how to use `REAL()` to inspect and modify a numeric vector:
+There is a helper function for each atomic vector that allows you to access the C array which stores the data in a vector. Use `REAL()`, `INTEGER()`, `LOGICAL()`, `COMPLEX()`, and `RAW()` to access the C array inside numeric, integer, logical, complex, and raw vectors. The following example shows how to use `REAL()` to inspect and modify a numeric vector:
 
 ```{r, cache = TRUE}
 add_one <- cfunction(c(x = "numeric"), "
@@ -293,7 +292,7 @@ On my computer, `add_two()` is about twice as fast as `add_one()` for a million 
 
 ### Character vectors and lists
 
-Strings and lists are more complicated because the individual elements of a vector are `SEXP`s, not basic C data structures. Each element of a `STRSXP` is a `CHARSXP`s, an immutable object that contains a pointer to C string stored in a global pool. Use `STRING_ELT(x, i)` to extract the `CHARSXP`, and `CHAR(STRING_ELT(x, i))` to get the actual `const char*` string. Set values with `SET_STRING_ELT(x, i, value)`. Use `mkChar()` to turn a C string into a `CHARSXP`, and `mkString()` to turn a C string into a `STRSXP`. Use `mkChar()` to create strings to insert in an existing vector, use `mkString()` to create a new (length 1) vector.
+Strings and lists are more complicated because the individual elements of a vector are `SEXP`s, not basic C data structures. Each element of a `STRSXP` is a `CHARSXP`s, an immutable object that contains a pointer to C string stored in a global pool. Use `STRING_ELT(x, i)` to extract the `CHARSXP`, and `CHAR(STRING_ELT(x, i))` to get the actual `const char*` string. Set values with `SET_STRING_ELT(x, i, value)`. Use `mkChar()` to turn a C string into a `CHARSXP` and `mkString()` to turn a C string into a `STRSXP`. Use `mkChar()` to create strings to insert in an existing vector, use `mkString()` to create a new (length 1) vector.
 
 The following function shows how to make a character vector containing known strings:
 
@@ -348,11 +347,11 @@ x
 y
 ```
 
-If you're working with lists, use `shallow_duplicate()` to make a shallow copy; `duplicate()` will also copy ever element of the list.
+If you're working with lists, use `shallow_duplicate()` to make a shallow copy; `duplicate()` will also copy every element of the list.
 
 ### Coercing scalars
 
-There are a few helper functions that turn length one R vectors into a C scalars:
+There are a few helper functions that turn length one R vectors into C scalars:
 
 * `asLogical(x): INTSXP -> int`
 * `asInteger(x): INTSXP -> int`
@@ -366,7 +365,7 @@ And helpers for the opposite direction:
 * `ScalarReal(x): double -> REALSXP`
 * `mkString(x): const char* -> STRSXP`
 
-These all create R-level objects, so need to be `PROTECT()`ed.
+These all create R-level objects, so they need to be `PROTECT()`ed.
 
 ### Long vectors
 
@@ -374,9 +373,9 @@ As of R 3.0.0, R vectors can have length greater than $2 ^ 32$. This means that 
 
 ## Pairlists {#c-pairlists}
 
-In R code, there are few places where you need to care about the difference between a pairlist and a list (as described in [Pairlists](#pairlists)). Working with pairlists is much more important for C code because they are used for calls, unevaluated arguments, attributes and in `...`. In C, lists and pairlists differ primarily in how you access and name elements.
+In R code, there are few places where you need to care about the difference between a pairlist and a list (as described in [Pairlists](#pairlists)). Working with pairlists is much more important for C code because they are used for calls, unevaluated arguments, attributes, and in `...`. In C, lists and pairlists differ primarily in how you access and name elements.
 
-Unlike lists (`VECSXP`s), pairlists (`LISTSXP`s) have no way to index into an arbitrary location. Instead, R provides a set of helper functions that navigate along a linked list. The basic helpers are `CAR()`, which extracts the first element of the list, and `CDR()`, which extracts the rest of the list. These can be composed to get `CAAR()`, `CDAR()`, `CADDR()`, `CADDDR()` and so on. Corresponding to the getters, R provders setters `SETCAR()`, `SETCDR()` etc.
+Unlike lists (`VECSXP`s), pairlists (`LISTSXP`s) have no way to index into an arbitrary location. Instead, R provides a set of helper functions that navigate along a linked list. The basic helpers are `CAR()`, which extracts the first element of the list, and `CDR()`, which extracts the rest of the list. These can be composed to get `CAAR()`, `CDAR()`, `CADDR()`, `CADDDR()`, and so on. Corresponding to the getters, R provides setters `SETCAR()`, `SETCDR()`, etc.
 
 The following example shows how `CAR()` and `CDR()` pull out pieces of a quoted function call:
 
@@ -395,7 +394,7 @@ car(cdr(x))
 cadr(x)
 ```
 
-Pairlists are always terminated with `R_NilValue`, so to loop over all elements of a pairlist, use a for loop as follows:
+Pairlists are always terminated with `R_NilValue`. To loop over all elements of a pairlist, use this template:
 
 ```{r, cache = TRUE}
 count <- cfunction(c(x = "ANY"), '
@@ -426,7 +425,7 @@ new_call()
 gctorture(FALSE)
 ```
 
-On my machine, I get the result `5 + 5` -- highly unexpected! In fact, to be safe, we must `PROTECT` each `ScalarReal` that is generated, as every R object allocation can trigger the garbage collector.
+On my machine, I get the result `5 + 5` --- highly unexpected! In fact, to be safe, we must `PROTECT` each `ScalarReal` that is generated, as every R object allocation can trigger the garbage collector.
 
 ```{r, cache = TRUE}
 new_call <- cfunction(NULL, '
@@ -450,7 +449,7 @@ gctorture(FALSE)
 Attributes are also pairlists, but come with the helper functions `setAttrib()` and `getAttrib()`:
 
 ```{r, cache = TRUE}
-set_attr <- cfunction(c(obj = "ANY", attr = "character", value = "ANY"), '
+set_attr <- cfunction(c(obj = "SEXP", attr = "SEXP", value = "SEXP"), '
   const char* attr_s = CHAR(asChar(attr));
 
   duplicate(obj);
@@ -463,11 +462,11 @@ set_attr(x, "a", 1)
 
 (Note that `setAttrib()` and `getAttrib()` must do a linear search over the attributes pairlist.)
 
-There are some (confusingly named) shortcuts for common setting operations: `classgets()`, `namesgets()`, `dimgets()` and `dimnamesgets()` are the internal versions of the default methods of `class<-`, `names<-`, `dim<-` and `dimnames<-`. 
+There are some (confusingly named) shortcuts for common setting operations: `classgets()`, `namesgets()`, `dimgets()`, and `dimnamesgets()` are the internal versions of the default methods of `class<-`, `names<-`, `dim<-`, and `dimnames<-`. 
 
 ## Input validation {#c-input-validation}
 
-If the user provides unexpected input to your function (e.g. a list instead of a numeric vector), it's very easy to crash R. For this reason, it's a good idea to write a wrapper function that checks arguments are of the correct type. It's usually easier to do this at the R level. For example, going back to our first example of C code, we might rename the C function to `add_` and write a wrapper around it to check that the inputs are ok:
+If the user provides unexpected input to your function (e.g., a list instead of a numeric vector), it's very easy to crash R. For this reason, it's a good idea to write a wrapper function that checks arguments are of the correct type. It's usually easier to do this at the R level. For example, going back to our first example of C code, we might rename the C function to `add_` and write a wrapper around it to check that the inputs are ok:
 
 ```{r, cache = TRUE}
 add_ <- cfunction(signature(a = "integer", b = "integer"), "
@@ -478,7 +477,8 @@ add_ <- cfunction(signature(a = "integer", b = "integer"), "
   return result;
 ")
 add <- function(a, b) {
-  stopifnot(is.numeric(a), is.numeric(b), length(a) == 1, length(b) == 1)
+  stopifnot(is.numeric(a), is.numeric(b))
+  stopifnot(length(a) == 1, length(b) == 1)
   add_(a, b)
 }
 ```
@@ -516,29 +516,33 @@ There are also a number of helper functions which return 0 for FALSE and 1 for T
 
 * For combinations of atomic vectors: `isNumeric()` (integer, logical, real), 
   `isNumber()` (integer, logical, real, complex), `isVectorAtomic()` 
-  (logical, integer, numeric, complex, string, raw)
+  (logical, integer, numeric, complex, string, raw).
 
-* Matrices (`isMatrix()`) and arrays (`isArray()`)
+* Matrices (`isMatrix()`) and arrays (`isArray()`).
 
 * For other more esoteric objects: `isEnvironment()`, `isExpression()`, 
  `isList()` (a pair list), `isNewList()` (a list), `isSymbol()`, `isNull()`,
  `isObject()` (S4 objects), `isVector()` (atomic vectors, lists, expressions).
 
-Note that some of these functions behave differently to the R-level functions with similar names. For example `isVector()` is true for atomic vectors, lists and expressions, where `is.vector()` is returns `TRUE` only if its input has no attributes apart from names.
+Note that some of these functions behave differently to the R-level functions with similar names. For example `isVector()` is true for atomic vectors, lists, and expressions, where `is.vector()` returns `TRUE` only if its input has no attributes apart from names.
 
 ## Finding the C source code for a function {#c-find-source}
 
-R code in the base package doesn't use `.Call()`. Instead it uses two special functions: `.Internal()` or `.Primitive()`. Finding the source code for these functions is a somewhat arduous process (you first need to look there C function name in `src/main/names.c` then search the R sources), but `pryr::show_c_source()` automates the process (using github code search).
+R code in the base package doesn't use `.Call()`. Instead it uses two special functions: `.Internal()` or `.Primitive()`. Finding the source code for these functions is a somewhat arduous process (you first need to look up the C function name in `src/main/names.c` then search the R sources), but `pryr::show_c_source()` automates the process (using github code search).
 
 ```{r}
 tabulate
+```
+```{r, eval = FALSE}
 pryr::show_c_source(.Internal(tabulate(bin, nbins)))
+#> tabulate is implemented by do_tabulate with op = 0
 ```
 
 This reveals the following C source code (slighted edited for clarity):
 
 ```c
-SEXP attribute_hidden do_tabulate(SEXP call, SEXP op, SEXP args, SEXP rho) {
+SEXP attribute_hidden do_tabulate(SEXP call, SEXP op, SEXP args, 
+                                  SEXP rho) {
   checkArity(op, args);
   SEXP in = CAR(args), nbin = CADR(args);
   if (TYPEOF(in) != INTSXP)  error("invalid input");
@@ -567,13 +571,13 @@ Interval and primitive functions have a somewhat different interface than `.Call
 * `SEXP call`: the complete call to the function. `CAR(call)` gives
   the name of the function (as a symbol), `CDR(call)` gives the arguments.
 
-* `SEXP op`: a "offset pointer". This is used when multiple R functions use the
-  same same C function. For example `do_logic()` implements `&`, `|` and `!`.
+* `SEXP op`: an "offset pointer". This is used when multiple R functions use the
+  same C function. For example `do_logic()` implements `&`, `|`, and `!`.
   `show_c_source()` prints this out for you.
 
-* `SEXP args` a pairlist containing the unevaluated arguments to the function.
+* `SEXP args`: a pairlist containing the unevaluated arguments to the function.
 
-* `SEXP rho` the environment in which the call was executed.
+* `SEXP rho`: the environment in which the call was executed.
 
 This gives internal functions an incredible amount of flexibility as to how and when the arguments are evaluated. For example, internal S3 generics call `DispatchOrEval()` which either calls the appropriate S3 method or evaluates all the arguments in place. This flexibility does come at a cost which makes the code harder to understand, but usually evaluating the arguments is the first step and the rest of the function is more straightforward.
 
@@ -605,14 +609,15 @@ tabulate2(c(1L, 1L, 1L, 2L, 2L), 3)
 
 To get this to compile, I also removed the call to `_()` which is an internal R function used to translate error messages between different languages.
 
-The final version below moves more of the coercion logic into an accompanying R function, as does some minor restructuring to make the code a little easier to understand. I also added a `PROTECT()`; this is probably missing in the original because the author knew that it would be safe.
+The final version below moves more of the coercion logic into an accompanying R function, and does some minor restructuring to make the code a little easier to understand. I also added a `PROTECT()`; this is probably missing in the original because the author knew that it would be safe.
 
 ```{r, cache = TRUE}
 tabulate_ <- cfunction(c(bin = "SEXP", nbins = "SEXP"), '  
   int nb = asInteger(nbins);
 
-  // Allocate vector for output - assumes that there are less than 2^32 bins,
-  // and that each bin has less than 2^32 elements in it.
+  // Allocate vector for output - assumes that there are 
+  // less than 2^32 bins, and that each bin has less than 
+  // 2^32 elements in it.
   SEXP out = PROTECT(allocVector(INTSXP, nb));
   int *pbin = INTEGER(bin), *pout = INTEGER(out);
   memset(pout, 0, nb * sizeof(int));
