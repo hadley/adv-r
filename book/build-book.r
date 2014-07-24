@@ -76,3 +76,4 @@ system("xelatex -interaction=batchmode advanced-r ")
 setwd(old)
 
 file.copy("book/tex/advanced-r.pdf", "book/advanced-r.pdf", overwrite = TRUE)
+embedFonts("book/tex/advanced-r.pdf")
