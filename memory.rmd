@@ -12,7 +12,7 @@ options(scipen = 9)
 
 # Memory {#memory}
 
-A solid understanding of R's memory management will help you predict how much memory you'll need for a given task and help you to make the most of the memory you have. It can even help you write faster code because accidental copies are a major cause of slow code. The goal is this chapter is to help you understand the basics of memory management in R, moving from individual objects to functions to larger blocks of code. Along the way, you'll learn about some common myths, such as that you need to call `gc()` to free up memory, or that `for` loops are always slow.
+A solid understanding of R's memory management will help you predict how much memory you'll need for a given task and help you to make the most of the memory you have. It can even help you write faster code because accidental copies are a major cause of slow code. The goal of this chapter is to help you understand the basics of memory management in R, moving from individual objects to functions to larger blocks of code. Along the way, you'll learn about some common myths, such as that you need to call `gc()` to free up memory, or that `for` loops are always slow.
 
 ##### Outline
 
@@ -47,7 +47,7 @@ devtools::install_github("hadley/lineprof")
 
 <!-- FIXME: cite R-exts and R-ints formally -->
 
-The details of R's memory management are not documented in a single place. Most of the information in this chapter was gleaned from a close reading of the documentation (particularly `?Memory` and `?gc`), the [memory profiling](http://cran.r-project.org/doc/manuals/R-exts.html#Profiling-R-code-for-memory-use) section of R-exts, and the [SEXPs](http://cran.r-project.org/doc/manuals/R-ints.html#SEXPs) section of R-ints. The rest I figured out by reading the C source code, performing small experiments and asking questions on R-devel. Any mistakes are entirely mine.
+The details of R's memory management are not documented in a single place. Most of the information in this chapter was gleaned from a close reading of the documentation (particularly `?Memory` and `?gc`), the [memory profiling](http://cran.r-project.org/doc/manuals/R-exts.html#Profiling-R-code-for-memory-use) section of R-exts, and the [SEXPs](http://cran.r-project.org/doc/manuals/R-ints.html#SEXPs) section of R-ints. The rest I figured out by reading the C source code, performing small experiments, and asking questions on R-devel. Any mistakes are entirely mine.
 
 ## Object size {#object-size}
 
@@ -66,7 +66,8 @@ Something interesting occurs if we use `object_size()` to systematically explore
 
 ```{r size-q, fig.height = 2.5, fig.width = 4, small_mar = TRUE}
 sizes <- sapply(0:50, function(n) object_size(seq_len(n)))
-plot(0:50, sizes, xlab = "Length", ylab = "Size (bytes)", type = "s")
+plot(0:50, sizes, xlab = "Length", ylab = "Size (bytes)", 
+  type = "s")
 ```
 
 This isn't just an artefact of integer vectors. Every length 0 vector occupies 40 bytes of memory:
@@ -107,9 +108,9 @@ All vectors have three additional components:
   obviously very important otherwise! Numeric vectors occupy 8 bytes for
   every element, integer vectors 4, and complex vectors 16.
 
-If you're keeping count you'll notice that only this adds up to 36 bytes. The remaining 4 bytes are used for padding so that each component starts on an 8 byte (= 64-bit) boundary. Most cpu architectures require pointers to be aligned in this way, and even if they don't require it, accessing non-aligned pointers tends to be rather slow. (If you're interested, you can read more about it in [C structure packing](http://www.catb.org/esr/structure-packing/).)
+If you're keeping count you'll notice that this only adds up to 36 bytes. The remaining 4 bytes are used for padding so that each component starts on an 8 byte (= 64-bit) boundary. Most cpu architectures require pointers to be aligned in this way, and even if they don't require it, accessing non-aligned pointers tends to be rather slow. (If you're interested, you can read more about it in [C structure packing](http://www.catb.org/esr/structure-packing/).)
 
-This explains the intercept on the graph. But why does the memory size grow irregularly? To understand why, you need to know a little bit about how R requests memory from the operating system. Requesting memory (with `malloc()`) is a relatively expensive operation. Having to request memory every time a small vector is created would slow R down considerably. Instead, R asks for a big block of memory and then manages that block itself. This block is called the small vector pool and is used for vectors less than 128 bytes long. For efficiency and simplicity, it only allocates vectors that are 8, 16, 32, 48, 64 or 128 bytes long. If we adjust our previous plot to remove the 40 bytes of overhead, we can see that those values correspond to the jumps in memory use.
+This explains the intercept on the graph. But why does the memory size grow irregularly? To understand why, you need to know a little bit about how R requests memory from the operating system. Requesting memory (with `malloc()`) is a relatively expensive operation. Having to request memory every time a small vector is created would slow R down considerably. Instead, R asks for a big block of memory and then manages that block itself. This block is called the small vector pool and is used for vectors less than 128 bytes long. For efficiency and simplicity, it only allocates vectors that are 8, 16, 32, 48, 64, or 128 bytes long. If we adjust our previous plot to remove the 40 bytes of overhead, we can see that those values correspond to the jumps in memory use.
 
 ```{r size-a, fig.height = 2.5, fig.width = 4, small_mar = TRUE}
 plot(0:50, sizes - 40, xlab = "Length", 
@@ -132,7 +133,7 @@ y <- list(x, x, x)
 object_size(y)
 ```
 
-`y` isn't three times as big as `x` because R is smart enough to not copy `x` three times, instead it just points to the existing `x`. 
+`y` isn't three times as big as `x` because R is smart enough to not copy `x` three times; instead it just points to the existing `x`. 
 
 It's misleading to look at the sizes of `x` and `y` individually. If you want to know how much space they take up together, you have to supply them to the same `object_size()` call:
 
@@ -152,7 +153,7 @@ object_size(x1, y1)
 object_size(x1) + object_size(y1) == object_size(x1, y1)
 ```
 
-The same issue also comes up with strings, because R has a global string pool. This means that each unique string is only stored in one place, and therefor character vectors take up less memory than you might expect:
+The same issue also comes up with strings, because R has a global string pool. This means that each unique string is only stored in one place, and therefore character vectors take up less memory than you might expect:
 
 ```{r}
 object_size("banana")
@@ -163,7 +164,7 @@ object_size(rep("banana", 10))
 
 1.  Repeat the analysis above for numeric, logical, and complex vectors.
 
-1.  If a data frame has 1 million rows, and three variables (two numeric, and 
+1.  If a data frame has one million rows, and three variables (two numeric, and 
     one integer), how much space will it take up? Work out it out from theory, 
     then verify your work by creating a data frame and measuring its size.
 
@@ -217,7 +218,7 @@ mem_change(NULL)
 mem_change(NULL)
 ```
 
-In some languages, you have to explicitly delete unused objects for their memory to be returned. R uses an alternative approach: garbage collection (or GC for short). GC automatically releases memory when an object is no longer used. It does this by tracking how many names point to each object, and when there are no names point to an object, it deletes that object. 
+In some languages, you have to explicitly delete unused objects for their memory to be returned. R uses an alternative approach: garbage collection (or GC for short). GC automatically releases memory when an object is no longer used. It does this by tracking how many names point to each object, and when there are no names pointing to an object, it deletes that object. 
 
 ```{r}
 # Create a big object
@@ -328,11 +329,11 @@ You can hover over any of the bars to get the exact numbers. In this example, lo
 There are two downsides to profiling:
 
 1. `read_delim()` only takes around half a second, but profiling can, at best, 
-   capture memory usage every 1ms. This means we'll only get about 500 samples.
+   capture memory usage every 1 ms. This means we'll only get about 500 samples.
 
 1. Since GC is lazy, we can never tell exactly when memory is no longer needed.
 
-You can work around both problems is to use `torture = TRUE`, which forces R to run GC after every allocation (see `gctorture()` for more details). This helps with both problems because memory is freed as soon as possible, and R runs 10-100x slower. This effectively makes the resolution of the timer greater, so that you can see smaller allocations and exactly when memory is no longer needed. 
+You can work around both problems by using `torture = TRUE`, which forces R to run GC after every allocation (see `gctorture()` for more details). This helps with both problems because memory is freed as soon as possible, and R runs 10--100x slower. This effectively makes the resolution of the timer greater, so that you can see smaller allocations and exactly when memory is no longer needed. 
 
 ### Exercises
 
@@ -495,12 +496,12 @@ for(i in 1:5) {
 }
 ```
 
-This behaviour was substantially more problematic prior to R 3.1.0, because every copy of the data frame was a deep copy. This made the motivating example take around 5s, compared to 0.01s today.
+This behaviour was substantially more problematic prior to R 3.1.0, because every copy of the data frame was a deep copy. This made the motivating example take around 5 s, compared to 0.01 s today.
 
 ### Exercises
 
 1.  The code below makes one duplication. Where does it occur and why? 
-    (Hint: Look at `refs(y)`.)
+    (Hint: look at `refs(y)`.)
 
     ```{r}
     y <- as.list(x)
