@@ -309,12 +309,13 @@
 \newsavebox\ll@box
 \newsavebox\lr@box
 \def\top@cornermarks{%
-  \hskip-\htrim
-  \vbox to 0\p@{\vskip-\vtrimtop\llap{\copy\ul@box}\vss}%
-  \vbox to 0\p@{\vskip-\vtrimtop\rlap{\hskip\textwidth\hskip2\htrim\copy\ur@box}\vss}%
-  \vbox to 0\p@{\vskip\textheight\vskip\vtrimbot\llap{\copy\ll@box}\vss}%
-  \vbox to 0\p@{\vskip\textheight\vskip\vtrimbot\rlap{\hskip\textwidth\hskip2\htrim\copy\lr@box}\vss}%
-  \hskip\htrim}
+  %%%\hskip-\htrim
+  %%%\vbox to 0\p@{\vskip-\vtrimtop\llap{\copy\ul@box}\vss}%
+  %%%\vbox to 0\p@{\vskip-\vtrimtop\rlap{\hskip\textwidth\hskip2\htrim\copy\ur@box}\vss}%
+  %%%\vbox to 0\p@{\vskip\textheight\vskip\vtrimbot\llap{\copy\ll@box}\vss}%
+  %%%\vbox to 0\p@{\vskip\textheight\vskip\vtrimbot\rlap{\hskip\textwidth\hskip2\htrim\copy\lr@box}\vss}%
+  %%%\hskip\htrim
+}
 \def\make@cornermarks{%
   \sbox\ul@box{\rule{18\p@}{.25\p@}\hskip8\p@\hbox to.25\p@{\vbox to26\p@{\noindent\rule{.25\p@}{18\p@}}}}%
   \sbox\ur@box{\hbox to.25\p@{\vbox to26\p@{\noindent\rule{.25\p@}{18\p@}}}\hskip8\p@\rule{18\p@}{.25\p@}}%
