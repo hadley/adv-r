@@ -1,0 +1,200 @@
+\chapter{Namespaces}
+
+As the name suggest, namespaces provide ``spaces'' for ``names'',
+providing a context for evaluating which object is found when you look
+for it. When developing code, they allow you to specify which package to
+look for a function when there are multiple packages it could come from,
+and when developing packages they ensure that your functions always call
+functions in the same place.
+
+Namespaces make it possible for packages to refer to specific functions
+in other packages, not the functions that you have defined in the global
+workspace.
+
+For example, take the simple \texttt{nrow} function:
+
+\begin{verbatim}
+nrow
+# function (x) 
+# dim(x)[1L]
+\end{verbatim}
+
+What happens if we create our own dim method? Does \texttt{nrow} break?
+
+\begin{verbatim}
+dim <- function(x) c(1, 1)
+dim(mtcars)
+nrow(mtcars)
+\end{verbatim}
+
+Suprisingly, it does not! That's because when \texttt{nrow} looks for an
+object called \texttt{dim}, it finds the function in the base package,
+not our function.
+
+Namespaces also provide an extension to the standard way of looking up
+the value of an object: instead of just typing \texttt{objectname}, you
+type \texttt{package::objectname}.
+
+Namespaces also control the functions and methods that your package
+makes available for use by others. Namespaces make it easier to come up
+with your own function names without worrying about what names other
+packages have used. A namespace means you can use any name you like for
+internal functions, and when there is a conflict with an exported
+function, there is a standard disambiguation procedure.
+
+The easiest way to use namespaces is with roxygen2, because it keeps the
+namespace definitions next to the function that it concerns. The
+translation between roxygen2 tags and \texttt{NAMESPACE} directives is
+usually straightforward: the tag becomes a function name and its
+space-separated arguments become comma separated arguments to the
+function. For example \texttt{@import plyr} becomes
+\texttt{import(plyr)} and \texttt{@importFrom plyr ddply} becomes
+\texttt{importFrom(plyr, ddply)}. The chief exception is
+\texttt{@export} which will automatically figure out the function name
+to export.
+
+\section{How do namespaces work}
+
+\section{Exporting}
+
+For every function in your package, you need to decide whether it is
+external and available to all users of the package, or internal and only
+available to other functions within the package. It's not always easy to
+tell whether or not a function is internal or external. A few rules of
+thumb:
+
+\begin{itemize}
+\item
+  Is the purpose of the function the same as the purpose of the package?
+  If not, make it internal. (A package should provide a set of closely
+  related functions for a well-defined problem domain - someone should
+  be able to look at all the functions in your package and say this is a
+  package about X - if not, you should consider splitting it up into two
+  packages)
+\item
+  Does the function have a clear purpose and can you easily explain it?
+  Every external function needs to be documented, and there's an
+  implicit contract that that function will continue to exist in the
+  future. If that's not the case, don't export it.
+\end{itemize}
+
+If a function isn't exported, you don't need to document it. This
+doesn't mean you shouldn't document it, but you only need to if it's
+complicated enough that you think you won't remember what it does.
+Generally, you want to export as few functions as possible: this makes
+it easier to change the package in the future.
+
+As described below, the \texttt{@export} tag is all that you need. There
+are only a few exceptions:
+
+\begin{itemize}
+\item
+  \textbf{Functions}: use the \texttt{@export} tag.
+\item
+  \textbf{S3 methods}: There are two ways to export a method for an S3
+  method depending on whether it's documented or not:
+
+  \begin{itemize}
+  \item
+    If it's documented, you'll already be using the \texttt{@method} tag
+    to state that it's an S3 method and you only need the
+    \texttt{@export} to generate the correct export flag in the
+    \texttt{NAMESPACE}
+  \item
+    If it's not documented, use the \texttt{S3method} tag:
+    \texttt{@S3method function class}
+  \end{itemize}
+\item
+  \textbf{S4 classes}: Use \texttt{@export}
+\item
+  \textbf{S4 methods}: If the methods are for classes that you have
+  defined and exported, you don't need to do anything. If they are for
+  classes defined in other packages, you need to use \texttt{@export}.
+\item
+  \textbf{Other objects}: For any other types of object that you want to
+  make available to the user, use \texttt{@export}.
+\end{itemize}
+
+You may also want to make the distinction between functions for users
+and functions for other developers. Functions that might be useful for
+developers or power users should be exported, but tagged with
+\texttt{@keywords internal} so they don't show up in routine lists of
+function documentation.
+
+\section{Importing}
+
+In your package \texttt{DESCRIPTION} there are two ways to indicate that
+your package requires another package to work: by listing it in either
+\texttt{Depends} or \texttt{Imports}. \texttt{Depends} works just like
+using library to load a package, but \texttt{Imports} is a little more
+subtle: the dependency doesn't get loaded in a way the user can see.
+This is good practice because it reduces the chances of conflict, and it
+makes the code clearer by requiring that every package used be
+explicitly loaded. Since R 2.14 there is no reason to use
+\texttt{Depends} because all packages have a namespace.
+
+There are two places you need to record your package's dependency:
+
+\begin{itemize}
+\item
+  In the \texttt{Imports} field in the \texttt{DESCRIPTION} file, used
+  by \texttt{install.packages} to download package dependencies
+  automatically.
+\item
+  In the \texttt{NAMESPACE} file, to make all the functions in the
+  dependency available to your code. The easiest way to do this is to
+  add \texttt{@import   package-name} to your
+  \href{Documenting-packages.html}{package documentation}:
+
+\begin{verbatim}
+#' @docType package
+#' ...
+#' @import stringr MASS
+\end{verbatim}
+\end{itemize}
+
+and have \texttt{roxygen2} generate the \texttt{NAMESPACE} file from
+that.
+
+There are two alternatives to using \texttt{@import}:
+
+\begin{itemize}
+\item
+  Use \texttt{@importFrom package fun1 fun2 ...} to only import selected
+  functions from another package. This is important if you are importing
+  two packages share functions with the same name. You can also use it
+  to produce a very specific \texttt{NAMESPACE}, but at the cost of
+  having to use \texttt{@importFrom} for every function that uses a
+  function from another package.
+\item
+  \texttt{::} refers to a function within a package directly. I don't
+  recommend this method because it doesn't work well during package
+  development -- it will use the installed version of the package,
+  rather than the development version.
+\item
+  S4 methods: See the
+  \href{http://cran.r-project.org/doc/manuals/R-exts.html\#Name-spaces-with-S4-classes-and-methods}{R
+  extensions} manual
+\end{itemize}
+
+You should very very very rarely use \texttt{:::}. This is a sign that
+you're using an internal function from someone else - and there is no
+guarantee that that function won't change from version to version. It
+would be better to encourage the author to make it an external, exported
+function, or ask if you could include a copy of it in your package.
+
+\section{Compiled code}
+
+If you have C or Fortran code in your package, you'll need to add
+\texttt{@useDynLib mypackage} to your package documentation to ensure
+your functions can access it. This means you don't need to specify
+\texttt{PACKAGE} in \texttt{.Call}.
+
+\section{How do they work}
+
+New set of rules on top of ordinary {[}{[}scoping{]}{]} rules, which
+deal with lists of environments - each environment belongs to a package.
+Search path. Variable look up differs depending on whether you're inside
+or outside a package. If a package has a namespace, then R looks first
+inside the package namespace, then the imports, then the base namespace
+and then the normal search path.
