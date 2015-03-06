@@ -53,9 +53,9 @@ escape <- function(x) {
   gsub("([{}])", "\\\\\\1", x)
 }
 apply_regexps(c(
-  "\\begin{SIDEBAR}" =    "\\begin{shortbox}\\begin{minipage}{25pc}\\Boxhead{",
+  "\\begin{SIDEBAR}" =    "\\begin{shortbox}\\Boxhead{",
   "\\end{SIDEBAR}"   = "}",
-  "\\begin{ENDSIDEBAR}\\end{ENDSIDEBAR}" = "\\end{minipage}\\end{shortbox}"
+  "\\begin{ENDSIDEBAR}\\end{ENDSIDEBAR}" = "\\end{shortbox}"
 ))
 
 # Copy across additional files -------------------------------------------------
