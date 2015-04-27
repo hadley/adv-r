@@ -14,7 +14,7 @@ render_chapter <- function(src) {
 
   message("Rendering ", src)
   command <- bquote(rmarkdown::render(.(src), bookdown::tex_chapter(),
-    output_dir = "book/tex", quiet = TRUE, env = globalenv()))
+    output_dir = "book/tex", quiet = TRUE, envir = globalenv()))
   writeLines(deparse(command), "run.r")
   on.exit(unlink("run.r"))
   source_clean("run.r")
@@ -61,6 +61,7 @@ apply_regexps(c(
 # Copy across additional files -------------------------------------------------
 file.copy("book/advanced-r.tex", "book/tex/", recursive = TRUE)
 file.copy("book/krantz.cls", "book/tex/", recursive = TRUE)
+file.copy(dir("book", "^K", full.names = TRUE), "book/tex/", recursive = TRUE)
 file.copy("diagrams/", "book/tex/", recursive = TRUE)
 file.copy("screenshots/", "book/tex/", recursive = TRUE)
 file.copy("figures", "book/tex/", recursive = TRUE)
