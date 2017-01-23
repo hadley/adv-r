@@ -1,5 +1,7 @@
 # Advanced R programming
 
+[![Build Status](https://travis-ci.org/hadley/adv-r.svg?branch=master)](https://travis-ci.org/hadley/adv-r)
+
 This is code and text behind the [Advanced R programming](http://adv-r.had.co.nz)
 book. 
 
