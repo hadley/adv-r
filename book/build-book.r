@@ -1,4 +1,4 @@
-library(bookdown)
+library(oldbookdown)
 library(rmarkdown)
 
 # Render chapters into tex  ----------------------------------------------------
@@ -13,7 +13,7 @@ render_chapter <- function(src) {
   if (!needs_update(src, dest)) return()
 
   message("Rendering ", src)
-  command <- bquote(rmarkdown::render(.(src), bookdown::tex_chapter(),
+  command <- bquote(rmarkdown::render(.(src), oldbookdown::tex_chapter(),
     output_dir = "book/tex", quiet = TRUE, envir = globalenv()))
   writeLines(deparse(command), "run.r")
   on.exit(unlink("run.r"))

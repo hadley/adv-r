@@ -1,6 +1,6 @@
 #!/usr/bin/Rscript
 library(rmarkdown)
-library(bookdown)
+library(oldbookdown)
 library(methods)
 
 args <- commandArgs(trailingOnly = TRUE)
