@@ -60,15 +60,19 @@ microbenchmark(
 )
 ```
 
+```{r, include = FALSE}
+sqrt_x <- last_benchmark("sqrt(x)")
+```
+
 By default, `microbenchmark()` runs each expression 100 times (controlled by the `times` parameter). In the process, it also randomises the order of the expressions. It summarises the results with a minimum (`min`), lower quartile (`lq`), median, upper quartile (`uq`), and maximum (`max`). Focus on the median, and use the upper and lower quartiles (`lq` and `uq`) to get a feel for the variability. In this example, you can see that using the special purpose `sqrt()` function is faster than the general exponentiation operator. 
 
-As with all microbenchmarks, pay careful attention to the units: each computation takes about 800 ns, 800 billionths of a second. To help calibrate the impact of a microbenchmark on run time, it's useful to think about how many times a function needs to run before it takes a second. If a microbenchmark takes:
+As with all microbenchmarks, pay careful attention to the units: here, each computation takes about `r sqrt_x` ns, `r sqrt_x` billionths of a second. To help calibrate the impact of a microbenchmark on run time, it's useful to think about how many times a function needs to run before it takes a second. If a microbenchmark takes:
 
 * 1 ms, then one thousand calls takes a second
 * 1 µs, then one million calls takes a second
 * 1 ns, then one billion calls takes a second
 
-The `sqrt()` function takes about 800 ns, or 0.8 µs, to compute the square root of 100 numbers. That means if you repeated the operation a million times, it would take 0.8 s. So changing the way you compute the square root is unlikely to significantly affect real code.
+The `sqrt()` function takes about `r sqrt_x` ns, or `r sqrt_x / 1000` µs, to compute the square root of 100 numbers. That means if you repeated the operation a million times, it would take `r sqrt_x / 1000` s. So changing the way you compute the square root is unlikely to significantly affect real code.
 
 ### Exercises
 
@@ -157,7 +161,11 @@ microbenchmark(
 )
 ```
 
-On my computer, the bare function takes about 200 ns. S3 method dispatch takes an additional 2,000 ns; S4 dispatch, 11,000 ns; and RC dispatch, 10,000 ns. S3 and S4 method dispatch are expensive because R must search for the right method every time the generic is called; it might have changed between this call and the last. R could do better by caching methods between calls, but caching is hard to do correctly and a notorious source of bugs.
+```{r, include = FALSE}
+base <- last_benchmark("fun")
+```
+
+The bare function takes about `r last_benchmark("fun")` ns. S3 method dispatch takes an additional `r last_benchmark("S3") - base` ns; S4 dispatch, `r last_benchmark("S4") - base` ns; and `r last_benchmark("RC") - base` dispatch, 10,000 ns. S3 and S4 method dispatch are expensive because R must search for the right method every time the generic is called; it might have changed between this call and the last. R could do better by caching methods between calls, but caching is hard to do correctly and a notorious source of bugs.
 
 ### Name lookup with mutable environments
 
@@ -301,7 +309,7 @@ microbenchmark(
 )
 ```
 
-Using `pmin()` and `pmax()` is about 3x faster than `ifelse()`, and using subsetting directly is about twice as fast again. We can often do even better by using C++. The following example compares the best R implementation to a relatively simple, if verbose, implementation in C++. Even if you've never used C++, you should still be able to follow the basic strategy: loop over every element in the vector and perform a different action depending on whether or not the value is less than `a` and/or greater than `b`. The C++ implementation is around 3x faster than the best pure R implementation.
+Using `pmin()` and `pmax()` is about `r last_benchmark("squish_ife") / last_benchmark("squish_p")`x faster than `ifelse()`, and using subsetting directly is about `r last_benchmark("squish_p") / last_benchmark("squish_in_place")`x as fast again. We can often do even better by using C++. The following example compares the best R implementation to a relatively simple, if verbose, implementation in C++. Even if you've never used C++, you should still be able to follow the basic strategy: loop over every element in the vector and perform a different action depending on whether or not the value is less than `a` and/or greater than `b`. 
 
 ```{r, engine = "Rcpp"}
 #include <Rcpp.h>
@@ -336,6 +344,8 @@ microbenchmark(
   unit = "us"
 )
 ```
+
+The C++ implementation is around `r last_benchmark("squish_in_place") / last_benchmark("squish_cpp")`x faster than the best pure R implementation.
 
 ### Exercises
 
@@ -420,19 +430,19 @@ double cond_sum_cpp(NumericVector x, NumericVector y,
 }
 ```
 
-On my computer, this approach is about eight times faster than the vectorised R equivalent, which is already pretty fast.
-
 ```{r}
 cond_sum_r <- function(x, y, z) {
   sum((x + y)[z])
 }
 
 microbenchmark(
-  cond_sum_cpp(x, y, z),
-  cond_sum_r(x, y, z),
+  cond_sum_cpp = cond_sum_cpp(x, y, z),
+  cond_sum_r = cond_sum_r(x, y, z),
   unit = "ms"
 )
 ```
+
+On my computer, this approach is about `r last_benchmark("cond_sum_r") / last_benchmark("cond_sum_cpp")`x faster than the vectorised R equivalent, which is already pretty fast.
 
 The goal of deferred evaluation is to perform this transformation automatically, so you can write concise R code and have it automatically translated into efficient machine code. Sophisticated translators can also figure out how to make the most of multiple cores. In the above example, if you have four cores, you could split `x`, `y`, and `z` into four pieces performing the conditional sum on each core, then adding together the four individual results. Deferred evaluation can also work with for loops, automatically discovering operations that can be vectorised.
 
