@@ -12,6 +12,9 @@ microbenchmark <- function(...) {
 }
 
 last_benchmark <- function(expr, fun = median) {
+  if (is.null(benchmark$last))
+    stop("No previous benchmark", call. = FALSE)
+
   structure(
     fun(benchmark$last$time[benchmark$last$expr == expr]),
     class = "benchmark"
@@ -23,7 +26,7 @@ knit_print.benchmark <- function(x, ...) {
 }
 
 print.benchmark <- function(x, ...) {
-  cat(knit_print(x), ...)
+  cat(knitr::knit_print(x), ...)
 }
 
 
