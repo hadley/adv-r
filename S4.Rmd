@@ -23,37 +23,68 @@ In S3, you can turn any object into an object of a particular class just by sett
 
 A class has three key properties:
 
-  * a __name__: an alpha-numeric string that identifies the class
+  * a __Class__ (name): an alpha-numeric string that identifies the class
 
-  * __representation__: a list of __slots__ (or attributes), giving their
-    names and classes. For example, a person class might be represented by a
-    character name and a numeric age, as follows: 
-    `representation(name = "character", age = "numeric")`
+  * __slots__: a named character vector, containing the __representation__
+    if the object by its slots (attributes).
+    For example, a person class might be represented by a character name and a
+    numeric age, as follows:
+    `slots <- c(name = "character", age = "numeric")`
 
-  * a character vector of classes that it inherits from, or in S4 terminology,
-    __contains__.  Note that S4 supports multiple inheritance, but this should
-    be used with extreme caution as it makes method lookup extremely
-    complicated.
+  * a character vector of classes it inherits from, or in S4 terminology,
+    __contains__.
+    Note that S4 supports multiple inheritance, but this should be used with
+    extreme caution, as it makes method lookup more complicated.
+    
+Optional properties of an S4 class are:
+
+  * a __prototype__: This defines the object at it's creation.
+    It might be added to support the methods `initialize`, `validity` and `show`.
+    It can be used as function call to `prototype(...)` or as a named character vector.
+    
+  * a __validity__ function, which checks additional attributes of the object,
+    for example the attributes from the object inside slots.
+    This is to ensure a safety check on object creation and modification.
+    
+### Initialization
 
 You create a class with `setClass`:
 
 ```R
 setClass("Person", representation(name = "character", age = "numeric"))
-setClass("Employee", representation(boss = "Person"), contains = "Person")
+setClass("Employee", representation(boss = "Person"), contains = c(self = "Person"))
 ```
 
-and create an instance of a class with `new`:
+and an object of that class with the generator function `new`
 
 ```R
 hadley <- new("Person", name = "Hadley", age = 31)
+hadley
+# An object of class "Person"
+# Slot "name":
+# [1] "Hadley"
+# 
+# Slot "age":
+# [1] 31
+```
+
+The function `setClass` returns a function, the generator, that itself calls `new`.
+So one can define an alias for the generator function and use it instead of a call
+to `new`.
+For clarity, it is recommended to use the name of the class:
+
+```R
+Person <- setClass("Person", slots = c(name = "character", age = "numeric"))
+hadley <- Person(name = "Hadley", age = 31)
 ```
 
 Unlike S3, S4 checks that all of the slots have the correct type:
 
 ```R    
 hadley <- new("Person", name = "Hadley", age = "thirty")
-# invalid class "Person" object: invalid object for slot "age" in class
-#  "Person": got class "character", should be or extend class "numeric"
+# Error in validObject(.Object) :
+#   invalid class "Person" object: invalid object for slot "age" in class
+#   "Person": got class "character", should be or extend class "numeric"
     
 hadley <- new("Person", name = "Hadley", sex = "male")
 # invalid names for slots of class "Person": sex
@@ -73,9 +104,29 @@ Or if you have a character string giving a slot name, you use the `slot` functio
 
 ```R
 slot(hadley, "age")
+# [1] NA
 ```
 
 This is the equivalent of `[[`.
+
+### Prototype
+
+An emtpy value for `age` is probably not what you want.
+There are two approaches to create defaults for the slot.
+One is the method `initialize`, which is described later, 
+and the other is a default __prototype__ for the class.
+The recommended usage is to provide an object (e.g. a list) instead of using
+the `prototype` function.
+This is due to `representation` is deprecated from version 3.0.0 of R,
+and the usage of the arguments `slots` and `contains` is promoted.
+
+```R
+Person <- setClass("Person", slots = c(name = "character", age = "numeric"),
+  prototype = list(name = NA_character_, age = NA_real_))
+hadley <- Person(name = "Hadley")
+hadley@age
+# [1] NA
+```
 
 An empty value for `age` is probably not what you want, so you can also assign a default __prototype__ for the class:
 
@@ -97,6 +148,11 @@ getSlots("Person")
 
 You can find out the class of an object with `is`.
 
+```R
+is(hadley, "Person")
+# [1] TRUE
+```
+
 Note that there's some tension between the usual interactive functional style of R and the global side-effect causing S4 class definitions. In most programming languages, class definition occurs at compile-time, while object instantiation occurs at run-time - it's unusual to be able to create new classes interactively. In particular, note that the examples rely on the fact that multiple calls to `setClass` with the same class name will silently override the previous definition unless the first definition is sealed with `sealed = TRUE`. 
 
 ### Checking validity
@@ -108,35 +164,39 @@ check_person <- function(object) {
   errors <- character()
   length_age <- length(object@age)
   if (length_age != 1) {
-    msg <- paste("Age is length ", length_age, ".  Should be 1", sep = "")
+    msg <- paste("Age is length ", length_age, ". Should be 1.", sep = "")
     errors <- c(errors, msg)
   }
 
   length_name <- length(object@name)
   if (length_name != 1) {
-    msg <- paste("Name is length ", length_name, ".  Should be 1", sep = "")
+    msg <- paste("Name is length ", length_name, ". Should be 1.", sep = "")
     errors <- c(errors, msg)
   }
       
   if (length(errors) == 0) TRUE else errors
 }
+
 setClass("Person", representation(name = "character", age = "numeric"), 
   validity = check_person)
     
 new("Person", name = "Hadley")
-# invalid class "Person" object: Age is length 0.  Should be 1
+# Error in validObject(.Object) : 
+#   invalid class “Person” object: Age is length 0. Should be 1.
+
 new("Person", name = "Hadley", age = 1:10)
-Error in validObject(.Object) : 
-  invalid class "Person" object: Age is length 10.  Should be 1
+# Error in validObject(.Object) : 
+#   invalid class "Person" object: Age is length 10. Should be 1.
       
 # But note that the check is not automatically applied when we modify 
 # slots directly
 hadley <- new("Person", name = "Hadley", age = 31)
 hadley@age <- 1:10
     
-# Can force check with validObject:
+# We can check validity with validObject:
 validObject(hadley)
-# invalid class "Person" object: Age is length 10.  Should be 1
+# Error in validObject(hadley) : 
+#   invalid class “Person” object: Age is length 10. Should be 1.
 ```
 
 ## Generic functions and methods
