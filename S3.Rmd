@@ -1,39 +1,36 @@
 # S3 {#s3}
 
-S3 is R's first and simplest OO system. It is the only OO system used in the base and stats packages, and it's the most commonly used system in CRAN packages. S3 is informal and ad hoc, but it has a certain elegance in its minimalism: you can't take away any part of it and still have a useful OO system. \index{S3} \index{objects!S3|see{S3}}
+S3 is R's first and simplest OO system. It is the only OO system used in the base and stats packages, and it's the most commonly used system in CRAN packages. S3 is informal and ad hoc, but it has a certain elegance in its minimalism: you can't take away any part of it and still have a useful OO system. S3 should be your default: you should use it unless you have a compelling reason to use a different system.\index{S3} \index{objects!S3|see{S3}}
 
-## Recognising in the wild
+## Basics {#s3-basics}
 
-Most objects that you encounter are S3 objects. But unfortunately there's no simple way to test if an object is an S3 object in base R. The closest you can come is `is.object(x) & !isS4(x)`, i.e., it's an object, but not S4. An easier way is to use `pryr::otype()`: \indexc{otype()}
-
-```{r, message = FALSE}
-library(pryr)
-
-df <- data.frame(x = 1:10, y = letters[1:10])
-otype(df)    # A data frame is an S3 class
-otype(df$x)  # A numeric vector isn't
-otype(df$y)  # A factor is
-```
-
-In S3, methods belong to functions, called __generic functions__, or generics for short. S3 methods do not belong to objects or classes. This is different from most other programming languages, but is a legitimate OO style. \index{functions!generics|see{generics}} \index{S3!generics} \index{generics!S3}
-
-To determine if a function is an S3 generic, you can inspect its source code for a call to `UseMethod()`: that's the function that figures out the correct method to call, the process of __method dispatch__. Similar to `otype()`, pryr also provides `ftype()` which describes the object system, if any, associated with a function: \indexc{UseMethod()}
+An S3 object is always built on a base type (typically a vector) and has the "class" attributte set. For example, take the factor. It's built on top of an integer vector, and has attributes "levels", and "class". It's the class attribute that makes this an S3 object.
 
 ```{r}
-mean
-ftype(mean)
+f <- factor("a")
+
+typeof(f)
+attributes(f)
 ```
 
-Some S3 generics, like `[`, `sum()`, and `cbind()`, don't call `UseMethod()` because they are implemented in C. Instead, they call the C functions `DispatchGroup()` or `DispatchOrEval()`. Functions that do method dispatch in C code are called __internal generics__ and are documented in `?"internal generic"`. `ftype()` knows about these special cases too.
-
-Given a class, the job of an S3 generic is to call the right S3 method. You can recognise S3 methods by their names, which look like `generic.class()`. For example, the Date method for the `mean()` generic is called `mean.Date()`, and the factor method for `print()` is called `print.factor()`.  \index{methods!S3} \index{S3!methods}
-
-This is the reason that most modern style guides discourage the use of `.` in function names: it makes them look like S3 methods. For example, is `t.test()` the `t` method for `test` objects? Similarly, the use of `.` in class names can also be confusing: is `print.data.frame()` the `print()` method for `data.frames`, or the `print.data()` method for `frames`?  `pryr::ftype()` knows about these exceptions, so you can use it to figure out if a function is an S3 method or generic:
+S3 objects differ in their behaviour to the underlying base type because of __generic functions__, or generics for short. A generic function has different behaviour based on the class of one of its arguments (almost always the first). You can see this difference with the most important generic function: `print()`.
 
 ```{r}
-ftype(t.data.frame) # data frame method for t()
-ftype(t.test)       # generic function for t tests
+print(f)
+print(unclass(f))
 ```
+
+Generic functions behave differently for different S3 classes because they have __methods__. A method is a function that implements the generic for a specific class. Note that in S3, methods belong to the generic, not the the object or the class. This reflects a different school of though to most programming languages, but is a good fit to the problem of data analysis. \index{functions!generics|see{generics}} \index{S3!generics} \index{generics!S3}
+
+To determine if a function is an S3 generic, you can inspect its source code for a call to `UseMethod()`: that's the function that figures out the correct method to call, the process of __method dispatch__.  \indexc{UseMethod()}
+
+```{r}
+print
+```
+
+Some S3 generics, like `[`, `sum()`, and `cbind()`, don't call `UseMethod()` because they are implemented in C. Instead, they call the C functions `DispatchGroup()` or `DispatchOrEval()`. Functions that do method dispatch in C code are called __internal generics__ and we'll talk about them in [internal generics].
+
+Given an object, the job of an S3 generic is to call the right S3 method. You can recognise S3 methods by their names, which look like `generic.class()`. For example, the Date method for the `mean()` generic is called `mean.Date()`, and the factor method for `print()` is called `print.factor()`. This is the reason that most modern style guides discourage the use of `.` in function names: it makes them look like S3 methods. For example, is `t.test()` the `t` method for `test` objects? Similarly, the use of `.` in class names can also be confusing: is `print.data.frame()` the `print()` method for `data.frames`, or the `print.data()` method for `frames`?  
 
 You can see all the methods that belong to a generic with `methods()`:
 
@@ -42,7 +39,7 @@ methods("mean")
 methods("t.test")
 ```
 
-(Apart from methods defined in the base package, most S3 methods will not be visible: use `getS3method()` to read their source code.)
+(Apart from methods defined in the base package, most S3 methods will not be visible: use `getS3method("generic", "class")` to read their source code.)
 
 You can also list all generics that have a method for a given class:
 
@@ -50,7 +47,24 @@ You can also list all generics that have a method for a given class:
 methods(class = "ts")
 ```
 
-There's no way to list all S3 classes, as you'll learn in the following section.
+There's no way to list all S3 classes because there is no formal definition of an S3 class, as you'll learn shortly.
+
+### Exercises
+
+1.  What does the `is.data.frame.data.frame()` method do?
+
+1.  The most important S3 objects in base R are factors, data.frames,
+    and date/times. You've already seen the attributes and type that
+    factors are build on. What data structures and attributes are
+    the others built on?
+
+1.  What does the following code return? What base type is built on?
+    What attributes does it use?
+    
+    ```{r}
+    x <- ecdf(rpois(100, 10))
+    x
+    ```
 
 ## New classes
 
@@ -65,8 +79,6 @@ foo <- list()
 class(foo) <- "foo"
 ```
 
-S3 objects are usually built on top of lists, or atomic vectors with attributes. (You can refresh your memory of attributes with [attributes](#attributes).) You can also turn functions into S3 objects. Other base types are either rarely seen in R, or have unusual semantics that don't work well with attributes.
-
 You can determine the class of any object using `class(x)`, and see if an object inherits from a specific class using `inherits(x, "classname")`. \index{attributes!class}
 
 ```{r}
@@ -74,28 +86,11 @@ class(foo)
 inherits(foo, "foo")
 ```
 
-The class of an S3 object can be a vector, which describes behaviour from most to least specific. For example, the class of the `glm()` object is `c("glm", "lm")` indicating that generalised linear models inherit behaviour from linear models. Class names are usually lower case, and you should avoid `.`. Otherwise, opinion is mixed whether to use underscores (`my_class`) or CamelCase (`MyClass`) for multi-word class names.
+Class names can be any string, but I recommend using only lower case letters and `_`. Avoid `.`. Opinion is mixed whether to use underscores (`my_class`) or CamelCase (`MyClass`) for multi-word class names. Just pick one convention and stick with it.  You can include multiple names in a character vector. We'll come back to that idea in [inheritance].
 
-### Constructor
+S3 has no checks for correctness. This means you can change the class of existing objects:
 
-* Create a construction method that checks the types of the input, and returns
-  a list with the correct class label. `XXX <- function(...) {}`
-
-
-Most S3 classes provide a constructor function:
-
-```{r}
-foo <- function(x) {
-  if (!is.numeric(x)) stop("X must be numeric")
-  structure(list(x), class = "foo")
-}
-```
-
-You should use it if it's available (like for `factor()` and `data.frame()`). This ensures that you're creating the class with the correct components. Constructor functions usually have the same name as the class.
-
-Apart from developer supplied constructor functions, S3 has no checks for correctness. This means you can change the class of existing objects:
-
-```{r}
+```{r, error = TRUE}
 # Create a linear model
 mod <- lm(log(mpg) ~ log(disp), data = mtcars)
 class(mod)
@@ -103,24 +98,70 @@ print(mod)
 
 # Turn it into a data frame (?!)
 class(mod) <- "data.frame"
-# But unsurprisingly this doesn't work very well
+
+# Unsurprisingly this doesn't work very well
 print(mod)
+
 # However, the data is still there
 mod$coefficients
 ```
 
 If you've used other OO languages, this might make you feel queasy. But surprisingly, this flexibility causes few problems: while you _can_ change the type of an object, you never should. R doesn't protect you from yourself: you can easily shoot yourself in the foot. As long as you don't aim the gun at your foot and pull the trigger, you won't have a problem.
 
-As discussed in the next section, R looks for methods in the order in which they appear in the class vector. So in this example, it would be like class A inherits from class B - if a method isn't defined for A, it will fall back to B. However, if you switched the order of the classes, the opposite would be true! This is because S3 doesn't define any formal relationship between classes, or even any definition of what an individual class is. If you're coming from a strict environment like Java, this will seem pretty frightening (and it is!) but it does give your users a tremendous amount of freedom. While it's very difficult to stop someone from doing something you don't want them to do, your users will never be held back because there is something you haven't implemented yet.
+### Constructor
+
+Because S3 itself provides no checks for correctness, it's up to you to adopt conventions to protect yourself. The first convention is to use a constructor function: 
+
+* Whenever you create an S3 object, you should always do so by calling 
+  a constructor.
+
+* Whenever you create an S3 class of your own, you should always provide
+  a constructor.
+  
+The job of the constructor is to ensure that the S3 object always has the same structure (i.e. it always uses the same attributes, and they are defined up front) and to perform checks for validity. Generally, an S3 constructor should err on the side of strictness rather than helpfulness. Typically you will also provide a helpful function for the user.
+
+```{r}
+new_factor <- function(x, levels) {
+  stopifnot(is.integer(x))
+  stopifnot(is.character(levels))
+  
+  if (any(x <= 0)) {
+    stop("All `x` values must be greater than zero")
+  }
+  
+  if (length(levels) < max(x)) {
+    stop("There must at least as many `levels` as possible values in `x`")
+  }
+  
+  structure(
+    x,
+    levels = levels,
+    class = "factor"
+  )
+}
+```
+
+`validity` method approach. A la `tibble::tibble()`.
+
+If writing a package, you will need to consider whether or not to make the S3 constructor function available to the user. 
+
+You should use it if it's available (like for `factor()` and `data.frame()`). This ensures that you're creating the class with the correct components. Constructor functions usually have the same name as the class.
+
+Apart from developer supplied constructor functions,
+
 
 ### Object styles
 
 Two basic ways to create an object in S3: with a list or with attributes.  With attributes is best if your object behaves like a vector, list if you're starting from scratch.
 
+S3 objects are usually built on top of lists, or atomic vectors with attributes. (You can refresh your memory of attributes with [attributes](#attributes).) You can also turn functions into S3 objects. Other base types are either rarely seen in R, or have unusual semantics that don't work well with attributes.
+
+
+
 
 ## New methods
 
-A generic isn't useful without some methods. To add a method, you just create a regular function with the correct (`generic.class`) name: \index{S3!new methods}
+A generic isn't useful without some methods. To add a method, you just create a regular function with the correct (`generic.class`) name: \index{methods!S3} \index{S3!methods}
 
 ```{r}
 f.a <- function(x) "Class a"
@@ -235,6 +276,10 @@ To add a new generic, create a function that calls `UseMethod()`. `UseMethod()` 
 f <- function(x) UseMethod("f")
 ```
 
+There are two main reasons to write your own generic:
+
+* To avoid a big compound if statement
+* To make it possible for others to extend your package
 
 ## Method dispatch
 
@@ -305,6 +350,8 @@ baz.c(c)
 
 baz.c(1)
 ```
+
+As discussed in the next section, R looks for methods in the order in which they appear in the class vector. So in this example, it would be like class A inherits from class B - if a method isn't defined for A, it will fall back to B. However, if you switched the order of the classes, the opposite would be true! This is because S3 doesn't define any formal relationship between classes, or even any definition of what an individual class is. If you're coming from a strict environment like Java, this will seem pretty frightening (and it is!) but it does give your users a tremendous amount of freedom. While it's very difficult to stop someone from doing something you don't want them to do, your users will never be held back because there is something you haven't implemented yet.
 
 ### Interaction with base types
 
