@@ -6,11 +6,13 @@ S3 implements a style of object oriented programming called generic-function OO.
 
 The primary use of OO programming in R is for print, summary and plot methods. These methods allow us to have one generic function, e.g. `print()`, that displays the object differently depending on its type: printing a linear model is very different to printing a data frame.
 
-Because S3 is a very free system, effective use requires that you constrain yourself. 
+Because S3 is a very free system, effective use requires that you constrain yourself. In this chapter, as well as explaining the basics operation of S3, I'll also give you advice to make working with S3 as effective as possible.
 
 ## Basics {#s3-basics}
 
-An S3 object is always built on a base type (typically a vector) and has the "class" attribute set. For example, take the factor. It's built on top of an integer vector, and has attributes "levels", and "class". It's the class attribute that makes this an S3 object.
+An S3 object is always built on top of a base type (typically a vector) and has the "class" attribute set. Other data is usually stored in attributes (there's another common type based on a list which we'll come back to later). 
+
+For example, take the factor. It's built on top of an integer vector, and has attributes "levels", and "class". It's the class attribute that makes this an S3 object.
 
 ```{r}
 f <- factor("a")
@@ -19,52 +21,50 @@ typeof(f)
 attributes(f)
 ```
 
-S3 objects differ in their behaviour to the underlying base type because of __generic functions__, or generics for short. A generic function has different behaviour based on the class of one of its arguments (almost always the first). You can see this difference with the most important generic function: `print()`.
+S3 objects differ in their behaviour to the underlying base type because of __generic functions__, or generics for short. A generic behaves differently depending on the class of one of its arguments (almost always the first argument). You can see this difference with the most important generic function: `print()`.
 
 ```{r}
 print(f)
 print(unclass(f))
 ```
 
-Generic functions behave differently for different S3 classes because they have __methods__. A method is a function that implements the generic for a specific class. Note that in S3, methods belong to the generic, not the the object or the class. This reflects a different school of though to most programming languages, but is a good fit to the problem of data analysis. \index{functions!generics|see{generics}} \index{S3!generics} \index{generics!S3}
+(`unclass()` simply strips the class attribute and is a useful tool for seeing what special behaviour an S3 class adds.)
 
-To determine if a function is an S3 generic, you can inspect its source code for a call to `UseMethod()`: that's the function that figures out the correct method to call, the process of __method dispatch__.  \indexc{UseMethod()}
+The reason that generics behaviour differently for different classes is that generics have __methods__. A method is a function implements the generic behaviour for a specific class. The generic doesn't actually do any work: it's job is to find the write method, and pass on its arguments.
 
-```{r}
-print
-```
+You can recognise S3 methods by their names, which look like `generic.class()`. For example, the Date method for the `mean()` generic is called `mean.Date()`, and the factor method for `print()` is called `print.factor()`. This is the reason that most modern style guides discourage the use of `.` in function names: it makes them look like S3 methods. For example, is `t.test()` the `t` method for `test` objects? Similarly, the use of `.` in class names can also be confusing: is `print.data.frame()` the `print()` method for `data.frames`, or the `print.data()` method for `frames`?  
 
-Some S3 generics, like `[`, `sum()`, and `cbind()`, don't call `UseMethod()` because they are implemented in C. Instead, they call the C functions `DispatchGroup()` or `DispatchOrEval()`. Functions that do method dispatch in C code are called __internal generics__ and we'll talk about them in [internal generics].
+Note that in S3, methods belong to the generic, not the the object or the class. This reflects a different school of though to most programming languages, but is a good fit to the problem of data analysis. Knowing this fact probably won't help you much in your day-to-day programming, but it will avoid some fundamental confusing if you're coming from another OO programmming language. \index{functions!generics|see{generics}} \index{S3!generics} \index{generics!S3}
 
-Given an object, the job of an S3 generic is to call the right S3 method. You can recognise S3 methods by their names, which look like `generic.class()`. For example, the Date method for the `mean()` generic is called `mean.Date()`, and the factor method for `print()` is called `print.factor()`. This is the reason that most modern style guides discourage the use of `.` in function names: it makes them look like S3 methods. For example, is `t.test()` the `t` method for `test` objects? Similarly, the use of `.` in class names can also be confusing: is `print.data.frame()` the `print()` method for `data.frames`, or the `print.data()` method for `frames`?  
-
-You can see all the methods that belong to a generic with `methods()`:
-
-```{r}
-methods("mean")
-methods("t.test")
-```
-
-(Apart from methods defined in the base package, most S3 methods will not be visible: use `getS3method("generic", "class")` to read their source code.)
-
-You can also list all generics that have a method for a given class:
-
-```{r}
-methods(class = "ts")
-```
-
-There's no way to list all S3 classes because there is no formal definition of an S3 class, as you'll learn shortly.
+The following sections will explore each of these topics in more depth, filling in the details.
 
 ### Exercises
-
-1.  What does the `is.data.frame.data.frame()` method do?
 
 1.  The most important S3 objects in base R are factors, data.frames,
     and date/times. You've already seen the attributes and type that
     factors are build on. What data structures and attributes are
     the others built on?
 
-## New classes
+1.  Describe the difference in behaviour in these two calls.
+
+    ```{r}
+    some_days <- as.Date("2017-01-31") + sample(10, 5)
+    
+    mean(some_days)
+    mean(unclass(some_days))
+    ```
+
+1.  What does the `is.data.frame.data.frame()` method do?
+
+1.  What does the following code return? What base type is built on?
+    What attributes does it use?
+    
+    ```{r}
+    x <- ecdf(rpois(100, 10))
+    x
+    ```
+
+## Classes
 
 S3 is a simple and ad hoc system; it has no formal definition of a class. To make an object an instance of a class, you just take an existing object and set the class attribute. You can do that during creation with `structure()`, or after the fact with `class<-()`: \index{S3!classes} \index{classes!S3}
 
@@ -221,17 +221,75 @@ These are not the only types, but they are the most common. Other less common bu
 
 ### Exercises
 
-1.  What does the following code return? What base type is built on?
-    What attributes does it use?
-    
-    ```{r}
-    x <- ecdf(rpois(100, 10))
-    x
-    ```
+## Generics
 
+To determine if a function is an S3 generic, you can inspect its source code for a call to `UseMethod()`: that's the function that figures out the correct method to call, the process of __method dispatch__.  \indexc{UseMethod()}
 
+```{r}
+print
+```
 
-## New methods
+To add a new generic, create a function that calls `UseMethod()`. `UseMethod()` takes two arguments: the name of the generic function, and the argument to use for method dispatch. If you omit the second argument it will dispatch on the first argument to the function. 
+
+There you don't pass any of the arguments of the generic to `UseMethod()`. `UseMethod()` uses black magic to find them out for itself. \indexc{UseMethod()} \index{S3!new generic}
+
+```{r}
+f <- function(x) UseMethod("f")
+```
+
+There are two main reasons to write your own generic:
+
+* To avoid a big compound if statement
+* To make it possible for others to extend your package
+
+### Coercion methods
+
+One common use of a generic is as a coercion method, i.e. `as_my_class`. (Base R often uses `as.` but I think it's better to use `_` to avoid method names like `as.data.frame.data.frame`).
+
+You should always have `as_my_class.my_class <- function(x, ...) x` (i.e. coercing an object that's already of the right type should do nothing.). Generally each coercion method should do a little work then call the constructor.
+
+### Esoterica
+
+Note that `UseMethod()` calls methods in a special way:
+
+```{r}
+g <- function(x) {
+  x <- 10
+  y <- 10
+  UseMethod("g")
+}
+g.default <- function(x) c(x = x, y = y)
+
+x <- 1
+y <- 1
+g(x)
+```
+
+Arguments to the generic are passed on as they were recieved by the generic, regardless of what's happened to them in the meantime. New variables, however, are passed on as is. You should never rely on this behaviour because it is esoteric. Instead, you should avoid performing complex calculations in the generic. Most generics should simply contain `UseMethod()` and nothing else.
+
+### Group generics
+
+Group generic methods add a little more complexity. Group generics make it possible to implement methods for multiple generics with one function. The four group generics and the functions they include are: \index{group generics} \index{S3!group generics}
+
+* Math: `abs`, `sign`, `sqrt`, `floor`, `cos`, `sin`, `log`, `exp`, ...
+* Ops: `+`, `-`, `*`, `/`, `^`, `%%`, `%/%`, `&`, `|`, `!`, `==`, `!=`, `<`, `<=`, `>=`, `>`
+* Summary: `all`, `any`, `sum`, `prod`, `min`, `max`, `range`
+* Complex: `Arg`, `Conj`, `Im`, `Mod`, `Re`
+
+Note that inside a group generic function a special variable `.Generic` provides the actual generic function called.
+
+### Internal generics
+
+Some S3 generics, like `[`, `sum()`, and `cbind()`, don't call `UseMethod()` because they are implemented in C. Instead, they call the C functions `DispatchGroup()` or `DispatchOrEval()`. Functions that do method dispatch in C code are called __internal generics__. It's important to know which functions are internally generic, so you can write methods for them, and so you're aware of the slight differences in method dispatch. It's not easy to tell if a function is internally generic, because it just looks like a typical call to a C function:
+
+```{r}
+length
+cbind
+```
+
+You can look in the documentation, in the global variable `.S3PrimitiveGenerics`, and in `?InternalMethods`.  All group generics are internal generics.
+
+## Methods
 
 A generic isn't useful without some methods. To add a method, you just create a regular function with the correct (`generic.class`) name: \index{methods!S3} \index{S3!methods}
 
@@ -282,82 +340,25 @@ f.a(c)
 
 However, this is just as dangerous as changing the class of an object, so you shouldn't do it. Please don't point the loaded gun at your foot! The only reason to call the method directly is that sometimes you can get considerable performance improvements by skipping method dispatch. See [performance](#be-lazy) for details.
 
-### Exercises
 
-1.  Read the source code for `t()` and `t.test()` and confirm that 
-    `t.test()` is an S3 generic and not an S3 method. What happens if 
-    you create an object with class `test` and call `t()` with it?
 
-1.  What classes have a method for the `Math` group generic in base R? Read 
-    the source code. How do the methods work?
-
-1.  R has two classes for representing date time data, `POSIXct` and 
-    `POSIXlt`, which both inherit from `POSIXt`. Which generics have 
-    different behaviours for the two classes? Which generics share the same
-    behaviour?
-
-1.  Which base generic has the greatest number of defined methods?
-
-## New generics
-
-To add a new generic, create a function that calls `UseMethod()`. `UseMethod()` takes two arguments: the name of the generic function, and the argument to use for method dispatch. If you omit the second argument it will dispatch on the first argument to the function. There's no need to pass any of the arguments of the generic to `UseMethod()` and you shouldn't do so. `UseMethod()` uses black magic to find them out for itself. \indexc{UseMethod()} \index{S3!new generic}
+You can see all the methods that belong to a generic with `methods()`:
 
 ```{r}
-f <- function(x) UseMethod("f")
+methods("mean")
+methods("t.test")
 ```
 
-There are two main reasons to write your own generic:
+(Apart from methods defined in the base package, most S3 methods will not be visible: use `getS3method("generic", "class")` to read their source code.)
 
-* To avoid a big compound if statement
-* To make it possible for others to extend your package
+You can also list all generics that have a method for a given class:
 
+```{r}
+methods(class = "ts")
+```
 
-### Coercion methods
+There's no way to list all S3 classes because there is no formal definition of an S3 class, as you'll learn shortly.
 
-One common use of a generic is as a coercion method, i.e. `as_my_class`. (Base R often uses `as.` but I think it's better to use `_` to avoid method names like `as.data.frame.data.frame`).
-
-You should always have `as_my_class.my_class <- function(x, ...) x` (i.e. coercing an object that's already of the right type should do nothing.). Generally each coercion method should do a little work then call the constructor.
-
-### "Duck" typing
-
-`is.numeric()` is
-
-> Methods for is.numeric should only return true if the base type of 
-> the class is double or integer and values can reasonably be regarded 
-> as numeric (e.g., arithmetic on them makes sense, and comparison 
-> should be done via the base type).
-
-(i.e. you should only ever override it to be false)
-
-This is confusing because this definition of numeric is different to the definition of numeric used elsewhere: i.e. either an integer or a double. A better name would have been `is.numericish()` or similar.
-
-### `UseMethod()` behaviour
-
-1.  `UseMethod()` calls methods in a special way. Predict what the following
-     code will return, then run it and read the help for `UseMethod()` to 
-    figure out what's going on. Write down the rules in the simplest form
-    possible.
-
-    ```{r, eval = FALSE}
-    y <- 1
-    g <- function(x) {
-      y <- 2
-      UseMethod("g")
-    }
-    g.numeric <- function(x) y
-    g(10)
-
-    h <- function(x) {
-      x <- 10
-      UseMethod("h")
-    }
-    h.character <- function(x) paste("char", x)
-    h.numeric <- function(x) paste("num", x)
-
-    h("a")
-    ```
-
-## Method dispatch
 
 ### Method families
 
@@ -375,27 +376,23 @@ This is confusing because this definition of numeric is different to the definit
 
 How does `+` work.
 
-### Internal generics
 
-Some internal C functions are also generic, which means that the method dispatch is not performed by R function, but is instead performed by special C functions. It's important to know which functions are internally generic, so you can write methods for them, and so you're aware of the slight differences in method dispatch. It's not easy to tell if a function is internally generic, because it just looks like a typical call to a C:
+### Exercises
 
-```{r}
-length
-cbind
-```
+1.  Read the source code for `t()` and `t.test()` and confirm that 
+    `t.test()` is an S3 generic and not an S3 method. What happens if 
+    you create an object with class `test` and call `t()` with it?
 
-As well as `length` and `cbind`, internal generic functions include `dim`, `c`, `as.character`, `names` and `rep`. A complete list can be found in the global variable `.S3PrimitiveGenerics`, and more details are given in `?InternalMethods`.
+1.  What classes have a method for the `Math` group generic in base R? Read 
+    the source code. How do the methods work?
 
-### Group generics
+1.  R has two classes for representing date time data, `POSIXct` and 
+    `POSIXlt`, which both inherit from `POSIXt`. Which generics have 
+    different behaviours for the two classes? Which generics share the same
+    behaviour?
 
-Group generic methods add a little more complexity. Group generics make it possible to implement methods for multiple generics with one function. The four group generics and the functions they include are: \index{group generics} \index{S3!group generics}
+1.  Which base generic has the greatest number of defined methods?
 
-* Math: `abs`, `sign`, `sqrt`, `floor`, `cos`, `sin`, `log`, `exp`, ...
-* Ops: `+`, `-`, `*`, `/`, `^`, `%%`, `%/%`, `&`, `|`, `!`, `==`, `!=`, `<`, `<=`, `>=`, `>`
-* Summary: `all`, `any`, `sum`, `prod`, `min`, `max`, `range`
-* Complex: `Arg`, `Conj`, `Im`, `Mod`, `Re`
-
-Group generics are a relatively advanced technique and are beyond the scope of this chapter but you can find out more about them in `?groupGeneric`. The most important thing to take away from this is to recognise that `Math`, `Ops`, `Summary`, and `Complex` aren't real functions, but instead represent groups of functions. Note that inside a group generic function a special variable `.Generic` provides the actual generic function called.
 
 ## Inheritance
 
@@ -474,9 +471,23 @@ Methods invoked as a result of a call to `NextMethod` behave as if they had been
 
 If `NextMethod` is called in a situation where there is no second class it will return an error. 
 
-### Writing flexible methods
+### Writing flexible base methods
+
+
 
 ## Base types
+
+```{r}
+x <- 1:10
+class(x)
+inherits(x, "integer")
+inherits(x, "numeric")
+
+foo <- function(x) UseMethod("foo")
+foo.numeric <- function(x) TRUE
+foo.default <- function(x) FALSE
+foo(x)
+```
 
 ### Interaction with base types
 
@@ -491,9 +502,8 @@ iclass <- function(x) {
   c(
     if (is.matrix(x)) "matrix",
     if (is.array(x) && !is.matrix(x)) "array",
-    if (is.double(x)) "double",
-    if (is.integer(x)) "integer",
-    mode(x)
+    typeof(x),
+    if (is.integer(x) || is.double(x)) "numeric"
   )
 }
 iclass(matrix(1:5))
@@ -501,6 +511,8 @@ iclass(array(1.5))
 ```
 
 ### Internal generics
+
+" internal generics only dispatch on objects for which is.object is true."
 
 Internal generic have a slightly different dispatch mechanism to other generic functions: before trying the default method, they will also try dispatching on the __mode__ of an object, i.e. `mode(x)`. The following example shows the difference:
 
@@ -531,7 +543,25 @@ mylength(x)
     length(g)
     ```
 
-## Packages
+
+## Useful techniques
+
+### "Duck" typing
+
+`is.numeric()` is
+
+> Methods for is.numeric should only return true if the base type of 
+> the class is double or integer and values can reasonably be regarded 
+> as numeric (e.g., arithmetic on them makes sense, and comparison 
+> should be done via the base type).
+
+(i.e. you should only ever override it to be false)
+
+This is confusing because this definition of numeric is different to the definition of numeric used elsewhere: i.e. either an integer or a double. A better name would have been `is.numericish()` or similar.
+
+### Mixins
+
+### S3 in packages
 
 * Beware class clashes across packages. If there's any chance of confusion
   give your classes a common prefix.
