@@ -124,7 +124,9 @@ new_Date <- function(x) {
 new_Date(c(-1, 0, 1))
 ```
 
-Generally, constructors will be used by developers (i.e. you). That means they can be quite simple, and you don't need to optimise the error messages for user friendliness. Typically, you'll also provide a user friendly way to create objects, often by coercing from an existing type. If this code is in a package, you may want to export the constructor and use it to document the structure of the class.
+Generally, constructors will be used by developers (i.e. you). That means they can be quite simple, and you don't need to optimise the error messages for user friendliness.
+
+Typically, you'll also provide a user friendly way to create objects, often by coercing from an existing type. If this code is in a package, you may want to export the constructor and use it to document the structure of the class.
 
 Note that a constructor should alway be called `new_class_name()`. Here we have the awkwardly named `new_Date()`, because the existing base class uses a capital letter. I recommend using camel case class names to avoid this problem.
 
@@ -151,6 +153,12 @@ new_POSIXct(1, tzone = "UTC")
 
 (Note that we set the class to a vector here; we'll come back to that in [Inheritance])
 
+(If your code works a lot with base objects that don't have a constructor, you might consider writing one yourself, just to keep your code consistent.)
+
+Often S3 objects are created only by your functions and don't need to be created deliberately by the user. If, however, you expect others to create these objects, it's a good idea to create a more helpful constructor function, called `class_name()`, and a coercion function called `as_class_name()` (which should be an S3 generic).
+
+### Validity methods
+
 More complicated classes will require more complicated checks for validity. Take factors for example:
 
 ```{r}
@@ -174,32 +182,59 @@ new_factor <- function(x, levels) {
 }
 ```
 
-If you find the checks growing long, and you want to re-use them in other places, consider moving out in a `check_class` function.
+If you find the checks growing long, and you want to re-use them in other places, consider moving out into a separate validity checking function.
 
-Often S3 objects are created only by your functions and don't need to be created deliberately by the user. If, however, you expect others to create these objects, it's a good idea to create a more helpful constructor function, called `class_name()`, and a coercion function called `as_class_name()` (which should be an S3 generic).
+```{r}
+check_factor <- function(x) {
+  values <- unclass(x) # blech
+  levels <- attr(x, "levels")
+  
+  if (any(values <= 0)) {
+    stop("All `x` values must be greater than zero")
+  }
+  
+  if (length(levels) < max(x)) {
+    stop("There must at least as many `levels` as possible values in `x`")
+  }
+}
+```
+
+If you are constructing many known-correct object elsewhere in your code you may want to make expensive checks explicit by putting in a separate function and calling.  This is a little less safe (because you might forget to call when it is important), but for complex objects the performance benefit may be worth. Don't do it proactively; only do it if [profiling] reveals object construction to be a bottleneck.
+
+### Helpers
+
+If you want others to construct objects of your new class, you should also provide a helper method that makes their life easy as possible. This should have the same name as a class, and will often provide more defaults and more checks. 
+
+A good example of a helper is `factor()`: the internal representation is quite different to how you might want to create it in practice. The simplest possible implementation looks soemthing like this:
+
+```{r}
+factor <- function(x, levels = unique(x)) {
+  ind <- match(x, levels)
+  new_factor(ind, levels)
+}
+factor(c("a", "a", "b"))
+```
+
+Constrast this with `Date` and `POSIXct`. Neither of these have helpers in base R because there's no particularly natural way for them to be constructed. Instead they provide a coercion function that lets you create from existing base types.
 
 ### Object styles
 
-S3 gives you the freedom to built a new class on top of an existing base type. Often the only way to find out which base type you should use is to pick the wrong one and 
+S3 gives you the freedom to build a new class on top of an existing base type. Often the only way to find out which base type you should use is to pick the wrong one and 
 
-However, there are two common styles that it's best to start with "scalar" and "vector":
+However, there are two common styles that it's best to start with:
 
 *   If you are building a complex object that represents a single 
     thing (a "scalar"), you should use a list with named elements. 
     A good example of this type of object is "lm".
     
-*   If you creating a vector type (i.e. something that you'd want to put
+*   If you creating a "vector" type (i.e. something that you'd want to put
     in a data frame column) that adds some mild need behaviour
     add attributes to a vector.
 
-The constructors above showed the vector type. The constructor for scalar type looks slightly different:
+So far the constructors have created the vector type where you check the type of the base object and then add attributes (including class). The constructors for a scalar type object is slightly different, as you always put the elements in a list:
 
 ```{r}
 new_my_class <- function(x, y, z) {
-  stopifnot(is.logical(x))
-  stopifnot(is.character(y))
-  stopifnot(is.numeric(z))
-  
   structure(
     list(
       x = x,
@@ -211,13 +246,34 @@ new_my_class <- function(x, y, z) {
 }
 ```
 
+(For a real constructor, you'd also check that `x`, `y`, and `z` are the types that you expect.)
+
 These are not the only types, but they are the most common. Other less common but still useful structures are:
 
-*   Functions with classes, which allow you to modify the print method
+*   Functions with classes. This is mostly useful to override the print method
+    as you can't override the call method.
+
 *   Environments with classes, which allow you to implement new styles of OO.
-*   "Vector" lists, like data frames.
+    This is beyond the scope of this book, because generally you shouldn't
+    be creating your own OO style!
+
+*   "Vector" lists, like data frames. This is technically a subtype of the
+    "vector type", where your vector is a list.
 
 ### Exercises
+
+1.  Using the above system, categorise the objects returned by `lm()`,
+    `factor()`, `table()`, `ecdf()`, `ordered()`, `I()`.
+
+1.  Write a constructor for `difftime` objects. What base type are they
+    built on? What attributes do they use?
+
+1.  Write a constructor for `data.frame` objects. What base type is a data 
+    frame build on? What attributes does it use? What are the restrictions 
+    placed on the individual elements? What about the names?
+
+1.  Carefully read the source code of `factor()` what does it do that
+    our constructor does not?
 
 ## Generics
 
@@ -245,6 +301,14 @@ There are two main reasons to write your own generic:
 One common use of a generic is as a coercion method, i.e. `as_my_class`. (Base R often uses `as.` but I think it's better to use `_` to avoid method names like `as.data.frame.data.frame`).
 
 You should always have `as_my_class.my_class <- function(x, ...) x` (i.e. coercing an object that's already of the right type should do nothing.). Generally each coercion method should do a little work then call the constructor.
+
+```{r}
+as_factor <- function(x) UseMethod(x)
+
+as_factor.factor <- function(x) x
+as_factor.character <- function(x) new_factor(x, levels = unique(x))
+as_factor.integer <- function(x) new_factor(x, levels = unique(x))
+```
 
 ### Esoterica
 
@@ -391,10 +455,50 @@ How does `+` work.
 
 1.  Which base generic has the greatest number of defined methods?
 
+## Multiple "classes"
 
-## Inheritance
+Not just inheritance. Better to think of S3 classes as an interface that defines a specific behaviour (and requried data).
+
+<https://en.wikipedia.org/wiki/Composition_over_inheritance>
 
 As discussed in the next section, R looks for methods in the order in which they appear in the class vector. So in this example, it would be like class A inherits from class B - if a method isn't defined for A, it will fall back to B. However, if you switched the order of the classes, the opposite would be true! This is because S3 doesn't define any formal relationship between classes, or even any definition of what an individual class is. If you're coming from a strict environment like Java, this will seem pretty frightening (and it is!) but it does give your users a tremendous amount of freedom. While it's very difficult to stop someone from doing something you don't want them to do, your users will never be held back because there is something you haven't implemented yet.
+
+### Method dispatch
+
+
+### "Duck" typing
+
+`is.numeric()` is
+
+> Methods for is.numeric should only return true if the base type of 
+> the class is double or integer and values can reasonably be regarded 
+> as numeric (e.g., arithmetic on them makes sense, and comparison 
+> should be done via the base type).
+
+(i.e. you should only ever override it to be false)
+
+This is confusing because this definition of numeric is different to the definition of numeric used elsewhere: i.e. either an integer or a double. A better name would have been `is.numericish()` or similar.
+
+### Interfaces
+
+`POSIXt`
+
+### Mixins
+
+`I()`
+
+```{r}
+labelled <- function(x, label) {
+  struture(x, 
+    label = label,
+    class = c("labelled", class(x))
+  )
+}
+
+`[.labelled` <- function(x) {
+  labelled(NextMethod(), attr(x, "label"))
+}
+```
 
 ### Conventions
 
@@ -407,6 +511,8 @@ S3 provides no rules as to the structure of inheritance. However, you will make 
   you add, not subtract.
 
 * Use a constructor to enforce the order of classes.
+
+(Note that `POSIXct` and `POSIXlt` don't follow this definition because `POSIXct` is built on an double vector, and `POSIXlt` is build on a list. We'll come back to what the `POSIXt` "base class" does in [interface].)
 
 ### Constructor
 
@@ -425,8 +531,6 @@ new_sub_class <- function(x, y, z, ..., subclass = NULL) {
   new_my_class(x, y, z, ..., subclass = c(subclass, "sub_class"))
 }
 ```
-
-### Method dispatch
 
 
 ### Default method
@@ -472,6 +576,17 @@ If `NextMethod` is called in a situation where there is no second class it will 
 ### Writing flexible base methods
 
 
+### Exercises
+
+1.  The `ordered` class is a subtclass of `factor`, but it's implemented in 
+    a very adhoc way in base R. Implement it in a principled way by
+    building a constructor and an `as_ordered` generic.
+    
+    ```{r}
+    f1 <- factor("a", c("a", "b"))
+    as.factor(f1)  
+    as.ordered(f1) # loses levels
+    ```
 
 ## Base types
 
@@ -541,25 +656,8 @@ mylength(x)
     length(g)
     ```
 
-
-## Useful techniques
-
-### "Duck" typing
-
-`is.numeric()` is
-
-> Methods for is.numeric should only return true if the base type of 
-> the class is double or integer and values can reasonably be regarded 
-> as numeric (e.g., arithmetic on them makes sense, and comparison 
-> should be done via the base type).
-
-(i.e. you should only ever override it to be false)
-
-This is confusing because this definition of numeric is different to the definition of numeric used elsewhere: i.e. either an integer or a double. A better name would have been `is.numericish()` or similar.
-
-### Mixins
-
-### S3 in packages
+## Packaging
 
 * Beware class clashes across packages. If there's any chance of confusion
   give your classes a common prefix.
+
