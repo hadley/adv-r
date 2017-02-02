@@ -40,42 +40,11 @@ There's also one other system that's not quite OO, but it's important to mention
   important to know about because they provide the building blocks for the 
   other OO systems.
 
-The following sections describe each system in turn, starting with base types. You'll learn how to recognise the OO system that an object belongs to, how method dispatch works, and how to create new objects, classes, generics, and methods for that system. The chapter concludes with a few remarks on when to use each system.
+The following chapters describe each system in turn, starting with base types. You'll learn how to recognise the OO system that an object belongs to, how method dispatch works, and how to create new objects, classes, generics, and methods for that system. The chapter concludes with a few remarks on when to use each system.
 
 ##### Prerequisites
 
 You'll need the pryr package, `install.packages("pryr")`, to access useful functions for examining OO properties.
-
-##### Quiz
-
-Think you know this material already? If you can answer the following questions correctly, you can safely skip this chapter. Find the answers at the end of the chapter in [answers](#oo-answers).
-
-1. How do you tell what OO system (base, S3, S4, or RC) an object is 
-   associated with?
-
-1. How do you determine the base type (like integer or list) of an object?
-
-1. What is a generic function?
-
-1. What are the main differences between S3 and S4? What are the main 
-   differences between S4 & RC?
-
-##### Outline
-
-* [Base types](#base-types) teaches you about R's base object system. Only
-  R-core can add new classes to this system, but it's important to know about
-  because it underpins the three other systems.
-  
-* [S3](#s3) shows you the basics of the S3 object system. It's the simplest
-  and most commonly used OO system.
-  
-* [S4](#s4) discusses the more formal and rigorous S4 system.
-
-* [RC](#rc) teaches you about R's newest OO system: reference classes, or
-  RC for short.
-  
-* [Picking a system](#picking-a-system) advises on which OO system to
-  use if you're starting a new project.
 
 ## S4 {#s4}
 
@@ -251,122 +220,6 @@ method_from_call(nobs(fit))
     if you pass an S3 object to an S4 generic? (Hint: read `?setOldClass` 
     for the second case.)
 
-## RC {#rc}
-
-Reference classes (or RC for short) are the newest OO system in R. They were introduced in version 2.12. They are fundamentally different to S3 and S4 because: \index{RC} \index{reference classes|see{RC}} \index{objects!RC|see{RC}}
-
-* RC methods belong to objects, not functions
-
-* RC objects are mutable: the usual R copy-on-modify semantics do not apply
-
-These properties make RC objects behave more like objects do in most other programming languages, e.g., Python, Ruby, Java, and C#. Reference classes are implemented using R code: they are a special S4 class that wraps around an environment.
-
-### Defining classes and creating objects
-
-Since there aren't any reference classes provided by the base R packages, we'll start by creating one. RC classes are best used for describing stateful objects, objects that change over time, so we'll create a simple class to model a bank account. \index{RC!classes} \index{classes!RC}
-
-Creating a new RC class is similar to creating a new S4 class, but you use `setRefClass()` instead of `setClass()`. The first, and only required argument, is an alphanumeric __name__. While you can use `new()` to create new RC objects, it's good style to use the object returned by `setRefClass()` to generate new objects. (You can also do that with S4 classes, but it's less common.) \indexc{setRefClass()}
-
-```{r}
-Account <- setRefClass("Account")
-Account$new()
-```
-
-`setRefClass()` also accepts a list of name-class pairs that define class __fields__ (equivalent to S4 slots). Additional named arguments passed to `new()` will set initial values of the fields. You can get and set field values with `$`: \index{fields}
-
-```{r}
-Account <- setRefClass("Account",
-  fields = list(balance = "numeric"))
-
-a <- Account$new(balance = 100)
-a$balance
-a$balance <- 200
-a$balance
-```
-
-Instead of supplying a class name for the field, you can provide a single argument function which will act as an accessor method. This allows you to add custom behaviour when getting or setting a field. See `?setRefClass` for more details.
-
-Note that RC objects are __mutable__, i.e., they have reference semantics, and are not copied-on-modify: \index{copy-on-modify!exceptions}
-
-```{r}
-b <- a
-b$balance
-a$balance <- 0
-b$balance
-```
-
-For this reason, RC objects come with a `copy()` method that allow you to make a copy of the object:
-
-```{r}
-c <- a$copy()
-c$balance
-a$balance <- 100
-c$balance
-```
-
-An object is not very useful without some behaviour defined by __methods__. RC methods are associated with a class and can modify its fields in place. In the following example, note that you access the value of fields with their name, and modify them with `<<-`. You'll learn more about `<<-` in [Environments](#binding). \index{RC!methods} \index{methods!RC} \indexc{<<-}
-
-```{r}
-Account <- setRefClass("Account",
-  fields = list(balance = "numeric"),
-  methods = list(
-    withdraw = function(x) {
-      balance <<- balance - x
-    },
-    deposit = function(x) {
-      balance <<- balance + x
-    }
-  )
-)
-```
-
-You call an RC method in the same way as you access a field:
-
-```{r}
-a <- Account$new(balance = 100)
-a$deposit(100)
-a$balance
-```
-
-The final important argument to `setRefClass()` is `contains`. This is the name of the parent RC class to inherit behaviour from. The following example creates a new type of bank account that returns an error preventing the balance from going below 0.
-
-```{r, error = TRUE}
-NoOverdraft <- setRefClass("NoOverdraft",
-  contains = "Account",
-  methods = list(
-    withdraw = function(x) {
-      if (balance < x) stop("Not enough money")
-      balance <<- balance - x
-    }
-  )
-)
-accountJohn <- NoOverdraft$new(balance = 100)
-accountJohn$deposit(50)
-accountJohn$balance
-accountJohn$withdraw(200)
-```
-
-All reference classes eventually inherit from `envRefClass`. It provides useful methods like `copy()` (shown above), `callSuper()` (to call the parent field), `field()` (to get the value of a field given its name), `export()` (equivalent to `as()`), and `show()` (overridden to control printing). See the inheritance section in `setRefClass()` for more details.
-
-### Recognising objects and methods
-
-You can recognise RC objects because they are S4 objects (`isS4(x)`) that inherit from "refClass" (`is(x, "refClass")`). `pryr::otype()` will return "RC".  RC methods are also S4 objects, with class `refMethodDef`.
-
-### Method dispatch
-
-Method dispatch is very simple in RC because methods are associated with classes, not functions. When you call `x$f()`, R will look for a method f in the class of x, then in its parent, then its parent's parent, and so on. From within a method, you can call the parent method directly with `callSuper(...)`. \index{RC!method dispatch rules}
-
-### Exercises
-
-1.  Use a field function to prevent the account balance from being directly
-    manipulated. (Hint: create a "hidden" `.balance` field, and read the 
-    help for the fields argument in `setRefClass()`.)
-
-1.  I claimed that there aren't any RC classes in base R, but that was a 
-    bit of a simplification. Use `getClasses()` and find which classes 
-    `extend()` from `envRefClass`. What are the classes used for? (Hint: 
-    recall how to look up the documentation for a class.)
-
 ## Picking a system {#picking-a-system}
 
 Three OO systems is a lot for one language, but for most R programming, S3 suffices. In R you usually create fairly simple objects and methods for pre-existing generic functions like `print()`, `summary()`, and `plot()`. S3 is well suited to this task, and the majority of OO code that I have written in R is S3. S3 is a little quirky, but it gets the job done with a minimum of code. \index{objects!which system?}
@@ -384,20 +237,3 @@ length(getClasses("package:Matrix", FALSE))
 If you are creating more complicated systems of interrelated objects, S4 may be more appropriate. A good example is the `Matrix` package by Douglas Bates and Martin Maechler. It is designed to efficiently store and compute with many different types of sparse matrices. As of version 1.1.3, it defines 102 classes and 20 generic functions. The package is well written and well commented, and the accompanying vignette (`vignette("Intro2Matrix", package = "Matrix")`) gives a good overview of the structure of the package. S4 is also used extensively by Bioconductor packages, which need to model complicated interrelationships between biological objects. Bioconductor provides many [good resources](https://www.google.com/search?q=bioconductor+s4) for learning S4. If you've mastered S3, S4 is relatively easy to pick up; the ideas are all the same, it is just more formal, more strict, and more verbose.
 
 If you've programmed in a mainstream OO language, RC will seem very natural. But because they can introduce side effects through mutable state, they are harder to understand. For example, when you call `f(a, b)` in R you can usually assume that `a` and `b` will not be modified. But if `a` and `b` are RC objects, they might be modified in the place. Generally, when using RC objects you want to minimise side effects as much as possible, and use them only where mutable states are absolutely required. The majority of functions should still be "functional", and free of side effects. This makes code easier to reason about and easier for other R programmers to understand.
-
-## Quiz answers {#oo-answers}
-
-1.  To determine the OO system of an object, you use a process of elimination.
-    If `!is.object(x)`, it's a base object. If `!isS4(x)`, it's S3. If 
-    `!is(x, "refClass")`, it's S4; otherwise it's RC.
-    
-1.  Use `typeof()` to determine the base class of an object.
-
-1.  A generic function calls specific methods depending on the class of 
-    it inputs. In S3 and S4 object systems, methods belong to generic 
-    functions, not classes like in other programming languages.
-    
-1.  S4 is more formal than S3, and supports multiple inheritance and
-    multiple dispatch. RC objects have reference semantics, and methods 
-    belong to classes, not functions.
-    
