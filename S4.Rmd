@@ -202,58 +202,65 @@ validObject(hadley)
 ## Generic functions and methods
 
 Generic functions and methods work similarly to S3, but dispatch is based on the class of all arguments, and there is a special syntax for creating both generic functions and new methods.  
-
-The `setGeneric` function provides two main ways to create a new generic.  You can either convert an existing function to a generic function, or you can create a new one from scratch.
-
-```R
-sides <- function(object) 0
-setGeneric("sides")
-```
-
-If you create your own, the second argument to `setGeneric` should be a function that defines all the arguments that you want to dispatch on and contains a call to `standardGeneric`:
-
-```R
-setGeneric("sides", function(object) {
-  standardGeneric("sides")
-})
-```
-
-The following example sets up a simple hierarchy of shapes to use with the sides function.
+For introduction to generic functions and methdos, the following example sets up a simple hierarchy of shapes to use with the `sides` method.
 
 ```R
 setClass("Shape")
-setClass("Polygon", representation(sides = "integer"), contains = "Shape")
+setClass("Polygon", slots = c(sides = "integer"), contains = "Shape")
 setClass("Triangle", contains = "Polygon")
 setClass("Square", contains = "Polygon")
 setClass("Circle", contains = "Shape")
 ```
 
+### Create generic functions
+
+The `setGeneric` function provides two main ways to create a new generic.  You can either convert an existing function to a generic function, or you can create a new one from scratch.
+
+```R
+sides <- function (object) 0
+setGeneric("sides")
+# [1] "sides"
+```
+
+If you create your own, the second argument to `setGeneric` should be a function that defines all the arguments that you want to dispatch on and contains a call to `standardGeneric`:
+
+```R
+setGeneric("sides", function (object) standardGeneric("sides") )
+# [1] "sides"
+```
+
+### Create methods
+
 Defining a method for polygons is straightforward: we just use the sides slot.  The `setMethod` function takes three arguments: the name of the generic function, the signature to match for this method and a function to compute the result.  Unfortunately R doesn't offer any syntactic sugar for this task so the code is a little verbose and repetitive.
 
 ```R
-setMethod("sides", signature(object = "Polygon"), function(object) {
-  object@sides
-})
+setMethod("sides", signature = c(object = "Polygon"), 
+          function(object) object@sides )
+# [1] "sides"
 ```
 
 For the others we supply exact values. Note that that for generics with few arguments you can simplify the signature without giving the argument names. This saves spaces at the expense of having to remember which position corresponds to which argument - not a problem if there's only one argument.
+Here, also the arguments name is not used:
 
 ```R
-setMethod("sides", signature("Triangle"), function(object) 3)
-setMethod("sides", signature("Square"),   function(object) 4)
-setMethod("sides", signature("Circle"),   function(object) Inf)
+setMethod("sides", signature("Triangle"), function (object) 3 )
+# [1] "sides"
+setMethod("sides", signature("Square"),   function (object) 4 )
+# [1] "sides"
+setMethod("sides", signature("Circle"),   function (object) Inf )
+# [1] "sides"
 ```
 
-You can optionally also specify `valueClass` to define the expected output of the generic. This will raise a run-time error if a method returns output of the wrong class.
+You can optionally also specify `valueClass` to define the expected output of the generic. This will raise a runtime error if a method returns output of the wrong class.
 
 ```R
-setGeneric("sides", valueClass = "numeric", function(object) {
-  standardGeneric("sides")
-})
-setMethod("sides", signature("Triangle"), function(object) "three")
+setGeneric("sides", function(object) standardGeneric("sides"),
+           valueClass = "numeric")
+setMethod("sides", "Triangle", function(object) "three")
 sides(new("Triangle"))
-# invalid value from generic function "sides", class "character", expected
-# "numeric"
+# Error in .valueClassTest(ans, "numeric", "sides") : 
+#   invalid value from generic function ‘sides’, class “character”, 
+#   expected “numeric”
 ```
 
 Note that arguments that the generic dispatches on can't be lazily evaluated - otherwise how would R know which class the object was?  This also means that you can't use `substitute` to access the unevaluated expression.
@@ -263,16 +270,27 @@ To find what methods are already defined for a generic function, use `showMethod
 ```R
 showMethods("sides")
 # Function: sides (package .GlobalEnv)
+# object="ANY"
 # object="Circle"
 # object="Polygon"
 # object="Square"
 # object="Triangle"
     
 showMethods(class = "Polygon")
-# Function: initialize (package methods)
-# .Object="Polygon"
-#    (inherited from: .Object="ANY")
+# Function ".DollarNames":
+#  <not an S4 generic function>
 # 
+# Function "complete":
+#  <not an S4 generic function>
+# 
+# Function "formals<-":
+#  <not an S4 generic function>
+# 
+# Function "functions":
+#  <not an S4 generic function>
+# 
+# Function "prompt":
+#  <not an S4 generic function>
 # Function: sides (package .GlobalEnv)
 # object="Polygon"
 ```
@@ -301,20 +319,25 @@ setClass("A1", contains = "A")
 setClass("A2", contains = "A1")
 setClass("A3", contains = "A2")
 
-setGeneric("foo", function(a, b) standardGeneric("foo")) 
-setMethod("foo", signature("A1", "A2"), function(a, b) "1-2")
-setMethod("foo", signature("A2", "A1"), function(a, b) "2-1")
+setGeneric("foo", function (a, b) standardGeneric("foo"))
+# [1] "foo"
+setMethod("foo", c("A1", "A2"), function (a, b) "1-2")
+# [1] "foo"
+setMethod("foo", c("A2", "A1"), function (a, b) "2-1")
+# [1] "foo"
     
 foo(new("A2"), new("A2"))
-# Note: Method with signature "A2#A1" chosen for function "foo",
-# target signature "A2#A2". "A1#A2" would also be valid
+# Note: method with signature ‘A2#A1’ chosen for function ‘foo’,
+#  target signature ‘A2#A2’.
+#  "A1#A2" would also be valid
 ```
 
 Generally, you should avoid this ambiguity by providing a more specific method:
 
 ```R
-setMethod("foo", signature("A2", "A2"), function(a, b) "2-2")
+setMethod("foo", c("A2", "A2"), function (a, b) "2-2")
 foo(new("A2"), new("A2"))
+# [1] "2-2"
 ```
 
 (The computation is cached for this combination of classes so that it doesn't have to be done again.)
@@ -324,12 +347,17 @@ There are two special classes that can be used in the signature: `missing` and `
 You can also use basic classes like `numeric`, `character` and `matrix`. A matrix of (e.g.) characters will have class `matrix`.
 
 ```R
-setGeneric("type", function(x) standardGeneric("type"))
-setMethod("type", signature("matrix"), function(x) "matrix")
-setMethod("type", signature("character"), function(x) "character")
+setGeneric("type", function (x) standardGeneric("type"))
+# [1] "type"
+setMethod("type", "matrix", function (x) "matrix")
+# [1] "type"
+setMethod("type", "character", function (x) "character")
+# [1] "type"
     
 type(letters)
+# [1] "character"
 type(matrix(letters, ncol = 2))
+# [1] "matrix"
 ```
 
 You can also dispatch on S3 classes provided that you have made S4 aware of them by calling `setOldClass`.
@@ -339,11 +367,13 @@ foo <- structure(list(x = 1), class = "foo")
 type(foo)
 
 setOldClass("foo")
-setMethod("type", signature("foo"), function(x) "foo")
+setMethod("type", "foo", function(x) "foo")
     
 type(foo)
-    
-setMethod("+", signature(e1 = "foo", e2 = "numeric"), function(e1, e2) {
+# Error in (function (classes, fdef, mtable)  : 
+#   unable to find an inherited method for function ‘type’ for signature ‘"foo"’ 
+
+setMethod("+", c(e1 = "foo", e2 = "numeric"), function (e1, e2) {
   structure(list(x = e1$x + e2), class = "foo")
 })
 foo + 3
@@ -363,8 +393,7 @@ First we set up the classes: two types of vehicle (car and truck), and two types
 setClass("Vehicle")
 setClass("Truck", contains = "Vehicle")
 setClass("Car", contains = "Vehicle")
-
-setClass("Inspector", representation(name = "character"))
+setClass("Inspector", slots = c(name = "character"))
 setClass("StateInspector", contains = "Inspector")
 ```
 
@@ -374,23 +403,24 @@ Next we define the generic function for inspecting a vehicle. It has two argumen
 setGeneric("inspect.vehicle", function(v, i) {
    standardGeneric("inspect.vehicle")
  })
+ # [1] "inspect.vehicle"
 ```
 
 All vehicle must be checked for rust by all inspectors, so we'll add the first.  Cars also need to have working seatbelts.
 
 ```R
 setMethod("inspect.vehicle", 
-  signature(v = "Vehicle", i = "Inspector"), 
-  function(v, i) {
-    message("Looking for rust")
-  })
+  c(v = "Vehicle", i = "Inspector"), 
+  function(v, i) message("Looking for rust") )
+# [1] "inspect.vehicle"
 
 setMethod("inspect.vehicle", 
-  signature(v = "Car", i = "Inspector"),
+  c(v = "Car", i = "Inspector"),
   function(v, i) {  
    callNextMethod() # perform vehicle inspection
    message("Checking seat belts")
   })
+# [1] "inspect.vehicle"
 
 inspect.vehicle(new("Car"), new("Inspector"))
 # Looking for rust
@@ -403,22 +433,24 @@ We'll next add methods for trucks (cargo attachments need to be ok), and the spe
 
 ```R
 setMethod("inspect.vehicle", 
-  signature(v = "Truck", i = "Inspector"),
+  c(v = "Truck", i = "Inspector"),
   function(v, i) {
     callNextMethod() # perform vehicle inspection
     message("Checking cargo attachments")
   })
+# [1] "inspect.vehicle"
 
 inspect.vehicle(new("Truck"), new("Inspector"))
 # Looking for rust
 # Checking cargo attachments
 
 setMethod("inspect.vehicle", 
-  signature(v = "Car", i = "StateInspector"),
+  c(v = "Car", i = "StateInspector"),
   function(v, i) {
     callNextMethod() # perform car inspection
     message("Checking insurance")
 })
+# [1] "inspect.vehicle"
 
 inspect.vehicle(new("Car"), new("StateInspector"))
 # Looking for rust
