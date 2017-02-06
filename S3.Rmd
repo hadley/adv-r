@@ -1,16 +1,12 @@
 # S3 {#s3}
 
-S3 is R's first and simplest OO system. It is the only OO system used in the base and stats packages, and it's the most commonly used system in CRAN packages. S3 is informal and ad hoc, but it has a certain elegance in its minimalism: you can't take away any part of it and still have a useful OO system. S3 should be your default: you should use it unless you have a compelling reason to use a different system.\index{S3} \index{objects!S3|see{S3}}
+S3 is R's first and simplest OO system. It is the only OO system used in the base and stats packages, and it's the most commonly used system in CRAN packages. S3 is informal and ad hoc, but it has a certain elegance in its minimalism: you can't take away any part of it and still have a useful OO system. Because of these reasons, S3 should be your default choice for OO programming: you should use it unless you have a compelling reason otherwise.\index{S3} \index{objects!S3|see{S3}}
 
-The primary use of OO programming in R is for print, summary and plot methods. These methods allow us to have one generic function, e.g. `print()`, that displays the object differently depending on its type: printing a linear model is very different to printing a data frame.
-
-Because S3 is a very free system, effective use requires that you constrain yourself. In this chapter, as well as explaining the basics operation of S3, I'll also give you advice to make working with S3 as effective as possible.
+S3 is a very flexible system: it allows you to do a lot things that are quite ill-advised. To use S3 safely and efficiently, you need to impose constraints yourself. Those constraints will be a focus of this chapter.
 
 ## Basics {#s3-basics}
 
-An S3 object is always built on top of a base type (typically a vector) and has the "class" attribute set. Other data is usually stored in attributes (there's another common type based on a list which we'll come back to later). 
-
-For example, take the factor. It's built on top of an integer vector, and has attributes "levels", and "class". It's the class attribute that makes this an S3 object.
+An S3 object is built on top of a base type (typically a vector) and must have the "class" attribute set. For example, take the factor. It's built on top of an integer vector, and the value of the class attribute is "factor". It stores information about the "levels" in another attribute.
 
 ```{r}
 f <- factor("a")
@@ -19,28 +15,36 @@ typeof(f)
 attributes(f)
 ```
 
-S3 objects differ in their behaviour to the underlying base type because of __generic functions__, or generics for short. A generic behaves differently depending on the class of one of its arguments (almost always the first argument). You can see this difference with the most important generic function: `print()`.
+S3 objects differ in behaviour from the underlying base type because of __generic functions__, or generics for short. A generic behaves differently depending on the class of one of its arguments (almost always the first). You can see this difference with the most important generic function: `print()`.
 
 ```{r}
 print(f)
 print(unclass(f))
 ```
 
-(`unclass()` simply strips the class attribute and is a useful tool for seeing what special behaviour an S3 class adds.)
+`unclass()` strips the class attribute from its input, so is a useful tool for seeing what special behaviour an S3 class adds. Be aware when using `str()`: some S3 classes provide a custom `str()` method which may attempt to hide the underlying reality. For example, take the `POSIXlt` class, which is one of the two classes used to represent date-time data:
 
-The reason that generics behaviour differently for different classes is that generics have __methods__. A method is a function implements the generic behaviour for a specific class. The generic doesn't actually do any work: it's job is to find the write method, and pass on its arguments.
+```{r}
+time <- strptime("2017-01-01", "%Y-%m-%d")
+str(time)
+str(unclass(time))
+```
+
+Generics behave differently for different classes because generics have __methods__. A method is a function that implements the generic behaviour for a specific class. The generic doesn't actually do any work: it's job is to find the right method and pass on its arguments. Remember that S3 is from the generic-functions school of OO, so that methods belong to the generic, not the the object or the class. 
 
 You can recognise S3 methods by their names, which look like `generic.class()`. For example, the Date method for the `mean()` generic is called `mean.Date()`, and the factor method for `print()` is called `print.factor()`. This is the reason that most modern style guides discourage the use of `.` in function names: it makes them look like S3 methods. For example, is `t.test()` the `t` method for `test` objects? Similarly, the use of `.` in class names can also be confusing: is `print.data.frame()` the `print()` method for `data.frames`, or the `print.data()` method for `frames`?  
 
-Note that in S3, methods belong to the generic, not the the object or the class. This reflects a different school of though to most programming languages, but is a good fit to the problem of data analysis. Knowing this fact probably won't help you much in your day-to-day programming, but it will avoid some fundamental confusing if you're coming from another OO programmming language. \index{functions!generics|see{generics}} \index{S3!generics} \index{generics!S3}
+You can sometimes find the source code for an S3 method by typing its name. This will work for S3 methods in the base package and your own code, but will not work with most packages because S3 methods are not exported. Instead, you can use `getS3method()`, which will work regardless of where the method lives:
 
-The following sections will explore each of these topics in more depth, filling in the details.
+```{r}
+getS3method("mean", "Date")
+```
 
 ### Exercises
 
 1.  The most important S3 objects in base R are factors, data.frames,
-    and date/times. You've already seen the attributes and type that
-    factors are build on. What data structures and attributes are
+    and date/times. You've already seen the attributes and base type 
+    that factors are build on. What base types and attributes are
     the others built on?
 
 1.  Describe the difference in behaviour in these two calls.
@@ -52,7 +56,11 @@ The following sections will explore each of these topics in more depth, filling 
     mean(unclass(some_days))
     ```
 
-1.  What does the `is.data.frame.data.frame()` method do?
+1.  Draw a Venn diagram illustrating the relationship between
+    functions, generics, and methods.
+
+1.  What does the `is.data.frame.data.frame()` method do? Why is
+    it confusing?
 
 1.  What does the following code return? What base type is built on?
     What attributes does it use?
@@ -82,7 +90,7 @@ class(foo)
 inherits(foo, "foo")
 ```
 
-Class names can be any string, but I recommend using only lower case letters and `_`. Avoid `.`. Opinion is mixed whether to use underscores (`my_class`) or CamelCase (`MyClass`) for multi-word class names. Just pick one convention and stick with it.  You can include multiple names in a character vector. We'll come back to that idea in [inheritance].
+Class names can be any string, but I recommend using only lower case letters and `_`. Avoid `.`. Opinion is mixed whether to use underscores (`my_class`) or CamelCase (`MyClass`) for multi-word class names. Pick one convention and stick with it.
 
 S3 has no checks for correctness. This means you can change the class of existing objects:
 
@@ -99,21 +107,13 @@ class(mod) <- "data.frame"
 print(mod)
 ```
 
-If you've used other OO languages, this might make you feel queasy. But surprisingly, this flexibility causes few problems: while you _can_ change the type of an object, you never should. R doesn't protect you from yourself: you can easily shoot yourself in the foot. As long as you don't aim the gun at your foot and pull the trigger, you won't have a problem.
+If you've used other OO languages, this might make you feel queasy. But surprisingly, this flexibility causes few problems: while you _can_ change the type of an object, you never _should_. R doesn't protect you from yourself: you can easily shoot yourself in the foot. As long as you don't aim the gun at your foot and pull the trigger, you won't have a problem.
 
-### Conventions
+### Constructors
 
-Because S3 itself provides no checks for object validity, it's up to you to adopt conventions to protect yourself. The first convention is to use a constructor function: 
+Since S3 doesn't check that your object is valid (i.e. it has the right attributes of the right types), it's up to you to adopt a convention to protect yourself. Do so with a __constructor__ which extracts out object creation code into a single place. The job of the constructor is enforce consistency. It ensures that whenever you create an S3 object of a specific class it is built on the same base type with the same attributes. 
 
-* Whenever you create an S3 object, you should always do so by calling 
-  a constructor.
-
-* Whenever you create an S3 class of your own, you should always provide
-  a constructor.
-  
-The primary job of the constructor is to ensure that the S3 object always has the same structure: it is built on the same base type, and uses the same attributes of the same types. Base R generally does not use this convention, so we demonstrate constructors by filling in some function that base R does not provide.
-
-The simplest useful class is Date: it's just a double with a class attribute:
+Base R generally does not use this convention, so we'll demonstrate constructors by filling in some missing functions. (If your code works a lot with base objects that don't have a constructor, you might consider writing one yourself, just to keep your code consistent). In base R, the simplest useful class is Date: it's just a double with a class attribute.
 
 ```{r}
 new_Date <- function(x) {
@@ -124,22 +124,16 @@ new_Date <- function(x) {
 new_Date(c(-1, 0, 1))
 ```
 
-Generally, constructors will be used by developers (i.e. you). That means they can be quite simple, and you don't need to optimise the error messages for user friendliness.
+Constructors should always be called `new_class_name()`. Here we have the slightly awkward `new_Date()`, because the existing base class uses a capital letter. I recommend using snake case class names to avoid this problem. 
 
-Typically, you'll also provide a user friendly way to create objects, often by coercing from an existing type. If this code is in a package, you may want to export the constructor and use it to document the structure of the class.
+Generally, constructors will be used by developers (i.e. you). That means they can be quite simple, and you don't need to optimise the error messages for user friendliness. If you expect others to create these objects, you should also create a helpful function, called `class_name()`, and you may want to consider a coercion function called `as_class_name()`.
 
-Note that a constructor should alway be called `new_class_name()`. Here we have the awkwardly named `new_Date()`, because the existing base class uses a capital letter. I recommend using camel case class names to avoid this problem.
-
-A more complicated example is `POSIXct`, which is used to represent date-times. It is again built on a double, but has an attribute that specifies the time zone. The time zone controls how the date-time is printed, and must either be "" (representing the local time), or from a list of known values. When an object has additional attributes, the arguments to the constructor should be those attributes, with sensible default values where possible.
+A more complicated example is `POSIXct`, which is used to represent date-times. It is again built on a double, but has an attribute that specifies the time zone which must be a length 1 character vector. The arguments to the constructor should match the attributes of the created object.
 
 ```{r}
 new_POSIXct <- function(x, tzone = "") {
   stopifnot(is.double(x))
-  stopifnot(
-    is.character(tzone), 
-    length(tzone) == 1, 
-    identical(tzone, "") || tzone %in% OlsonNames()  
-  )
+  stopifnot(is.character(tzone), length(tzone) == 1)
   
   structure(x, 
     class = c("POSIXct", "POSIXt"),
@@ -151,28 +145,16 @@ new_POSIXct(1)
 new_POSIXct(1, tzone = "UTC")
 ```
 
-(Note that we set the class to a vector here; we'll come back to that in [Inheritance])
+(Note that we set the class to a vector; we'll come back to that in [Inheritance])
 
-(If your code works a lot with base objects that don't have a constructor, you might consider writing one yourself, just to keep your code consistent.)
+### Validators
 
-Often S3 objects are created only by your functions and don't need to be created deliberately by the user. If, however, you expect others to create these objects, it's a good idea to create a more helpful constructor function, called `class_name()`, and a coercion function called `as_class_name()` (which should be an S3 generic).
-
-### Validity methods
-
-More complicated classes will require more complicated checks for validity. Take factors for example:
+More complicated classes will require more complicated checks for validity. Take factors, for example. The constructor function should ensure that you have an object of the correct structure:
 
 ```{r}
 new_factor <- function(x, levels) {
   stopifnot(is.integer(x))
   stopifnot(is.character(levels))
-  
-  if (any(x <= 0)) {
-    stop("All `x` values must be greater than zero")
-  }
-  
-  if (length(levels) < max(x)) {
-    stop("There must at least as many `levels` as possible values in `x`")
-  }
   
   structure(
     x,
@@ -182,24 +164,42 @@ new_factor <- function(x, levels) {
 }
 ```
 
-If you find the checks growing long, and you want to re-use them in other places, consider moving out into a separate validity checking function.
+But it's possible to use this to create invalid factors, because we don't ensure that the `x` and `levels` are compatible:
 
-```{r}
-check_factor <- function(x) {
-  values <- unclass(x) # blech
-  levels <- attr(x, "levels")
-  
-  if (any(values <= 0)) {
-    stop("All `x` values must be greater than zero")
-  }
-  
-  if (length(levels) < max(x)) {
-    stop("There must at least as many `levels` as possible values in `x`")
-  }
-}
+```{r, error = TRUE}
+new_factor(1:5, "a")
+new_factor(0:1, "a")
 ```
 
-If you are constructing many known-correct object elsewhere in your code you may want to make expensive checks explicit by putting in a separate function and calling.  This is a little less safe (because you might forget to call when it is important), but for complex objects the performance benefit may be worth. Don't do it proactively; only do it if [profiling] reveals object construction to be a bottleneck.
+Rather than encumbering the constructor with complicated checks, it's better to put them in a separate function.
+
+```{r, error = TRUE}
+validate_factor <- function(x) {
+  values <- unclass(x)
+  levels <- attr(x, "levels")
+  
+  if (!all(!is.na(values) & values > 0)) {
+    stop(
+      "All `x` values must be non-missing and greater than zero",
+      call. = FALSE
+    )
+  }
+  
+  if (length(levels) < max(values)) {
+    stop(
+      "There must at least as many `levels` as possible values in `x`",
+      call. = FALSE
+    )
+  }
+  
+  x
+}
+
+validate_factor(new_factor(1:5, "a"))
+validate_factor(new_factor(0:1, "a"))
+```
+
+(This function is called primarily for its side-effects (throwing an error if the object is invalid) so you'd expect it to invisibly returns its primary input. Validation methods, however, are an exception to the rule)
 
 ### Helpers
 
@@ -210,28 +210,16 @@ A good example of a helper is `factor()`: the internal representation is quite d
 ```{r}
 factor <- function(x, levels = unique(x)) {
   ind <- match(x, levels)
-  new_factor(ind, levels)
+  validate_factor(new_factor(ind, levels))
 }
 factor(c("a", "a", "b"))
 ```
 
-Constrast this with `Date` and `POSIXct`. Neither of these have helpers in base R because there's no particularly natural way for them to be constructed. Instead they provide a coercion function that lets you create from existing base types.
+Constrast `factor` with `Date` and `POSIXct`. Neither of these have helpers in base R because there's no particularly natural way for them to be constructed. Instead they provide a coercion function that lets you create from existing base types. We'll come back to that idea in [coercion].
 
 ### Object styles
 
-S3 gives you the freedom to build a new class on top of an existing base type. Often the only way to find out which base type you should use is to pick the wrong one and 
-
-However, there are two common styles that it's best to start with:
-
-*   If you are building a complex object that represents a single 
-    thing (a "scalar"), you should use a list with named elements. 
-    A good example of this type of object is "lm".
-    
-*   If you creating a "vector" type (i.e. something that you'd want to put
-    in a data frame column) that adds some mild need behaviour
-    add attributes to a vector.
-
-So far the constructors have created the vector type where you check the type of the base object and then add attributes (including class). The constructors for a scalar type object is slightly different, as you always put the elements in a list:
+S3 gives you the freedom to build a new class on top of an existing base type. So far, we've focussed on the "vector" type of S3 object where you take an exist vector base type and add some attributes. Another common style is the "scalar" type, where you use a list with named elements. The constructors for the scalar type is slightly different, as you always put the elements in a list:
 
 ```{r}
 new_my_class <- function(x, y, z) {
@@ -248,17 +236,17 @@ new_my_class <- function(x, y, z) {
 
 (For a real constructor, you'd also check that `x`, `y`, and `z` are the types that you expect.)
 
-These are not the only types, but they are the most common. Other less common but still useful structures are:
-
-*   Functions with classes. This is mostly useful to override the print method
-    as you can't override the call method.
+These are not the only styles, but they are the most common. Other less common but still useful structures are:
 
 *   Environments with classes, which allow you to implement new styles of OO.
     This is beyond the scope of this book, because generally you shouldn't
     be creating your own OO style!
 
 *   "Vector" lists, like data frames. This is technically a subtype of the
-    "vector type", where your vector is a list.
+    "vector type", where the vector is a list.
+
+*   Functions with classes. This is mostly useful to override the print method
+    as you can't override the call method.
 
 ### Exercises
 
@@ -271,6 +259,10 @@ These are not the only types, but they are the most common. Other less common bu
 1.  Write a constructor for `data.frame` objects. What base type is a data 
     frame build on? What attributes does it use? What are the restrictions 
     placed on the individual elements? What about the names?
+
+1.  Enhance our `factor()` helper to have better behaviour when one or
+    more `values` is not found in `levels`. What does `base::factor()` do
+    in this situation?
 
 1.  Carefully read the source code of `factor()` what does it do that
     our constructor does not?
@@ -294,20 +286,37 @@ f <- function(x) UseMethod("f")
 There are two main reasons to write your own generic:
 
 * To avoid a big compound if statement
-* To make it possible for others to extend your package
+* To make it possible for others to extend your code
 
-### Coercion methods
+
+
+### Coercion
 
 One common use of a generic is as a coercion method, i.e. `as_my_class`. (Base R often uses `as.` but I think it's better to use `_` to avoid method names like `as.data.frame.data.frame`).
 
 You should always have `as_my_class.my_class <- function(x, ...) x` (i.e. coercing an object that's already of the right type should do nothing.). Generally each coercion method should do a little work then call the constructor.
 
 ```{r}
-as_factor <- function(x) UseMethod(x)
+as_factor <- function(x) UseMethod("as_factor")
 
 as_factor.factor <- function(x) x
 as_factor.character <- function(x) new_factor(x, levels = unique(x))
 as_factor.integer <- function(x) new_factor(x, levels = unique(x))
+```
+
+You may want to consider adding a "default" method. The default method is called if no specific method is found. We'll talk more about this in [inheritance]. This is a good place to add a more informative error message
+
+```{r, error = TRUE}
+as_factor(1)
+
+as_factor.default <- function(x) {
+  stop(
+    "Don't know how to coerce object of class ", 
+    paste(class(x), collapse = "/"), " into a factor", 
+    call. = FALSE
+  )
+}
+as_factor(1)
 ```
 
 ### Esoterica
@@ -444,6 +453,11 @@ How does `+` work.
 1.  Read the source code for `t()` and `t.test()` and confirm that 
     `t.test()` is an S3 generic and not an S3 method. What happens if 
     you create an object with class `test` and call `t()` with it?
+    
+    ```{r, error = TRUE }
+    x <- structure(1, class = "test")
+    t(x)
+    ```
 
 1.  What classes have a method for the `Math` group generic in base R? Read 
     the source code. How do the methods work?
@@ -621,6 +635,10 @@ iclass <- function(x) {
 }
 iclass(matrix(1:5))
 iclass(array(1.5))
+```
+
+```{r}
+class(1:5)
 ```
 
 ### Internal generics
