@@ -269,46 +269,56 @@ These are not the only styles, but they are the most common. Other less common b
 
 ## Generics
 
-To determine if a function is an S3 generic, you can inspect its source code for a call to `UseMethod()`: that's the function that figures out the correct method to call, the process of __method dispatch__.  \indexc{UseMethod()}
+Generics use the special `UseMethod()` function to dispatch to perform  __method dispatch__.  `UseMethod()` takes two arguments: the name of the generic function, and the argument to use for method dispatch. If you omit the second argument it will dispatch on the first argument to the function.  \indexc{UseMethod()} \index{S3!new generic}
 
 ```{r}
-print
+# Dispatches on x
+foo1 <- function(x, y) {
+  UseMethod("foo1")
+}
+
+# Dispatches on y
+foo2 <- function(x, y) {
+  UseMethod("foo2", y)
+}
 ```
 
-To add a new generic, create a function that calls `UseMethod()`. `UseMethod()` takes two arguments: the name of the generic function, and the argument to use for method dispatch. If you omit the second argument it will dispatch on the first argument to the function. 
-
-There you don't pass any of the arguments of the generic to `UseMethod()`. `UseMethod()` uses black magic to find them out for itself. \indexc{UseMethod()} \index{S3!new generic}
-
-```{r}
-f <- function(x) UseMethod("f")
-```
-
-There are two main reasons to write your own generic:
-
-* To avoid a big compound if statement
-* To make it possible for others to extend your code
-
-
+Note that you don't pass any of the arguments of the generic to `UseMethod()`; it uses black magic to pass them on to the method. Generally, you should avoid doing any computation in the generic, because the behaviour is confusing and few people know the details.  Rather than creating a new evaluation environment, it uses the environment of the current function call (the call to the generic), so any assignments or evaluations that were made before the call to UseMethod will be accessible to the method; __except__ that the arguments to the method are passed as they were recieved (even if you've modified them).
 
 ### Coercion
 
-One common use of a generic is as a coercion method, i.e. `as_my_class`. (Base R often uses `as.` but I think it's better to use `_` to avoid method names like `as.data.frame.data.frame`).
-
-You should always have `as_my_class.my_class <- function(x, ...) x` (i.e. coercing an object that's already of the right type should do nothing.). Generally each coercion method should do a little work then call the constructor.
+One common reason to create you own generic is to create a principled coercion function, i.e. `as_my_class`. (Base R often uses `as.` but I think it's better to use `_` to avoid method names like `as.data.frame.data.frame`). For example, building on the constructor we defined above, we can create a our own `as_factor()` and give it methods for character and integer vectors:
 
 ```{r}
 as_factor <- function(x) UseMethod("as_factor")
+as_factor.character <- function(x) {
+  factor(x, levels = unique(x))
+}
+as_factor.integer <- function(x) {
+  factor(x, levels = as.character(unique(x)))
+}
 
-as_factor.factor <- function(x) x
-as_factor.character <- function(x) new_factor(x, levels = unique(x))
-as_factor.integer <- function(x) new_factor(x, levels = unique(x))
+as_factor(1:5)
+as_factor(c("b", "c", "a", "a", "b"))
 ```
 
-You may want to consider adding a "default" method. The default method is called if no specific method is found. We'll talk more about this in [inheritance]. This is a good place to add a more informative error message
+Every `as_x` function should have a method that returns objects of `x` as is:
+
+```{r}
+as_factor.factor <- function(x) x
+
+as_factor(factor("a"))
+```
+
+You may want to consider adding a "default" method. The default method is called if no specific method is found. If you don't provide a default, you'll get an error message if no method is found:
 
 ```{r, error = TRUE}
 as_factor(1)
+```
 
+You can use a default method if you want to provide a more user friendly error message.
+
+```{r, error = TRUE}
 as_factor.default <- function(x) {
   stop(
     "Don't know how to coerce object of class ", 
@@ -319,37 +329,35 @@ as_factor.default <- function(x) {
 as_factor(1)
 ```
 
-### Esoterica
+### Special generics
 
-Note that `UseMethod()` calls methods in a special way:
+There are two special types of generics present in base R:
 
-```{r}
-g <- function(x) {
-  x <- 10
-  y <- 10
-  UseMethod("g")
-}
-g.default <- function(x) c(x = x, y = y)
+* group generics, which allow you to provide methods for multiple generics at
+  once.
+  
+* internal generics, which are implemented in C, not R.
 
-x <- 1
-y <- 1
-g(x)
-```
+You can not create these types of generic yourself, but they're important to know about because you might want to create methods for them.
 
-Arguments to the generic are passed on as they were recieved by the generic, regardless of what's happened to them in the meantime. New variables, however, are passed on as is. You should never rely on this behaviour because it is esoteric. Instead, you should avoid performing complex calculations in the generic. Most generics should simply contain `UseMethod()` and nothing else.
+#### Group generics
 
-### Group generics
-
-Group generic methods add a little more complexity. Group generics make it possible to implement methods for multiple generics with one function. The four group generics and the functions they include are: \index{group generics} \index{S3!group generics}
+Group generics make it possible to implement methods for multiple generics with one function. The four group generics and the functions they include are: \index{group generics} \index{S3!group generics}
 
 * Math: `abs`, `sign`, `sqrt`, `floor`, `cos`, `sin`, `log`, `exp`, ...
-* Ops: `+`, `-`, `*`, `/`, `^`, `%%`, `%/%`, `&`, `|`, `!`, `==`, `!=`, `<`, `<=`, `>=`, `>`
+
+* Ops: `+`, `-`, `*`, `/`, `^`, `%%`, `%/%`, `&`, `|`, `!`, `==`, `!=`, `<`, 
+  `<=`, `>=`, `>`
+
 * Summary: `all`, `any`, `sum`, `prod`, `min`, `max`, `range`
+
 * Complex: `Arg`, `Conj`, `Im`, `Mod`, `Re`
 
-Note that inside a group generic function a special variable `.Generic` provides the actual generic function called.
+Once you provide a 
 
-### Internal generics
+Note that inside a group generic function a special variable `.Generic` provides the actual generic function called. This can be useful when producing error messages.
+
+#### Internal generics
 
 Some S3 generics, like `[`, `sum()`, and `cbind()`, don't call `UseMethod()` because they are implemented in C. Instead, they call the C functions `DispatchGroup()` or `DispatchOrEval()`. Functions that do method dispatch in C code are called __internal generics__. It's important to know which functions are internally generic, so you can write methods for them, and so you're aware of the slight differences in method dispatch. It's not easy to tell if a function is internally generic, because it just looks like a typical call to a C function:
 
@@ -360,95 +368,24 @@ cbind
 
 You can look in the documentation, in the global variable `.S3PrimitiveGenerics`, and in `?InternalMethods`.  All group generics are internal generics.
 
-## Methods
-
-A generic isn't useful without some methods. To add a method, you just create a regular function with the correct (`generic.class`) name: \index{methods!S3} \index{S3!methods}
-
-```{r}
-f.a <- function(x) "Class a"
-
-a <- structure(list(), class = "a")
-class(a)
-f(a)
-```
-
-Adding a method to an existing generic works in the same way:
-
-```{r}
-mean.a <- function(x) "a"
-mean(a)
-```
-
-As you can see, there's no check to make sure that the method returns the class compatible with the generic. It's up to you to make sure that your method doesn't violate the expectations of existing code.
-
-### Method dispatch
-
-S3 method dispatch is relatively simple. `UseMethod()` creates a vector of function names, like `paste0("generic", ".", c(class(x), "default"))` and looks for each in turn. The "default" class makes it possible to set up a fall back method for otherwise unknown classes. \index{S3!method dispatch rules}
-
-```{r}
-f <- function(x) UseMethod("f")
-f.a <- function(x) "Class a"
-f.default <- function(x) "Unknown class"
-
-f(structure(list(), class = "a"))
-# No method for b class, so uses method for a class
-f(structure(list(), class = c("b", "a")))
-# No method for c class, so falls back to default
-f(structure(list(), class = "c"))
-```
-
-Once `UseMethod` has found the correct method, it's invoked in a special way. Rather than creating a new evaluation environment, it uses the environment of the current function call (the call to the generic), so any assignments or evaluations that were made before the call to UseMethod will be accessible to the method. The arguments that were used in the call to the generic are passed on to the method in the same order they were received.
-
-Because methods are normal R functions, you can call them directly:
-
-```{r}
-c <- structure(list(), class = "c")
-# Call the correct method:
-f.default(c)
-# Force R to call the wrong method:
-f.a(c)
-```
-
-However, this is just as dangerous as changing the class of an object, so you shouldn't do it. Please don't point the loaded gun at your foot! The only reason to call the method directly is that sometimes you can get considerable performance improvements by skipping method dispatch. See [performance](#be-lazy) for details.
-
-
-
-You can see all the methods that belong to a generic with `methods()`:
-
-```{r}
-methods("mean")
-methods("t.test")
-```
-
-(Apart from methods defined in the base package, most S3 methods will not be visible: use `getS3method("generic", "class")` to read their source code.)
-
-You can also list all generics that have a method for a given class:
-
-```{r}
-methods(class = "ts")
-```
-
-There's no way to list all S3 classes because there is no formal definition of an S3 class, as you'll learn shortly.
-
-
-### Method families
-
-
-* When implementing a vector class, you should implement these methods: `length`, `[`, `[<-`, `[[`, `[[<-`, `c`.  (If `[` is implemented `rev`, `head`, and `tail` should all work). 
-
-* When implementing anything mathematical, implement `Ops`, `Math` and `Summary`.
-
-* When implementing a matrix/array class, you should implement these methods: `dim` (gets you nrow and ncol), `t`, `dimnames` (gets you rownames and colnames), `dimnames<-` (gets you colnames<-, rownames<-), `cbind`, `rbind`.
-
-* If you're implementing more complicated `print()` methods, it's a better idea to implement `format()` methods that return a string, and then implement `print.class <- function(x, ...) cat(format(x, ...), "\n"`. This makes for methods that are much easier to compose, because the side-effects are isolated to a single place.
-
-
-### Double dispatch
-
-How does `+` work.
-
-
 ### Exercises
+
+1.  Carefully read the documentation for `UseMethod()` and explain why the
+    following code returns the results that it does. What two usual rules
+    of function evaluation does `UseMethdod()` violate?
+    
+    ```{r}
+    g <- function(x) {
+      x <- 10
+      y <- 10
+      UseMethod("g")
+    }
+    g.default <- function(x) c(x = x, y = y)
+    
+    x <- 1
+    y <- 1
+    g(x)
+    ```
 
 1.  Read the source code for `t()` and `t.test()` and confirm that 
     `t.test()` is an S3 generic and not an S3 method. What happens if 
@@ -467,6 +404,95 @@ How does `+` work.
     different behaviours for the two classes? Which generics share the same
     behaviour?
 
+## Methods
+
+A generic isn't useful without some methods. To add a method, you just create a regular function with the correct (`generic.class`) name: \index{methods!S3} \index{S3!methods}
+
+```{r}
+f.a <- function(x) "Class a"
+
+a <- structure(list(), class = "a")
+class(a)
+f(a)
+```
+
+In other words, a method is just a function with a special name.
+
+### Method dispatch
+
+S3 method dispatch is relatively simple. `UseMethod()` creates a vector of function names, like `paste0("generic", ".", c(class(x), "default"))` and looks for each in turn. The "default" class makes it possible to set up a fall back method for otherwise unknown classes. \index{S3!method dispatch rules}
+
+```{r}
+f <- function(x) UseMethod("f")
+f.a <- function(x) "Class a"
+f.default <- function(x) "Unknown class"
+
+f(structure(list(), class = "a"))
+# No method for b class, so uses method for a class
+f(structure(list(), class = c("b", "a")))
+# No method for c class, so falls back to default
+f(structure(list(), class = "c"))
+```
+
+Because methods are normal R functions, you can call them directly:
+
+```{r}
+c <- structure(list(), class = "c")
+# Call the correct method:
+f.default(c)
+# Force R to call the wrong method:
+f.a(c)
+```
+
+However, this is just as dangerous as changing the class of an object, so you shouldn't do it. Please don't point the loaded gun at your foot! The only reason to call the method directly is that sometimes you can get considerable performance improvements by skipping method dispatch. See [performance](#be-lazy) for details.
+
+Because of this you should check in your methods that the inputs are the correct types.
+
+You can see all the methods that belong to a generic with `methods()`:
+
+```{r}
+methods("mean")
+methods("t.test")
+```
+
+(Apart from methods defined in the base package, most S3 methods will not be visible: use `getS3method("generic", "class")` to read their source code.)
+
+You can also list all generics that have a method for a given class:
+
+```{r}
+methods(class = "ts")
+```
+
+#### Double dispatch
+
+> The classes of both arguments are considered in dispatching any member of this group. For each argument its vector of classes is examined to see if there is a matching specific (preferred) or Ops method. If a method is found for just one argument or the same method is found for both, it is used. If different methods are found, there is a warning about ‘incompatible methods’: in that case or if no method is found for either argument the internal method is used.
+
+> For operators in the Ops group a special method is invoked if the two operands taken together suggest a single method. Specifically, if both operands correspond to the same method or if one operand corresponds to a method that takes precedence over that of the other operand. If they do not suggest a single method then the default method is used. Either a group method or a class method dominates if the other operand has no corresponding method. A class method dominates a group method.
+
+> For the operators of group Ops, the object .Method is a length-two character vector with elements the methods selected for the left and right arguments respectively. (If no method was selected, the corresponding element is "".)
+
+
+
+#### Dots dispatch
+
+
+### Method families
+
+
+* When implementing a vector class, you should implement these methods: `length`, `[`, `[<-`, `[[`, `[[<-`, `c`.  (If `[` is implemented `rev`, `head`, and `tail` should all work). 
+
+* When implementing anything mathematical, implement `Ops`, `Math` and `Summary`.
+
+* When implementing a matrix/array class, you should implement these methods: `dim` (gets you nrow and ncol), `t`, `dimnames` (gets you rownames and colnames), `dimnames<-` (gets you colnames<-, rownames<-), `cbind`, `rbind`.
+
+* If you're implementing more complicated `print()` methods, it's a better idea to implement `format()` methods that return a string, and then implement `print.class <- function(x, ...) cat(format(x, ...), "\n"`. This makes for methods that are much easier to compose, because the side-effects are isolated to a single place.
+
+* model fitting
+
+
+### Exercises
+
+
 1.  Which base generic has the greatest number of defined methods?
 
 ## Multiple "classes"
@@ -476,80 +502,6 @@ Not just inheritance. Better to think of S3 classes as an interface that defines
 <https://en.wikipedia.org/wiki/Composition_over_inheritance>
 
 As discussed in the next section, R looks for methods in the order in which they appear in the class vector. So in this example, it would be like class A inherits from class B - if a method isn't defined for A, it will fall back to B. However, if you switched the order of the classes, the opposite would be true! This is because S3 doesn't define any formal relationship between classes, or even any definition of what an individual class is. If you're coming from a strict environment like Java, this will seem pretty frightening (and it is!) but it does give your users a tremendous amount of freedom. While it's very difficult to stop someone from doing something you don't want them to do, your users will never be held back because there is something you haven't implemented yet.
-
-### Method dispatch
-
-
-### "Duck" typing
-
-`is.numeric()` is
-
-> Methods for is.numeric should only return true if the base type of 
-> the class is double or integer and values can reasonably be regarded 
-> as numeric (e.g., arithmetic on them makes sense, and comparison 
-> should be done via the base type).
-
-(i.e. you should only ever override it to be false)
-
-This is confusing because this definition of numeric is different to the definition of numeric used elsewhere: i.e. either an integer or a double. A better name would have been `is.numericish()` or similar.
-
-### Interfaces
-
-`POSIXt`
-
-### Mixins
-
-`I()`
-
-```{r}
-labelled <- function(x, label) {
-  struture(x, 
-    label = label,
-    class = c("labelled", class(x))
-  )
-}
-
-`[.labelled` <- function(x) {
-  labelled(NextMethod(), attr(x, "label"))
-}
-```
-
-### Conventions
-
-S3 provides no rules as to the structure of inheritance. However, you will make your life easier if you impose some principles.
-
-* A subclass should always be built on the same base type as a parent.
-
-* If using attributes, a subclass should always contain at least the
-  same attributes as the parent. If using named list elements, ensure
-  you add, not subtract.
-
-* Use a constructor to enforce the order of classes.
-
-(Note that `POSIXct` and `POSIXlt` don't follow this definition because `POSIXct` is built on an double vector, and `POSIXlt` is build on a list. We'll come back to what the `POSIXt` "base class" does in [interface].)
-
-### Constructor
-
-If you want people to extend your class, you should faciliate this in the constructor by using `...` and `subclass`
-
-```{r}
-new_my_class <- function(x, y, ..., subclass = NULL) {
-  structure(
-    x,
-    y = y,
-    ...,
-    class = c(subclass, "my_class")
-  )
-}
-new_sub_class <- function(x, y, z, ..., subclass = NULL) {
-  new_my_class(x, y, z, ..., subclass = c(subclass, "sub_class"))
-}
-```
-
-
-### Default method
-
-Sometimes you may want to customise just to have a more informative error for your audience.
 
 ### `NextMethod()`
 
@@ -587,7 +539,57 @@ Methods invoked as a result of a call to `NextMethod` behave as if they had been
 
 If `NextMethod` is called in a situation where there is no second class it will return an error. 
 
-### Writing flexible base methods
+### Interfaces
+
+`POSIXt`
+
+### Mixins
+
+`I()`
+
+```{r}
+labelled <- function(x, label) {
+  struture(x, 
+    label = label,
+    class = c("labelled", class(x))
+  )
+}
+
+`[.labelled` <- function(x) {
+  labelled(NextMethod(), attr(x, "label"))
+}
+```
+
+### Inheritance
+
+S3 provides no rules as to the structure of inheritance. However, you will make your life easier if you impose some principles.
+
+* A subclass should always be built on the same base type as a parent.
+
+* If using attributes, a subclass should always contain at least the
+  same attributes as the parent. If using named list elements, ensure
+  you add, not subtract.
+
+* Use a constructor to enforce the order of classes.
+
+(Note that `POSIXct` and `POSIXlt` don't follow this definition because `POSIXct` is built on an double vector, and `POSIXlt` is build on a list. We'll come back to what the `POSIXt` "base class" does in [interface].)
+
+If you want people to extend your class, you should faciliate this in the constructor by using `...` and `subclass`
+
+```{r}
+new_my_class <- function(x, y, ..., subclass = NULL) {
+  structure(
+    x,
+    y = y,
+    ...,
+    class = c(subclass, "my_class")
+  )
+}
+new_sub_class <- function(x, y, z, ..., subclass = NULL) {
+  new_my_class(x, y, z, ..., subclass = c(subclass, "sub_class"))
+}
+```
+
 
 
 ### Exercises
@@ -710,3 +712,8 @@ We need a little extra discussion of the numeric "type" because it's used in thr
 * Beware class clashes across packages. If there's any chance of confusion
   give your classes a common prefix.
 
+* If you define your own generics, make sure you document it from both a user
+  perspective and the perspective of a devloper. Be clear about the contract
+  that the generic provides.
+
+* Don't export methods; use `S3method()` so they can be found.
