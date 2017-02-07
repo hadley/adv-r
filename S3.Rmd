@@ -359,7 +359,7 @@ Note that inside a group generic function a special variable `.Generic` provides
 
 #### Internal generics
 
-Some S3 generics, like `[`, `sum()`, and `cbind()`, don't call `UseMethod()` because they are implemented in C. Instead, they call the C functions `DispatchGroup()` or `DispatchOrEval()`. Functions that do method dispatch in C code are called __internal generics__. It's important to know which functions are internally generic, so you can write methods for them, and so you're aware of the slight differences in method dispatch. It's not easy to tell if a function is internally generic, because it just looks like a typical call to a C function:
+Some S3 generics, like `[`, `sum()`, and `cbind()`, don't call `UseMethod()` because they are implemented in C. Instead, they call the C functions `DispatchGroup()` or `DispatchOrEval()`. Functions that do method dispatch in C code are called __internal generics__. It's important to know which functions are internally generic, so you can write methods for them. It's not easy to tell if a function is internally generic, because it just looks like a typical call to a C function:
 
 ```{r}
 length
@@ -367,6 +367,8 @@ cbind
 ```
 
 You can look in the documentation, in the global variable `.S3PrimitiveGenerics`, and in `?InternalMethods`.  All group generics are internal generics.
+
+Internal generics have a slightly different dispatch for base types as described in XXX.
 
 ### Exercises
 
@@ -479,7 +481,7 @@ methods(class = "ts")
 ### Method families
 
 
-* When implementing a vector class, you should implement these methods: `length`, `[`, `[<-`, `[[`, `[[<-`, `c`.  (If `[` is implemented `rev`, `head`, and `tail` should all work). 
+* When implementing a vector class, you should implement these methods: `length`, `[`, `[<-`, `[[`, `[[<-`, `c`.  (If `[` is implemented `rev`, `head`, and `tail` should all work).  Also need to implement `as.data.frame`
 
 * When implementing anything mathematical, implement `Ops`, `Math` and `Summary`.
 
@@ -490,18 +492,36 @@ methods(class = "ts")
 * model fitting
 
 
+This is a quick and dirty way to create data frames. It does little checking (i.e. all columns need to have unique names, and be the same length), but assuming you give it valid input it gives you a valid data frame class. You'll need this if you want to create your own vector class because you need a `as.data.frame` method that returns a data frame. 
+
+```{r}
+new_data_frame <- function(x, row_names = NULL) {
+  stopifnot(is.list(x))
+  
+  if (is.null(row_names)) {
+    n <- if (length(x) == 0) 0 else length(x[[1]])
+    row_names <- .set_row_names(n)
+  }
+  
+  structure(x,
+    class = "data.frame",
+    row.names = row_names
+  )
+}
+```
+
 ### Exercises
 
 
 1.  Which base generic has the greatest number of defined methods?
 
-## Multiple "classes"
+## Inheritance
 
-Not just inheritance. Better to think of S3 classes as an interface that defines a specific behaviour (and requried data).
+We've hinted at how the `class` attribute can have more than a single value. This is used in method dispatch: if an object has class `c("a", "b", "c")` R looks first for `generic.a()`, then `generic.b()`, then `generic.c()`. 
 
-<https://en.wikipedia.org/wiki/Composition_over_inheritance>
+This is what allows S3 to be a fully fledged OO system. 
 
-As discussed in the next section, R looks for methods in the order in which they appear in the class vector. So in this example, it would be like class A inherits from class B - if a method isn't defined for A, it will fall back to B. However, if you switched the order of the classes, the opposite would be true! This is because S3 doesn't define any formal relationship between classes, or even any definition of what an individual class is. If you're coming from a strict environment like Java, this will seem pretty frightening (and it is!) but it does give your users a tremendous amount of freedom. While it's very difficult to stop someone from doing something you don't want them to do, your users will never be held back because there is something you haven't implemented yet.
+However, if you switched the order of the classes, the opposite would be true! This is because S3 doesn't define any formal relationship between classes, or even any definition of what an individual class is. If you're coming from a strict environment like Java, this will seem pretty frightening (and it is!) but it does give your users a tremendous amount of freedom. While it's very difficult to stop someone from doing something you don't want them to do, your users will never be held back because there is something you haven't implemented yet.
 
 ### `NextMethod()`
 
@@ -539,30 +559,7 @@ Methods invoked as a result of a call to `NextMethod` behave as if they had been
 
 If `NextMethod` is called in a situation where there is no second class it will return an error. 
 
-### Interfaces
-
-`POSIXt`
-
-### Mixins
-
-`I()`
-
-```{r}
-labelled <- function(x, label) {
-  struture(x, 
-    label = label,
-    class = c("labelled", class(x))
-  )
-}
-
-`[.labelled` <- function(x) {
-  labelled(NextMethod(), attr(x, "label"))
-}
-```
-
-### Inheritance
-
-S3 provides no rules as to the structure of inheritance. However, you will make your life easier if you impose some principles.
+### Subclasses
 
 * A subclass should always be built on the same base type as a parent.
 
@@ -590,7 +587,14 @@ new_sub_class <- function(x, y, z, ..., subclass = NULL) {
 }
 ```
 
+You should also add a method to the coercion method for the parent class:
 
+```{r}
+as_my_class.sub_class <- function(x) {
+  class(x) <- setdiff(class(x), "sub_class")
+  x
+}
+```
 
 ### Exercises
 
@@ -603,6 +607,41 @@ new_sub_class <- function(x, y, z, ..., subclass = NULL) {
     as.factor(f1)  
     as.ordered(f1) # loses levels
     ```
+
+
+### Interfaces and Mixins
+
+Like many other parts of S3, there are few rules about what you can put in this vector (as long as it's a character vector, anything goes), however you're better of using this vector in one of three ways:
+
+1.  Subclassing. Build on top of an existing class to specialise behaviour
+    further.  For example, an ordered factor builds on top of a regular
+    factor.
+
+1.  Interfaces. Here the the class name doesn't provide any behaviour: it just
+    forms a contract. The object has methods for a set of generics. For 
+    example, `POSIXt` defines 
+
+1.  Mixins. A class that provides additional behaviour (and additional 
+    attributes) that are orthogonal to the behaviour of the base class.
+
+
+`POSIXt`: `POSIXct` is a numeric vector with attribute `tzone`; `POSIXlt` is a named list. They have no structure in common, so `POSIXt` isn't a super class. In fact, I'd say `POSIXt` is more like an interface: it implies that the object "behaves like" a date-time (in other words it implements the key methods).
+
+`I()`: two main methods (`as.data.frame()` does the work, `[` preserves the class.) `methods(class = "AsIs")`.
+
+```{r}
+labelled <- function(x, label) {
+  struture(x, 
+    label = label,
+    class = c("labelled", class(x))
+  )
+}
+
+`[.labelled` <- function(x) {
+  labelled(NextMethod(), attr(x, "label"))
+}
+```
+
 
 ## Base types
 
