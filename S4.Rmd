@@ -1,7 +1,5 @@
 # The S4 object system
 
-<!-- For all changes by Sven E. Templer up to this commit: I assign the copyright of this contribution to Hadley Wickham -->
-
 <!-- 
 http://www.ci.tuwien.ac.at/Conferences/useR-2004/Keynotes/Leisch.pdf
 Need to use consistent example throughout - work on car inspection a la Dylan?
@@ -15,59 +13,105 @@ Compared to S3, the S4 object system is much stricter, and much closer to other 
 * multiple dispatch: the generic function can be dispatched to a method
   based on the class of any number of argument, not just one
 
+* There is a special operator, `@`, for extracting slots (aka fields)
+  from an S4 object.
+
 Here we introduce the basics of S4, trying to stay away from the esoterica and focussing on the ideas that you need to understand and write the majority of S4 code. 
 
 <!-- This document will hopefully give you the scaffolding to make better sense of documentation and other detailed resources such as: ... -->
+
+All S4 related code is stored in the `methods` package. This package is always available when you're running R interactively, but may not be available when running R in batch mode. For this reason, it's a good idea to include an explicit `library(methods)` whenever you're using S4.
+
+To learn more, some good references are:
+
+* [S4 system development in Bioconductor](http://www.bioconductor.org/help/course-materials/2010/AdvancedR/S4InBioconductor.pdf)
+
+* John Chambers' [_Software for Data Analysis_](http://amzn.com/0387759352?tag=devtools-20)
+
+* [Martin Morgan's answers to S4 questions on stackoverflow](http://stackoverflow.com/search?tab=votes&q=user%3a547331%20%5bs4%5d%20is%3aanswe)
+
+## Identifying S4 objects
+
+
+There aren't any S4 classes in the commonly used base packages (stats, graphics, utils, datasets, and base), so we'll start by creating an S4 object from the built-in stats4 package, which provides some S4 classes and methods associated with maximum likelihood estimation:
+
+```{r}
+library(stats4)
+library(pryr)
+
+# From example(mle)
+y <- c(26, 17, 13, 12, 20, 5, 9, 8, 5, 4, 8)
+nLL <- function(lambda) - sum(dpois(y, lambda, log = TRUE))
+fit <- mle(nLL, start = list(lambda = 5), nobs = length(y))
+
+# An S4 object
+isS4(fit)
+otype(fit)
+
+# An S4 generic
+isS4(nobs)
+ftype(nobs)
+
+# Retrieve an S4 method, described later
+mle_nobs <- method_from_call(nobs(fit))
+isS4(mle_nobs)
+ftype(mle_nobs)
+```
+
+Use `is()` with one argument to list all classes that an object inherits from. Use `is()` with two arguments to test if an object inherits from a specific class.
+
+```{r}
+is(fit)
+is(fit, "mle")
+```
+
+You can get a list of all S4 generics with `getGenerics()`, and a list of all S4 classes with `getClasses()`. This list includes shim classes for S3 classes and base types. You can list all S4 methods with `showMethods()`, optionally restricting selection either by `generic` or by `class` (or both). It's also a good idea to supply `where = search()` to restrict the search to methods available in the global environment.
+
 
 ## Classes and instances
 
 In S3, you can turn any object into an object of a particular class just by setting the class attribute.  S4 is much stricter: you must define the representation of the call using `setClass`, and the only way to create it is through the constructer function `new`.
 
-A class has three key properties:
 
-  * a __Class__ (name): an alpha-numeric string that identifies the class
+### Defining classes and creating objects
 
-  * __slots__: a named character vector, containing the __representation__
-    of the object by its slots (attributes).
-    For example, a person class might be represented by a character name and a
-    numeric age, as follows:
-    `slots <- c(name = "character", age = "numeric")`
+In S3, you can turn any object into an object of a particular class just by setting the class attribute. S4 is much stricter: you must define the representation of a class with `setClass()`, and create a new object with `new()`. You can find the documentation for a class with a special syntax: `class?className`, e.g., `class?mle`. \index{S4!classes} \index{classes!S4}
 
-  * a character vector of classes it inherits from, or in S4 terminology,
-    __contains__.
-    Note that S4 supports multiple inheritance, but this should be used with
-    extreme caution, as it makes method lookup more complicated.
-    
-Optional properties of an S4 class are:
+An S4 class has three key properties:
 
-  * a __prototype__: This defines the object at it's creation.
-    It might be added to support the methods `initialize`, `validity` and `show`.
-    It can be used as function call to `prototype(...)` or as a named character vector.
-    
-  * a __validity__ function, which checks additional attributes of the object,
-    for example the attributes from the object inside slots.
-    This is to ensure a safety check on object creation and modification.
-    
+* A __name__: an alpha-numeric class identifier. By convention, S4 class names
+  use UpperCamelCase.
+
+* A named list of __slots__ (fields), which defines slot names and
+  permitted classes. For example, a person class might be represented by a
+  character name and a numeric age: `list(name = "character", age = "numeric")`.
+  \index{slots}
+
+* A string giving the class it inherits from, or, in S4 terminology,
+  that it __contains__. You can provide multiple classes for multiple
+  inheritance, but this is an advanced technique which adds much
+  complexity.
+
+  In `slots` and `contains` you can use S4 classes, S3 classes registered
+  with `setOldClass()`, or the implicit class of a base type. In `slots`
+  you can also use the special class `ANY` which does not restrict the input.
+
+S4 classes have other optional properties like a `validity` method that tests if an object is valid, and a `prototype` object that defines default slot values. 
+
 ### Initialization
 
 You create a class with `setClass`:
 
-```R
+```{r}
 setClass("Person", representation(name = "character", age = "numeric"))
 setClass("Employee", representation(boss = "Person"), contains = c(self = "Person"))
 ```
 
 and an object of that class with the generator function `new`
 
-```R
+```{r}
 hadley <- new("Person", name = "Hadley", age = 31)
 hadley
-# An object of class "Person"
-# Slot "name":
-# [1] "Hadley"
-# 
-# Slot "age":
-# [1] 31
 ```
 
 The function `setClass` returns a function, the generator, that itself calls `new`.
@@ -75,41 +119,32 @@ So one can define an alias for the generator function and use it instead of a ca
 to `new`.
 For clarity, it is recommended to use the name of the class:
 
-```R
+```{r}
 Person <- setClass("Person", slots = c(name = "character", age = "numeric"))
 hadley <- Person(name = "Hadley", age = 31)
 ```
 
 Unlike S3, S4 checks that all of the slots have the correct type:
 
-```R    
+```{r, error = TRUE}
 hadley <- new("Person", name = "Hadley", age = "thirty")
-# Error in validObject(.Object) :
-#   invalid class "Person" object: invalid object for slot "age" in class
-#   "Person": got class "character", should be or extend class "numeric"
-    
 hadley <- new("Person", name = "Hadley", sex = "male")
-# invalid names for slots of class "Person": sex
 ```
 
 If you omit a slot, it will initiate it with the default object of the class.  
 
-To access slots of an S4 object you use `@`, not `$`:
+To access slots of an S4 object use `@` or `slot()`: \index{subsetting!S4} \index{S4|subsetting}
 
-```R
+```{r}
 hadley <- new("Person", name = "Hadley")
 hadley@age
-# numeric(0)
-```
-
-Or if you have a character string giving a slot name, you use the `slot` function:
-
-```R
 slot(hadley, "age")
-# numeric(0)
 ```
 
-This is the equivalent of `[[`.
+(`@` is equivalent to `$`, and `slot()` to `[[`.)
+
+Since R is an interactive programming language, it's possible to create new classes or redefine existing classes at any time. This can be a problem when you're interactively experimenting with S4. If you modify a class, make sure you also recreate any objects of that class, otherwise you'll end up with invalid objects.
+
 
 ### Prototype
 
@@ -157,49 +192,11 @@ is(hadley, "Person")
 
 Note that there's some tension between the usual interactive functional style of R and the global side-effect causing S4 class definitions. In most programming languages, class definition occurs at compile-time, while object instantiation occurs at run-time - it's unusual to be able to create new classes interactively. In particular, note that the examples rely on the fact that multiple calls to `setClass` with the same class name will silently override the previous definition unless the first definition is sealed with `sealed = TRUE`. 
 
+### Constructor
+
 ### Checking validity
 
-You can also provide an optional method that applies additional restrictions. This function should have a single argument called `object` and should return `TRUE` if the object is valid, and if not it should return a character vector giving all reasons it is not valid.
-
-```R
-check_person <- function(object) {
-  errors <- character()
-  length_age <- length(object@age)
-  if (length_age != 1) {
-    msg <- paste("Age is length ", length_age, ". Should be 1.", sep = "")
-    errors <- c(errors, msg)
-  }
-
-  length_name <- length(object@name)
-  if (length_name != 1) {
-    msg <- paste("Name is length ", length_name, ". Should be 1.", sep = "")
-    errors <- c(errors, msg)
-  }
-      
-  if (length(errors) == 0) TRUE else errors
-}
-
-setClass("Person", representation(name = "character", age = "numeric"), 
-  validity = check_person)
-    
-new("Person", name = "Hadley")
-# Error in validObject(.Object) : 
-#   invalid class “Person” object: Age is length 0. Should be 1.
-
-new("Person", name = "Hadley", age = 1:10)
-# Error in validObject(.Object) : 
-#   invalid class "Person" object: Age is length 10. Should be 1.
-      
-# But note that the check is not automatically applied when we modify 
-# slots directly
-hadley <- new("Person", name = "Hadley", age = 31)
-hadley@age <- 1:10
-    
-# We can check validity with validObject:
-validObject(hadley)
-# Error in validObject(hadley) : 
-#   invalid class “Person” object: Age is length 10. Should be 1.
-```
+Do not use the validity method.
 
 ## Generic functions and methods
 
@@ -215,6 +212,31 @@ setClass("Circle", contains = "Shape")
 ```
 
 ### Create generic functions
+
+### Creating new methods and generics
+
+S4 provides special functions for creating new generics and methods. `setGeneric()` creates a new generic or converts an existing function into a generic. `setMethod()` takes the name of the generic, the classes the method should be associated with, and a function that implements the method. For example, we could take `union()`, which usually just works on vectors, and make it work with data frames: \index{S4!generics} \index{S4!methods} \index{generics!S4} \index{methods!S4}
+
+```{r}
+setGeneric("union")
+setMethod("union",
+  c(x = "data.frame", y = "data.frame"),
+  function(x, y) {
+    unique(rbind(x, y))
+  }
+)
+```
+
+If you create a new generic from scratch, you need to supply a function that calls `standardGeneric()`:
+
+```{r}
+setGeneric("myGeneric", function(x) {
+  standardGeneric("myGeneric")
+})
+```
+
+`standardGeneric()` is the S4 equivalent to `UseMethod()`.
+
 
 The `setGeneric` function provides two main ways to create a new generic.  You can either convert an existing function to a generic function, or you can create a new one from scratch.
 
@@ -297,7 +319,21 @@ showMethods(class = "Polygon")
 # object="Polygon"
 ```
 
-### Method dispatch
+## Method dispatch
+
+If an S4 generic dispatches on a single class with a single parent, then S4 method dispatch is the same as S3 dispatch. The main difference is how you set up default values: S4 uses the special class `ANY` to match any class and "missing" to match a missing argument. Like S3, S4 also has group generics, documented in `?S4groupGeneric`, and a way to call the "parent" method, `callNextMethod()`. \index{S4!method dispatch rules}
+
+Method dispatch becomes considerably more complicated if you dispatch on multiple arguments, or if your classes use multiple inheritance. The rules are described in `?Methods`, but they are complicated and it's difficult to predict which method will be called. For this reason, I strongly recommend avoiding multiple inheritance and multiple dispatch unless absolutely necessary.
+
+Finally, there are two methods that find which method gets called given the specification of a generic call:
+
+```{r, eval = FALSE}
+# From methods: takes generic name and class names
+selectMethod("nobs", list("mle"))
+
+# From pryr: takes an unevaluated function call
+method_from_call(nobs(fit))
+```
 
 <!-- http://www.opendylan.org/books/drm/Method_Dispatch -->
 
@@ -606,3 +642,34 @@ The `Matrix` package by Douglas Bates and Martin Maechler is a great example of 
   conversion of standard S3 matrices
 
 Most of the hard work is done in C for efficiency, but it's still useful to look at the other R files to see how the code is arranged.
+
+## S3 and base types
+
+If an S4 object contains (inherits from) an S3 class or a base type, it will have a special `.Data` slot which contains the underlying base type or S3 object: \indexc{.Data}
+
+```{r}
+RangedNumeric <- setClass(
+  "RangedNumeric",
+  contains = "numeric",
+  slots = list(min = "numeric", max = "numeric")
+)
+rn <- RangedNumeric(1:10, min = 1, max = 10)
+rn@min
+rn@.Data
+```
+
+S3Part
+
+
+
+### Exercises
+
+1.  Which S4 generic has the most methods defined for it? Which S4 class 
+    has the most methods associated with it?
+
+1.  What happens if you define a new S4 class that doesn't "contain" an 
+    existing class?  (Hint: read about virtual classes in `?setClass`.)
+
+1.  What happens if you pass an S4 object to an S3 generic? What happens 
+    if you pass an S3 object to an S4 generic? (Hint: read `?setOldClass` 
+    for the second case.)
