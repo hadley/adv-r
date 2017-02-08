@@ -27,7 +27,7 @@ print(unclass(f))
 ```{r}
 time <- strptime("2017-01-01", "%Y-%m-%d")
 str(time)
-str(unclass(time))
+str(unclass(time), list.len = 5)
 ```
 
 Generics behave differently for different classes because generics have __methods__. A method is a function that implements the generic behaviour for a specific class. The generic doesn't actually do any work: it's job is to find the right method and pass on its arguments. Remember that S3 is from the generic-functions school of OO, so that methods belong to the generic, not the the object or the class. 
@@ -147,6 +147,8 @@ new_POSIXct(1, tzone = "UTC")
 
 (Note that we set the class to a vector; we'll come back to that in [Inheritance])
 
+Constructors in base R: `.difftime()`, `.POSIXct()`, and `.POSIXlt()`
+
 ### Validators
 
 More complicated classes will require more complicated checks for validity. Take factors, for example. The constructor function should ensure that you have an object of the correct structure:
@@ -236,6 +238,14 @@ new_my_class <- function(x, y, z) {
 
 (For a real constructor, you'd also check that `x`, `y`, and `z` are the types that you expect.)
 
+The most important example of this class in base R is `lm`; the class returned when you fit a linear model:
+
+```{r}
+mod <- lm(mpg ~ wt, data = mtcars)
+typeof(mod)
+attributes(mod)
+```
+
 These are not the only styles, but they are the most common. Other less common but still useful structures are:
 
 *   Environments with classes, which allow you to implement new styles of OO.
@@ -267,6 +277,9 @@ These are not the only styles, but they are the most common. Other less common b
 1.  Carefully read the source code of `factor()` what does it do that
     our constructor does not?
 
+1.  What would a constructor function for `lm` objects, `new_lm()`, look like?
+    Why is a constructor function less useful for linear models?
+
 ## Generics
 
 Generics use the special `UseMethod()` function to dispatch to perform  __method dispatch__.  `UseMethod()` takes two arguments: the name of the generic function, and the argument to use for method dispatch. If you omit the second argument it will dispatch on the first argument to the function.  \indexc{UseMethod()} \index{S3!new generic}
@@ -284,6 +297,14 @@ foo2 <- function(x, y) {
 ```
 
 Note that you don't pass any of the arguments of the generic to `UseMethod()`; it uses black magic to pass them on to the method. Generally, you should avoid doing any computation in the generic, because the behaviour is confusing and few people know the details.  Rather than creating a new evaluation environment, it uses the environment of the current function call (the call to the generic), so any assignments or evaluations that were made before the call to UseMethod will be accessible to the method; __except__ that the arguments to the method are passed as they were recieved (even if you've modified them).
+
+There are two special types of generic that you'll learn about later: 
+
+* __group generics__, which allow you to specify methods for many generics at 
+  once.
+
+* __internal generics__, which are implemented in C, and have slightly different
+  dispatch rules.
 
 ### Coercion
 
@@ -331,44 +352,13 @@ as_factor(1)
 
 ### Special generics
 
-There are two special types of generics present in base R:
+There are two special types of generics that in exist in base R. You can create your own, but they're important know about 
 
 * group generics, which allow you to provide methods for multiple generics at
   once.
   
 * internal generics, which are implemented in C, not R.
 
-You can not create these types of generic yourself, but they're important to know about because you might want to create methods for them.
-
-#### Group generics
-
-Group generics make it possible to implement methods for multiple generics with one function. The four group generics and the functions they include are: \index{group generics} \index{S3!group generics}
-
-* Math: `abs`, `sign`, `sqrt`, `floor`, `cos`, `sin`, `log`, `exp`, ...
-
-* Ops: `+`, `-`, `*`, `/`, `^`, `%%`, `%/%`, `&`, `|`, `!`, `==`, `!=`, `<`, 
-  `<=`, `>=`, `>`
-
-* Summary: `all`, `any`, `sum`, `prod`, `min`, `max`, `range`
-
-* Complex: `Arg`, `Conj`, `Im`, `Mod`, `Re`
-
-Once you provide a 
-
-Note that inside a group generic function a special variable `.Generic` provides the actual generic function called. This can be useful when producing error messages.
-
-#### Internal generics
-
-Some S3 generics, like `[`, `sum()`, and `cbind()`, don't call `UseMethod()` because they are implemented in C. Instead, they call the C functions `DispatchGroup()` or `DispatchOrEval()`. Functions that do method dispatch in C code are called __internal generics__. It's important to know which functions are internally generic, so you can write methods for them. It's not easy to tell if a function is internally generic, because it just looks like a typical call to a C function:
-
-```{r}
-length
-cbind
-```
-
-You can look in the documentation, in the global variable `.S3PrimitiveGenerics`, and in `?InternalMethods`.  All group generics are internal generics.
-
-Internal generics have a slightly different dispatch for base types as described in XXX.
 
 ### Exercises
 
@@ -408,156 +398,146 @@ Internal generics have a slightly different dispatch for base types as described
 
 ## Methods
 
-A generic isn't useful without some methods. To add a method, you just create a regular function with the correct (`generic.class`) name: \index{methods!S3} \index{S3!methods}
+A generic isn't useful without some methods. To add a method, you just create a regular function with the correct (`generic.class`) name. Undertanding methods is mostly about understanding method dispatch. Before we go on, we need to emphasise that an object can have multiple "classes", i.e. the class attribute can be a vector. Here we'll explore how that affects method dispatch, and in the next section we'll explore what that means for S3 as an OO system.
+
+To make experimenting with this a little easier, I'll start by defining an `new_s3()` helper that lets me easily generate new objects from a given class:
 
 ```{r}
-f.a <- function(x) "Class a"
+new_s3 <- function(...) {
+  structure(
+    list(),
+    class = c(...)
+  )
+}
 
-a <- structure(list(), class = "a")
-class(a)
-f(a)
+class(new_s3("a"))
+class(new_s3("b", "a"))
+class(new_s3("b"))
 ```
-
-In other words, a method is just a function with a special name.
 
 ### Method dispatch
 
-S3 method dispatch is relatively simple. `UseMethod()` creates a vector of function names, like `paste0("generic", ".", c(class(x), "default"))` and looks for each in turn. The "default" class makes it possible to set up a fall back method for otherwise unknown classes. \index{S3!method dispatch rules}
+S3 method dispatch is relatively simple. `UseMethod()` creates a vector of function names, like `paste0("generic", ".", c(class(x), "default"))` and looks for each in turn. Next we'll create our own generic with a few methods so we can see what's going on.  \index{methods!S3} \index{S3!methods}
 
-```{r}
-f <- function(x) UseMethod("f")
-f.a <- function(x) "Class a"
-f.default <- function(x) "Unknown class"
+```{r, error = TRUE}
+generic <- function(x) UseMethod("generic")
+generic.a <- function(x) {
+  message("generic.a")
+}
+generic.b <- function(x) {
+  message("generic.b")
+}
 
-f(structure(list(), class = "a"))
-# No method for b class, so uses method for a class
-f(structure(list(), class = c("b", "a")))
-# No method for c class, so falls back to default
-f(structure(list(), class = "c"))
+generic(new_s3("a"))
+generic(new_s3("b", "a"))
+generic(new_s3("b"))
 ```
 
-Because methods are normal R functions, you can call them directly:
+As we saw earlier, it's possible to add a fallback "default" method that is called if no other method is found:
 
 ```{r}
-c <- structure(list(), class = "c")
-# Call the correct method:
-f.default(c)
-# Force R to call the wrong method:
-f.a(c)
+generic.default <- function(x) {
+  message("generic.default")
+}
+
+generic(new_s3("c"))
 ```
 
-However, this is just as dangerous as changing the class of an object, so you shouldn't do it. Please don't point the loaded gun at your foot! The only reason to call the method directly is that sometimes you can get considerable performance improvements by skipping method dispatch. See [performance](#be-lazy) for details.
+### Finding and accessing methods
 
-Because of this you should check in your methods that the inputs are the correct types.
-
-You can see all the methods that belong to a generic with `methods()`:
+You can see all the methods defined for a generic with `methods()`:
 
 ```{r}
-methods("mean")
-methods("t.test")
+methods("generic")
 ```
 
-(Apart from methods defined in the base package, most S3 methods will not be visible: use `getS3method("generic", "class")` to read their source code.)
+Note the false positive: `generic.skeleton()` is not a method for our generic but an existing function in the methods package. It's picked up because method definition relies only on a naming convention. This is one of the reasons that you should avoid using `.` in function names, except for methods.
 
-You can also list all generics that have a method for a given class:
+Note that apart from methods that you've created, and those defined in the base package, most S3 methods will not be visible: use `getS3method("generic", "class")` to read their source code.)
+
+The rules for how a generic finds the set of possible methods are a little complicated. There are two basic places to look: in the calling environment of the function that calls the generic; or in the special object `.__S3MethodsTable__.` in the environment of the generic. Every package has one and it lists all the S3 method that the package exports.
+
+### Calling methods directly
+
+Because a method is just a function with a special name, you can call methods directly:
 
 ```{r}
-methods(class = "ts")
+generic.a(new_s3("b"))
 ```
 
-#### Double dispatch
+This is generally a bad idea: please don't point the loaded gun at your foot! The only reason to call the method directly is that sometimes you can get considerable performance improvements by skipping method dispatch. See [performance](#be-lazy) for details.
 
-> The classes of both arguments are considered in dispatching any member of this group. For each argument its vector of classes is examined to see if there is a matching specific (preferred) or Ops method. If a method is found for just one argument or the same method is found for both, it is used. If different methods are found, there is a warning about ‘incompatible methods’: in that case or if no method is found for either argument the internal method is used.
+### `NextMethod()`
 
-> For operators in the Ops group a special method is invoked if the two operands taken together suggest a single method. Specifically, if both operands correspond to the same method or if one operand corresponds to a method that takes precedence over that of the other operand. If they do not suggest a single method then the default method is used. Either a group method or a class method dominates if the other operand has no corresponding method. A class method dominates a group method.
-
-> For the operators of group Ops, the object .Method is a length-two character vector with elements the methods selected for the left and right arguments respectively. (If no method was selected, the corresponding element is "".)
-
-
-
-#### Dots dispatch
-
-
-### Method families
-
-
-* When implementing a vector class, you should implement these methods: `length`, `[`, `[<-`, `[[`, `[[<-`, `c`.  (If `[` is implemented `rev`, `head`, and `tail` should all work).  Also need to implement `as.data.frame`
-
-* When implementing anything mathematical, implement `Ops`, `Math` and `Summary`.
-
-* When implementing a matrix/array class, you should implement these methods: `dim` (gets you nrow and ncol), `t`, `dimnames` (gets you rownames and colnames), `dimnames<-` (gets you colnames<-, rownames<-), `cbind`, `rbind`.
-
-* If you're implementing more complicated `print()` methods, it's a better idea to implement `format()` methods that return a string, and then implement `print.class <- function(x, ...) cat(format(x, ...), "\n"`. This makes for methods that are much easier to compose, because the side-effects are isolated to a single place.
-
-* model fitting
-
-
-This is a quick and dirty way to create data frames. It does little checking (i.e. all columns need to have unique names, and be the same length), but assuming you give it valid input it gives you a valid data frame class. You'll need this if you want to create your own vector class because you need a `as.data.frame` method that returns a data frame. 
+There's one more wrinkle in method dispatch: above, you saw that method dispatch terminated as soon as it found a matching method. In a method, however, you can choose to forward on to the "next" method; i.e. the method that would have been called if your method had not.
 
 ```{r}
-new_data_frame <- function(x, row_names = NULL) {
-  stopifnot(is.list(x))
-  
-  if (is.null(row_names)) {
-    n <- if (length(x) == 0) 0 else length(x[[1]])
-    row_names <- .set_row_names(n)
-  }
-  
-  structure(x,
-    class = "data.frame",
-    row.names = row_names
-  )
+generic <- function(x) UseMethod("generic")
+generic.a <- function(x) {
+  message("generic.a")
+  NextMethod()
+}
+generic.b <- function(x) {
+  message("generic.b")
+  NextMethod()
+}
+
+generic(new_s3("b", "a"))
+```
+
+Like `UseMethod()` exactly what happens when you call `NextMethod` is a little tricky. It doesn't actually work with the class attribute of the object, but instead uses a special variable (`.Class`) to keep track of which class to call next. This means that modifying the argument that is dispatched upon has no impact. The same principle as in `UseMethod()` and avoid modifying that object in place: it is likely to surprise you.
+
+Generally, you call `NextMethod()` without any arguments. How you can supply argument if you want to pass on extra arguments to the next method. We'll seem some examples of that in the next section.
+
+### Group generics
+
+Group generics make it possible to implement methods for multiple generics with one function. The four group generics and the functions they include are: \index{group generics} \index{S3!group generics}
+
+* Math: `abs`, `sign`, `sqrt`, `floor`, `cos`, `sin`, `log`, `exp`, ...
+
+* Ops: `+`, `-`, `*`, `/`, `^`, `%%`, `%/%`, `&`, `|`, `!`, `==`, `!=`, `<`, 
+  `<=`, `>=`, `>`
+
+* Summary: `all`, `any`, `sum`, `prod`, `min`, `max`, `range`
+
+* Complex: `Arg`, `Conj`, `Im`, `Mod`, `Re`
+
+Most group generics involve a call to `NextMethod()`. For example, the `difftime()` method for the Math group generic looks effectively like this:
+
+```{r}
+Math.difftime <- function(x, ...) {
+  new_difftime(NextMethod(), units = attr(x, "units"))
 }
 ```
 
-### Exercises
+All the generic does is preserve the attributes and class of the 
 
+Note that inside a group generic function a special variable `.Generic` provides the actual generic function called. This can be useful when producing error messages.
+
+
+### Exercises
 
 1.  Which base generic has the greatest number of defined methods?
 
-## Inheritance
+1.  Explain what is happening the following code.
 
-We've hinted at how the `class` attribute can have more than a single value. This is used in method dispatch: if an object has class `c("a", "b", "c")` R looks first for `generic.a()`, then `generic.b()`, then `generic.c()`. 
+    ```{r}
+    generic2 <- function(x) UseMethod("generic2")
+    generic2.a1 <- function(x) "a1"
+    generic2.a2 <- function(x) "a2"
+    generic2.b <- function(x) {
+      class(x) <- "a1"
+      NextMethod()
+    }
+
+    generic2(new_s3("b", "a2"))
+    ```
+
+## Inheritance
 
 This is what allows S3 to be a fully fledged OO system. 
 
 However, if you switched the order of the classes, the opposite would be true! This is because S3 doesn't define any formal relationship between classes, or even any definition of what an individual class is. If you're coming from a strict environment like Java, this will seem pretty frightening (and it is!) but it does give your users a tremendous amount of freedom. While it's very difficult to stop someone from doing something you don't want them to do, your users will never be held back because there is something you haven't implemented yet.
-
-### `NextMethod()`
-
-The `NextMethod` function provides a simple inheritance mechanism, using the fact that the class of an S3 object is a vector. 
-
-`NextMethod()` works like `UseMethod` but instead of dispatching on the first element of the class vector, it will dispatch based on the second (or subsequent) element:
-
-```{r}
-baz <- function(x) UseMethod("baz", x)
-baz.A <- function(x) "A"
-baz.B <- function(x) "B"
-
-baz.C <- function(x) c("C", NextMethod())
-ca <- structure(1, class = c("C", "A"))
-cb <- structure(1, class = c("C", "B"))
-baz(ca)
-baz(cb)
-```
-
-The exact details are a little tricky: `NextMethod` doesn't actually work with the class attribute of the object, it uses a global variable (`.Class`) to keep track of which class to call next. This means that manually changing the class of the object will have no impact on the inheritance:
-
-```{r}
-# Turn object into class A - doesn't work!
-baz.D <- function(x) {
-  class(x) <- "A"
-  NextMethod()
-}
-da <- structure(1, class = c("D", "A"))
-db <- structure(1, class = c("D", "B"))
-baz(da)
-baz(db)
-```
-
-Methods invoked as a result of a call to `NextMethod` behave as if they had been invoked from the previous method. The arguments to the inherited method are in the same order and have the same names as the call to the current method, and are therefore are the same as the call to the generic. However, the expressions for the arguments are the names of the corresponding formal arguments of the current method. Thus the arguments will have values that correspond to their value at the time NextMethod was invoked. Unevaluated arguments remain unevaluated. Missing arguments remain missing.
-
-If `NextMethod` is called in a situation where there is no second class it will return an error. 
 
 ### Subclasses
 
@@ -596,19 +576,6 @@ as_my_class.sub_class <- function(x) {
 }
 ```
 
-### Exercises
-
-1.  The `ordered` class is a subtclass of `factor`, but it's implemented in 
-    a very adhoc way in base R. Implement it in a principled way by
-    building a constructor and an `as_ordered` generic.
-    
-    ```{r}
-    f1 <- factor("a", c("a", "b"))
-    as.factor(f1)  
-    as.ordered(f1) # loses levels
-    ```
-
-
 ### Interfaces and Mixins
 
 Like many other parts of S3, there are few rules about what you can put in this vector (as long as it's a character vector, anything goes), however you're better of using this vector in one of three ways:
@@ -641,6 +608,18 @@ labelled <- function(x, label) {
   labelled(NextMethod(), attr(x, "label"))
 }
 ```
+
+### Exercises
+
+1.  The `ordered` class is a subtclass of `factor`, but it's implemented in 
+    a very adhoc way in base R. Implement it in a principled way by
+    building a constructor and an `as_ordered` generic.
+    
+    ```{r}
+    f1 <- factor("a", c("a", "b"))
+    as.factor(f1)  
+    as.ordered(f1) # loses levels
+    ```
 
 
 ## Base types
@@ -683,6 +662,17 @@ class(1:5)
 ```
 
 ### Internal generics
+
+Some S3 generics, like `[`, `sum()`, and `cbind()`, don't call `UseMethod()` because they are implemented in C. Instead, they call the C functions `DispatchGroup()` or `DispatchOrEval()`. Functions that do method dispatch in C code are called __internal generics__. It's important to know which functions are internally generic, so you can write methods for them. It's not easy to tell if a function is internally generic, because it just looks like a typical call to a C function:
+
+```{r}
+length
+cbind
+```
+
+You can look in the documentation, in the global variable `.S3PrimitiveGenerics`, and in `?InternalMethods`.  All group generics are internal generics.
+
+Internal generics have a slightly different dispatch for base types as described in XXX.
 
 " internal generics only dispatch on objects for which is.object is true."
 
@@ -746,7 +736,43 @@ We need a little extra discussion of the numeric "type" because it's used in thr
     is.numeric(factor("x"))
     ```
 
-## Packaging
+## Practicalities
+
+
+### Method families
+
+* When implementing a vector class, you should implement these methods: `length`, `[`, `[<-`, `[[`, `[[<-`, `c`.  (If `[` is implemented `rev`, `head`, and `tail` should all work).  Also need to implement `as.data.frame`
+
+* When implementing anything mathematical, implement `Ops`, `Math` and `Summary`.
+
+* When implementing a matrix/array class, you should implement these methods: `dim` (gets you nrow and ncol), `t`, `dimnames` (gets you rownames and colnames), `dimnames<-` (gets you colnames<-, rownames<-), `cbind`, `rbind`.
+
+* If you're implementing more complicated `print()` methods, it's a better idea to implement `format()` methods that return a string, and then implement `print.class <- function(x, ...) cat(format(x, ...), "\n"`. This makes for methods that are much easier to compose, because the side-effects are isolated to a single place.
+
+* model fitting
+
+
+This is a quick and dirty way to create data frames. It does little checking (i.e. all columns need to have unique names, and be the same length), but assuming you give it valid input it gives you a valid data frame class. You'll need this if you want to create your own vector class because you need a `as.data.frame` method that returns a data frame. 
+
+```{r}
+new_data_frame <- function(x, row_names = NULL) {
+  stopifnot(is.list(x))
+  
+  if (is.null(row_names)) {
+    n <- if (length(x) == 0) 0 else length(x[[1]])
+    row_names <- .set_row_names(n)
+  }
+  
+  structure(x,
+    class = "data.frame",
+    row.names = row_names
+  )
+}
+```
+
+
+
+### Packaging
 
 * Beware class clashes across packages. If there's any chance of confusion
   give your classes a common prefix.
@@ -756,3 +782,20 @@ We need a little extra discussion of the numeric "type" because it's used in thr
   that the generic provides.
 
 * Don't export methods; use `S3method()` so they can be found.
+  This registers the method is a special environment that is accessible to
+  `UseMethod()` but not directly via `::`. This is good practice.
+
+
+### Special dispatch
+
+#### Double dispatch
+
+> The classes of both arguments are considered in dispatching any member of this group. For each argument its vector of classes is examined to see if there is a matching specific (preferred) or Ops method. If a method is found for just one argument or the same method is found for both, it is used. If different methods are found, there is a warning about ‘incompatible methods’: in that case or if no method is found for either argument the internal method is used.
+
+> For operators in the Ops group a special method is invoked if the two operands taken together suggest a single method. Specifically, if both operands correspond to the same method or if one operand corresponds to a method that takes precedence over that of the other operand. If they do not suggest a single method then the default method is used. Either a group method or a class method dominates if the other operand has no corresponding method. A class method dominates a group method.
+
+> For the operators of group Ops, the object .Method is a length-two character vector with elements the methods selected for the left and right arguments respectively. (If no method was selected, the corresponding element is "".)
+
+#### Dots dispatch
+
+#### `rbind()` and `cbind()`
