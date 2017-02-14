@@ -46,10 +46,10 @@ getS3method("mean", "Date")
 
 ### Exercises
 
-1.  The most important S3 objects in base R are factors, data.frames,
-    and date/times. You've already seen the attributes and base type 
-    that factors are build on. What base types and attributes are
-    the others built on?
+1.  The most important S3 objects in base R are factors, data frames,
+    and date/times (Dates, POSIXct, POSIXlt). You've already seen the 
+    attributes and base type that factors are build on. What base types and 
+    attributes are the others built on?
 
 1.  Describe the difference in behaviour in these two calls.
 
@@ -236,11 +236,31 @@ The validator prevents the construction on invalid objects, but for a real helpe
 factor(c("a", "a", "b"), levels = "a")
 ```
 
-Constrast `factor` with `Date` and `POSIXct`. Neither of these have helpers in base R because there's no particularly natural way for them to be constructed. Instead they provide a coercion function that lets you create from existing base types. We'll come back to that idea in [coercion].
+In base R, neither `Date` nor `POSIXct` have a helper function. Instead there are two ways to construct them:
+
+* By coercing from another type with `as.Date()` and `as.POSIXct()`. These
+  functions should be S3 generics, so we'll come back to them in [coercion].
+  
+* With a helper function that either parses a string (`strptime()`) or
+  creates a date from individual components (`ISODatetime()`).
+
+These missing helpers mean that there's no obvious default way to create a date or date time in R. We can fill in those missing pieces with a couple of helpers:
+
+```{r}
+Date <- function(year, month, day) {
+  as.Date(ISOdate(year, month, day, tz = ""))
+}
+
+POSIXct <- function(year, month, day, hour, minute, sec, tzone = "") {
+  ISOdatetime(year, month, day, hour, minute, sec, tz = tzone)
+}
+```
+
+These helpers work, but are not efficient: behind the scene `ISODatetime()` works by pasting the components into a string and then using `strptime()`. A more efficient equivalent is available in `lubridate::make_datetime()` and `lubridate::make_date()`.
 
 ### Object styles
 
-S3 gives you the freedom to build a new class on top of an existing base type. So far, we've focussed on the "vector" type of S3 object where you take an exist vector base type and add some attributes. Another common style is the "scalar" type, where you use a list with named elements. The constructors for the scalar type is slightly different, as you always put the elements in a list:
+S3 gives you the freedom to build a new class on top of an existing base type. So far, we've focussed on the "vector" type of S3 object where you take an exist vector base type and add some attributes. Another common style is the "scalar" type, where you use a list with named elements. The constructor for the scalar type is slightly different because the arguments become named elements of the list, rather than attributes.
 
 ```{r}
 new_my_class <- function(x, y, z) {
@@ -257,7 +277,7 @@ new_my_class <- function(x, y, z) {
 
 (For a real constructor, you'd also check that `x`, `y`, and `z` are the types that you expect.)
 
-The most important example of this class in base R is `lm`; the class returned when you fit a linear model:
+In the base R, the most important example of this style `lm`, the class returned when you fit a linear model:
 
 ```{r}
 mod <- lm(mpg ~ wt, data = mtcars)
@@ -279,14 +299,16 @@ These are not the only styles, but they are the most common. Other less common b
 
 ### Exercises
 
-1.  Using the above system, categorise the objects returned by `lm()`,
-    `factor()`, `table()`, `ecdf()`, `ordered()`, `I()`.
+1.  Categorise the objects returned by `lm()`, `factor()`, `table()`, 
+    `as.Date()`, `ecdf()`, `ordered()`, `I()` into "vector", "scalar", and 
+    "other".
 
 1.  Write a constructor for `difftime` objects. What base type are they
-    built on? What attributes do they use?
+    built on? What attributes do they use? You'll need to consult the
+    documentation, read some code, and perform some experiments.
 
 1.  Write a constructor for `data.frame` objects. What base type is a data 
-    frame build on? What attributes does it use? What are the restrictions 
+    frame built on? What attributes does it use? What are the restrictions 
     placed on the individual elements? What about the names?
 
 1.  Enhance our `factor()` helper to have better behaviour when one or
@@ -299,55 +321,81 @@ These are not the only styles, but they are the most common. Other less common b
 1.  What would a constructor function for `lm` objects, `new_lm()`, look like?
     Why is a constructor function less useful for linear models?
 
-## Generics
+## Method dispatch
 
-Generics use the special `UseMethod()` function to dispatch to perform  __method dispatch__.  `UseMethod()` takes two arguments: the name of the generic function, and the argument to use for method dispatch. If you omit the second argument it will dispatch on the first argument to the function.  \indexc{UseMethod()} \index{S3!new generic}
+S3 classes behave differently because they provide methods for generic functions. A generic doesn't do any work itself, but instead dispatch to a specific method based on the class of one of the arguments (typically the first). 
+
+### Generics and methods
+
+S3 generics have a simple structure: they call `UseMethod()` which performs the method dispatch. `UseMethod()` takes two arguments: the name of the generic function (required), and the argument to use for method dispatch (optional). If you omit the second argument it will dispatch based on the first argument.  \indexc{UseMethod()} \index{S3!new generic}
 
 ```{r}
 # Dispatches on x
-foo1 <- function(x, y) {
-  UseMethod("foo1")
+generic <- function(x, y, ...) {
+  UseMethod("generic")
 }
 
 # Dispatches on y
-foo2 <- function(x, y) {
-  UseMethod("foo2", y)
+generic2 <- function(x, y, ...) {
+  UseMethod("generic2", y)
 }
 ```
 
-Note that you don't pass any of the arguments of the generic to `UseMethod()`; it uses black magic to pass them on to the method. Generally, you should avoid doing any computation in the generic, because the behaviour is confusing and few people know the details.  Rather than creating a new evaluation environment, it uses the environment of the current function call (the call to the generic), so any assignments or evaluations that were made before the call to UseMethod will be accessible to the method; __except__ that the arguments to the method are passed as they were recieved (even if you've modified them).
+Note that you don't pass any of the arguments of the generic to `UseMethod()`; it uses black magic to pass them on automatically. Generally, you should avoid doing any computation in a generic, because the semantics are complicated and few people know the details. The method uses the evaluation environment of the generic, rather than creating a new one as is typical, with the exception that the arguments to the method are passed as they were recieved (i.e. any modifications you've performed will be undone).
 
-There are two special types of generic that you'll learn about later: 
+A generic isn't useful without some methods, which are just functions that follow a naming scheme (`generic.class`). Because a method is just a function with a special name, you can call methods directly, but generally you should avoid doing so. The only reason to call the method directly is that sometimes you can get considerable performance improvements by skipping method dispatch. See [performance](#be-lazy) for an example.
 
-* __group generics__, which allow you to specify methods for many generics at 
-  once.
+```{r}
+generic.foo <- function(x, y, ...) {
+  message("foo method of generic()")
+}
+```
 
-* __internal generics__, which are implemented in C, and have slightly different
-  dispatch rules.
+You can see all the methods defined for a generic with `methods()`:
+
+```{r}
+methods("generic")
+```
+
+Note the false positive: `generic.skeleton()` is not a method for our generic but an existing function in the methods package. It's picked up because method definition relies only on a naming convention. This is one of the reasons that you should avoid using `.` in function names, except for methods.
+
+Apart from methods that you've created, and those defined in the base package, most S3 methods will not be visible: use `getS3method("generic", "class")` to read their source code.)
+
 
 ### Coercion
 
-One common reason to create you own generic is to create a principled coercion function, i.e. `as_my_class`. (Base R often uses `as.` but I think it's better to use `_` to avoid method names like `as.data.frame.data.frame`). For example, building on the constructor we defined above, we can create a our own `as_factor()` and give it methods for character and integer vectors:
+Let's apply this knowledge to a real problem. Many S3 objects classes can be naturally created by coercing an existing object. If this is the case for your class, you should provide a coercion function. Coercion functions should always be called `as_class_name`, and be an S3 generic. Base R does not follow these conventions as illustrated by `as.factor()`:
+
+* The name is confusing, since `as.factor()` is not the `factor` method of the 
+  `as()` generic.  
+  
+* `as.factor()` is not a generic, which means that if you create a new class
+  that could useful be converted to a factor, you have to provide your 
+  own function.
+
+We can fix both of these issues by using creating our own generic:
 
 ```{r}
-as_factor <- function(x) UseMethod("as_factor")
-as_factor.character <- function(x) {
+as_factor <- function(x, ...) {
+  UseMethod("as_factor")
+}
+```
+
+Two useful methods would be for character and integer vectors. Typically the methods of coercion function will either call the constructor or the helper; pick the function that makes the code simpler.
+
+```{r}
+as_factor.character <- function(x, ...) {
   factor(x, levels = unique(x))
 }
-as_factor.integer <- function(x) {
+as_factor.integer <- function(x, ...) {
   factor(x, levels = as.character(unique(x)))
 }
-
-as_factor(1:5)
-as_factor(c("b", "c", "a", "a", "b"))
 ```
 
 Every `as_x` function should have a method that returns objects of `x` as is:
 
 ```{r}
-as_factor.factor <- function(x) x
-
-as_factor(factor("a"))
+as_factor.factor <- function(x, ...) x
 ```
 
 You may want to consider adding a "default" method. The default method is called if no specific method is found. If you don't provide a default, you'll get an error message if no method is found:
@@ -359,7 +407,7 @@ as_factor(1)
 You can use a default method if you want to provide a more user friendly error message.
 
 ```{r, error = TRUE}
-as_factor.default <- function(x) {
+as_factor.default <- function(x, ...) {
   stop(
     "Don't know how to coerce object of class ", 
     paste(class(x), collapse = "/"), " into a factor", 
@@ -369,57 +417,13 @@ as_factor.default <- function(x) {
 as_factor(1)
 ```
 
-### Special generics
+Unlike base R, I've opted to not provide a method for doubles, because this seems mildly dangerous to me.
 
-There are two special types of generics that in exist in base R. You can create your own, but they're important know about 
+### Dispatch basics
 
-* group generics, which allow you to provide methods for multiple generics at
-  once.
-  
-* internal generics, which are implemented in C, not R.
+S3 method dispatch is relatively simple. `UseMethod()` creates a vector of function names, like `paste0("generic", ".", c(class(x), "default"))` and looks for each in turn. If no matching methods are found it throws an error.
 
-
-### Exercises
-
-1.  Carefully read the documentation for `UseMethod()` and explain why the
-    following code returns the results that it does. What two usual rules
-    of function evaluation does `UseMethdod()` violate?
-    
-    ```{r}
-    g <- function(x) {
-      x <- 10
-      y <- 10
-      UseMethod("g")
-    }
-    g.default <- function(x) c(x = x, y = y)
-    
-    x <- 1
-    y <- 1
-    g(x)
-    ```
-
-1.  Read the source code for `t()` and `t.test()` and confirm that 
-    `t.test()` is an S3 generic and not an S3 method. What happens if 
-    you create an object with class `test` and call `t()` with it?
-    
-    ```{r, error = TRUE }
-    x <- structure(1, class = "test")
-    t(x)
-    ```
-
-1.  What classes have a method for the `Math` group generic in base R? Read 
-    the source code. How do the methods work?
-
-1.  R has two classes for representing date time data, `POSIXct` and 
-    `POSIXlt`, which both inherit from `POSIXt`. Which generics have 
-    different behaviours for the two classes? Which generics share the same
-    behaviour?
-
-## Methods
-
-A generic isn't useful without some methods. To add a method, you just create a regular function with the correct (`generic.class`) name. Undertanding methods is mostly about understanding method dispatch. Before we go on, we need to emphasise that an object can have multiple "classes", i.e. the class attribute can be a vector. Here we'll explore how that affects method dispatch, and in the next section we'll explore what that means for S3 as an OO system.
-
-To make experimenting with this a little easier, I'll start by defining an `new_s3()` helper that lets me easily generate new objects from a given class:
+To make experimenting with method dispatch this a little easier, I'll start by defining an `new_s3()` helper that lets me easily generate new objects from a given class:
 
 ```{r}
 new_s3 <- function(...) {
@@ -428,17 +432,12 @@ new_s3 <- function(...) {
     class = c(...)
   )
 }
-
-class(new_s3("a"))
 class(new_s3("b", "a"))
-class(new_s3("b"))
 ```
 
-### Method dispatch
+We'll create our own generic with a few methods to see how this plays out in real life: \index{methods!S3} \index{S3!methods}
 
-S3 method dispatch is relatively simple. `UseMethod()` creates a vector of function names, like `paste0("generic", ".", c(class(x), "default"))` and looks for each in turn. Next we'll create our own generic with a few methods so we can see what's going on.  \index{methods!S3} \index{S3!methods}
-
-```{r, error = TRUE}
+```{r}
 generic <- function(x) UseMethod("generic")
 generic.a <- function(x) {
   message("generic.a")
@@ -452,7 +451,7 @@ generic(new_s3("b", "a"))
 generic(new_s3("b"))
 ```
 
-As we saw earlier, it's possible to add a fallback "default" method that is called if no other method is found:
+`UseMethod()` always looks for a `generic.default()` which allows you to add fallback method that is called if no other method is found:
 
 ```{r}
 generic.default <- function(x) {
@@ -462,29 +461,15 @@ generic.default <- function(x) {
 generic(new_s3("c"))
 ```
 
-### Finding and accessing methods
+The rules for how a generic finds the set of possible methods are a little complicated. There are two basic places to look: in the calling environment of the function that calls the generic, and in the special `.__S3MethodsTable__.` object in the environment of the generic. Every package has one and it lists all the S3 method that the package exports.
 
-You can see all the methods defined for a generic with `methods()`:
+### Generic-method argument agreement
 
-```{r}
-methods("generic")
-```
+A method should have the same arguments as the generic. This is not enforced in base R, but it is good practice because it will avoid confusing behaviour, and if you eventually turn your code in to package, it is required.
 
-Note the false positive: `generic.skeleton()` is not a method for our generic but an existing function in the methods package. It's picked up because method definition relies only on a naming convention. This is one of the reasons that you should avoid using `.` in function names, except for methods.
+Unless you have strong reasons otherwise, you should always include `...` in the generic. This allows method to take additional arguments, which is important because you don't know what additional arguments that a method for someone else's class might need.
 
-Note that apart from methods that you've created, and those defined in the base package, most S3 methods will not be visible: use `getS3method("generic", "class")` to read their source code.)
-
-The rules for how a generic finds the set of possible methods are a little complicated. There are two basic places to look: in the calling environment of the function that calls the generic; or in the special object `.__S3MethodsTable__.` in the environment of the generic. Every package has one and it lists all the S3 method that the package exports.
-
-### Calling methods directly
-
-Because a method is just a function with a special name, you can call methods directly:
-
-```{r}
-generic.a(new_s3("b"))
-```
-
-This is generally a bad idea: please don't point the loaded gun at your foot! The only reason to call the method directly is that sometimes you can get considerable performance improvements by skipping method dispatch. See [performance](#be-lazy) for details.
+This means that your methods should have some way to warn the user when they have a spelling mistake. So every method should always call `rlang::check_empty_dots()`.
 
 ### `NextMethod()`
 
@@ -531,8 +516,7 @@ Math.difftime <- function(x, ...) {
 
 All the generic does is preserve the attributes and class of the 
 
-Note that inside a group generic function a special variable `.Generic` provides the actual generic function called. This can be useful when producing error messages.
-
+Note that inside a group generic function a special variable `.Generic` provides the actual generic function called. This can be useful when producing error messages, and can sometimes be useful if you need to manually re-call the generic with different arguments.
 
 ### Exercises
 
@@ -552,6 +536,31 @@ Note that inside a group generic function a special variable `.Generic` provides
     generic2(new_s3("b", "a2"))
     ```
 
+1.  Read the source code for `t()` and `t.test()` and confirm that 
+    `t.test()` is an S3 generic and not an S3 method. What happens if 
+    you create an object with class `test` and call `t()` with it? Why?
+    
+    ```{r}
+    x <- structure(1:10, class = "test")
+    t(x)
+    ```
+
+1.  Carefully read the documentation for `UseMethod()` and explain why the
+    following code returns the results that it does. What two usual rules
+    of function evaluation does `UseMethdod()` violate?
+    
+    ```{r}
+    g <- function(x) {
+      x <- 10
+      y <- 10
+      UseMethod("g")
+    }
+    g.default <- function(x) c(x = x, y = y)
+    
+    x <- 1
+    y <- 1
+    g(x)
+    ```
 ## Inheritance
 
 This is what allows S3 to be a fully fledged OO system. 
@@ -640,6 +649,13 @@ labelled <- function(x, label) {
     as.ordered(f1) # loses levels
     ```
 
+1.  What classes have a method for the `Math` group generic in base R? Read 
+    the source code. How do the methods work?
+
+1.  R has two classes for representing date time data, `POSIXct` and 
+    `POSIXlt`, which both inherit from `POSIXt`. Which generics have 
+    different behaviours for the two classes? Which generics share the same
+    behaviour?
 
 ## Base types
 
