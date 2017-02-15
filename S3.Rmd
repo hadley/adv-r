@@ -359,21 +359,22 @@ methods("generic")
 
 Note the false positive: `generic.skeleton()` is not a method for our generic but an existing function in the methods package. It's picked up because method definition relies only on a naming convention. This is one of the reasons that you should avoid using `.` in function names, except for methods.
 
-Apart from methods that you've created, and those defined in the base package, most S3 methods will not be visible: use `getS3method("generic", "class")` to read their source code.)
-
+Apart from methods that you've created, and those defined in the base package, most S3 methods will not be directly accessible. You'll need to use `getS3method("generic", "class")` to see their source code.
 
 ### Coercion
 
-Let's apply this knowledge to a real problem. Many S3 objects classes can be naturally created by coercing an existing object. If this is the case for your class, you should provide a coercion function. Coercion functions should always be called `as_class_name`, and be an S3 generic. Base R does not follow these conventions as illustrated by `as.factor()`:
+Let's create a new generic and some methods to solve a real problem. Many S3 objects can be naturally created from an existing object through __coercion__. If this is the case for your class, you should provide a coercion function which is an S3 generic called `as_class_name`.
+
+Base R does not follow these two conventions. Take `as.factor()`:
 
 * The name is confusing, since `as.factor()` is not the `factor` method of the 
-  `as()` generic.  
+  `as()` generic.
   
 * `as.factor()` is not a generic, which means that if you create a new class
-  that could useful be converted to a factor, you have to provide your 
-  own function.
+  that could be usefully converted to a factor, you can not extend
+  `as.factor()`.
 
-We can fix both of these issues by using creating our own generic:
+We can fix these issues by creating our own generic:
 
 ```{r}
 as_factor <- function(x, ...) {
@@ -381,7 +382,7 @@ as_factor <- function(x, ...) {
 }
 ```
 
-Two useful methods would be for character and integer vectors. Typically the methods of coercion function will either call the constructor or the helper; pick the function that makes the code simpler.
+Two useful methods would be for character and integer vectors. Unlike base R, I've opted to not provide a method for double vectors, because this seems mildly dangerous to me. When it comes to coercion methods, it's generally better to force people to be explicit, as implicit coercions can allow bugs to silently propagate.
 
 ```{r}
 as_factor.character <- function(x, ...) {
@@ -392,21 +393,19 @@ as_factor.integer <- function(x, ...) {
 }
 ```
 
-Every `as_x` function should have a method that returns objects of `x` as is:
+Typically the methods of coercion function will either call the constructor or the helper; pick the function that makes the code simpler. Here the helper is simplest. If you use the constructor, remember to call the validator function.
+
+Every `as_x()` generic should have a method that returns objects of class `x` unchanged:
 
 ```{r}
 as_factor.factor <- function(x, ...) x
 ```
 
-You may want to consider adding a "default" method. The default method is called if no specific method is found. If you don't provide a default, you'll get an error message if no method is found:
+If you think your coercion function will be frequently used, it's worth providing a default method that gives a better error message. We'll discuss default methods more in the next section.
 
 ```{r, error = TRUE}
 as_factor(1)
-```
 
-You can use a default method if you want to provide a more user friendly error message.
-
-```{r, error = TRUE}
 as_factor.default <- function(x, ...) {
   stop(
     "Don't know how to coerce object of class ", 
@@ -416,8 +415,6 @@ as_factor.default <- function(x, ...) {
 }
 as_factor(1)
 ```
-
-Unlike base R, I've opted to not provide a method for doubles, because this seems mildly dangerous to me.
 
 ### Dispatch basics
 
@@ -673,27 +670,11 @@ foo(x)
 
 ### Interaction with base types
 
-You can also call an S3 generic with a non-S3 object. Non-internal S3 generics will dispatch on the __implicit class__ of base types. (Internal generics don't do that for performance reasons.) The rules to determine the implicit class of a base type are somewhat complex, but are shown in the function below: \index{implicit class} \index{base types!implicit class}
+You can also call an S3 generic with a non-S3 object. Non-internal S3 generics will dispatch on the __implicit class__ of base types. (Internal generics don't do that for performance reasons.) The rules to determine the implicit class of a base type are somewhat complex, but are can be found in `S3::implicit_class()` \index{implicit class} \index{base types!implicit class}
 
 ```{r}
-iclass <- function(x) {
-  if (is.object(x)) {
-    stop("x is not a primitive type", call. = FALSE)
-  }
-
-  c(
-    if (is.matrix(x)) "matrix",
-    if (is.array(x) && !is.matrix(x)) "array",
-    typeof(x),
-    if (is.integer(x) || is.double(x)) "numeric"
-  )
-}
-iclass(matrix(1:5))
-iclass(array(1.5))
-```
-
-```{r}
-class(1:5)
+S3::implicit_class(matrix(1:5))
+S3::implicit_class(array(1.5))
 ```
 
 ### Internal generics
