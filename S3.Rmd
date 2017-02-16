@@ -2,7 +2,14 @@
 
 S3 is R's first and simplest OO system. It is the only OO system used in the base and stats packages, and it's the most commonly used system in CRAN packages. S3 is informal and ad hoc, but it has a certain elegance in its minimalism: you can't take away any part of it and still have a useful OO system. Because of these reasons, S3 should be your default choice for OO programming: you should use it unless you have a compelling reason otherwise.\index{S3} \index{objects!S3|see{S3}}
 
-S3 is a very flexible system: it allows you to do a lot things that are quite ill-advised. To use S3 safely and efficiently, you need to impose constraints yourself. Those constraints will be a focus of this chapter.
+S3 is a very flexible system: it allows you to do a lot things that are quite ill-advised. To use S3 safely and efficiently, you need to impose constraints yourself. Those constraints will be a focus of this chapter. 
+
+We'll use the S3 package to fill in some missing pieces when it comes to S3. 
+
+```{r setup, messages = FALSE}
+# install_github("hadley/S3")
+library(S3)
+```
 
 ## Basics {#s3-basics}
 
@@ -132,7 +139,9 @@ There are three rules that a constructor should follow. It should:
 1.  Have one argument for the base object, and one for each attribute.
 1.  Check the types of the base object and each attribute.
 
-Base R generally does not provide constructors (three exceptions are the internal `.difftime()`, `.POSIXct()`, and `.POSIXlt()`) so we'll demonstrate constructors by filling in some missing pieces in base. We'll start with one the simplest S3 class in base R: Date, which is just a double with a class attribute. The constructor rules lead to the slightly awkward name `new_Date()`, because the existing base class uses a capital letter. I recommend using snake case class names to avoid this problem. 
+Base R generally does not provide constructors (three exceptions are the internal `.difftime()`, `.POSIXct()`, and `.POSIXlt()`) so we'll demonstrate constructors by filling in some missing pieces in base. (If you want to use these constructor in your own code, you can use the versions exported by the S3 package, which complete a few details that elide here to focus on the core issues.)
+
+We'll start with one the simplest S3 class in base R: Date, which is just a double with a class attribute. The constructor rules lead to the slightly awkward name `new_Date()`, because the existing base class uses a capital letter. I recommend using snake case class names to avoid this problem. 
 
 ```{r}
 new_Date <- function(x) {
@@ -141,6 +150,14 @@ new_Date <- function(x) {
 }
 
 new_Date(c(-1, 0, 1))
+```
+
+You can use the `new_s3_*()` helpers provided by S3 to make this even simpler. They are wrappers around structure that require a class argument, and check the base type of `x`.
+
+```{r}
+new_Date <- function(x) {
+  S3::new_s3_dbl(x, class = "Date")
+}
 ```
 
 The purpose of the constructor is to help the developer (you). That means you can keep them simple, and you don't need to optimise the error messages for user friendliness. If you expect others to create your objects, you should also create a friendly helper function, called `class_name()`, which we'll describe shortly.
@@ -275,6 +292,20 @@ new_my_class <- function(x, y, z) {
 }
 ```
 
+Or with the S3 package:
+
+```{r}
+new_my_class <- function(x, y, z) {
+  S3::new_s3_scalar(
+    x = x,
+    y = y,
+    z = z,
+    class = "my_class"
+  )
+}
+
+```
+
 (For a real constructor, you'd also check that `x`, `y`, and `z` are the types that you expect.)
 
 In the base R, the most important example of this style `lm`, the class returned when you fit a linear model:
@@ -321,11 +352,7 @@ These are not the only styles, but they are the most common. Other less common b
 1.  What would a constructor function for `lm` objects, `new_lm()`, look like?
     Why is a constructor function less useful for linear models?
 
-## Method dispatch
-
-S3 classes behave differently because they provide methods for generic functions. A generic doesn't do any work itself, but instead dispatch to a specific method based on the class of one of the arguments (typically the first). 
-
-### Generics and methods
+## Generics and methods
 
 S3 generics have a simple structure: they call `UseMethod()` which performs the method dispatch. `UseMethod()` takes two arguments: the name of the generic function (required), and the argument to use for method dispatch (optional). If you omit the second argument it will dispatch based on the first argument.  \indexc{UseMethod()} \index{S3!new generic}
 
@@ -347,8 +374,10 @@ A generic isn't useful without some methods, which are just functions that follo
 
 ```{r}
 generic.foo <- function(x, y, ...) {
-  message("foo method of generic()")
+  message("foo method")
 }
+
+generic(new_s3_scalar(class = "foo"))
 ```
 
 You can see all the methods defined for a generic with `methods()`:
@@ -416,51 +445,7 @@ as_factor.default <- function(x, ...) {
 as_factor(1)
 ```
 
-### Dispatch basics
-
-S3 method dispatch is relatively simple. `UseMethod()` creates a vector of function names, like `paste0("generic", ".", c(class(x), "default"))` and looks for each in turn. If no matching methods are found it throws an error.
-
-To make experimenting with method dispatch this a little easier, I'll start by defining an `new_s3()` helper that lets me easily generate new objects from a given class:
-
-```{r}
-new_s3 <- function(...) {
-  structure(
-    list(),
-    class = c(...)
-  )
-}
-class(new_s3("b", "a"))
-```
-
-We'll create our own generic with a few methods to see how this plays out in real life: \index{methods!S3} \index{S3!methods}
-
-```{r}
-generic <- function(x) UseMethod("generic")
-generic.a <- function(x) {
-  message("generic.a")
-}
-generic.b <- function(x) {
-  message("generic.b")
-}
-
-generic(new_s3("a"))
-generic(new_s3("b", "a"))
-generic(new_s3("b"))
-```
-
-`UseMethod()` always looks for a `generic.default()` which allows you to add fallback method that is called if no other method is found:
-
-```{r}
-generic.default <- function(x) {
-  message("generic.default")
-}
-
-generic(new_s3("c"))
-```
-
-The rules for how a generic finds the set of possible methods are a little complicated. There are two basic places to look: in the calling environment of the function that calls the generic, and in the special `.__S3MethodsTable__.` object in the environment of the generic. Every package has one and it lists all the S3 method that the package exports.
-
-### Generic-method argument agreement
+### Argument agreement
 
 A method should have the same arguments as the generic. This is not enforced in base R, but it is good practice because it will avoid confusing behaviour, and if you eventually turn your code in to package, it is required.
 
@@ -468,27 +453,65 @@ Unless you have strong reasons otherwise, you should always include `...` in the
 
 This means that your methods should have some way to warn the user when they have a spelling mistake. So every method should always call `rlang::check_empty_dots()`.
 
-### `NextMethod()`
 
-There's one more wrinkle in method dispatch: above, you saw that method dispatch terminated as soon as it found a matching method. In a method, however, you can choose to forward on to the "next" method; i.e. the method that would have been called if your method had not.
+## Method dispatch
+
+S3 method dispatch is relatively simple. `UseMethod()` creates a vector of function names, like `paste0("generic", ".", c(class(x), "default"))` and looks for each in turn. If no matching methods are found it throws an error. To explore dispatch, we'll use `S3::s3_dispatch()`. You give it a call to an S3 generic, and it shows what methods the generic will look for and what methods it finds. For example, what happens, when you try and print a `POSIXct` object?
 
 ```{r}
-generic <- function(x) UseMethod("generic")
-generic.a <- function(x) {
-  message("generic.a")
-  NextMethod()
-}
-generic.b <- function(x) {
-  message("generic.b")
-  NextMethod()
-}
-
-generic(new_s3("b", "a"))
+x <- Sys.time()
+s3_dispatch(print(x))
 ```
 
-Like `UseMethod()` exactly what happens when you call `NextMethod` is a little tricky. It doesn't actually work with the class attribute of the object, but instead uses a special variable (`.Class`) to keep track of which class to call next. This means that modifying the argument that is dispatched upon has no impact. The same principle as in `UseMethod()` and avoid modifying that object in place: it is likely to surprise you.
+The precise rules for where a generic looks for the methods are a little complicated. There are are two places the generic will look:
 
-Generally, you call `NextMethod()` without any arguments. How you can supply argument if you want to pass on extra arguments to the next method. We'll seem some examples of that in the next section.
+1. In the calling environment of the function that called the generic.
+
+1. In the special `.__S3MethodsTable__.` object in the function environment of 
+   the generic. Every package has one and it lists all the S3 method that the 
+   package exports.
+
+These details are not important, but are necessary in order for S3 generics to the correct method when the generic and method are in different packages.
+
+There are four wrinkles to S3 dispatch: `NextMethod()`, base types, group generics, and internal generics
+
+### `NextMethod()`
+
+There's one more wrinkle in method dispatch: above, you saw that method dispatch terminated as soon as it found a matching method. In a method, however, you can choose to forward on to the "next" method.
+
+Let's make this concrete with an example. Below I define a new generic ("showoff") with three methods. Each method signals that it's been called, and then calls the next method:
+
+```{r}
+showoff <- function(x) UseMethod("showoff")
+showoff.b <- function(x) {
+  message("showoff.b")
+  NextMethod()
+}
+showoff.a <- function(x) {
+  message("showoff.a")
+  NextMethod()
+}
+showoff.default <- function(x) {
+  message("showoff.default")
+}
+```
+
+Let's create a dummy object with classes "b" and "a".  `s3_dispatch()` shows that all three potential methods are available:
+
+```{r}
+x <- new_s3_scalar(class = c("b", "a"))
+s3_dispatch(showoff(x))
+```
+
+When you call `NextMethod()` it finds and calls the next available method in the dispatch list:
+
+```{r}
+showoff(x)
+```
+
+Like `UseMethod()`, the precise semantics of `NextMethod()` are complex. It doesn't actually work with the class attribute of the object, but instead uses a special variable (`.Class`) to keep track of which class to call next. This means that modifying the argument that is dispatched upon has no impact. The same principle as in `UseMethod()` and avoid modifying that object in place: it is likely to surprise you.
+
+Generally, you call `NextMethod()` without any arguments, but you can them in order pass on extra arguments to the next method. 
 
 ### Group generics
 
@@ -503,6 +526,12 @@ Group generics make it possible to implement methods for multiple generics with 
 
 * Complex: `Arg`, `Conj`, `Im`, `Mod`, `Re`
 
+Group generics are found after the more precise methods:
+
+```{r}
+s3_dispatch(sum(Sys.time()))
+```
+
 Most group generics involve a call to `NextMethod()`. For example, the `difftime()` method for the Math group generic looks effectively like this:
 
 ```{r}
@@ -511,9 +540,50 @@ Math.difftime <- function(x, ...) {
 }
 ```
 
-All the generic does is preserve the attributes and class of the 
+This is an easy way to implement all math methods on the underlying base type, while preserving the class and attributes.
 
 Note that inside a group generic function a special variable `.Generic` provides the actual generic function called. This can be useful when producing error messages, and can sometimes be useful if you need to manually re-call the generic with different arguments.
+
+### Base types
+
+What happens when you call an S3 generic with a non-S3 object, i.e. an object that doesn't have the class atttribute set?  You might think it would dispatch on what `class()` returns:
+
+```{r}
+class(matrix(1:5))
+```
+
+But this is a lie. Dispatch actually occurs on the __implicit class__. There is no base function shows you what the implicit class, but you can use a helper from S3:
+\index{implicit class} \index{base types!implicit class}
+
+```{r}
+s3_class(matrix(1:5))
+```
+
+The implicit class includes three components:
+
+* "array" or "matrix" (if the object has dimensions)
+* `typeof()` (with a few minor tweaks)
+* if "integer" or "double", "numeric"
+
+### Internal generics
+
+Some S3 generics, like `[`, `sum()`, and `cbind()`, don't call `UseMethod()` because they are implemented in C. Instead, they call the C functions `DispatchGroup()` or `DispatchOrEval()`. Functions that do method dispatch in C code are called __internal generics__. 
+
+There are two main differences in behaviour with internal generics:
+
+* They do not dispatch unless `is.object()` is true, i.e. the class
+  has been explicitly set. This improves performance for many common 
+  operations.
+  
+* They never have a `default` method; instead the default behaviour is
+  implemented in C.
+
+In `s3_dispatch()` this internal fallback is listed as the name of the generic:
+
+```{r}
+s3_dispatch(sum(1))
+s3_dispatch(sum(Sys.time()))
+```
 
 ### Exercises
 
@@ -530,7 +600,7 @@ Note that inside a group generic function a special variable `.Generic` provides
       NextMethod()
     }
 
-    generic2(new_s3("b", "a2"))
+    generic2(new_s3_scalar(class = c("b", "a2")))
     ```
 
 1.  Read the source code for `t()` and `t.test()` and confirm that 
@@ -668,68 +738,7 @@ foo.default <- function(x) FALSE
 foo(x)
 ```
 
-### Interaction with base types
-
-You can also call an S3 generic with a non-S3 object. Non-internal S3 generics will dispatch on the __implicit class__ of base types. (Internal generics don't do that for performance reasons.) The rules to determine the implicit class of a base type are somewhat complex, but are can be found in `S3::implicit_class()` \index{implicit class} \index{base types!implicit class}
-
-```{r}
-S3::implicit_class(matrix(1:5))
-S3::implicit_class(array(1.5))
-```
-
-### Internal generics
-
-Some S3 generics, like `[`, `sum()`, and `cbind()`, don't call `UseMethod()` because they are implemented in C. Instead, they call the C functions `DispatchGroup()` or `DispatchOrEval()`. Functions that do method dispatch in C code are called __internal generics__. 
-
-It's important to know which functions are internally generic, so you can write methods for them. It's not easy to tell if a function is internally generic, because it just looks like a typical call to a C function:
-
-```{r}
-length
-cbind
-```
-
-You can look in the documentation, in the global variable `.S3PrimitiveGenerics`, and in `?InternalMethods`.
-
-There are two main differences in behaviour with internal generics:
-
-* They do not dispatch unless `is.object()` is true, i.e. the class
-  has been explicitly set.
-  
-* They never have a `default` method; instead the default behaviour is
-  implemented in C.
-
-### Numeric
-
-We need a little extra discussion of the numeric "type" because it's used in three different ways in different places in R.
-
-1.  In some places it's used as an alias for "double".  For example
-    `as.numeric()` is identical to `as.double()`.
-    
-1.  In some places it means a base type of either integer or double. 
-
-    ```{r, error = TRUE}
-    mode(1)
-    mode(1L)
-    
-    # Note the error messages here
-    dummy <- function(x) UseMethod("dummy")
-    dummy(1)
-    dummy(1L)
-    ```
-
-1.  In some places it means an object build on a  base type of integer or 
-    double that has numeric behaviour (i.e. arithmetic makes sense and you
-    can order by numeric values)
-    
-    ```{r}
-    is.numeric(1)
-    is.numeric(1L)
-    is.numeric(Sys.Date())
-    is.numeric(factor("x"))
-    ```
-
 ## Practicalities
-
 
 ### Method families
 
