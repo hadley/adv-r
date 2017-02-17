@@ -453,17 +453,48 @@ Unless you have strong reasons otherwise, you should always include `...` in the
 
 This means that your methods should have some way to warn the user when they have a spelling mistake. So every method should always call `rlang::check_empty_dots()`.
 
+### Exercises
+
+1.  Read the source code for `t()` and `t.test()` and confirm that 
+    `t.test()` is an S3 generic and not an S3 method. What happens if 
+    you create an object with class `test` and call `t()` with it? Why?
+    
+    ```{r}
+    x <- structure(1:10, class = "test")
+    t(x)
+    ```
+
+1.  Carefully read the documentation for `UseMethod()` and explain why the
+    following code returns the results that it does. What two usual rules
+    of function evaluation does `UseMethod()` violate?
+    
+    ```{r}
+    g <- function(x) {
+      x <- 10
+      y <- 10
+      UseMethod("g")
+    }
+    g.default <- function(x) c(x = x, y = y)
+    
+    x <- 1
+    y <- 1
+    g(x)
+    ```
 
 ## Method dispatch
 
-S3 method dispatch is relatively simple. `UseMethod()` creates a vector of function names, like `paste0("generic", ".", c(class(x), "default"))` and looks for each in turn. If no matching methods are found it throws an error. To explore dispatch, we'll use `S3::s3_dispatch()`. You give it a call to an S3 generic, and it shows what methods the generic will look for and what methods it finds. For example, what happens, when you try and print a `POSIXct` object?
+The basics of S3 method dispatch are simple. `UseMethod()` creates a vector of function names, `paste0("generic", ".", c(class(x), "default"))` and looks for each method in turn. As soon as it finds a matching method, it calls it. If no matching method is found, it throws an error. 
+
+To explore dispatch, we'll use `S3::s3_dispatch()`. You give it a call to an S3 generic, and it lists all the possible methods, and which actually exist. For example, what happens when you try and print a `POSIXct` object?
 
 ```{r}
 x <- Sys.time()
 s3_dispatch(print(x))
 ```
 
-The precise rules for where a generic looks for the methods are a little complicated. There are are two places the generic will look:
+There are three possible methods, two exist, and first, `print.POSIXct()` will be called.
+
+The precise rules for where a generic looks for the methods are a little complicated because there are two paths for discovery:
 
 1. In the calling environment of the function that called the generic.
 
@@ -471,13 +502,13 @@ The precise rules for where a generic looks for the methods are a little complic
    the generic. Every package has one and it lists all the S3 method that the 
    package exports.
 
-These details are not important, but are necessary in order for S3 generics to the correct method when the generic and method are in different packages.
+These details are not usually important, but are necessary in order for S3 generics to the correct method when the generic and method are in different packages.
 
-There are four wrinkles to S3 dispatch: `NextMethod()`, base types, group generics, and internal generics
+There are four wrinkles to S3 dispatch: `NextMethod()`, base types, internal generics, and group generics.
 
 ### `NextMethod()`
 
-There's one more wrinkle in method dispatch: above, you saw that method dispatch terminated as soon as it found a matching method. In a method, however, you can choose to forward on to the "next" method.
+Above, you learned that method dispatch terminates as soon as a matching method is found. In a method, however, you can choose to call the next available method in the list. This is useful because it can allow you to rely on code that others have already written. We'll learn more about that in [inheritance].
 
 Let's make this concrete with an example. Below I define a new generic ("showoff") with three methods. Each method signals that it's been called, and then calls the next method:
 
@@ -503,19 +534,57 @@ x <- new_s3_scalar(class = c("b", "a"))
 s3_dispatch(showoff(x))
 ```
 
-When you call `NextMethod()` it finds and calls the next available method in the dispatch list:
+When you call `NextMethod()` it finds and calls the next available method in the dispatch list. So here, the method for `b` forwards to the method for `a`, which forwards to the default method.
 
 ```{r}
 showoff(x)
 ```
 
-Like `UseMethod()`, the precise semantics of `NextMethod()` are complex. It doesn't actually work with the class attribute of the object, but instead uses a special variable (`.Class`) to keep track of which class to call next. This means that modifying the argument that is dispatched upon has no impact. The same principle as in `UseMethod()` and avoid modifying that object in place: it is likely to surprise you.
+Like `UseMethod()`, the precise semantics of `NextMethod()` are complex. It doesn't actually work with the class attribute of the object, but instead uses a special variable (`.Class`) to keep track of which method to call next. This means that modifying the argument that is dispatched upon has no impact. Apply the same principle as for `UseMethod()`: avoid modifying the object in place, as it's likely to behave in a surprising way.
 
 Generally, you call `NextMethod()` without any arguments, but you can them in order pass on extra arguments to the next method. 
 
+### Base types
+
+What happens when you call an S3 generic with a non-S3 object, i.e. an object that doesn't have the class atttribute set?  You might think it would dispatch on what `class()` returns:
+
+```{r}
+class(matrix(1:5))
+```
+
+But unfortunately this is not true, and dispatch actually occurs on the __implicit class__. There is no base function that will compute the implicit class, but you can use a helper from S3: \index{implicit class} \index{base types!implicit class}
+
+```{r}
+s3_class(matrix(1:5))
+```
+
+The implicit class includes three components:
+
+* "array" or "matrix" (if the object has dimensions).
+* `typeof()` (with a few minor tweaks).
+* if "integer" or "double", "numeric".
+
+### Internal generics
+
+Some S3 generics, like `[`, `sum()`, and `cbind()`, don't call `UseMethod()` because they are implemented in C. Instead, they call the C functions `DispatchGroup()` or `DispatchOrEval()`. Functions that do method dispatch in C code are called __internal generics__.  There are two main differences between generics and internal generics:
+
+*   For performance reasons, internal generics do not dispatch to methods 
+    unless `is.object()` is true, i.e. the class has been explicitly set. 
+
+    ```{r}
+    s3_dispatch(sum(1))
+    ```  
+
+*   Internal generics usually don't have a default method because the
+    the default behaviour is implemented in C (using switchpatch).
+    
+    ```{r}
+    s3_dispatch(sum(Sys.time()))
+    ```
+
 ### Group generics
 
-Group generics make it possible to implement methods for multiple generics with one function. The four group generics and the functions they include are: \index{group generics} \index{S3!group generics}
+Group generics are the most complicated part of S3 method dispatch because to use effectively them you must understand both `NextMethod()` and internal generics. Group generics are useful however, because they allow you to implement a whole swatch of methods with one function. The four group generics and the functions they include are: \index{group generics} \index{S3!group generics}
 
 * Math: `abs`, `sign`, `sqrt`, `floor`, `cos`, `sin`, `log`, `exp`, ...
 
@@ -532,7 +601,14 @@ Group generics are found after the more precise methods:
 s3_dispatch(sum(Sys.time()))
 ```
 
-Most group generics involve a call to `NextMethod()`. For example, the `difftime()` method for the Math group generic looks effectively like this:
+Most group generics involve a call to `NextMethod()`. For example, take `difftime()` objects. If you look at the method dispatch for `abs()`, you'll see there's a `Math` group generic defined.
+
+```{r}
+y <- as.difftime(10, units = "mins")
+s3_dispatch(abs(y))
+```
+
+`Math.difftime` basically looks like this:
 
 ```{r}
 Math.difftime <- function(x, ...) {
@@ -540,50 +616,9 @@ Math.difftime <- function(x, ...) {
 }
 ```
 
-This is an easy way to implement all math methods on the underlying base type, while preserving the class and attributes.
+It dispatches to the next method, here the internal default, to the actual computation, then copies back over the the class and attributes.
 
 Note that inside a group generic function a special variable `.Generic` provides the actual generic function called. This can be useful when producing error messages, and can sometimes be useful if you need to manually re-call the generic with different arguments.
-
-### Base types
-
-What happens when you call an S3 generic with a non-S3 object, i.e. an object that doesn't have the class atttribute set?  You might think it would dispatch on what `class()` returns:
-
-```{r}
-class(matrix(1:5))
-```
-
-But this is a lie. Dispatch actually occurs on the __implicit class__. There is no base function shows you what the implicit class, but you can use a helper from S3:
-\index{implicit class} \index{base types!implicit class}
-
-```{r}
-s3_class(matrix(1:5))
-```
-
-The implicit class includes three components:
-
-* "array" or "matrix" (if the object has dimensions)
-* `typeof()` (with a few minor tweaks)
-* if "integer" or "double", "numeric"
-
-### Internal generics
-
-Some S3 generics, like `[`, `sum()`, and `cbind()`, don't call `UseMethod()` because they are implemented in C. Instead, they call the C functions `DispatchGroup()` or `DispatchOrEval()`. Functions that do method dispatch in C code are called __internal generics__. 
-
-There are two main differences in behaviour with internal generics:
-
-* They do not dispatch unless `is.object()` is true, i.e. the class
-  has been explicitly set. This improves performance for many common 
-  operations.
-  
-* They never have a `default` method; instead the default behaviour is
-  implemented in C.
-
-In `s3_dispatch()` this internal fallback is listed as the name of the generic:
-
-```{r}
-s3_dispatch(sum(1))
-s3_dispatch(sum(Sys.time()))
-```
 
 ### Exercises
 
@@ -603,31 +638,8 @@ s3_dispatch(sum(Sys.time()))
     generic2(new_s3_scalar(class = c("b", "a2")))
     ```
 
-1.  Read the source code for `t()` and `t.test()` and confirm that 
-    `t.test()` is an S3 generic and not an S3 method. What happens if 
-    you create an object with class `test` and call `t()` with it? Why?
-    
-    ```{r}
-    x <- structure(1:10, class = "test")
-    t(x)
-    ```
+1.  `Math.difftime()` is more complicated than I described. Why?
 
-1.  Carefully read the documentation for `UseMethod()` and explain why the
-    following code returns the results that it does. What two usual rules
-    of function evaluation does `UseMethdod()` violate?
-    
-    ```{r}
-    g <- function(x) {
-      x <- 10
-      y <- 10
-      UseMethod("g")
-    }
-    g.default <- function(x) c(x = x, y = y)
-    
-    x <- 1
-    y <- 1
-    g(x)
-    ```
 ## Inheritance
 
 This is what allows S3 to be a fully fledged OO system. 
