@@ -483,34 +483,39 @@ This means that your methods should have some way to warn the user when they hav
 
 ## Method dispatch
 
-The basics of S3 method dispatch are simple. `UseMethod()` creates a vector of function names, `paste0("generic", ".", c(class(x), "default"))` and looks for each method in turn. As soon as it finds a matching method, it calls it. If no matching method is found, it throws an error. 
+The basics of S3 method dispatch are simple. `UseMethod()` creates a vector of function names, `paste0("generic", ".", c(class(x), "default"))`, and looks for each method in turn. As soon as it finds a matching method, it calls it. If no matching method is found, it throws an error. 
 
-To explore dispatch, we'll use `S3::s3_dispatch()`. You give it a call to an S3 generic, and it lists all the possible methods, and which actually exist. For example, what happens when you try and print a `POSIXct` object?
+To explore dispatch, we'll use `S3::s3_dispatch()`. You give it a call to an S3 generic, and it lists all the possible methods, noting which ones exist. For example, what happens when you try and print a `POSIXct` object?
 
 ```{r}
 x <- Sys.time()
 s3_dispatch(print(x))
 ```
 
-There are three possible methods, two exist, and first, `print.POSIXct()` will be called.
+`print()` will look for three possible methods, of which two exist, and one, `print.POSIXct()`, will be called.
 
-The precise rules for where a generic looks for the methods are a little complicated because there are two paths for discovery:
+On top of this structure, there are five wrinkles which add some additional complication:
 
-1. In the calling environment of the function that called the generic.
+*   `NextMethod()`, which allows you to call the next method in the list.
+    
+*   Dispatch on base types, i.e. objects that don't have a class attribute.
 
-1. In the special `.__S3MethodsTable__.` object in the function environment of 
-   the generic. Every package has one and it lists all the S3 method that the 
-   package exports.
+*   Internal generics which are implemented in C, and obey slightly different
+    rules for base types.
+    
+*   Group generics, which allow you to define a method for a suite on generics
+    in one pass.
 
-These details are not usually important, but are necessary in order for S3 generics to the correct method when the generic and method are in different packages.
-
-There are four wrinkles to S3 dispatch: `NextMethod()`, base types, internal generics, and group generics.
+*   Environments and namespaces which affect precisely where `UseMethod()` 
+    looks for method matches.
+    
+These are explained in more detail below.
 
 ### `NextMethod()`
 
-Above, you learned that method dispatch terminates as soon as a matching method is found. In a method, however, you can choose to call the next available method in the list. This is useful because it can allow you to rely on code that others have already written. We'll learn more about that in [inheritance].
+Above, you learned that method dispatch terminates as soon as a matching method is found. However, methods can choose to call the next available method in the list. This is useful because it can allow you to rely on code that others have already written. We'll learn more about that in [inheritance]. Let's make this concrete with an example. 
 
-Let's make this concrete with an example. Below I define a new generic ("showoff") with three methods. Each method signals that it's been called, and then calls the next method:
+Here, I define a new generic ("showoff") with three methods. Each method signals that it's been called, and then calls the next method:
 
 ```{r}
 showoff <- function(x) UseMethod("showoff")
@@ -524,6 +529,7 @@ showoff.a <- function(x) {
 }
 showoff.default <- function(x) {
   message("showoff.default")
+  TRUE
 }
 ```
 
@@ -534,13 +540,13 @@ x <- new_s3_scalar(class = c("b", "a"))
 s3_dispatch(showoff(x))
 ```
 
-When you call `NextMethod()` it finds and calls the next available method in the dispatch list. So here, the method for `b` forwards to the method for `a`, which forwards to the default method.
+When you call `NextMethod()` it finds and calls the next available method in the dispatch list. When we call `showoff()`, the method for `b` forwards to the method for `a`, which forwards to the default method.
 
 ```{r}
 showoff(x)
 ```
 
-Like `UseMethod()`, the precise semantics of `NextMethod()` are complex. It doesn't actually work with the class attribute of the object, but instead uses a special variable (`.Class`) to keep track of which method to call next. This means that modifying the argument that is dispatched upon has no impact. Apply the same principle as for `UseMethod()`: avoid modifying the object in place, as it's likely to behave in a surprising way.
+Like `UseMethod()`, the precise semantics of `NextMethod()` are complex. It doesn't actually work with the class attribute of the object, but instead uses a special global variable (`.Class`) to keep track of which method to call next. This means that modifying the argument that is dispatched upon has no impact. Apply the same principle as for `UseMethod()`: don't modify the dispatch object in place, as it's likely to behave in a surprising way.
 
 Generally, you call `NextMethod()` without any arguments, but you can them in order pass on extra arguments to the next method. 
 
@@ -552,7 +558,7 @@ What happens when you call an S3 generic with a non-S3 object, i.e. an object th
 class(matrix(1:5))
 ```
 
-But unfortunately this is not true, and dispatch actually occurs on the __implicit class__. There is no base function that will compute the implicit class, but you can use a helper from S3: \index{implicit class} \index{base types!implicit class}
+But unfortunately this is just a convenient lie, and dispatch actually occurs on the __implicit class__. There is no base function that will compute the implicit class, but you can use a helper from S3: \index{implicit class} \index{base types!implicit class}
 
 ```{r}
 s3_class(matrix(1:5))
@@ -564,38 +570,45 @@ The implicit class includes three components:
 * `typeof()` (with a few minor tweaks).
 * if "integer" or "double", "numeric".
 
+`s3_dispatch()` knows about the implicit class, so use it if you're ever in doubt about method dispatch:
+
+```{r}
+s3_dispatch(print(matrix(1:5)))
+```
+
 ### Internal generics
 
-Some S3 generics, like `[`, `sum()`, and `cbind()`, don't call `UseMethod()` because they are implemented in C. Instead, they call the C functions `DispatchGroup()` or `DispatchOrEval()`. Functions that do method dispatch in C code are called __internal generics__.  There are two main differences between generics and internal generics:
+Some S3 generics, like `[`, `sum()`, and `cbind()`, don't call `UseMethod()` because they are implemented in C. Instead, they call the C functions `DispatchGroup()` or `DispatchOrEval()`. Functions that do method dispatch in C code are called __internal generics__. They only exist in base R, as you can not create an internal generic in a package.
 
-*   For performance reasons, internal generics do not dispatch to methods 
-    unless `is.object()` is true, i.e. the class has been explicitly set. 
+`s3_dispatch()` shows internal generics by including the name of the generic at the bottom of the method class. If this method is called, all the work happens in C code, typically using [switchpatch].
 
-    ```{r}
-    s3_dispatch(sum(1))
-    ```  
+```{r}
+s3_dispatch(Sys.time()[1])
+```
 
-*   Internal generics usually don't have a default method because the
-    the default behaviour is implemented in C (using switchpatch).
-    
-    ```{r}
-    s3_dispatch(sum(Sys.time()))
-    ```
+For performance reasons, internal generics do not dispatch to methods unless `is.object()` is true, i.e. the class has been explicitly set. This means that internal generics do not rely on the implicit class, but instead call the internal code directly.
+
+```{r}
+x <- sample(10)
+s3_dispatch(x[1])
+```  
 
 ### Group generics
 
-Group generics are the most complicated part of S3 method dispatch because to use effectively them you must understand both `NextMethod()` and internal generics. Group generics are useful however, because they allow you to implement a whole swatch of methods with one function. The four group generics and the functions they include are: \index{group generics} \index{S3!group generics}
+Group generics are the most complicated part of S3 method dispatch because to use effectively them you must understand both `NextMethod()` and internal generics. Group generics are worth learning about, however, because they allow you to implement a whole swath of methods with one function. Like internal generics, they are only exist in base R, and you can not define your own group generic.
 
-* Math: `abs`, `sign`, `sqrt`, `floor`, `cos`, `sin`, `log`, `exp`, ...
+Base R has four group generics, which are made up of the following generics: \index{group generics} \index{S3!group generics}
 
-* Ops: `+`, `-`, `*`, `/`, `^`, `%%`, `%/%`, `&`, `|`, `!`, `==`, `!=`, `<`, 
+* __Math__: `abs`, `sign`, `sqrt`, `floor`, `cos`, `sin`, `log`, `exp`, ...
+
+* __Ops__: `+`, `-`, `*`, `/`, `^`, `%%`, `%/%`, `&`, `|`, `!`, `==`, `!=`, `<`, 
   `<=`, `>=`, `>`
 
-* Summary: `all`, `any`, `sum`, `prod`, `min`, `max`, `range`
+* __Summary__: `all`, `any`, `sum`, `prod`, `min`, `max`, `range`
 
-* Complex: `Arg`, `Conj`, `Im`, `Mod`, `Re`
+* __Complex__: `Arg`, `Conj`, `Im`, `Mod`, `Re`
 
-Group generics are found after the more precise methods:
+Methods for group generics are looked for only if the methods for the specific generic do not exist:
 
 ```{r}
 s3_dispatch(sum(Sys.time()))
@@ -619,6 +632,18 @@ Math.difftime <- function(x, ...) {
 It dispatches to the next method, here the internal default, to the actual computation, then copies back over the the class and attributes.
 
 Note that inside a group generic function a special variable `.Generic` provides the actual generic function called. This can be useful when producing error messages, and can sometimes be useful if you need to manually re-call the generic with different arguments.
+
+### Environments and namespaces
+
+The precise rules for where a generic looks for the methods are a little complicated because there are two paths for discovery:
+
+1. In the calling environment of the function that called the generic.
+
+1. In the special `.__S3MethodsTable__.` object in the function environment of 
+   the generic. Every package has one and it lists all the S3 method that the 
+   package exports.
+
+These details are not usually important, but are necessary in order for S3 generics to the correct method when the generic and method are in different packages.
 
 ### Exercises
 
