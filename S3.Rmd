@@ -510,42 +510,27 @@ foo("This is a long string", trncate = 5)
 
 ## Method dispatch
 
-The basics of S3 method dispatch are simple. `UseMethod()` creates a vector of function names, `paste0("generic", ".", c(class(x), "default"))`, and looks for each method in turn. As soon as it finds a matching method, it calls it. If no matching method is found, it throws an error. 
+At a high-level, S3 method dispatch is simple, and revolves around two functions, `UseMethod()` and `NextMethod()`. You'll learn about these two functions below, and then we'll come back to some of the additional wrinkles in [dispatch details].
 
-To explore dispatch, we'll use `S3::s3_dispatch()`. You give it a call to an S3 generic, and it lists all the possible methods, noting which ones exist. For example, what happens when you try and print a `POSIXct` object?
+### `UseMethod()`
+
+`UseMethod()` creates a vector of function names, `paste0("generic", ".", c(class(x), "default"))`, and looks for each method in turn. As soon as it finds a matching method, it calls it. If no matching method is found, it throws an error. To explore dispatch, we'll use `S3::s3_dispatch()`. You give it a call to an S3 generic, and it lists all the possible methods, noting which ones exist. For example, what happens when you try and print a `POSIXct` object?
 
 ```{r}
 x <- Sys.time()
 s3_dispatch(print(x))
 ```
 
-`print()` will look for three possible methods, of which two exist, and one, `print.POSIXct()`, will be called.
-
-On top of this structure, there are five wrinkles which add some additional complication:
-
-*   `NextMethod()`, which allows you to call the next method in the list.
-    
-*   Dispatch on base types, i.e. objects that don't have a class attribute.
-
-*   Internal generics which are implemented in C, and obey slightly different
-    rules for base types.
-    
-*   Group generics, which allow you to define a method for a suite on generics
-    in one pass.
-
-*   Environments and namespaces which affect precisely where `UseMethod()` 
-    looks for method matches.
-    
-These are explained in more detail below.
+`print()` will look for three possible methods, of which two exist, and one, `print.POSIXct()`, will be called. The last method is always the "default" method. This doesn't correspond to a specific class, so is a useful catch all.
 
 ### `NextMethod()`
 
-Above, you learned that method dispatch terminates as soon as a matching method is found. However, methods can choose to call the next available method in the list. This is useful because it can allow you to rely on code that others have already written. We'll learn more about that in [inheritance]. Let's make this concrete with an example. 
-
-Here, I define a new generic ("showoff") with three methods. Each method signals that it's been called, and then calls the next method:
+Method dispatch usually terminates as soon as a matching method is found. However, methods can explicitly choose to call the next available method using `NextMethod()`. This is useful because it allows you to rely on code that others have already written, which we'll come back to in [inheritance]. Let's make `NextMethod()` concrete with an example. Here, I define a new generic ("showoff") with three methods. Each method signals that it's been called, and then calls the "next" method:
 
 ```{r}
-showoff <- function(x) UseMethod("showoff")
+showoff <- function(x) {
+  UseMethod("showoff")
+}
 showoff.b <- function(x) {
   message("showoff.b")
   NextMethod()
@@ -573,9 +558,266 @@ When you call `NextMethod()` it finds and calls the next available method in the
 showoff(x)
 ```
 
-Like `UseMethod()`, the precise semantics of `NextMethod()` are complex. It doesn't actually work with the class attribute of the object, but instead uses a special global variable (`.Class`) to keep track of which method to call next. This means that modifying the argument that is dispatched upon has no impact. Apply the same principle as for `UseMethod()`: don't modify the dispatch object in place, as it's likely to behave in a surprising way.
+Like `UseMethod()`, the precise semantics of `NextMethod()` are complex. It doesn't actually work with the class attribute of the object, but instead uses a special global variable (`.Class`) to keep track of which method to call next. This means that modifying the argument that is dispatched upon has no impact, and you should avoiding modifying the object that is being dispatched on.
 
-Generally, you call `NextMethod()` without any arguments, but you can them in order pass on extra arguments to the next method. 
+Generally, you call `NextMethod()` without any arguments. Howver, if you do give arguments, they are passed on to the next method, as if they'd be supplied to the generic.
+
+### Exercises
+
+1.  Which base generic has the greatest number of defined methods?
+
+1.  Explain what is happening the following code.
+
+    ```{r}
+    generic2 <- function(x) UseMethod("generic2")
+    generic2.a1 <- function(x) "a1"
+    generic2.a2 <- function(x) "a2"
+    generic2.b <- function(x) {
+      class(x) <- "a1"
+      NextMethod()
+    }
+
+    generic2(new_s3_scalar(class = c("b", "a2")))
+    ```
+
+## Inheritance
+
+The class attribute is not limited to a single string, but can be a character vector. This, along with S3 method dispatch and `NextMethod()`, gives a surprising amount of flexibility that can be used creatively to reduce code duplication. However, this flexibility can also lead to code that its hard to understand or reason about, so you are best of constraining yourself to simple styles of inheritance. Here we will focus on defining subclasses that inherit their fields, and some behaviour, from a parent class.
+
+Subclasses use a character __vector__ for the class attribute. There are two examples of subclasses that you might have come across in base R:
+
+* Generalised linear models are a generalisation of linear models that allow
+  the error term belong to a richer set of distributions, not just the normal
+  distribution like the linear model. In R, `glm()` returns objects of 
+  class `c("glm", "lm")`.
+  
+* Ordered factors are used when the levels of a factor have some intrinsic
+  ordering, like `c("Good", "Better", "Best")`. Ordered factors are produced
+  by `ordered()` which returns an object with class `c("ordered", "factor")`.
+  
+You can think of the glm class "inheriting" behaviour from the lm class, and the ordered class inheriting behaviour from the factor class because of the way method dispatch works. If there is method available for the subclass, R will use it, otherwise it will fallback to the "parent" class. We can write a little to which methods glm overrides from lm:
+
+```{r}
+setdiff(
+  attr(methods(class = "lm"), "info")$generic,
+  attr(methods(class = "glm"), "info")$generic
+)
+```
+
+### Constructors
+
+There are three principles to adhere when creating a subclass:
+
+* A subclass should always be built on the same base type as a parent.
+
+* The `class()` of the subclass should be of the form 
+  `c(sub_class, parent_class)`
+
+* The fields of the subclass should be a superset of the fields of the parent.
+
+And these properties should be enforced by the constructor. 
+
+When you create a class, you need to decide if you want to allow subclasses, because it requires changes to the constructor and careful thought in your methods. To allow subclasses, the parent constructor needs to have `...` and `subclass` arguments:
+
+```{r}
+new_my_class <- function(x, y, ..., subclass = NULL) {
+  stopifnot(is.numeric(x))
+  stopifnot(is.logical(y))
+  
+  structure(
+    x,
+    y = y,
+    ...,
+    class = c(subclass, "my_class")
+  )
+}
+```
+
+Then the implementation of the subclass constructor is simple: it checks the types of the new fields, then calls the parent constructor. If your subclass is more complicated, you'd also provide validator and helper functions, as described previously
+
+```{r}
+new_sub_class <- function(x, y, z) {
+  stopifnot(is.character(z))
+  new_my_class(x, y, z, subclass = subclass)
+}
+```
+
+If you wanted to allow this subclass to be futher subclassed, you'd need to include `...` and `subclass` arguments:
+
+```{r}
+new_sub_class <- function(x, y, z, ..., subclass = NULL) {
+  stopifnot(is.character(z))
+  
+  new_my_class(x, y, z, ..., subclass = c(subclass, "sub_class"))
+}
+```
+
+### Coercion
+
+You also need to make sure that there's some way to convert the subclass back to the parent class. The best way to do that is to add a method to the coercion generic. Generally, this method should call the parent constructor: 
+
+```{r}
+as_my_class.sub_class <- function(x) {
+  new_my_class(attr(x, "x"), attr(x, "y"))
+}
+```
+
+### Methods
+
+The goal of creating a subclass is to reuse as much code as possible from the parent class. This means that you should not have to define every method that the parent class provides (if you do, reconsider if you actually need a subclass!). Generally, defining new methods is straightforward: you simply create a new method (`generic.subclass`) whenever the parent method doesn't do quite the right thing. In many cases, the new method will be able to call `NextMethod()` in order to take advantage of the computation done in the parent.
+
+One wrinkle arises when you have methods that return the same type of object as the primary input. For example, dplyr has many functions (`arrange()`, `summarise()`, `mutate()`, ...) that input a data frame (or data frame like object) and output a modified version of that data frame. Imagine you want to store the provenance of each data frame, i.e. who created it and when. To do so, you might create a data frame subclass called `provenance`:
+
+```{r}
+new_provenance <- function(data, author, date = Sys.Date()) {
+  stopifnot(is.data.frame(data))
+  stopifnot(is.character(author), length(author) == 1)
+  stopifnot(is.Date(date), length(date) == 1)
+  
+  structure(
+    data,
+    author = author, 
+    date = date,
+    class = c("provenance", "data.frame")
+  )
+}
+```
+
+And now you want to make this class work with dplyr. The class doesn't change any of the computation related to data frame, it just needs to preserve the attributes, which  dplyr doesn't know anything about. That means you need to provide a method for each dplyr generic. The computation is unchanged, so you can use `NextMethod()` to do all the hard work, but you need to manually reconstruct the pronvenance object.
+
+```{r}
+arrange.provenance <- function(.data, ...) {
+  new_provenance(
+    NextMethod(), 
+    author = attr(.data, "author"),
+    date = attr(.data, "date")
+  )
+}
+
+mutate.provenance <- function(.data, ...) {
+  new_provenance(
+    NextMethod(), 
+    author = attr(.data, "author"),
+    date = attr(.data, "date")
+  )
+}
+```
+
+To do this for all the dplyr generics would require a lot of copying and pasting. Let's reduce some of that duplication by taking advantage of `S3::reconstruct()`. `reconstruct()` is a generic function designed to reconstruct a subclass from an instance of the parent class, typically created by `NextMethod()`, and the original subclass. In other words, the job of a reconstructor is to take an object from a parent class, and copy over attributes from the subclass. (Note that `reconstruct()` is unusual in that it dispatches on the second argument. This allows a more natural specification.)
+
+```{r}
+reconstruct.provenance  <- function(new, old) {
+  new_provenance(
+    new, 
+    author = attr(old, "author"),
+    date = attr(old, "date")
+  )
+}
+```
+
+Now we can rewrite the methods to minimise the amount of duplicated code:
+
+```{r}
+arrange.provenance <- function(.data, ...) {
+  reconstruct(NextMethod(), .data)
+}
+
+mutate.provenance <- function(.data, ...) {
+  reconstruct(NextMethod(), .data)
+}
+```
+
+This duplicated code could be avoided completely if `arrange.data.frame()`, provided by dplyr, called `reconstruct()` for you. And indeed, a future version of that function will.
+
+When designing a class that can be subclassed, you need to carefully think through these issues. Generally, whenever you implement a method that returns the same type of object as the primary input, you should call `reconstruct()` to ensure that it also works for subclasses. That way implementors of a subclass will only need to provide methods when the computation is actually different.
+
+### Exercises
+
+1.  The `ordered` class is a subtclass of `factor`, but it's implemented in 
+    a very adhoc way in base R. Implement it in a principled way by
+    building a constructor and an `as_ordered` generic.
+    
+    ```{r}
+    f1 <- factor("a", c("a", "b"))
+    as.factor(f1)  
+    as.ordered(f1) # loses levels
+    ```
+
+1.  What classes have a method for the `Math` group generic in base R? Read 
+    the source code. How do the methods work?
+
+1.  R has two classes for representing date time data, `POSIXct` and 
+    `POSIXlt`, which both inherit from `POSIXt`. Which generics have 
+    different behaviours for the two classes? Which generics share the same
+    behaviour?
+
+## Practicalities
+
+### Method families
+
+* When implementing a vector class, you should implement these methods: `length`, `[`, `[<-`, `[[`, `[[<-`, `c`.  (If `[` is implemented `rev`, `head`, and `tail` should all work).  Also need to implement `as.data.frame`
+
+* When implementing anything mathematical, implement `Ops`, `Math` and `Summary`.
+
+* When implementing a matrix/array class, you should implement these methods: `dim` (gets you nrow and ncol), `t`, `dimnames` (gets you rownames and colnames), `dimnames<-` (gets you colnames<-, rownames<-), `cbind`, `rbind`.
+
+* If you're implementing more complicated `print()` methods, it's a better idea to implement `format()` methods that return a string, and then implement `print.class <- function(x, ...) cat(format(x, ...), "\n"`. This makes for methods that are much easier to compose, because the side-effects are isolated to a single place.
+
+* model fitting
+
+This is a quick and dirty way to create data frames. It does little checking (i.e. all columns need to have unique names, and be the same length), but assuming you give it valid input it gives you a valid data frame class. You'll need this if you want to create your own vector class because you need a `as.data.frame` method that returns a data frame. 
+
+```{r}
+new_data_frame <- function(x, row_names = NULL) {
+  stopifnot(is.list(x))
+  
+  if (is.null(row_names)) {
+    n <- if (length(x) == 0) 0 else length(x[[1]])
+    row_names <- .set_row_names(n)
+  }
+  
+  
+  structure(x,
+    class = "data.frame",
+    row.names = row_names
+  )
+}
+```
+
+
+
+### Packaging
+
+* Beware class clashes across packages. If there's any chance of confusion
+  give your classes a common prefix.
+
+* If you define your own generics, make sure you document it from both a user
+  perspective and the perspective of a devloper. Be clear about the contract
+  that the generic provides.
+
+* Don't export methods; use `S3method()` so they can be found.
+  This registers the method is a special environment that is accessible to
+  `UseMethod()` but not directly via `::`. This is good practice.
+
+
+## Dispatch details
+
+*   Dispatch on base types, i.e. objects that don't have a class attribute.
+
+*   Internal generics which are implemented in C, and obey slightly different
+    rules for base types.
+    
+*   Group generics, which allow you to define methods for multiple generics
+    with one function.
+
+*   Environments and namespaces which affect precisely where `UseMethod()` 
+    looks for method matches.
+    
+*   Generics that use double dispatch
+
+*   Generics that use dots dispatch
+
+These are explained in more detail below, but feel free to skip if this is your first time learning about S3.
 
 ### Base types
 
@@ -585,7 +827,7 @@ What happens when you call an S3 generic with a non-S3 object, i.e. an object th
 class(matrix(1:5))
 ```
 
-But unfortunately this is just a convenient lie, and dispatch actually occurs on the __implicit class__. There is no base function that will compute the implicit class, but you can use a helper from S3: \index{implicit class} \index{base types!implicit class}
+But unfortunately this is just a convenient fiction, and dispatch actually occurs on the __implicit class__. There is no base function that will compute the implicit class, but you can use a helper from S3: \index{implicit class} \index{base types!implicit class}
 
 ```{r}
 s3_class(matrix(1:5))
@@ -605,7 +847,7 @@ s3_dispatch(print(matrix(1:5)))
 
 ### Internal generics
 
-Some S3 generics, like `[`, `sum()`, and `cbind()`, don't call `UseMethod()` because they are implemented in C. Instead, they call the C functions `DispatchGroup()` or `DispatchOrEval()`. Functions that do method dispatch in C code are called __internal generics__. They only exist in base R, as you can not create an internal generic in a package.
+Some S3 generics, like `[`, `sum()`, and `cbind()`, don't call `UseMethod()` because they are implemented in C. Instead, they call the C functions `DispatchGroup()` or `DispatchOrEval()`. These functions are called __internal generics__, because they do dispatch internal, in C. They only exist in base R, as you can not create an internal generic in a package.
 
 `s3_dispatch()` shows internal generics by including the name of the generic at the bottom of the method class. If this method is called, all the work happens in C code, typically using [switchpatch].
 
@@ -613,11 +855,16 @@ Some S3 generics, like `[`, `sum()`, and `cbind()`, don't call `UseMethod()` bec
 s3_dispatch(Sys.time()[1])
 ```
 
-For performance reasons, internal generics do not dispatch to methods unless `is.object()` is true, i.e. the class has been explicitly set. This means that internal generics do not rely on the implicit class, but instead call the internal code directly.
+For performance reasons, internal generics do not dispatch to methods unless `is.object()` is true, i.e. the class attribute has been set. This means that internal generics do not use the implicit class. Again, if you're confused, rely on `s3_dispatch()` to show you the difference.
 
 ```{r}
 x <- sample(10)
+class(x)
 s3_dispatch(x[1])
+
+y <- structure(sample(10), class = "integer")
+class(y) 
+s3_dispatch(y[1])
 ```  
 
 ### Group generics
@@ -656,7 +903,7 @@ Math.difftime <- function(x, ...) {
 }
 ```
 
-It dispatches to the next method, here the internal default, to the actual computation, then copies back over the the class and attributes.
+It dispatches to the next method, here the internal default, to perform the actual computation, then copies back over the the class and attributes.
 
 Note that inside a group generic function a special variable `.Generic` provides the actual generic function called. This can be useful when producing error messages, and can sometimes be useful if you need to manually re-call the generic with different arguments.
 
@@ -670,211 +917,10 @@ The precise rules for where a generic looks for the methods are a little complic
    the generic. Every package has one and it lists all the S3 method that the 
    package exports.
 
-These details are not usually important, but are necessary in order for S3 generics to the correct method when the generic and method are in different packages.
-
-### Exercises
-
-1.  Which base generic has the greatest number of defined methods?
-
-1.  Explain what is happening the following code.
-
-    ```{r}
-    generic2 <- function(x) UseMethod("generic2")
-    generic2.a1 <- function(x) "a1"
-    generic2.a2 <- function(x) "a2"
-    generic2.b <- function(x) {
-      class(x) <- "a1"
-      NextMethod()
-    }
-
-    generic2(new_s3_scalar(class = c("b", "a2")))
-    ```
-
-1.  `Math.difftime()` is more complicated than I described. Why?
-
-## Inheritance
-
-As you've learned, `NextMethod()` allows a method delegate to other methods. 
-
-This gives S3 the ability to act like a traditional OO system with classes and subclasses that inherit fields and methods. 
-
-However, because the class attribute is not predefined, it also allows you to implement some possibilities like interfaces and mixins.
-
-### Subclasses
-
-* A subclass should always be built on the same base type as a parent.
-
-* If using attributes, a subclass should always contain at least the
-  same attributes as the parent. If using named list elements, ensure
-  you add, not subtract.
-
-* Use a constructor to enforce the order of classes.
-
-If you want people to extend your class, you should faciliate this in the constructor by using `...` and `subclass`
-
-```{r}
-new_my_class <- function(x, y, ..., subclass = NULL) {
-  structure(
-    x,
-    y = y,
-    ...,
-    class = c(subclass, "my_class")
-  )
-}
-new_sub_class <- function(x, y, z, ..., subclass = NULL) {
-  new_my_class(x, y, z, ..., subclass = c(subclass, "sub_class"))
-}
-```
-
-You should also add a method to the coercion method for the parent class:
-
-```{r}
-as_my_class.sub_class <- function(x) {
-  class(x) <- setdiff(class(x), "sub_class")
-  x
-}
-```
-
-If you want to allow your object to be subclassed, you need to design methods to preserve all attributes by default. To do this, you'll need to switch from using a constructor to using a "reconstructor" like `S3::reconstruct()`. For example, if base R wanted to faciliate subclassing difftime objects, it would need to change `Math.difftime` to:
-
-```{r}
-Math.difftime <- function(x, ...) {
-  reconstruct(NextMethod(), x)
-}
-```
-
-And proivde a method for `reconstruct()`
-
-```{r}
-reconstruct.difftime <- function(new, old) {
-  new_difftime(new, units = attr(old, "units"))
-}
-```
-
-Note that `reconstruct()` is unusual in that it dispatches on the second argument. This allows a more natural specification.
-
-The use of a reconstructor means that the subclass only needs to override methods if the behaviour is different, or the attributes need recomputation.
-
-### Interfaces and Mixins
-
-Like many other parts of S3, there are few rules about what you can put in this vector (as long as it's a character vector, anything goes), however you're better of using this vector in one of three ways:
-
-1.  Subclassing. Build on top of an existing class to specialise behaviour
-    further.  For example, an ordered factor builds on top of a regular
-    factor.
-
-1.  Interfaces. Here the the class name doesn't provide any behaviour: it just
-    forms a contract. The object has methods for a set of generics. For 
-    example, `POSIXt` defines 
-
-1.  Mixins. A class that provides additional behaviour (and additional 
-    attributes) that are orthogonal to the behaviour of the base class.
+These details are not usually important, but are necessary in order for S3 generics to find the correct method when the generic and method are in different packages.
 
 
-`POSIXt`: `POSIXct` is a numeric vector with attribute `tzone`; `POSIXlt` is a named list. They have no structure in common, so `POSIXt` isn't a super class. In fact, I'd say `POSIXt` is more like an interface: it implies that the object "behaves like" a date-time (in other words it implements the key methods).
-
-`I()`: two main methods (`as.data.frame()` does the work, `[` preserves the class.) `methods(class = "AsIs")`.
-
-```{r}
-labelled <- function(x, label) {
-  struture(x, 
-    label = label,
-    class = c("labelled", class(x))
-  )
-}
-
-`[.labelled` <- function(x) {
-  labelled(NextMethod(), attr(x, "label"))
-}
-```
-
-### Exercises
-
-1.  The `ordered` class is a subtclass of `factor`, but it's implemented in 
-    a very adhoc way in base R. Implement it in a principled way by
-    building a constructor and an `as_ordered` generic.
-    
-    ```{r}
-    f1 <- factor("a", c("a", "b"))
-    as.factor(f1)  
-    as.ordered(f1) # loses levels
-    ```
-
-1.  What classes have a method for the `Math` group generic in base R? Read 
-    the source code. How do the methods work?
-
-1.  R has two classes for representing date time data, `POSIXct` and 
-    `POSIXlt`, which both inherit from `POSIXt`. Which generics have 
-    different behaviours for the two classes? Which generics share the same
-    behaviour?
-
-## Base types
-
-```{r}
-x <- 1:10
-class(x)
-inherits(x, "integer")
-inherits(x, "numeric")
-
-foo <- function(x) UseMethod("foo")
-foo.numeric <- function(x) TRUE
-foo.default <- function(x) FALSE
-foo(x)
-```
-
-## Practicalities
-
-### Method families
-
-* When implementing a vector class, you should implement these methods: `length`, `[`, `[<-`, `[[`, `[[<-`, `c`.  (If `[` is implemented `rev`, `head`, and `tail` should all work).  Also need to implement `as.data.frame`
-
-* When implementing anything mathematical, implement `Ops`, `Math` and `Summary`.
-
-* When implementing a matrix/array class, you should implement these methods: `dim` (gets you nrow and ncol), `t`, `dimnames` (gets you rownames and colnames), `dimnames<-` (gets you colnames<-, rownames<-), `cbind`, `rbind`.
-
-* If you're implementing more complicated `print()` methods, it's a better idea to implement `format()` methods that return a string, and then implement `print.class <- function(x, ...) cat(format(x, ...), "\n"`. This makes for methods that are much easier to compose, because the side-effects are isolated to a single place.
-
-* model fitting
-
-
-This is a quick and dirty way to create data frames. It does little checking (i.e. all columns need to have unique names, and be the same length), but assuming you give it valid input it gives you a valid data frame class. You'll need this if you want to create your own vector class because you need a `as.data.frame` method that returns a data frame. 
-
-```{r}
-new_data_frame <- function(x, row_names = NULL) {
-  stopifnot(is.list(x))
-  
-  if (is.null(row_names)) {
-    n <- if (length(x) == 0) 0 else length(x[[1]])
-    row_names <- .set_row_names(n)
-  }
-  
-  
-  structure(x,
-    class = "data.frame",
-    row.names = row_names
-  )
-}
-```
-
-
-
-### Packaging
-
-* Beware class clashes across packages. If there's any chance of confusion
-  give your classes a common prefix.
-
-* If you define your own generics, make sure you document it from both a user
-  perspective and the perspective of a devloper. Be clear about the contract
-  that the generic provides.
-
-* Don't export methods; use `S3method()` so they can be found.
-  This registers the method is a special environment that is accessible to
-  `UseMethod()` but not directly via `::`. This is good practice.
-
-
-### Special dispatch
-
-#### Double dispatch
+### Double dispatch
 
 > The classes of both arguments are considered in dispatching any member of this group. For each argument its vector of classes is examined to see if there is a matching specific (preferred) or Ops method. If a method is found for just one argument or the same method is found for both, it is used. If different methods are found, there is a warning about ‘incompatible methods’: in that case or if no method is found for either argument the internal method is used.
 
@@ -882,6 +928,12 @@ new_data_frame <- function(x, row_names = NULL) {
 
 > For the operators of group Ops, the object .Method is a length-two character vector with elements the methods selected for the left and right arguments respectively. (If no method was selected, the corresponding element is "".)
 
-#### Dots dispatch
+### Dots dispatch
 
-#### `rbind()` and `cbind()`
+`rbind()` and `cbind()`
+
+
+### Exercises
+
+
+1.  `Math.difftime()` is more complicated than I described. Why?
