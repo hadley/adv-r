@@ -742,77 +742,25 @@ When designing a class that can be subclassed, you need to carefully think throu
     different behaviours for the two classes? Which generics share the same
     behaviour?
 
-## Practicalities
-
-### Method families
-
-* When implementing a vector class, you should implement these methods: `length`, `[`, `[<-`, `[[`, `[[<-`, `c`.  (If `[` is implemented `rev`, `head`, and `tail` should all work).  Also need to implement `as.data.frame`
-
-* When implementing anything mathematical, implement `Ops`, `Math` and `Summary`.
-
-* When implementing a matrix/array class, you should implement these methods: `dim` (gets you nrow and ncol), `t`, `dimnames` (gets you rownames and colnames), `dimnames<-` (gets you colnames<-, rownames<-), `cbind`, `rbind`.
-
-* If you're implementing more complicated `print()` methods, it's a better idea to implement `format()` methods that return a string, and then implement `print.class <- function(x, ...) cat(format(x, ...), "\n"`. This makes for methods that are much easier to compose, because the side-effects are isolated to a single place.
-
-* model fitting
-
-This is a quick and dirty way to create data frames. It does little checking (i.e. all columns need to have unique names, and be the same length), but assuming you give it valid input it gives you a valid data frame class. You'll need this if you want to create your own vector class because you need a `as.data.frame` method that returns a data frame. 
-
-```{r}
-new_data_frame <- function(x, row_names = NULL) {
-  stopifnot(is.list(x))
-  
-  if (is.null(row_names)) {
-    n <- if (length(x) == 0) 0 else length(x[[1]])
-    row_names <- .set_row_names(n)
-  }
-  
-  
-  structure(x,
-    class = "data.frame",
-    row.names = row_names
-  )
-}
-```
-
-
-
-### Packaging
-
-* Beware class clashes across packages. If there's any chance of confusion
-  give your classes a common prefix.
-
-* If you define your own generics, make sure you document it from both a user
-  perspective and the perspective of a devloper. Be clear about the contract
-  that the generic provides.
-
-* Don't export methods; use `S3method()` so they can be found.
-  This registers the method is a special environment that is accessible to
-  `UseMethod()` but not directly via `::`. This is good practice.
-
-
 ## Dispatch details
 
-*   Dispatch on base types, i.e. objects that don't have a class attribute.
+This chapter concludes with a few additional details about method dispatch. It is safe to skip these details if you're new to S3, but they provide important information that is not well documented elsewhere.
 
-*   Internal generics which are implemented in C, and obey slightly different
-    rules for base types.
-    
-*   Group generics, which allow you to define methods for multiple generics
-    with one function.
+### Environments and namespaces
 
-*   Environments and namespaces which affect precisely where `UseMethod()` 
-    looks for method matches.
-    
-*   Generics that use double dispatch
+The precise rules for where a generic looks for the methods are a little complicated because there are two paths for discovery:
 
-*   Generics that use dots dispatch
+1. In the calling environment of the function that called the generic.
 
-These are explained in more detail below, but feel free to skip if this is your first time learning about S3.
+1. In the special `.__S3MethodsTable__.` object in the function environment of 
+   the generic. Every package has one and it lists all the S3 method that the 
+   package exports.
+
+These details are not usually important, but are necessary in order for S3 generics to find the correct method when the generic and method are in different packages.
 
 ### Base types
 
-What happens when you call an S3 generic with a non-S3 object, i.e. an object that doesn't have the class atttribute set?  You might think it would dispatch on what `class()` returns:
+What happens when you call an S3 generic with a non-S3 object, i.e. an object that doesn't have the class attribute set? You might think it would dispatch on what `class()` returns:
 
 ```{r}
 class(matrix(1:5))
@@ -828,7 +776,7 @@ The implicit class includes three components:
 
 * "array" or "matrix" (if the object has dimensions).
 * `typeof()` (with a few minor tweaks).
-* if "integer" or "double", "numeric".
+* If it's "integer" or "double", "numeric".
 
 `s3_dispatch()` knows about the implicit class, so use it if you're ever in doubt about method dispatch:
 
@@ -836,9 +784,21 @@ The implicit class includes three components:
 s3_dispatch(print(matrix(1:5)))
 ```
 
+Note that this can lead to different dispatch for objects that look similar:
+
+```{r}
+x1 <- 1:5
+class(x1)
+s3_dispatch(mean(x1))
+
+x2 <- structure(x1, class = "integer")
+class(x2)
+s3_dispatch(mean(x2))
+```
+
 ### Internal generics
 
-Some S3 generics, like `[`, `sum()`, and `cbind()`, don't call `UseMethod()` because they are implemented in C. Instead, they call the C functions `DispatchGroup()` or `DispatchOrEval()`. These functions are called __internal generics__, because they do dispatch internal, in C. They only exist in base R, as you can not create an internal generic in a package.
+Some S3 generics, like `[`, `sum()`, and `cbind()`, don't call `UseMethod()` because they are implemented in C. Instead, they call the C functions `DispatchGroup()` or `DispatchOrEval()`. These functions are called __internal generics__, because they do dispatch internally, in C code. Internal generics only exist in base R, as you can not create an internal generic in a package.
 
 `s3_dispatch()` shows internal generics by including the name of the generic at the bottom of the method class. If this method is called, all the work happens in C code, typically using [switchpatch].
 
@@ -853,9 +813,8 @@ x <- sample(10)
 class(x)
 s3_dispatch(x[1])
 
-y <- structure(sample(10), class = "integer")
 class(y) 
-s3_dispatch(y[1])
+s3_dispatch(mtcars[1])
 ```  
 
 ### Group generics
@@ -898,33 +857,55 @@ It dispatches to the next method, here the internal default, to perform the actu
 
 Note that inside a group generic function a special variable `.Generic` provides the actual generic function called. This can be useful when producing error messages, and can sometimes be useful if you need to manually re-call the generic with different arguments.
 
-### Environments and namespaces
-
-The precise rules for where a generic looks for the methods are a little complicated because there are two paths for discovery:
-
-1. In the calling environment of the function that called the generic.
-
-1. In the special `.__S3MethodsTable__.` object in the function environment of 
-   the generic. Every package has one and it lists all the S3 method that the 
-   package exports.
-
-These details are not usually important, but are necessary in order for S3 generics to find the correct method when the generic and method are in different packages.
-
-
 ### Double dispatch
 
-> The classes of both arguments are considered in dispatching any member of this group. For each argument its vector of classes is examined to see if there is a matching specific (preferred) or Ops method. If a method is found for just one argument or the same method is found for both, it is used. If different methods are found, there is a warning about ‘incompatible methods’: in that case or if no method is found for either argument the internal method is used.
+The generics in the "Ops" group, which includes the two-argument mathematical and logical operators like `-` and `&`, implements a special type of method dispatch. They dispatch on the type of _both_ of the arguments, so called __double dispatch__. This is necessary to preserve the commutative property of many operators, i.e. `a + b` should equal `b + a`. Take the following simple example:
 
-> For operators in the Ops group a special method is invoked if the two operands taken together suggest a single method. Specifically, if both operands correspond to the same method or if one operand corresponds to a method that takes precedence over that of the other operand. If they do not suggest a single method then the default method is used. Either a group method or a class method dominates if the other operand has no corresponding method. A class method dominates a group method.
+```{r}
+date <- as.Date("2017-01-01")
+integer <- 1L
 
-> For the operators of group Ops, the object .Method is a length-two character vector with elements the methods selected for the left and right arguments respectively. (If no method was selected, the corresponding element is "".)
+date + integer
+integer + date
+```
 
-### Dots dispatch
+If `+` dispatched only on the first argument, it would return different values for the two cases. To overcome this problem, generics in the Ops group use a slightly different strategy to usual. Rather than doing a single method dispatch, they do two, one for each input. There are three possible outcomes of this lookup:
 
-`rbind()` and `cbind()`
+* The methods are the same, so it doesn't matter which method is used.
 
+* The methods are different, and R calls the internal method with a warning.
+
+* One method is internal, in which case R calls the other method.
+
+For the example above, we can look at the possible methods for each argument, taking advantage of the fact the we can call `+` with a single argument.  In this case, the second argument would dispatch to the internal `+` function, so R will call `+.Date`.
+
+```{r}
+s3_dispatch(+date)
+s3_dispatch(+integer)
+```
+
+Let's take a look at another case. What happens if you try and add a date and a factor? There is no method in common, so R calls the internal `+` method (which preserves the attributes of the LHS), with a warning.
+
+```{r, error = TRUE}
+factor <- factor("a")
+s3_dispatch(+factor)
+
+date + factor
+factor + date
+```
+
+Finally, what happens if we try to substract a POSIXct from a POSIXlt? A commmon `-.POSIXt` method is found and called.
+
+```{r}
+dt1 <- as.POSIXct(date)
+dt2 <- as.POSIXlt(date)
+
+s3_dispatch(-dt1)
+s3_dispatch(-dt2)
+
+dt1 - dt2
+```
 
 ### Exercises
-
 
 1.  `Math.difftime()` is more complicated than I described. Why?
