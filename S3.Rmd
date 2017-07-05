@@ -278,38 +278,24 @@ These helpers fill a useful role, but are not computationally efficient: behind 
 
 ### Object styles
 
-S3 gives you the freedom to build a new class on top of any existing base type. So far, we've focussed on the "vector" style of S3 object where you take an existing vector type and add some attributes, and a single object can represent multiple data points.
+S3 gives you the freedom to build a new class on top of any existing base type. So far, we've focussed on vector-style where you take an existing vector type and add some attributes. Importantly, a single vector-style object represents multiple values. There are two other important styles: scalar-style and data-frame-style.
 
-Another common style is the "scalar" style, where you use a list with named elements, and each object represents a single "thing". The constructor for the scalar type is slightly different because the arguments become named elements of the list, rather than attributes.
+The __scalar__-style, which is based on a named list, and a single object represent a a single "value". This is the style that you mostly likely to use in practice. The constructor for the scalar type is slightly different because the arguments become named elements of the list, rather than attributes.
 
 ```{r}
-new_my_class <- function(x, y, z) {
+new_scalar_class <- function(x, y, z) {
   structure(
     list(
       x = x,
       y = y,
       z = z
     ),
-    class = "my_class"
+    class = "my_scalar_class"
   )
 }
 ```
 
-The S3 package also provides helper for this case:
-
-```{r}
-new_my_class <- function(x, y, z) {
-  S3::new_s3_scalar(
-    x = x,
-    y = y,
-    z = z,
-    class = "my_class"
-  )
-}
-
-```
-
-(For a real constructor, you'd also check that `x`, `y`, and `z` are the types that you expect.)
+(For a real constructor, you'd also check that `x`, `y`, and `z` fields are the types that you expect.)
 
 In base R, the most important example of this style is `lm`, the class returned when you fit a linear model:
 
@@ -319,19 +305,26 @@ typeof(mod)
 attributes(mod)
 ```
 
-When creating your own classes, you should pick the vector style if your class closely resembles an existing vector type. Otherwise, use a scalar (list) style. The scalar type is generally easier to work with because implementing a full range of convenient vectorised methods is usually a lot of work.
+The __data-frame-style__ builds on top of a data frame (a named list where each element is a vector of the same lengrth), and adds additional attributes to store important metadata. A data-frame-style constructor looks like:
 
-These are not the only styles, but they are the most common. Other less common but still useful structures are:
+```{r}
+new_df_class <- function(df, attr1, attr2) {
+  stopifnot(is.data.frame(df))
+  
+  structure(
+    df, 
+    attr1 = attr1,
+    attr2 = attr2,
+    class = c("df_class", "data.frame")
+  )
+}
+```
 
-*   Environments with classes, which allow you to implement new styles of OO.
-    This is beyond the scope of this book, because generally you shouldn't
-    be creating your own OO style!
+The most common data-frame-style class is the tibble, a modern reimagining of the data frame provided by the tibble package, and used extensively within the tidyverse.
 
-*   "Vector" lists, like data frames. This is technically a subtype of the
-    "vector type", where the vector is a list.
+Collectively, we'll call the attributes of a vector-style or data-frame-style class and the names of a list-style class the __fields__ of an object.
 
-*   Functions with classes. This is mostly useful to override the print method
-    as you can't override the call method.
+When creating your own classes, you should pick the vector style if your class closely resembles an existing vector type. Otherwise, use a scalar (list) style. The scalar type is generally easier to work with because implementing a full range of convenient vectorised methods is usually a lot of work. It's typically obvious when you need to use data-frame-style.
 
 ### Exercises
 
@@ -397,9 +390,7 @@ Remember that apart from methods that you've created, and those defined in the b
 
 ### Coercion
 
-Let's create a new generic and some methods to solve a real problem. Many S3 objects can be naturally created from an existing object through __coercion__. If this is the case for your class, you should provide a coercion function, an S3 generic called `as_class_name`.
-
-Base R does not follow these two conventions. Take `as.factor()`:
+Let's create a new generic and some methods to solve a real problem. Many S3 objects can be naturally created from an existing object through __coercion__. If this is the case for your class, you should provide a coercion function, an S3 generic called `as_class_name`. Base R generally does not follow this convention. For example, take `as.factor()`:
 
 * The name is confusing, since `as.factor()` is not the `factor` method of the 
   `as()` generic.
@@ -408,7 +399,7 @@ Base R does not follow these two conventions. Take `as.factor()`:
   that could be usefully converted to a factor, you can not extend
   `as.factor()`.
 
-We can fix these issues by creating our own generic:
+We can fix these isspues by creating our own generic:
 
 ```{r}
 as_factor <- function(x, ...) {
@@ -452,9 +443,9 @@ as_factor(1)
 
 ### Arguments
 
-A method should always have the same arguments as the generic. This is not enforced, but it is good practice because it will avoid confusing behaviour, and if you eventually turn your code in to package, it is required by R CMD check.
+Methods should always have the same arguments as their generics. This is not usually enforced, but it is good practice because it will avoid confusing behaviour. If you do eventually turn your code in to package, R CMD check will enforce it, so it's good to get into the habit now.
 
-The exception to the rule is if the generic has `...`. In that case, the method still needs to have all the arguments of the generic (including `...`), but can also have its own additional arguments. For this reason, you should always include `...` in the generic. This allows methods to take additional arguments, which is important because you don't know what additional arguments that a method for someone else's class might need. One downside of using `...` is that it silently swallows misspelled arguments. 
+The only exception is if the generic has `...`. In that case, the method still needs to have all the arguments of the generic (including `...`), but can also have its own additional arguments. For this reason, you should always include `...` in the generic. This allows methods to take additional arguments, which is important because you don't know what additional arguments that a method for someone else's class might need. One downside of using `...` is that it silently swallows misspelled arguments. 
 
 ```{r}
 foo <- function(x, ...) {
