@@ -1,70 +1,79 @@
 # S4
 
-The S4 system takes the same basic ideas as S3 and turns the rigour and strictness up to 11. There are three main differences between S3 and S4:
+The S4 system takes the same basic ideas as S3 but provides a rigorous and strict implementation. There are three main differences between S3 and S4:
 
-* S4 has formal class definitions. To define a class you call `setClass()` 
-  specifying the structure and parent class. 
+* S4 classes have formal definitions provided by a call to `setClass()`.
+  An S4 class can have multiple parent classes.
   
-* Rather than attributes or named elements, the components of an S4 objects 
-  are called __slots__ and are accessed with a special operator, `@`.
+* The fields of an S4 object don't use attributes or named elements, but 
+  instead are called __slots__ and are accessed with the special `@` operator.
   
-* Instead of using a naming convention to define methods, you use
-  `setMethod()`
+* Methods are not defined with a naming convention, but are instead
+  defined by a call to `setMethod()`. S4 methods can dispatch on multiple
+  arguments.
   
-It's not possible to cover all of S4 in one chapter. Instead, we'll focus on the basics, what you need to know to write or read most S4 code. To learn more, some good references are:
+S4 is a rich system, and it's not possible to cover all of it in one chapter. Instead, we'll focus on what you need to know to write or read most S4 code, avoiding discussion of esoterica. To learn more, some good references are:
 
-* [S4 system development in Bioconductor][S4-bioconductor], by Patrick Aboyoun.
+* [S4 system development in Bioconductor][S4-bioconductor], a slide deck
+  by Patrick Aboyoun.
 
 * [S4 questions on stackoverflow][SO-Morgan] answered by Martin Morgan.
 
-* [_Software for Data Analysis_][S4DA] by John Chambers.
+* [_Software for Data Analysis_][S4DA], a book by John Chambers.
 
-All functions related to S4 lives in the methods package. This package is always available when you're running R interactively, but may not be available when running R in batch mode (i.e. from `Rscript`). For this reason, it's a good idea to include an explicit `library(methods)` whenever you use S4. This also signals to the reader that you'll be using S4.
+All functions related to S4 live in the methods package. This package is always available when you're running R interactively, but may not be available when running R in batch mode (i.e. from `Rscript`). For this reason, it's a good idea to call `library(methods)` whenever you use S4. This also signals to the reader that you'll be using the S4 object system.
 
 ```{r setup}
 library(methods)
 ```
 
+```{r, include = FALSE}
+# Hide annoying output
+setMethod <- function(...) invisible(methods::setMethod(...))
+setGeneric <- function(...) invisible(methods::setGeneric(...))
+```
+
 ## Classes
 
-Unlike S3, S4 classes have a formal definition. An S4 class has three key properties:
+Unlike S3, S4 classes have a formal definition. To define an S4 class, you must define key properties:
 
-* A __name__: an alphanumeric class identifier. By convention, S4 class names
-  use UpperCamelCase.
+* The class __name__. By convention, S4 class names use UpperCamelCase.
 
-* A named list of __slots__ (fields), which provides slot names and their
-  permitted classes. For example, a person class might be represented by a
-  character name and a numeric age: `list(name = "character", age = "numeric")`.
-  \index{slots}
+* A named list that describes the names and classes of the __slots__ (fields).
+  For example, a person class might be represented by a character name and a 
+  numeric age: `list(name = "character", age = "numeric")`. The special 
+  "ANY" allows objects of any type. \index{slots}
 
 * A string giving the class it inherits from, or, in S4 terminology,
   that it __contains__. You can provide multiple classes for multiple
   inheritance, but this is an advanced technique which adds much
   complexity.
   
-To create a class, you call `setClass()`, supplying these three arguments. Lets make this concrete with an example. Here we create two classes: a person has character name and numeric age, and an employee inherits slots and behaviour from person, adding an additional boss slot that must be a person.
+To create a class, you call `setClass()`, supplying these three properties. 
+
+Lets make this concrete with an example. Here we create two classes: a person has character `name` and numeric `age`, and an employee inherits slots and methods from `Person`, adding an additional `boss` slot that must be a `Person`.
 
 ```{r, cache = FALSE}
 setClass("Person", slots = list(name = "character", age = "numeric"))
 setClass("Employee", contains = "Person", slots = list(boss = "Person"))
 ```
 
-The `setClass()` function has 10 other arguments, but they are all either deprecated or not recommended. If you have existing S4 code that uses them, I'd recommend carefully reading the documentation and upgrading to modern practice.
+`setClass()` has 10 other arguments, but they are all either deprecated or not recommended. If you have existing S4 code that uses them, I'd recommend carefully reading the documentation and upgrading to modern practice.
 
-Once you have defined the class, you can create an object from that class by calling `new()`. The first argument is the name of the class, followed by name-value pairs specifying the values of the slots.
+Once you have defined the class, you can create an object from that class by calling the collector constructor `new()`. The first argument is the name of the class, and the remaining named arguments specify the values of the slots.
 
 ```{r}
 hadley <- new("Person", name = "Hadley", age = 37)
 hadley
 ```
 
-Note that there's some tension between the usual interactive functional style of R and the global side-effect causing S4 class definitions. In most programming languages, class definition occurs at compile-time, while object instantiation occurs at run-time - it's unusual to be able to create new classes interactively. This makes it possible to create invalid objects if you are experimenting with class structure interactively:
+In most programming languages, class definition occurs at compile-time, while object instantiation occurs at run-time. In R, however, both definition and construction occurs at run time. When you call `setClass()`, you are registering a class definition in a (hidden) global variable. As with all state-modifying functions you need to use `setClass()` with care. This isn't usually a problem, because you'll define a class once, then leave the definition alone. However, if you're experimenting with the class defintion interactively, it's possible to create invalid objects:
 
 ```{r, error = TRUE}
 setClass("A", slots = list(x = "numeric"))
 a <- new("A", x = 10)
 
-setClass("A", slots = list(y = "numeric"))
+setClass("A", slots = list(a_different_slot = "numeric"))
 a
 ```
 
@@ -111,13 +120,13 @@ new("Person", name = "Hadley", age = "thirty")
 new("Person", name = "Hadley", sex = "male")
 ```
 
-You can create S4 slots with the wrong length:
+You can create S4 slots with the wrong lengths:
 
 ```{r}
 new("Person", age = 1:10)
 ```
 
-We can avoid both these problems by providing an `initialize()` method. You'll learn more about the details of `setMethod()` in the next section.
+We can avoid both these problems by providing an `initialize()` method. You'll learn more about the details of `setMethod()` in the next section, but in brief, here are a defining a `Person` method for the `intialize` generic.
 
 ```{r, cache = FALSE}
 setMethod("initialize", "Person", function(.Object, name, age = NA_real_, ...) {
@@ -131,7 +140,7 @@ setMethod("initialize", "Person", function(.Object, name, age = NA_real_, ...) {
 })
 ```
 
-In your `intialize()` method you should provide named arguments for the slots that you want to check, or provide better defaults for. You should also provide `...` and pass that to `callNextMethod()`. That's important if you want to allow subclasses to use your initialize method.
+In your `intialize()` method you should provide named arguments for the slots that you want to check, or provide better defaults for. You're then responsible for setting those values with `@`. You should also provide `...` and pass that on to `callNextMethod()`. That will allow future subclasses to use your initialize method.
 
 ```{r, error = TRUE}
 # Name is now reqiured
@@ -146,7 +155,7 @@ new("Person", name = "Hadley")
 
 ## Generics and methods
 
-The job of a generic is to perform method dispatch, i.e. find the function designed to work specifically for the given class. S4 generics have a similar structure to S3 generics, with a little more formalism. To create an new S4 generic, you call `setGeneric()` providing a function that calls `standardGeneric()`.   \index{S4!generics} \index{S4!methods} \index{generics!S4} \index{methods!S4}
+The job of a generic is to perform method dispatch, i.e. find the function designed to work specifically for the given class. S4 generics have a similar structure to S3 generics, with a little more formalism. To create an new S4 generic, you call `setGeneric()` providing a function that calls `standardGeneric()`.   \index{S4!generics} \index{S4!methods} \index{generics!S4} \index{methods!S4}.
 
 ```{r}
 setGeneric("myGeneric", function(x) {
@@ -154,22 +163,38 @@ setGeneric("myGeneric", function(x) {
 })
 ```
 
-Like `setClass()`, `setGeneric()` has many other arguments, all of which you should never use. Consult the documentation for details.
+Like `setClass()`, `setGeneric()` has many other arguments, none of which you should ever need to use. Consult the documentation for details.
 
 A generic isn't useful without some methods, and in S4 you add methods with `setMethod()`. You give it the name of the generic, the name of the class, and then the implementation of method,
 
 ```{r}
-setMethod("myGeneric", "myClass", function(x) {
+setMethod("myGeneric", "Person", function(x) {
   # method implementation
 })
 ```
 
-The class can be a (named) vector, which allows S4 to implement multiple dispatch. We'll come back to that later.
-
 And again, `setMethod()` has other arguments, but you should never use them.
 
+As with S3, the most important method is usually the "print" method, which for S4 is called "show". Let's define a show method for Person, in order to improve the default output. When defining a method for an existing generic, you need first determine the arguments. You can you get those from the documentation or by looking at the formals of the generic. Unlike S3, if you get them wrong, `setMethod()` will tell you.
+
 ```{r}
-showMethods("myGeneric")
+names(formals(show))
+
+setMethod("show", "Person", function(object) {
+  cat("Person\n")
+  cat("  Name: ", object@name, "\n", sep = "")
+  cat("  Age:  ", object@age, "\n", sep = "")
+})
+hadley
+```
+
+More formally, the second argument to `setMethod()` is called the __signature__. In S4, unlike S3, the signature can include multiple arguments. This makes method dispatch substantially more complicated, but avoids having to implement double-dispatch as a special case. We'll talk more about multiple dispatch in the next section.
+
+### Introspection
+
+```{r, cache = FALSE}
+showMethods("initialize", where = globalenv(), inherited = FALSE)
+showMethods(class = "Person", where = globalenv())
 ```
 
 ## Method dispatch 
