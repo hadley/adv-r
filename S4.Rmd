@@ -48,7 +48,9 @@ Unlike S3, S4 classes have a formal definition. To define an S4 class, you must 
   that it __contains__. You can provide multiple classes for multiple
   inheritance, but this is an advanced technique which adds much
   complexity.
-  
+
+S4 objects can inherit from and include as slots base types and S3 classes. We'll come back to the details at the end of the chapter.
+
 To create a class, you call `setClass()`, supplying these three properties. 
 
 Lets make this concrete with an example. Here we create two classes: a person has character `name` and numeric `age`, and an employee inherits slots and methods from `Person`, adding an additional `boss` slot that must be a `Person`.
@@ -77,56 +79,41 @@ setClass("A", slots = list(a_different_slot = "numeric"))
 a
 ```
 
-### Introspection
-
-S3 objects are just built on top of R objects that you're already familiar with, so you can use the tools that you're already familiar with to look inside them and pull out the data you need. `str()` continues to be useful for S4 objects, but there are new set of functions that are helpful for S4 objects.
-
-To access the slots, use `@` or `slot()`. `@` is equivalent to `$`, and `slot()` to `[[`. \index{subsetting!S4} \index{S4|subsetting}
-
-```{r}
-hadley@age
-slot(hadley, "age")
-```
-
-You can list all available slots with `slotNames()`:
-
-```{r}
-slotNames(hadley)
-```
-
-As a user, you should generally not extract values out of an object using `@`. The names of the slots are considered an internal implementation detail and may change without warning. Instead, look for a method that provides the information you want, and only access the slot directly if there's no other choice.
-
-Use `is()` with one argument to list all classes that an object inherits from. Use `is()` with two arguments to test if an object inherits from a specific class.
-
-```{r}
-is(hadley)
-is(hadley, "person")
-```
-
-### Helper and validators
-
-`new()` serves as a low-level constructor, but it's still often useful to define your own validator and helper functions. I do not recommend using the built-in `setValidity()` function to define a validity method. It is always run by `new()`, which means that you no longer have a cheap way to create objects if you already know the values are valid. 
-
-There are a couple of reasons you might want to provide a helper method for the `Person()` class: to specify default values, and to check the _length_ of the inputs. If you don't supply values, `new()` will use a default value for the slot class:
-
-```{r}
-new("Person")
-```
-
-And while it is not possible to create a S4 object with the wrong slots or of the wrong type:
+To avoid this problem in production code, you may want to "seal" the class:
 
 ```{r, error = TRUE}
-new("Person", name = "Hadley", age = "thirty")
-new("Person", name = "Hadley", sex = "male")
+setClass("Sealed", sealed = TRUE)
+setClass("Sealed")
 ```
 
-You can create S4 slots with the wrong lengths:
+### Initialize method
 
-```{r}
-new("Person", age = 1:10)
-```
+`new()` serves as a low-level constructor so you don't need to write one yourself. However, the default behaviour has two drawbacks:
 
-We can avoid both these problems by providing an `initialize()` method. You'll learn more about the details of `setMethod()` in the next section, but in brief, here are a defining a `Person` method for the `intialize` generic.
+*   The default If you don't supply values, `new()` will use a default value for the slot class:
+
+    ```{r}
+    new("Person")
+    ```
+    
+    For this class, you might prefer that `name` is always required, and that
+    `age` defaults to `NA`.
+    
+*   It's not possible to create a S4 object with the wrong slots or 
+    slots of the wrong type:
+
+    ```{r, error = TRUE}
+    new("Person", name = "Hadley", age = "thirty")
+    new("Person", name = "Hadley", sex = "male")
+    ```
+    
+    But it is possible to create slots with the wrong lengths:
+    
+    ```{r}
+    new("Person", age = 1:10)
+    ```
+
+We can override these defaults by providing an `initialize()` method. You'll learn more about the details of creating methods with `setMethod()` in the next section, but in brief, the following code defines a `Person` method for the `intialize` generic.
 
 ```{r, cache = FALSE}
 setMethod("initialize", "Person", function(.Object, name, age = NA_real_, ...) {
@@ -140,7 +127,7 @@ setMethod("initialize", "Person", function(.Object, name, age = NA_real_, ...) {
 })
 ```
 
-In your `intialize()` method you should provide named arguments for the slots that you want to check, or provide better defaults for. You're then responsible for setting those values with `@`. You should also provide `...` and pass that on to `callNextMethod()`. That will allow future subclasses to use your initialize method.
+In your `intialize()` method you should provide named arguments for the slots that you want to check, or provide defaults for. __You__ are then responsible for setting those values with `@`. You should also provide `...` and pass that on to `callNextMethod()`. That will allow future subclasses to use your initialize method.
 
 ```{r, error = TRUE}
 # Name is now reqiured
@@ -149,13 +136,92 @@ new("Person")
 # And must be length 1
 new("Person", name = letters)
 
-# Age now gets a default value of NA
+# And if not supplied, age gets a default value of NA
 new("Person", name = "Hadley")
+```
+
+### Helper
+
+As in S3, it's not necessary to provide a helper function, but you should if it's more natural to construct the object some other. For example, you could imagine creating a S4 representation of factors. There you still want to supply a `Factor()` helper that most people would use to construct the object.
+
+```{r}
+setClass("Factor", 
+  slots = list(levels = "character"),
+  contains = "integer"
+)
+
+Factor <- function(x, levels = unique(x)) {
+  ind <- match(x, levels)
+  new("Factor", ind, levels = levels)
+}
+```
+
+This uses another form of `new()`: unnnamed arguments are taken to be objects of the superclass, which in this case is the base integer type.
+
+### Validator
+
+It's possible to use the built-in `setValidity()` function to define a validity method. However, I do not recommend using this because it is always run by `new()`. If your validation method is expensive, this means that you no longer have a cheap way to create objects when you already know the values are valid. 
+
+Following the factor example, we could port out S3 `validate_factor()` function to an S4 `validateFactor()` function. There are two main differences: we use camelCase instead of snake_case for the function name, and we use `@` instead of `attr()` to access the fields of the object. Note the use of the special `.Data` slot: this only exists when you inherit from an S3 class or base type, and it allows you to get that underlying object.
+
+```{r}
+validateFactor <- function(x) {
+  values <- x@.Data
+  
+  if (!all(!is.na(values) & values > 0)) {
+    stop(
+      "All `x` values must be non-missing and greater than zero",
+      call. = FALSE
+    )
+  }
+  
+  if (length(x@levels) < max(values)) {
+    stop(
+      "There must at least as many `levels` as possible values in `x`",
+      call. = FALSE
+    )
+  }
+  
+  x
+}
+```
+
+### Introspection
+
+`str()` and `View()` (in RStudio), continue to be useful tools for inspecting complex S4 object. But you'll also need to learn some new tools. To access the slots, use `@` or `slot()`; `@` is equivalent to `$`, and `slot()` to `[[`. \index{subsetting!S4} \index{S4|subsetting}
+
+```{r}
+hadley@age
+slot(hadley, "age")
+```
+
+You can list all available slots with `slotNames()`:
+
+```{r}
+slotNames(hadley)
+```
+
+(Internally, slots are implemented as attributes, so you can also use `attributes()` to get a glimpse of all the components at once. This isn't recommended, however, as it's an internal implementation detail and hence a bad idea to rely on it.)
+
+As a user, you should generally not extract values out of an object using `@`. The names of the slots are considered an internal implementation detail and may change without warning. Instead, look for a method that provides the information you want, and only access the slot directly if there's no other choice.
+
+To determine what classes an object inherits from, use `is()`:
+
+```{r}
+is(hadley)
+```
+
+To test if an object inherits from a specific class, use the second argument of `is()`:
+
+```{r}
+is(hadley, "person")
 ```
 
 ## Generics and methods
 
-The job of a generic is to perform method dispatch, i.e. find the function designed to work specifically for the given class. S4 generics have a similar structure to S3 generics, with a little more formalism. To create an new S4 generic, you call `setGeneric()` providing a function that calls `standardGeneric()`.   \index{S4!generics} \index{S4!methods} \index{generics!S4} \index{methods!S4}.
+The job of a generic is to perform method dispatch, i.e. find the method designed for the combination of classes passed to the generic. Here you'll learn how to define S4 generics and methods, then in the next section we'll dive into some of the details of S4 method dispatch. 
+
+S4 generics have a similar structure to S3 generics, with a little more formalism. To create an new S4 generic, you call `setGeneric()` providing a function that calls `standardGeneric()`. \index{S4!generics} \index{S4!methods} \index{generics!S4} \index{methods!S4}.
 
 ```{r}
 setGeneric("myGeneric", function(x) {
@@ -165,7 +231,7 @@ setGeneric("myGeneric", function(x) {
 
 Like `setClass()`, `setGeneric()` has many other arguments, none of which you should ever need to use. Consult the documentation for details.
 
-A generic isn't useful without some methods, and in S4 you add methods with `setMethod()`. You give it the name of the generic, the name of the class, and then the implementation of method,
+A generic isn't useful without some methods, and in S4 you add methods with `setMethod()`. There are three important arguments: the name of the generic, the name of the class, and the method itself. (Again `setMethod()` has other arguments, but you should never use them.)
 
 ```{r}
 setMethod("myGeneric", "Person", function(x) {
@@ -173,13 +239,15 @@ setMethod("myGeneric", "Person", function(x) {
 })
 ```
 
-And again, `setMethod()` has other arguments, but you should never use them.
-
-As with S3, the most important method is usually the "print" method, which for S4 is called "show". Let's define a show method for Person, in order to improve the default output. When defining a method for an existing generic, you need first determine the arguments. You can you get those from the documentation or by looking at the formals of the generic. Unlike S3, if you get them wrong, `setMethod()` will tell you.
+As with S3, the most commonly defined method controls how the object is printed. In S4, however, this method is called "show". When defining a method for an existing generic, you need first determine the arguments. You can you get those from the documentation or by looking at the formals of the generic. Unlike S3, if you get them wrong, `setMethod()` will tell you. 
 
 ```{r}
 names(formals(show))
+```
 
+Here we define a show method for Person, in order to improve the default output. 
+
+```{r}
 setMethod("show", "Person", function(object) {
   cat("Person\n")
   cat("  Name: ", object@name, "\n", sep = "")
@@ -192,9 +260,23 @@ More formally, the second argument to `setMethod()` is called the __signature__.
 
 ### Introspection
 
+Use `.S4methods` to list all the methods that belong to a generic, or that are associated with a class.
+
 ```{r, cache = FALSE}
-showMethods("initialize", where = globalenv(), inherited = FALSE)
-showMethods(class = "Person", where = globalenv())
+.S4methods("initialize")
+.S4methods(class = "Person")
+```
+
+If you're looking for the source for a specific method, you can use `select
+
+Finally, there are two methods that find which method gets called given the specification of a generic call:
+
+```{r, eval = FALSE}
+# From methods: takes generic name and class names
+selectMethod("nobs", list("mle"))
+
+# From pryr: takes an unevaluated function call
+method_from_call(nobs(fit))
 ```
 
 ## Method dispatch 
@@ -292,17 +374,6 @@ This section describes the strategy for matching a call to a generic function to
 
 
 It's also possible to dispatch on `...` under special circumstances. See `?dotsMethods` for more details.
-
-Finally, there are two methods that find which method gets called given the specification of a generic call:
-
-```{r, eval = FALSE}
-# From methods: takes generic name and class names
-selectMethod("nobs", list("mle"))
-
-# From pryr: takes an unevaluated function call
-method_from_call(nobs(fit))
-```
-
 
 ## S3 and base types
 
