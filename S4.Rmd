@@ -267,46 +267,72 @@ Use `.S4methods` to list all the methods that belong to a generic, or that are a
 .S4methods(class = "Person")
 ```
 
-If you're looking for the source for a specific method, you can use `select
+If you're looking for the source for a specific method, you can use `selectMethod()`. You give it the name of the generic, and the class signature.
 
-Finally, there are two methods that find which method gets called given the specification of a generic call:
+```{r}
+selectMethod("show", "Person")
+```
+
+If you're using a method defined in a package, the easiest way to get help on it, is to construct a valid call, and then put `?` in front it. `?` will use the arguments to figure out which help file you need:
 
 ```{r, eval = FALSE}
-# From methods: takes generic name and class names
-selectMethod("nobs", list("mle"))
-
-# From pryr: takes an unevaluated function call
-method_from_call(nobs(fit))
+?show(hadley)
 ```
 
 ## Method dispatch 
 
-If an S4 generic dispatches on a single class with a single parent, then S4 method dispatch is the same as S3 dispatch. The main difference is how you set up default values: S4 uses the special class `ANY` to match any class and "missing" to match a missing argument. (We'll come back to those later.)
+S4 dispatch is complicated because S4 has multiple inheritance, i.e. a class can have multiple parents, and multiple dispatch, i.e. a generic can use multiple arguments to pick a method. This makes S4 extremely flexible, but can also make it hard to understand what's going on. To explain method dispatch, we'll start simple with single inheritance and single dispatch, and work out way up to the more complicated cases.
 
-The complexity in S4 dispatch comes from multiple dispatch, because an S4 generic can use the class of multiple arguments to choose the method. To make the ideas in this section concrete, we'll create a simple class structure. We have three classes, a base class C, B which inherits from C, and A which inherits from B. 
+We're going to work an imaginary class graph that describes the relationships between some emoji  There are a couple of multiple inheritance relationships here. For example, `r emo::ji("sunglasses")` inherits from both `r emo::ji("dark_sunglasses")` and `r emo::ji("slightly_smiling_face")`
 
-```{r}
-setClass("C", slots = c(x = "numeric"))
-setClass("B", contains = "C")
-setClass("A", contains = "B")
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/class-graph.png", dpi = 300)
 ```
 
-This creates a class graph that looks like this:
+### Single dispatch
 
-```{r, echo = FALSE}
-knitr::include_graphics("diagrams/class-graph-1.png", dpi = 220)
+Let's start with a diagram for simplest case: a generic which dispatches on an object with single inheritance. The top of the diagram `f(...)` tells you that this diagram shows the methods for a generic with one argument, called with a simple class hierarchy. The bottom of the digram lists all the possible methods in diamonds. Note the special pseudo-class "ANY". This plays the role of the `.default` in S3, and matches any input.
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/s4-single.png", dpi = 300)
 ```
 
-Next, we create a generic, `f()`, which will dispatch on two arguments, `x` and `y`. We'll also initialise one object each from our three classes:
+The diagram shows all possible methods. Usually, only a small subset of methods are defined: this is why you're using S4. I'll show which methods are defined by colouring the background of the diamond. 
 
-```{r}
-setGeneric("f", function(x, y) {
-  standardGeneric("f")
-})
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/s4-single-2.png", dpi = 300)
+```
 
-a <- new("A")
-b <- new("B")
-c <- new("C")
+Now we're in a position to explain how method dispatch works. You start with the class supplied to the generic, and then follow the arrows until you find a method that exists. Search proceeds from the most specific to the most general. For example:
+
+* No method is found for `r emo::ji("stuck_out_tongue_winking_eye")`, 
+  so next most general method is used: `r emo::ji("wink")`.
+
+* No method is found for `r emo::ji("no_mouth")`, so the default "ANY" method 
+  is used.
+
+In this simple case, S4 dispatch is just the same as S3 dispatch.
+
+### Multiple inheritance
+
+The complexity in S4 dispatch comes from multiple dispatch, because an S4 generic can use the class of multiple arguments to choose the method. Here's minimal multiple dispatch method diagram.
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/s4-multiple.png", dpi = 300)
+```
+
+The basic idea remains the same. You start from the class you have, and follow the arrows until you find a defined method. The wrinkle is now that there are multiple arrows to follow, so you might find multiple methods. In that case, you pick the method that is closest to target class.
+
+However, it's possible to have two methods that are equi-distant. For example, if we've defined methods for `r emo::ji("dark_sunglasses")` and `r emo::ji("slightly_smiling_face")`, then `r emo::ji("sunglasses")` has the same distance, one, to both methods. This is a problem! In this scenario R will give a warning, and picks one basically at random (it uses the method that comes first in the alphabet). 
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/s4-multiple-ambig.png", dpi = 300)
+```
+
+The fallback "ANY" method 
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/s4-multiple-any.png", dpi = 300)
 ```
 
 To predict which method a generic will dispatch to, you need to know:
