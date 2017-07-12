@@ -297,7 +297,9 @@ Let's start with a diagram for simplest case: a generic which dispatches on an o
 knitr::include_graphics("diagrams/s4-single.png", dpi = 300)
 ```
 
-The diagram shows all possible methods. Usually, only a small subset of methods are defined: this is why you're using S4. I'll show which methods are defined by colouring the background of the diamond. 
+Notice that the classes are arranged in different orders in the generic call vs. the method list. This is because you understand a class hierarchy by moving from the generic to the specific, but method dispatch looks for the most specific, before looking for the more general.
+
+The diagram shows all possible methods. Usually, only a small subset of methods are defined: this is why you're using OO programming. I'll show which methods are defined by colouring the background of the diamond.  
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/s4-single-2.png", dpi = 300)
@@ -321,7 +323,7 @@ The complexity in S4 dispatch comes from multiple dispatch, because an S4 generi
 knitr::include_graphics("diagrams/s4-multiple.png", dpi = 300)
 ```
 
-The basic idea remains the same. You start from the class you have, and follow the arrows until you find a defined method. The wrinkle is now that there are multiple arrows to follow, so you might find multiple methods. In that case, you pick the method that is closest to target class.
+The basic process of dispatch remains the same. You start from the class you have, and follow the arrows until you find a defined method. The wrinkle is now that there are multiple arrows to follow, so you might find multiple methods. In that case, you pick the method that is closest to target class.
 
 However, it's possible to have two methods that are equi-distant. For example, if we've defined methods for `r emo::ji("dark_sunglasses")` and `r emo::ji("slightly_smiling_face")`, then `r emo::ji("sunglasses")` has the same distance, one, to both methods. This is a problem! In this scenario R will give a warning, and picks one basically at random (it uses the method that comes first in the alphabet). 
 
@@ -329,75 +331,47 @@ However, it's possible to have two methods that are equi-distant. For example, i
 knitr::include_graphics("diagrams/s4-multiple-ambig.png", dpi = 300)
 ```
 
-The fallback "ANY" method 
+You resolve this ambiguity by defining a more precise method.
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/s4-multiple-ambig-2.png", dpi = 300)
+```
+
+The fallback "ANY" method still exists but the rules a little more complex. As indicated by the wavy dotted lines, the "ANY" method is always considered further away than any other method. This means that it will never contribute to ambiguity.
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/s4-multiple-any.png", dpi = 300)
 ```
 
-To predict which method a generic will dispatch to, you need to know:
+### Multiple dispatch
 
-* the name and arguments to the generic
-* the signatures of the methods
-* the class of arguments supplied to the generic
+Once you understand dispatch with multiple inheritance, understanding inheritance with multiple dispatch is just a small step extra. The following shows the basic idea for double dispatch. Now each method takes a pair of classes, and we draw an arrow from one method to another if and only if both the left class and the right class inherit.
 
-The simplest type of method dispatch occurs if there's an exact match between the class of arguments (__arg-classes__) and the class of the signature (__sig-classes__). In the following example, we define methods with sig-classes `c("C", "C")` and `c("A", "A")`, and then call them with arg classes `c("C", "C")` and `c("A", "A")`.
-
-```{r}
-setMethod("f", c("C", "C"), function(x, y) "c-c")
-setMethod("f", c("A", "B"), function(x, y) "a-b")
-setMethod("f", c("B", "A"), function(x, y) "b-a")
-
-f(c, c)
-f(a, b)
-f(b, a)
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/s4-single-single.png", dpi = 300)
 ```
 
+The main difference with multiple inheritance is that there are many more arrows to follow. This means that ambigutity is also possible. Can you find the two ambiguous dispatches in this diagram?
 
-If there isn't an exact match, R looks for the closest method. The distance between the sig-class and arg-class is the sum of the distances between each class (matched by name and excluding `...`). The distance between classes is the shortest distance between them in the class graph. For example, the distance A -> B is 1, A -> C is 2 and B -> C is 1. The distances C -> B, C -> A and B -> A are all infinite because there's no way to reach them. That means that both of the following calls will dispatch to the same method:
-
-```{r}
-f(b, c)
-f(c, b)
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/s4-single-single-ambig.png", dpi = 300)
 ```
 
-What if multiple methods have the same distance? In the following example, two methods the same distance (1 = 1 + 0 = 0 + 1), and there is not a unique closest method. In this situation R gives a warning and calls the method that comes first alphabetically.  This is warning is for you, the developer. You'll need to provide a more specific method to relieve the ambiguity.
+And of course you can combine multiple dispatch with multiple inheritance:
 
-```{r, error = TRUE}
-f(a, a)
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/s4-single-multiple.png", dpi = 300)
 ```
 
-Multiple inheritance makes ambiguity even more likely. If we added another class, BC, that inherited from both B and C, then this class would have distance one to both B and C, and distance two to A. As you can see, multiple inheritance makes determining the distance substantially more complex, and is best to avoid unless absolutely necessary.
-
-```{r, echo = FALSE}
-knitr::include_graphics("diagrams/class-graph-2.png", dpi = 220)
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/s4-multiple-multiple.png", dpi = 300)
 ```
 
-There are two special classes that can be used in the signature: `missing` and `ANY`. `missing` matches the case where the argument is not supplied, and `ANY` is used for setting up default methods. `ANY` has the lowest possible precedence in method matching - in other words, it has a distance value higher than any other parent class.
+However, as the method graph gets more and more complicated it gets harder and harder to predict which actual method will get called given a combination of inputs, and it gets harder and harder to make sure that you haven't introduced ambiguity. For that reason I recommend using either multiple dispatch or multiple inheritance with extreme care, and I highly recommend avoiding the combination of the two.
 
-```{r}
-setMethod("f", c("C", "ANY"), function(x,y) "C-*")
-setMethod("f", c("C", "missing"), function(x,y) "C-?")
+### Other
 
-setClass("D", contains = "character")
-d <- new("D", "d")
-
-f(c)
-f(c, d)
-```
-
-
-This section describes the strategy for matching a call to a generic function to the correct method. If there's an exact match between the class of the objects in the call, and the signature of a method, it's easy - the generic function just calls that method.  Otherwise, R will figure out the method using the following method:
-
-* For each argument to the function, calculate the distance between the 
-  arg-class and the sig-class. 
-
-* Compute the total distance by adding together the individual distances.
-
-* Compute this distance for every method. If there's a method with a unique
-  smallest distance, use that. Otherwise, give a warning and call the matching
-  method that comes first alphabetically.
-
+"MISSING"
 
 It's also possible to dispatch on `...` under special circumstances. See `?dotsMethods` for more details.
 
