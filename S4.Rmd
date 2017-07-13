@@ -396,13 +396,23 @@ knitr::include_graphics("diagrams/s4-multiple-multiple.png", dpi = 300)
 
 However, as the method graph gets more and more complicated it gets harder and harder to predict which actual method will get called given a combination of inputs, and it gets harder and harder to make sure that you haven't introduced ambiguity. I highly recommend avoiding the combination of the two. There are some techniques (like mixins) that allow you to tame this complexity, but I am not aware of a detailed treatment as applied to S4.
 
-## S3 and base types
+## S4 and existing code
 
-### `setClass()`
+Most code that uses S4 will have to interact with existing S3 classes and base types, and with existing functions, including existing S3 generics. This section describes how S4 classes, methods, and generics interacts with existing code.
 
-In `slots` and `contains` you can use S4 classes, S3 classes registered with `setOldClass()`, or the implicit class of a base type. In `slots` you can also use the special class `ANY` which does not restrict the input.
+### Classes
 
-If an S4 object contains (inherits from) an S3 class or a base type, it will have a special `.Data` slot which contains the underlying base type or S3 object: \indexc{.Data}
+In `slots` and `contains` you can use S4 classes, S3 classes, or the implicit class of a base type.  To use an S3 class, you must first register it with `setOldClass()`. You call this function once for each S3 class, giving it the class attribute. For example, the following defintions are already provided by base R:
+
+```{r, eval = FALSe}
+setOldClass("data.frame")
+setOldClass(c("ordered", "factor"))
+setOldClass(c("glm", "lm"))
+```
+
+Generally, these definitions should be provided by the creator of the S3 class. If you're trying to build an S4 class on top of a S3 class provided by a package, it is better to request that the package maintainer to add this call to the package, rather than running it yourself. 
+
+If an S4 object inherits from an S3 class or a base type, it will have a special virtual slot called `.Data`. This contains the underlying base type or S3 object: \indexc{.Data}
 
 ```{r}
 RangedNumeric <- setClass(
@@ -415,74 +425,7 @@ rn@min
 rn@.Data
 ```
 
-S3Part
-
-### `setGeneric()`
-
-The `setGeneric` function provides two main ways to create a new generic.  You can either convert an existing function to a generic function, or you can create a new one from scratch.
-
-```R
-sides <- function (object) 0
-setGeneric("sides")
-# [1] "sides"
-```
-
-If you create your own, the second argument to `setGeneric` should be a function that defines all the arguments that you want to dispatch on and contains a call to `standardGeneric`:
-
-```R
-setGeneric("sides", function (object) standardGeneric("sides") )
-# [1] "sides"
-```
-
-### `setMethod()`
-
-You can also use basic classes like `numeric`, `character` and `matrix`. A matrix of (e.g.) characters will have class `matrix`.
-
-```
-setGeneric("type", function (x) standardGeneric("type"))
-# [1] "type"
-setMethod("type", "matrix", function (x) "matrix")
-# [1] "type"
-setMethod("type", "character", function (x) "character")
-# [1] "type"
-    
-type(letters)
-# [1] "character"
-type(matrix(letters, ncol = 2))
-# [1] "matrix"
-```
-
-You can also dispatch on S3 classes provided that you have made S4 aware of them by calling `setOldClass`.
-
-```R
-foo <- structure(list(x = 1), class = "foo")
-type(foo)
-
-setOldClass("foo")
-setMethod("type", "foo", function(x) "foo")
-    
-type(foo)
-# Error in (function (classes, fdef, mtable)  : 
-#   unable to find an inherited method for function ‘type’ for signature ‘"foo"’ 
-
-setMethod("+", c(e1 = "foo", e2 = "numeric"), function (e1, e2) {
-  structure(list(x = e1$x + e2), class = "foo")
-})
-foo + 3
-```
-
-
-### Exercises
-
-1.  Which S4 generic has the most methods defined for it? Which S4 class 
-    has the most methods associated with it?
-
-1.  What happens if you define a new S4 class that doesn't "contain" an 
-    existing class?  (Hint: read about virtual classes in `?setClass`.)
-
-1.  What happens if you pass an S4 object to an S3 generic? What happens 
-    if you pass an S3 object to an S4 generic? (Hint: read `?setOldClass` 
-    for the second case.)
+It is possible to define S3 methods for S4 generics, and S4 methods for S3 generics (provided you've called `setOldClass()`). However, it's more complicated that it might appear at first glance, so make sure you thoroughly read `?Methods_for_S3`.
 
 [S4-bioconductor]: http://www.bioconductor.org/help/course-materials/2010/AdvancedR/S4InBioconductor.pdf
 [S4DA]: http://amzn.com/0387759352?tag=devtools-20
