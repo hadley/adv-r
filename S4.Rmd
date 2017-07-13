@@ -281,99 +281,120 @@ If you're using a method defined in a package, the easiest way to get help on it
 
 ## Method dispatch 
 
-S4 dispatch is complicated because S4 has multiple inheritance, i.e. a class can have multiple parents, and multiple dispatch, i.e. a generic can use multiple arguments to pick a method. This makes S4 extremely flexible, but can also make it hard to understand what's going on. To explain method dispatch, we'll start simple with single inheritance and single dispatch, and work out way up to the more complicated cases.
+S4 dispatch is complicated because S4 for two reasons:
 
-We're going to work an imaginary class graph that describes the relationships between some emoji  There are a couple of multiple inheritance relationships here. For example, `r emo::ji("sunglasses")` inherits from both `r emo::ji("dark_sunglasses")` and `r emo::ji("slightly_smiling_face")`
+* Multiple inheritance, i.e. a class can have multiple parents, 
+* Multiple dispatch, i.e. a generic can use multiple arguments to pick a method. 
+
+These features make S4 very powerful, but can also make it hard to understand which method will get selected for a given combination of inputs. 
+
+To explain method dispatch, we'll start simple with single inheritance and single dispatch, and work out way up to the more complicated cases. To illustrate the ideas without getting bogged down in the details, we'll use an imaginary __class graph__ that uses emoji:
 
 ```{r, echo = FALSE, out.width = NULL}
-knitr::include_graphics("diagrams/class-graph.png", dpi = 300)
+knitr::include_graphics("diagrams/s4-emoji.png", dpi = 300)
 ```
+
+Emoji give us very compact class names (just one symbol) that evoke the relationships between the classes. It should be straightfoward to remember that `r emo::ji("stuck_out_tongue_winking_eye")` inherits from `r emo::ji("wink")` which inherits from `r emo::ji("no_mouth")`, and that `r emo::ji("sunglasses")` inherits from both `r emo::ji("dark_sunglasses")` and `r emo::ji("slightly_smiling_face")`
 
 ### Single dispatch
 
-Let's start with a diagram for simplest case: a generic which dispatches on an object with single inheritance. The top of the diagram `f(...)` tells you that this diagram shows the methods for a generic with one argument, called with a simple class hierarchy. The bottom of the digram lists all the possible methods in diamonds. Note the special pseudo-class "ANY". This plays the role of the `.default` in S3, and matches any input.
+Let's start with the simplest case: a generic function that dispatch on a single object that has a single parent. The method dispatch rules here are simple, and the same as S3, but this will serve to define the graphical conventions we'll expand to more complex cases.
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/s4-single.png", dpi = 300)
 ```
 
-Notice that the classes are arranged in different orders in the generic call vs. the method list. This is because you understand a class hierarchy by moving from the generic to the specific, but method dispatch looks for the most specific, before looking for the more general.
+There are two parts to this diagram:
 
-The diagram shows all possible methods. Usually, only a small subset of methods are defined: this is why you're using OO programming. I'll show which methods are defined by colouring the background of the diamond.  
+* The top part `f(...)` defines the scope of the diagram. Here we have a 
+  generic with one argument, and we're going to explore method dispatch for a
+  class heirarchy that is three levels deep. We'll only ever look at a small
+  fragment of the complete class graph. This will help you build intutition
+  that you can then apply in more complex scenarios.
+  
+* The bottom part is the __method graph__ and  displays all possible methods 
+  that could be defined. Methods that have been defined 
+  (i.e. with `setMethod()`) have a grey background.
+
+To find the method that gets called, you start with the class of the actual arguments, then follow the arrows until you find a method that exists. For example, if you called the function with an object of class `r emo::ji("wink")` you would follow the arrow right to find the method defined for the more general `r emo::ji("no_mouth")` class. If no method is found, method dispatch has failed and you get an error. For this reason, class graphs should usually have methods defined for all the terminal nodes, those on the far right. 
+
+Note that the classes are arranged in a different order in the class graph and the method graph. in different orders in the generic call vs. the method list. This is because you understand a class hierarchy by moving from the generic to the specific, but method dispatch looks for the most specific, before looking for the more general.
+
+There are two pseudo-classes that you can define methods for. These classes don't actually exist, but allow you define fallback methods. The first pseudo-class is  "ANY". This pseudo-class matches any class, so plays the same role as the `default` pseudo-class in S3. For technical reasons that we'll get to later, the link to the "ANY" method is longer than the links between the other classes:
 
 ```{r, echo = FALSE, out.width = NULL}
-knitr::include_graphics("diagrams/s4-single-2.png", dpi = 300)
+knitr::include_graphics("diagrams/s4-single-any.png", dpi = 300)
 ```
 
-Now we're in a position to explain how method dispatch works. You start with the class supplied to the generic, and then follow the arrows until you find a method that exists. Search proceeds from the most specific to the most general. For example:
-
-* No method is found for `r emo::ji("stuck_out_tongue_winking_eye")`, 
-  so next most general method is used: `r emo::ji("wink")`.
-
-* No method is found for `r emo::ji("no_mouth")`, so the default "ANY" method 
-  is used.
-
-In this simple case, S4 dispatch is just the same as S3 dispatch.
+The second pseudo-class is "MISSING". If you define a method for this "class", it will match whenever the argument is missing. It's generally not useful for function that take a single argument, but can be used for functions like `+` and `-` that behave differently depending on whether they have one or two arguments.
 
 ### Multiple inheritance
 
-The complexity in S4 dispatch comes from multiple dispatch, because an S4 generic can use the class of multiple arguments to choose the method. Here's minimal multiple dispatch method diagram.
+Things get more complicated when one of the classes has multiple parents.
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/s4-multiple.png", dpi = 300)
 ```
 
-The basic process of dispatch remains the same. You start from the class you have, and follow the arrows until you find a defined method. The wrinkle is now that there are multiple arrows to follow, so you might find multiple methods. In that case, you pick the method that is closest to target class.
+The basic process of dispatch remains the same. You start from the actual class supplied to the generic, then follow the arrows until you find a method that exists. The wrinkle is now that there are multiple arrows to follow, so you might find multiple methods. If that happens, you pick the method that is closest, i.e. requires travelling the fewest arrows. 
 
-However, it's possible to have two methods that are equi-distant. For example, if we've defined methods for `r emo::ji("dark_sunglasses")` and `r emo::ji("slightly_smiling_face")`, then `r emo::ji("sunglasses")` has the same distance, one, to both methods. This is a problem! In this scenario R will give a warning, and picks one basically at random (it uses the method that comes first in the alphabet). 
+What happens if methods are the same distance? For example, imagined we've defined methods for `r emo::ji("dark_sunglasses")` and `r emo::ji("slightly_smiling_face")`, and we call the generic with `r emo::ji("sunglasses")`:
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/s4-multiple-ambig.png", dpi = 300)
 ```
 
-You resolve this ambiguity by defining a more precise method.
+This is called an __ambiguous__ method, and in diagrams I'll illustrate it with a thick dotted border. When this happens in R, you'll get a warning, and one of the two methods is basically picked at random (it uses the method that comes first in the alphabet). When you discover ambiguity you should always resolve it by providing a more precise method:
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/s4-multiple-ambig-2.png", dpi = 300)
 ```
 
-The fallback "ANY" method still exists but the rules a little more complex. As indicated by the wavy dotted lines, the "ANY" method is always considered further away than any other method. This means that it will never contribute to ambiguity.
+The fallback "ANY" method still exists but the rules are little more complex. As indicated by the wavy dotted lines, the "ANY" method is always considered further away than method for a real class. This means that it will never contribute to ambiguity.
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/s4-multiple-any.png", dpi = 300)
 ```
 
+It is hard to simultaneously preventing ambiguity, ensure that every terminal method has an implementation, and minimise the number of define methods (in order to actual benefit from method dispatch). For example, of the six ways to define only two methods for this call, only one is free from problems. For this reason, I recommend using multiple inheritance with extreme care; you will need to carefully think about the method graph and plan carefully.
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/s4-multiple-all.png", dpi = 300)
+```
+
 ### Multiple dispatch
 
-Once you understand dispatch with multiple inheritance, understanding inheritance with multiple dispatch is just a small step extra. The following shows the basic idea for double dispatch. Now each method takes a pair of classes, and we draw an arrow from one method to another if and only if both the left class and the right class inherit.
+Once you understand dispatch for multiple inheritance, understanding inheritance for multiple dispatch is straightforwards. The following method graph extends the existing notation for multiple inheritance. Now each method is specified by two classes (separated by a comma), and we draw an arrow whenever either class would have an arrow, if by itself.
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/s4-single-single.png", dpi = 300)
 ```
 
-The main difference with multiple inheritance is that there are many more arrows to follow. This means that ambigutity is also possible. Can you find the two ambiguous dispatches in this diagram?
+I'm not going to show examples of dispatching on more than two arguments, but you can follow the basic principles to generate your own method graphs.
+
+The main difference between multiple inheritance and multiple dispatch is that there are many more arrows to follow. The following diagram shows four defined methods produce two ambiguous cases:
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/s4-single-single-ambig.png", dpi = 300)
 ```
 
-And of course you can combine multiple dispatch with multiple inheritance:
+Multiple dispatch tends to be less tricky to work with than multiple inheritance because are usually fewer terminal class combinations. In this example, there's only one.
+
+## Multiple dispatch and multiple inheritance
+
+Of course you can combine multiple dispatch with multiple inheritance:
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/s4-single-multiple.png", dpi = 300)
 ```
 
+The most complicated case dispatches on two classes both of which have mulitple inheritance:
+
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/s4-multiple-multiple.png", dpi = 300)
 ```
 
-However, as the method graph gets more and more complicated it gets harder and harder to predict which actual method will get called given a combination of inputs, and it gets harder and harder to make sure that you haven't introduced ambiguity. For that reason I recommend using either multiple dispatch or multiple inheritance with extreme care, and I highly recommend avoiding the combination of the two.
-
-### Other
-
-"MISSING"
-
-It's also possible to dispatch on `...` under special circumstances. See `?dotsMethods` for more details.
+However, as the method graph gets more and more complicated it gets harder and harder to predict which actual method will get called given a combination of inputs, and it gets harder and harder to make sure that you haven't introduced ambiguity. I highly recommend avoiding the combination of the two. There are some techniques (like mixins) that allow you to tame this complexity, but I am not aware of a detailed treatment as applied to S4.
 
 ## S3 and base types
 
