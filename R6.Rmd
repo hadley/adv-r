@@ -1,116 +1,78 @@
-# RC
+# R6
 
-Reference classes (or RC for short) are the newest OO system in R. They were introduced in version 2.12. They are fundamentally different to S3 and S4 because: \index{RC} \index{reference classes|see{RC}} \index{objects!RC|see{RC}}
+This chapter describes the R6 object system. Unlike S3 and S4, it provides encapsulated OO, which means that:
 
-* RC methods belong to objects, not functions
+* R6 methods belong to objects, not generics.
 
-* RC objects are mutable: the usual R copy-on-modify semantics do not apply
+* R6 objects are mutable: the usual copy-on-modify semantics do not apply.
 
-These properties make RC objects behave more like objects do in most other programming languages, e.g., Python, Ruby, Java, and C#. Reference classes are implemented using R code: they are a special S4 class that wraps around an environment.
+These properties make R6 objects behave more like objects do in other popular programming languages, like python, ruby and java. Reference classes are implemented using R code: they are a special S3 class that wraps around an environment.
 
-### Defining classes and creating objects
+Unlike S3 and S4, R6 is not built in to R and you'll need to load a package to use it:
 
-Since there aren't any reference classes provided by the base R packages, we'll start by creating one. RC classes are best used for describing stateful objects, objects that change over time, so we'll create a simple class to model a bank account. \index{RC!classes} \index{classes!RC}
-
-Creating a new RC class is similar to creating a new S4 class, but you use `setRefClass()` instead of `setClass()`. The first, and only required argument, is an alphanumeric __name__. While you can use `new()` to create new RC objects, it's good style to use the object returned by `setRefClass()` to generate new objects. (You can also do that with S4 classes, but it's less common.) \indexc{setRefClass()}
-
-```{r}
-Account <- setRefClass("Account")
-Account$new()
+```{r setup}
+library(R6)
 ```
 
-`setRefClass()` also accepts a list of name-class pairs that define class __fields__ (equivalent to S4 slots). Additional named arguments passed to `new()` will set initial values of the fields. You can get and set field values with `$`: \index{fields}
+R6 is very similar to a built-in OO system called __reference classes__, or RC for short. RC is the newest OO system in R and was introduced in R 2.12.0 in 2010. In this book, I'm going to cover R6 instead of RC for a few reasons:
+
+* R6 is much simpler. Both R6 and RC are built on top of environments, but
+  while R6 uses S3, RC uses S4. R6 is only ~500 lines of code (and ~1700 lines
+  of tests!)
+
+* RC relies on R's regular environment scoping rules to get and set field
+  values. This has a couple of downsides: it makes cross-package inheritance 
+  more complex, and it makes it harder to see which variables are fields.
+
+* RC is quite slow. Generally, method dispatch will not be a bottleneck in your
+  code, but R6 is much faster than RC. Switching from RC to R6 had a substantial
+  impact on the performance of the shiny pacakge.
+
+* It will only take a small amount of additional effort if you want to learn
+  RC once you have mastered R6.
+
+## Classes and methods
+
+Because R6 implements encapsulated OO, you create a class and its method at the same time. Here's a simple example:
 
 ```{r}
-Account <- setRefClass("Account",
-  fields = list(balance = "numeric"))
-
-a <- Account$new(balance = 100)
-a$balance
-a$balance <- 200
-a$balance
-```
-
-Instead of supplying a class name for the field, you can provide a single argument function which will act as an accessor method. This allows you to add custom behaviour when getting or setting a field. See `?setRefClass` for more details.
-
-Note that RC objects are __mutable__, i.e., they have reference semantics, and are not copied-on-modify: \index{copy-on-modify!exceptions}
-
-```{r}
-b <- a
-b$balance
-a$balance <- 0
-b$balance
-```
-
-For this reason, RC objects come with a `copy()` method that allow you to make a copy of the object:
-
-```{r}
-c <- a$copy()
-c$balance
-a$balance <- 100
-c$balance
-```
-
-An object is not very useful without some behaviour defined by __methods__. RC methods are associated with a class and can modify its fields in place. In the following example, note that you access the value of fields with their name, and modify them with `<<-`. You'll learn more about `<<-` in [Environments](#binding). \index{RC!methods} \index{methods!RC} \indexc{<<-}
-
-```{r}
-Account <- setRefClass("Account",
-  fields = list(balance = "numeric"),
-  methods = list(
-    withdraw = function(x) {
-      balance <<- balance - x
-    },
-    deposit = function(x) {
-      balance <<- balance + x
-    }
-  )
+Accumulator <- R6Class("Accumulator", public = list(
+  sum = 0,
+  add = function(x) {
+    self$sum <- self$sum + x 
+    invisible(self)
+  })
 )
+
+x <- Accumulator$new() 
+x$add(4) 
+x$sum
 ```
 
-You call an RC method in the same way as you access a field:
+Note that `add()` is called primarily for its side-effect of updating `self$sum`. In R6, it's often useful to invisibly return `self`. This makes it possible to chain together multiple method calls.
 
 ```{r}
-a <- Account$new(balance = 100)
-a$deposit(100)
-a$balance
+x$add(10)$add(10)
+x$sum
 ```
 
-The final important argument to `setRefClass()` is `contains`. This is the name of the parent RC class to inherit behaviour from. The following example creates a new type of bank account that returns an error preventing the balance from going below 0.
+Usually when you modify an object in R, a copy is created and the original object is left unchanged. This is not so with R6.
 
-```{r, error = TRUE}
-NoOverdraft <- setRefClass("NoOverdraft",
-  contains = "Account",
-  methods = list(
-    withdraw = function(x) {
-      if (balance < x) stop("Not enough money")
-      balance <<- balance - x
-    }
-  )
-)
-accountJohn <- NoOverdraft$new(balance = 100)
-accountJohn$deposit(50)
-accountJohn$balance
-accountJohn$withdraw(200)
+```{r}
+y1 <- Accumulator$new() 
+y2 <- y1
+
+y1$add(10)
+y2$sum
 ```
 
-All reference classes eventually inherit from `envRefClass`. It provides useful methods like `copy()` (shown above), `callSuper()` (to call the parent field), `field()` (to get the value of a field given its name), `export()` (equivalent to `as()`), and `show()` (overridden to control printing). See the inheritance section in `setRefClass()` for more details.
+### Initializer
 
+Like S4, can override default behaviour of `new()` with `initialize()` method. Looks different , but same idea.
 
-### Recognising objects and methods
+### print
 
-You can recognise RC objects because they are S4 objects (`isS4(x)`) that inherit from "refClass" (`is(x, "refClass")`). `pryr::otype()` will return "RC".  RC methods are also S4 objects, with class `refMethodDef`.
+## Inheritance
 
-### Method dispatch
+`super`
 
-Method dispatch is very simple in RC because methods are associated with classes, not functions. When you call `x$f()`, R will look for a method f in the class of x, then in its parent, then its parent's parent, and so on. From within a method, you can call the parent method directly with `callSuper(...)`. \index{RC!method dispatch rules}
-
-### Exercises
-
-1.  Use a field function to prevent the account balance from being directly
-    manipulated. (Hint: create a "hidden" `.balance` field, and read the 
-    help for the fields argument in `setRefClass()`.)
-
-1.  I claimed that there aren't any RC classes in base R, but that was a 
-    bit of a simplification. Use `getClasses()` and find which classes 
-    `extend()` from `envRefClass`. What are the classes used for? (Hint: 
-    recall how to look up the documentation for a class.)
