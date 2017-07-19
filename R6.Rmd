@@ -31,23 +31,50 @@ R6 is very similar to a built-in OO system called __reference classes__, or RC f
 * It will only take a small amount of additional effort if you want to learn
   RC once you have mastered R6.
 
+More details about R6 at `vignette("Introduction", package = "R6")`
+
 ## Classes and methods
 
-Because R6 implements encapsulated OO, you create a class and its method at the same time. Here's a simple example:
+Because R6 implements encapsulated OO, you create a class and its method at the same time. The one function you need to know about is `R6::R6Class`, which creates new classes. The following example shows the two most important arguments:
+
+* The first argument is the `classname`. It's not strictly needed, but it
+  improves error messages and makes it possible to also use R6 objects
+  with S3 generics. By convention, R6 classes use UpperCamelCase.
+  
+* The second argument, `public`, supplies a list of methods (functions) and 
+  fields (anything else) that make up the object. By convention, methods
+  and field use snake case.
 
 ```{r}
-Accumulator <- R6Class("Accumulator", public = list(
+Accumulator <- R6Class("Accumulator", list(
   sum = 0,
-  add = function(x) {
+  add = function(x = 1) {
     self$sum <- self$sum + x 
     invisible(self)
   })
 )
+```
 
+You assign the result of `R6Class` into an object with the same name as the class. This object is an R6 object that defines the class:
+
+```{r}
+class(Accumulator)
+```
+
+And you use it to generate objects from the class by calling the `new()` method. Because the method belongs to the object, you use `$` to access it.
+
+```{r}
 x <- Accumulator$new() 
+```
+
+You can then call methods on that object, or access fields.
+
+```{r}
 x$add(4) 
 x$sum
 ```
+
+By default, fields are public which menas that you can set or get any field value. We'll see later how to use private fields to make it more clear that a field isn't for public consumption.
 
 Note that `add()` is called primarily for its side-effect of updating `self$sum`. In R6, it's often useful to invisibly return `self`. This makes it possible to chain together multiple method calls.
 
@@ -55,6 +82,80 @@ Note that `add()` is called primarily for its side-effect of updating `self$sum`
 x$add(10)$add(10)
 x$sum
 ```
+
+### Initializer
+
+Like S4, can override default behaviour of `new()` with `initialize()` method. Looks different , but same idea.
+
+```{r}
+Person <- R6Class("Person", list(
+  age = NA,
+  name = NULL,
+  initialize = function(name, age = NA) {
+    self$name <- name
+    self$age <- age
+  }
+))
+
+hadley <- Person$new("Hadley")
+```
+
+### Print
+
+```{r}
+Person <- R6Class("Person", list(
+  age = NA,
+  name = NULL,
+  initialize = function(name, age = NA) {
+    self$name <- name
+    self$age <- age
+  },
+  print = function(...) {
+    cat("Person: \n")
+    cat("  Name: ", self$name, "\n", sep = "")
+    cat("  Age:  ", self$age, "\n", sep = "")
+  }
+))
+
+hadley2 <- Person$new("Hadley")
+hadley2
+```
+
+This also illustrates an important aspect of R6. Methods are bound to individual objects. This means that the `hadley` object I created previously does not get this new method. Indeed, from the perspective of R6, there is no relationship between `hadley` and `hadley2`.
+
+```{r}
+hadley
+```
+
+### Private methods
+
+It's also possible to define "private" fields and methods, elements of the class that can only be accessed from within the class, not from outside of it. This distinction tends to be more important in other programming langauges where you are creating complex networks of objects, and want to make it as clear as possible what it's ok for others to access. Anything that's private can be more easily refactored because you know others aren't relying on it.
+
+```{r}
+Person <- R6Class("Person", 
+  public = list(
+    initialize = function(name, age = NA) {
+      private$name <- name
+      private$age <- age
+    },
+    print = function(...) {
+      cat("Person: \n")
+      cat("  Name: ", private$name, "\n", sep = "")
+      cat("  Age:  ", private$age, "\n", sep = "")
+    }
+  ),
+  private = list(
+    age = NA,
+    name = NULL
+  )
+)
+
+hadley3 <- Person$new("Hadley")
+hadley3$name
+```
+
+
+## Reference semantics
 
 Usually when you modify an object in R, a copy is created and the original object is left unchanged. This is not so with R6.
 
@@ -66,13 +167,20 @@ y1$add(10)
 y2$sum
 ```
 
-### Initializer
+### Finalizer
 
-Like S4, can override default behaviour of `new()` with `initialize()` method. Looks different , but same idea.
+### R6 fields
 
-### print
+Beware of setting a default value to an R6 class - it will be shared across all instances of the object. Probably not what you were expecting!
+
+## Functional vs encapsulated
+
+Why is reasoning harder?
+
+Syntax differencdes
 
 ## Inheritance
 
 `super`
+
 
