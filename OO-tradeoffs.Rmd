@@ -1,10 +1,52 @@
 # Trade-offs {#oo-tradeoffs}
 
-## Why generic functions?
+Now that you understand the principles the underlie S3, S4, and R6 we can discuss the tradeoffs of the various systems to help you pick a system that's most likely to help you solve your problem.
 
-There are two big differences between S3 and S4, and R6 and most other modern programming languages: mutability and namespacing. These are trade-offs, and like all tradeoffs they have pros and cons. In my opinion, however, the trade-offs are particularly well suited for data analysis.
+Your default position should be to use S3. In R, you usually create fairly simple objects and methods for pre-existing generic functions like `print()`, `summary()`, and `plot()`. S3 is well suited to this task, and the majority of OO code that I have written in R is S3. S3 is a little quirky, but it gets the job done with a minimum of code. \index{objects!which system?} 
+
+The rest of the chapter discusses the exceptions, when S4 or R6 is more appropriate than S3.
+
+## S4 vs S3
+
+If you've mastered S3, S4 is relatively easy to pick up; the ideas are all the same, it is just more formal, more strict, and more verbose. 
+
+If you are creating more complicated systems of interrelated objects, S4 may be more appropriate.
+
+S4 is used extensively by Bioconductor packages, which need to model complicated interrelationships between biological objects. Bioconductor provides many [good resources](https://www.google.com/search?q=bioconductor+s4) for learning S4. 
+
+```{r, include = FALSE}
+library(Matrix)
+
+ver <- packageVersion("Matrix")
+
+gs <- getGenerics("package:Matrix")
+generics <- gs@.Data[gs@package == "Matrix"]
+n_generics <- length(generics)
+
+classes <- getClasses("package:Matrix", FALSE)
+n_classes <- length(classes)
+
+methods <- lapply(gs@.Data, findMethods)
+n_methods <- length(unlist(methods, recursive = FALSE))
+```
+
+In my opinion, the main challenge of using S4 effectively is designing a class graph that allows to minimise the number of methods you need to write, while still resonably understandable. One example, that shows deep use of multiple inhertiance is the Matrix package by Douglas Bates and Martin Maechler. It is designed to efficiently store and compute with many different types of sparse and dense matrices. As of version `r ver`, it defines `r n_classes` classes, `r n_generics` generic functions, and `r n_methods` methods. The package is well written and well commented, and the accompanying vignette (`vignette("Intro2Matrix", package = "Matrix")`) gives an overview of the structure of the package. 
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/s4-matrix-dsparseMatrix.png", dpi = 300)
+```
+
+In my opinon, the biggest reason to avoid is S4 is the lack of excellent documentation. The documentation for S4 is scattered over multiple man pages, books, and websites. S4 is a complex system that can be challenging to use effectively in practice. It deserves a book length treatment, but that book does not (yet) exist. (The documentation for S3 is no better, but because S3 is much simpler the lack is less painful.)
+
+## R6 vs S3
+
+There are two big differences between S3 and R6 and most other modern programming languages: mutability and namespacing. These are trade-offs, and like all tradeoffs they have pros and cons.
 
 In encapsulated OO, you should consider carefully when you need a new class; but you should create methods freely. In generic function OO, you should carefully consider when you need a new generic; but you should create classes freely.
+
+If you've programmed in a mainstream OO language, RC will seem very natural. But because they can introduce side effects through mutable state, they are harder to understand. For example, when you call `f(a, b)` in R you can usually assume that `a` and `b` will not be modified. But if `a` and `b` are RC objects, they might be modified in the place. Generally, when using RC objects you want to minimise side effects as much as possible, and use them only where mutable states are absolutely required. The majority of functions should still be "functional", and free of side effects. This makes code easier to reason about and easier for other R programmers to understand.
+
+
 
 ### Namespacing
 
@@ -26,33 +68,51 @@ Generic functions don't have this property: they are global. That means use must
 
 The reason that this works well is in data analyses you often want to do the same thing to different types of objects. For example, every model function in R understands `summary()` and `predict()`.
 
-This is also supports the use of pipes. In contrast to method chaining (where only the class author can add a new method), anyone can write a function that works in a chain, and it will do the right thing. This is a small but pervasive tension that in python tends to lead to large monolithic packages.
-
-This is a different school of thought to most popular programming languages, but is a good fit to the problem of data analysis. Knowing this fact probably won't help you much in your day-to-day programming, but it will avoid some fundamental confusion if you're coming from another OO programmming language. \index{functions!generics|see{generics}} \index{S3!generics} \index{generics!S3}
-
-(In fact this message is so powerful that I've talked to programmers who moved to R from javascript and it took them a while to figure out that they're not calling the `frame` method of the `data` object.)
-
 ### Mutability
 
+Threading state.
 
-## Picking a system {#picking-a-system}
+### Piping vs. method chaining
 
-Three OO systems is a lot for one language, but for most R programming, S3 suffices. In R you usually create fairly simple objects and methods for pre-existing generic functions like `print()`, `summary()`, and `plot()`. S3 is well suited to this task, and the majority of OO code that I have written in R is S3. S3 is a little quirky, but it gets the job done with a minimum of code. \index{objects!which system?}
+This is also supports the use of pipes. In contrast to method chaining (where only the class author can add a new method), anyone can write a function that works in a chain, and it will do the right thing. This is a small but pervasive tension that in python tends to lead to large monolithic packages.
 
-```{r, eval = FALSE, echo = FALSE}
-packageVersion("Matrix")
+### Stack
 
-library(Matrix)
-gs <- getGenerics("package:Matrix")
-sum(gs@package == "Matrix")
+```{r}
+Stack <- R6::R6Class("Stack", list(
+  items = list(),
+  push = function(x) {
+    self$items[[self$length() + 1]] <- x
+    invisible(self)
+  },
+  pop = function() {
+    item <- self$items[[self$length()]]
+    self$items <- self$items[-self$length()]
+    item
+  },
+  length = function() {
+    length(self$items)
+  }
+))
 
-length(getClasses("package:Matrix", FALSE))
+new_stack <- function(items = list()) {
+  structure(list(items = items), class = "stack")
+}
+
+length.stack <- function(x) length(x$items)
+
+push <- function(x) UseMethod("push")
+push.stack <- function(x, y) {
+  x$items[length(x)] <- y
+  x
+}
+
+pop <- function(x) UseMethod("pop")
+pop.stack <- function(x) {
+  item <- x$items[[x$size()]]
+  x$items <- x$items[-x$size()]
+  
+  list(item = item, x = x)
+}
 ```
 
-If you are creating more complicated systems of interrelated objects, S4 may be more appropriate. A good example is the `Matrix` package by Douglas Bates and Martin Maechler. It is designed to efficiently store and compute with many different types of sparse matrices. As of version 1.2.10, it defines 102 classes and 21 generic functions. The package is well written and well commented, and the accompanying vignette (`vignette("Intro2Matrix", package = "Matrix")`) gives a good overview of the structure of the package. S4 is also used extensively by Bioconductor packages, which need to model complicated interrelationships between biological objects. Bioconductor provides many [good resources](https://www.google.com/search?q=bioconductor+s4) for learning S4. If you've mastered S3, S4 is relatively easy to pick up; the ideas are all the same, it is just more formal, more strict, and more verbose.
-
-In my opinon, the biggest reason to avoid is S4 is the lack of excellent documentation. The documentation for S4 is scattered over multiple man pages, books, and websites. S4 is a complex system that can be challenging to use effectively in practice. It deserves a book length treatment, but that book does not (yet) exist. (The documentation for S3 is no better in general, but S3 is substantially simpler so the lack is less painful.)
-
-If you've programmed in a mainstream OO language, RC will seem very natural. But because they can introduce side effects through mutable state, they are harder to understand. For example, when you call `f(a, b)` in R you can usually assume that `a` and `b` will not be modified. But if `a` and `b` are RC objects, they might be modified in the place. Generally, when using RC objects you want to minimise side effects as much as possible, and use them only where mutable states are absolutely required. The majority of functions should still be "functional", and free of side effects. This makes code easier to reason about and easier for other R programmers to understand.
-
-It is possible to have mutable generic function OO, and immutable encapsulated OO, but they don't feel as natural.
