@@ -16,6 +16,9 @@ S4 is a rich system, and it's not possible to cover all of it in one chapter. In
 
 * [S4 system development in Bioconductor][S4-bioconductor], a slide deck
   by Patrick Aboyoun.
+JH: this resource seems a little old, Patrick Aboyoun hasn't been with Bioconductor since 2010.
+- https://bioconductor.org/help/course-materials/2017/Zurich/S4-classes-and-methods.html
+- https://bioconductor.org/packages/devel/bioc/vignettes/S4Vectors/inst/doc/S4QuickOverview.pdf
 
 * [S4 questions on stackoverflow][SO-Morgan] answered by Martin Morgan.
 
@@ -39,6 +42,8 @@ Unlike S3, S4 classes have a formal definition. To define an S4 class, you must 
 
 * The class __name__. By convention, S4 class names use UpperCamelCase.
 
+JH: The `slot` argument really accepts a named character vector, not a named
+list. But the latter is coerced to the former so either works in practice.
 * A named list that describes the names and classes of the __slots__ (fields).
   For example, a person might be represented by a character name and a numeric 
   age: `list(name = "character", age = "numeric")`. The pseudo-class "ANY" 
@@ -109,11 +114,12 @@ slotNames(hadley)
 
 (Internally, slots are implemented as attributes, so you can also use `attributes()` to get a glimpse of all the components at once. This isn't recommended, however, as it's an internal implementation detail and hence a bad idea to rely on it.)
 
-As a user, you should generally not extract values out of someone elses object using `@`. The names of the slots are considered an implementation detail and may change without warning. Instead, look for a method that provides the information you want, and only access the slot directly if there's no other choice.
+As a user, you should generally not extract values out of someone else's object using `@`. The names of the slots are considered an implementation detail and may change without warning. Instead, look for a method that provides the information you want, and only access the slot directly if there's no other choice.
 
 ### Initializer
 
 `new()` is a low-level constructor so you don't need to write one yourself like in S3. However, the default behaviour has two drawbacks:
+
 
 *   If you don't supply values for the slots, `new()` will automatically 
     supply default values based on the class of the slot:
@@ -139,7 +145,7 @@ As a user, you should generally not extract values out of someone elses object u
     new("Person", age = 1:10)
     ```
 
-We can override the default behaviour by providing an `initialize()` method. You'll learn more about the details of creating methods in the next section, but in brief, the following code defines a `Person` method for the `intialize` generic.
+We can override the default behaviour by providing an `initialize()` method. You'll learn more about the details of creating methods in the next section, but in brief, the following code defines a `Person` method for the `initialize` generic.
 
 ```{r, cache = FALSE}
 setMethod("initialize", "Person", function(.Object, name, age = NA_real_, ...) {
@@ -153,10 +159,10 @@ setMethod("initialize", "Person", function(.Object, name, age = NA_real_, ...) {
 })
 ```
 
-Your `intialize()` method should include named arguments for the slots whose default behaviour you want to modify. __You__ are then responsible for setting those values with `@`. You should also accept `...` and pass that on to `callNextMethod()`. This is a tecnhical requirement that allow future subclasses to make use of your initialize method.
+Your `intialize()` method should include named arguments for the slots whose default behaviour you want to modify. __You__ are then responsible for setting those values with `@`. You should also accept `...` and pass that on to `callNextMethod()`. This is a technical requirement that allow future subclasses to make use of your initialize method.
 
 ```{r, error = TRUE}
-# Name is now reqiured
+# Name is now required
 new("Person")
 
 # And must be length 1
@@ -187,6 +193,8 @@ Note that this example uses another form of `new()`: unnnamed arguments are take
 ### Validator
 
 It's possible to use the built-in `setValidity()` function to define a validator. I do not recommend using this feature because the validation method is always run by `new()`. This means that you no longer have a cheap way to create objects if you already know the values are valid.
+
+JH: This advice seems somewhat dangerous; `S4Vectors::setValidity2` is used in Bioconductor to give more control when validity methods are actually run, although it is not well documented. <https://github.com/Bioconductor-mirror/S4Vectors/blob/master/R/S4-utils.R#L83>
 
 Instead, follow the same principle as for S3: create a separate validate function that you can call when needed. Let's make this concrete by porting our S3 `validate_factor()` function to S4. 
 
@@ -309,7 +317,7 @@ If you're using a method defined in a package, the easiest way to get help on it
 
 ### Exercises
 
-1.  In the defintion of the generic, why is it necessary to repeat the
+1.  In the definition of the generic, why is it necessary to repeat the
     name of the generic twice?
     
 1.  What happens if you define a method with different argument names to
@@ -333,7 +341,7 @@ To explain method dispatch, we'll start simple with single inheritance and singl
 knitr::include_graphics("diagrams/s4-emoji.png", dpi = 300)
 ```
 
-Emoji give us very compact class names (just one symbol) that evoke the relationships between the classes. It should be straightfoward to remember that `r emo::ji("stuck_out_tongue_winking_eye")` inherits from `r emo::ji("wink")` which inherits from `r emo::ji("no_mouth")`, and that `r emo::ji("sunglasses")` inherits from both `r emo::ji("dark_sunglasses")` and `r emo::ji("slightly_smiling_face")`
+Emoji give us very compact class names (just one symbol) that evoke the relationships between the classes. It should be straightforward to remember that `r emo::ji("stuck_out_tongue_winking_eye")` inherits from `r emo::ji("wink")` which inherits from `r emo::ji("no_mouth")`, and that `r emo::ji("sunglasses")` inherits from both `r emo::ji("dark_sunglasses")` and `r emo::ji("slightly_smiling_face")`
 
 ### Single dispatch
 
@@ -347,9 +355,9 @@ There are two parts to this diagram:
 
 * The top part, `f(...)`, defines the scope of the diagram. Here we have a 
   generic with one argument, and we're going to explore method dispatch for a
-  class heirarchy that is three levels deep. We'll only ever look at a small
+  class hierarchy that is three levels deep. We'll only ever look at a small
   fragment of the complete class graph. This keeps individual diagrams simple
-  while helping you build intutition that you apply to more complex class 
+  while helping you build intuition that you apply to more complex class 
   graphs.
   
 * The bottom part is the __method graph__ and  displays all possible methods 
@@ -358,7 +366,7 @@ There are two parts to this diagram:
 
 To find the method that gets called, you start with the class of the actual arguments, then follow the arrows until you find a method that exists. For example, if you called the function with an object of class `r emo::ji("wink")` you would follow the arrow right to find the method defined for the more general `r emo::ji("no_mouth")` class. If no method is found, method dispatch has failed and you get an error. For this reason, class graphs should usually have methods defined for all the terminal nodes, those on the far right. 
 
-Note that the classes are arranged in a different order in the class graph and the method graph. in different orders in the generic call vs. the method list. This is because you understand a class hierarchy by moving from the generic to the specific, but method dispatch proceeds in the opposite direction, from the the most specific to the most general.
+Note that the classes are arranged in a different order in the class graph and the method graph. in different orders in the generic call vs. the method list. This is because you understand a class hierarchy by moving from the generic to the specific, but method dispatch proceeds in the opposite direction, from the most specific to the most general.
 
 There are two pseudo-classes that you can define methods for. These are called pseudo-classes because don't actually exist, but allow you define useful behaviours. The first pseudo-class is "ANY". This matches any class, and plays the same role as the `default` pseudo-class in S3. For technical reasons that we'll get to later, the link to the "ANY" method is longer than the links between the other classes:
 
@@ -387,6 +395,8 @@ knitr::include_graphics("diagrams/s4-multiple-ambig.png", dpi = 300)
 ```
 
 This is called an __ambiguous__ method, and in diagrams I'll illustrate it with a thick dotted border. When this happens in R, you'll get a warning, and one of the two methods is basically picked at random (it uses the method that comes first in the alphabet). When you discover ambiguity you should always resolve it by providing a more precise method:
+
+JH: You never mention that double red methods in the diagrams are those without a definition.
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/s4-multiple-ambig-2.png", dpi = 300)
@@ -430,7 +440,7 @@ Of course you can combine multiple dispatch with multiple inheritance:
 knitr::include_graphics("diagrams/s4-single-multiple.png", dpi = 300)
 ```
 
-A still more complicated case dispatches on two classes both of which have mulitple inheritance:
+A still more complicated case dispatches on two classes both of which have multiple inheritance:
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/s4-multiple-multiple.png", dpi = 300)
@@ -450,7 +460,7 @@ Even when writing new S4 code, you'll still need to interact with existing S3 cl
 
 ### Classes
 
-In `slots` and `contains` you can use S4 classes, S3 classes, or the implicit class of a base type.  To use an S3 class, you must first register it with `setOldClass()`. You call this function once for each S3 class, giving it the class attribute. For example, the following defintions are already provided by base R:
+In `slots` and `contains` you can use S4 classes, S3 classes, or the implicit class of a base type.  To use an S3 class, you must first register it with `setOldClass()`. You call this function once for each S3 class, giving it the class attribute. For example, the following definitions are already provided by base R:
 
 ```{r, eval = FALSE}
 setOldClass("data.frame")
