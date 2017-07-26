@@ -14,12 +14,10 @@ The S4 system is built on the same ideas of as S3 (generic functions), but provi
   
 S4 is a rich system, and it's not possible to cover all of it in one chapter. Instead, we'll focus on what you need to know to read most S4 code, and write basic S4 components. Unfortunately there is not one good reference for S4 and as you move towards more advanced usage, you will need to piece together needed information by carefully reading the documentation and performing experiments. Some good places to start are:
 
-* [S4 system development in Bioconductor][S4-bioconductor], a slide deck
-  by Patrick Aboyoun.
-JH: this resource seems a little old, Patrick Aboyoun hasn't been with Bioconductor since 2010.
-- https://bioconductor.org/help/course-materials/2017/Zurich/S4-classes-and-methods.html
-- https://bioconductor.org/packages/devel/bioc/vignettes/S4Vectors/inst/doc/S4QuickOverview.pdf
-
+* [BioConductor course materials][bioc-courses], a list of all courses
+  taught by BioConductor, a big user of S4. One recent course by Martin
+  Morgan and Hervé Pagès is [S4 classes and methods][bioc-s4-class].
+  
 * [S4 questions on stackoverflow][SO-Morgan] answered by Martin Morgan.
 
 * [_Software for Data Analysis_][S4DA], a book by John Chambers.
@@ -42,12 +40,10 @@ Unlike S3, S4 classes have a formal definition. To define an S4 class, you must 
 
 * The class __name__. By convention, S4 class names use UpperCamelCase.
 
-JH: The `slot` argument really accepts a named character vector, not a named
-list. But the latter is coerced to the former so either works in practice.
-* A named list that describes the names and classes of the __slots__ (fields).
-  For example, a person might be represented by a character name and a numeric 
-  age: `list(name = "character", age = "numeric")`. The pseudo-class "ANY" 
-  allows a slot to accept objects of any type. \index{slots}
+* A named character vector that describes the names and classes of the 
+  __slots__ (fields). For example, a person might be represented by a character 
+  name and a numeric  age: `c(name = "character", age = "numeric")`. The 
+  pseudo-class "ANY" allows a slot to accept objects of any type. \index{slots}
 
 * The name of a class (or classes) to inherit behaviour from, or in S4 
   terminology, that classes that it __contains__. 
@@ -58,14 +54,14 @@ To create a class, you call `setClass()`, supplying these three properties. Lets
 
 ```{r, cache = FALSE}
 setClass("Person", 
-  slots = list(
+  slots = c(
     name = "character", 
     age = "numeric"
   )
 )
 setClass("Employee", 
   contains = "Person", 
-  slots = list(
+  slots = c(
     boss = "Person"
   )
 )
@@ -83,10 +79,10 @@ hadley
 In most programming languages, class definition occurs at compile-time, and object construction occurs later, run-time. In R, however, both definition and construction occur at run time. When you call `setClass()`, you are registering a class definition in a (hidden) global variable. As with all state-modifying functions you need to use `setClass()` with care. It's possible to create invalid objects if you redefine a class after already having instantiated an object:
 
 ```{r, error = TRUE}
-setClass("A", slots = list(x = "numeric"))
+setClass("A", slots = c(x = "numeric"))
 a <- new("A", x = 10)
 
-setClass("A", slots = list(a_different_slot = "numeric"))
+setClass("A", slots = c(a_different_slot = "numeric"))
 a
 ```
 
@@ -178,7 +174,7 @@ As in S3, it's not necessary to provide a helper function, but you should, if ne
 
 ```{r}
 setClass("Factor", 
-  slots = list(levels = "character"),
+  slots = c(levels = "character"),
   contains = "integer"
 )
 
@@ -192,41 +188,52 @@ Note that this example uses another form of `new()`: unnnamed arguments are take
 
 ### Validator
 
-It's possible to use the built-in `setValidity()` function to define a validator. I do not recommend using this feature because the validation method is always run by `new()`. This means that you no longer have a cheap way to create objects if you already know the values are valid.
+S4 allows you to define a "validity" method, that check if your object is valid. You set this method by call `setValidity()`. Here's a port of our factor validity checking to S4. A validity method should a character vector containing a list of all the problem. If there are a no problems, return a character vector of length 0.
 
-JH: This advice seems somewhat dangerous; `S4Vectors::setValidity2` is used in Bioconductor to give more control when validity methods are actually run, although it is not well documented. <https://github.com/Bioconductor-mirror/S4Vectors/blob/master/R/S4-utils.R#L83>
-
-Instead, follow the same principle as for S3: create a separate validate function that you can call when needed. Let's make this concrete by porting our S3 `validate_factor()` function to S4. 
-
-```{r}
-validateFactor <- function(x) {
-  values <- x@.Data
+```{r, results = "hide"}
+setValidity("Factor", function(object) {
+  values <- object@.Data
+  probs <- character()
   
   if (!all(!is.na(values) & values > 0)) {
-    stop(
-      "All `x` values must be non-missing and greater than zero",
-      call. = FALSE
-    )
+    probs <- c(probs, "All `x` values must be non-missing and greater than zero")
   }
   
-  if (length(x@levels) < max(values)) {
-    stop(
-      "There must at least as many `levels` as possible values in `x`",
-      call. = FALSE
-    )
+  if (length(object@levels) < max(values)) {
+    probs <- c(probs, "There must at least as many `levels` as possible values in `x`")
   }
   
-  x
-}
+  probs
+})
 ```
 
-There are two main differences: 
+Note the use of the special `.Data` virtual slot: this only exists when you inherit from an S3 class or base type, and it allows you to get that underlying object. We'll come back to that in [S4 and existing code].
 
-* We use camelCase instead of snake_case for the function name
+To check if an object is valid, call `validObject()`. This takes care of turning the character into an error message.
 
-* We use `@` instead of `attr()` to access the fields of the object. 
+```{r, error = TRUE}
+f <- new("Factor", 
+  c(1, 2, 2, 1, 3, 1, 2, 2, 2, 2),
+  levels = c("a", "b", "c")
+)
+validObject(f)
 
-Note the use of the special `.Data` virtual slot: this only exists when you inherit from an S3 class or base type, and it allows you to get that underlying object.
+f@.Data[[1]] <- -1L
+validObject(f)
+
+f@.Data[[2]] <- 10L
+validObject(f)
+```
+
+`validObject()` is automatically called by the default initialiser. This is important to know for two reasons:
+
+* If you define your own intializer method, and want to check validity, you 
+  need to call `validObject()` yourself.
+  
+* If the validation method is expensive, you may want to make it optional so
+  that you can skip it in internal code when you know you are creating a
+  valid object. You could do this by creating an initializer that only calls
+  `validObject()` when a `validate` argument is `TRUE`.
 
 ### Introspection
 
@@ -388,7 +395,7 @@ The basic process remains the same: you start from the actual class supplied to 
 
 (The method graph is a powerful metaphor that helps you understand how method dispatch works. However, implementing method dispatch in this way would be rather inefficient so the actual approach that S4 uses is somewhat different. You can read the details in `?Methods_Details`)
 
-What happens if methods are the same distance? For example, imagine we've defined methods for `r emo::ji("dark_sunglasses")` and `r emo::ji("slightly_smiling_face")`, and we call the generic with `r emo::ji("sunglasses")`:
+What happens if methods are the same distance? For example, imagine we've defined methods for `r emo::ji("dark_sunglasses")` and `r emo::ji("slightly_smiling_face")`, and we call the generic with `r emo::ji("sunglasses")`. Note that there's no implementation for the `r emo::ji("no_mouth")` class, as indicated by the red double outline.
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/s4-multiple-ambig.png", dpi = 300)
@@ -396,11 +403,10 @@ knitr::include_graphics("diagrams/s4-multiple-ambig.png", dpi = 300)
 
 This is called an __ambiguous__ method, and in diagrams I'll illustrate it with a thick dotted border. When this happens in R, you'll get a warning, and one of the two methods is basically picked at random (it uses the method that comes first in the alphabet). When you discover ambiguity you should always resolve it by providing a more precise method:
 
-JH: You never mention that double red methods in the diagrams are those without a definition.
-
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/s4-multiple-ambig-2.png", dpi = 300)
 ```
+
 
 The fallback "ANY" method still exists but the rules are little more complex. As indicated by the wavy dotted lines, the "ANY" method is always considered further away than method for a real class. This means that it will never contribute to ambiguity.
 
@@ -476,7 +482,7 @@ If an S4 object inherits from an S3 class or a base type, it will have a special
 RangedNumeric <- setClass(
   "RangedNumeric",
   contains = "numeric",
-  slots = list(min = "numeric", max = "numeric")
+  slots = c(min = "numeric", max = "numeric")
 )
 rn <- RangedNumeric(1:10, min = 1, max = 10)
 rn@min
@@ -504,6 +510,8 @@ Note that `setMethod()` will automatically call `setGeneric()` if the first argu
 
 ### Exercises
 
-[S4-bioconductor]: http://www.bioconductor.org/help/course-materials/2010/AdvancedR/S4InBioconductor.pdf
 [S4DA]: http://amzn.com/0387759352?tag=devtools-20
 [SO-Morgan]: http://stackoverflow.com/search?tab=votes&q=user%3a547331%20%5bs4%5d%20is%3aanswe
+[bioc-courses]: https://bioconductor.org/help/course-materials/
+[bioc-s4-class]: https://bioconductor.org/help/course-materials/2017/Zurich/S4-classes-and-methods.html
+[bioc-s4-overview]: https://bioconductor.org/packages/devel/bioc/vignettes/S4Vectors/inst/doc/S4QuickOverview.pdf
