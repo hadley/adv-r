@@ -1,18 +1,25 @@
 # Trade-offs {#oo-tradeoffs}
 
-Now that you understand the principles the underlie S3, S4, and R6 we can discuss the tradeoffs of the various systems to help you pick a system that's most likely to help you solve your problem.
+In this section of the book, you have learned about three OO systems available in R. Now that you understand the principles that underlie them, we can discuss more deeply their tradeoffs, and which system you should use to solve a given problem.
 
-Your default position should be to use S3. In R, you usually create fairly simple objects and methods for pre-existing generic functions like `print()`, `summary()`, and `plot()`. S3 is well suited to this task, and the majority of OO code that I have written in R is S3. S3 is a little quirky, but it gets the job done with a minimum of code. \index{objects!which system?} 
+Your starting position should be to use S3. S3 is simple and is used throughout base R and contributed packages. While it's far from perfect, it's idiosyncracries are well understood and their are known approaches to overcome its shortcomings. 
 
-The rest of the chapter discusses the exceptions, when S4 or R6 is more appropriate than S3.
+The rest of this chapter describes when you should use S4 or R6 instead. S3 vs S4 is a fairly brief discussion since the essence of S3 and S4 is so similar. Then we'll dive into a comparison of S3 vs R6. This is a much deep discussion since the two systems are quite different, and the way you attach similar problems can be quite different.
 
 ## S4 vs S3
 
-If you've mastered S3, S4 is relatively easy to pick up; the ideas are all the same, it is just more formal, more strict, and more verbose. 
+Once you've mastered S3, S4 is relatively easy to pick up; the ideas are all the same, it is just more formal, more strict, and more verbose. The strictness and formalism of S4 make it more suitable for problems that multiple people are working on. Because there more structure is provided by the system itself, there is less need for convention, and so you don't need as much education to contribte new code that matches existing code.
 
-If you are creating more complicated systems of interrelated objects, S4 may be more appropriate.
+Once such domain where S4 is used to good effect is Biocondcutor. Bioconductor is an ecosystem of R packages designed to solve bioinformatics problems. These are large problems that are tackled by many people spread across multiple research groups. Biocondcutor is different to CRAN:
 
-S4 is used extensively by Bioconductor packages, which need to model complicated interrelationships between biological objects. Bioconductor provides many [good resources](https://www.google.com/search?q=bioconductor+s4) for learning S4. 
+* Smaller: ~1300 packages vs ~10,000 packages (July 2017)
+
+* Focussed on one domain
+
+* Stricter review process. Required to have at least one vignette and examples 
+  in all documentation.
+  
+Bioconductor packages are not required to use S4, but most will because the key data structures (e.g. ExpressionSet, IRanges, DNAStringSet) are built using S4.
 
 ```{r, include = FALSE}
 library(Matrix)
@@ -30,23 +37,31 @@ methods <- lapply(gs@.Data, findMethods)
 n_methods <- length(unlist(methods, recursive = FALSE))
 ```
 
-In my opinion, the main challenge of using S4 effectively is designing a class graph that allows to minimise the number of methods you need to write, while still resonably understandable. One example, that shows deep use of multiple inhertiance is the Matrix package by Douglas Bates and Martin Maechler. It is designed to efficiently store and compute with many different types of sparse and dense matrices. As of version `r ver`, it defines `r n_classes` classes, `r n_generics` generic functions, and `r n_methods` methods. The package is well written and well commented, and the accompanying vignette (`vignette("Intro2Matrix", package = "Matrix")`) gives an overview of the structure of the package. 
+S4 is also a good fit when you have a complicated system of interrelated objects, and it's possible to eliminate much duplication through careful selection of methods. The best example of this sort of use is Matrix package by Douglas Bates and Martin Maechler. It is designed to efficiently store and compute with many different types of sparse and dense matrices. As of version `r ver`, it defines `r n_classes` classes, `r n_generics` generic functions, and `r n_methods` methods. To give you some idea of the complexity, a small subset of the class graph is shown in Figure \@ref(fig:matrix-classes).
 
-```{r, echo = FALSE, out.width = NULL}
+```{r matrix-classes, echo = FALSE, out.width = NULL, fig.cap= "A small subset of the Matrix class graph showing the inheritance of sparse matrices. Each concrete class inherits from two virtual parents: one that describes how the data is stored (C = column oriented, R = row oriented, T = tagged) and one that describes any restriction on the matrix (s = symmetric, t = triangle, g = general)"}
 knitr::include_graphics("diagrams/s4-matrix-dsparseMatrix.png", dpi = 300)
 ```
 
-In my opinon, the biggest reason to avoid is S4 is the lack of excellent documentation. The documentation for S4 is scattered over multiple man pages, books, and websites. S4 is a complex system that can be challenging to use effectively in practice. It deserves a book length treatment, but that book does not (yet) exist. (The documentation for S3 is no better, but because S3 is much simpler the lack is less painful.)
+This problem domain is a good fit for S4 because there are often computational shortcuts for specific types of sparse matrix. S4 makes it easy to specify a general method that works for all inputs, and then provide a selection of more specialised computations where the specific data structures allow for a more efficient implementation.
+
+The biggest challenge to using S4 is the combination of increased complexity and absence of a single place to learn. The documentation for S4 is scattered over multiple man pages, books, and websites. S4 is a complex system that can be challenging to use effectively in practice. It deserves a book length treatment, but that book does not (yet) exist. (The documentation for S3 is no better, but because S3 is much simpler the lack is less painful.)
 
 ## R6 vs S3
 
-There are two big differences between S3 and R6 and most other modern programming languages: mutability and namespacing. These are trade-offs, and like all tradeoffs they have pros and cons.
+There are three primary differences between S3 and R6:
+
+* mutability 
+* namespacing
+* privacy
+
+And these lead to three consequences for API design:
+
+* Threading state
+* Modelling real-world
+* Piping vs. method chaining.
 
 In encapsulated OO, you should consider carefully when you need a new class; but you should create methods freely. In generic function OO, you should carefully consider when you need a new generic; but you should create classes freely.
-
-If you've programmed in a mainstream OO language, RC will seem very natural. But because they can introduce side effects through mutable state, they are harder to understand. For example, when you call `f(a, b)` in R you can usually assume that `a` and `b` will not be modified. But if `a` and `b` are RC objects, they might be modified in the place. Generally, when using RC objects you want to minimise side effects as much as possible, and use them only where mutable states are absolutely required. The majority of functions should still be "functional", and free of side effects. This makes code easier to reason about and easier for other R programmers to understand.
-
-
 
 ### Namespacing
 
@@ -70,15 +85,67 @@ The reason that this works well is in data analyses you often want to do the sam
 
 ### Mutability
 
-Threading state.
+If you've programmed in a mainstream OO language, RC will seem very natural. But because they can introduce side effects through mutable state, they are harder to understand. For example, when you call `f(a, b)` in R you can usually assume that `a` and `b` will not be modified. But if `a` and `b` are RC objects, they might be modified in the place. Generally, when using RC objects you want to minimise side effects as much as possible, and use them only where mutable states are absolutely required. The majority of functions should still be "functional", and free of side effects. This makes code easier to reason about and easier for other R programmers to understand.
 
-### Piping vs. method chaining {#tradeoffs-pipe}
+It's possible to get the best of both worlds. Use R6 internally, but don't expose.
 
-Method chaining achieves similar goals to the pipe operator (`%>%`) in R. The primary advantage of method chaining is that you get useful autocomplete; the primary disadvantage is that only the creator of the class can add new methods.
+### Privacy
 
-This is also supports the use of pipes. In contrast to method chaining (where only the class author can add a new method), anyone can write a function that works in a chain, and it will do the right thing. This is a small but pervasive tension that in python tends to lead to large monolithic packages.
+### Threading state
 
-### Stack
+For example, imagine you want to create a stack of objects. There are two main methods for a stack: push adds a new object to the top of the stack, and pop removes it. The implementation of `stack` in S3 is fairly simple:
+
+```{r}
+new_stack <- function(items = list()) {
+  structure(list(items = items), class = "stack")
+}
+length.stack <- function(x) length(x$items)
+
+push <- function(x, y) {
+  x$items[length(x) + 1] <- y
+  x
+}
+```
+
+Until we get to `pop()`. Pop is challenging because it has to both return a value (the object at the top of the stack), and have a side-effect (remove that object from that top). How can we do this in S3, where we can modify the input object? We need to return two things: the value, and the updated object:
+
+```{r}
+pop <- function(x) {
+  n <- length(x)
+  item <- x$items[[n]]
+  x$items <- x$items[-n]
+  
+  list(item = item, x = x)
+}
+```
+
+(Note that I've chosen not to make `push()` and `pop()` generic because there currently aren't any other data structures that use them.)
+
+This leads to rather awkward usage:
+
+```{r}
+s <- new_stack()
+s <- push(s, 10)
+s <- push(s, 20)
+
+out <- pop(s)
+out$item
+s <- out$x
+s
+```
+
+This problem is known as __threading state__ or __accumulator programming__,  because now matter how deeply the `pop()` is called, you have to feed the modified stack object all the way back to where the stack lives.
+
+One way that other FP languages deal with this challenge is to expose a "multiple assign" (destructing bind) that allows you to assign multiple values in a single step. The zeallot R package, by Nathan and Paul Teetor, provides multi-assign for R: `%<-%`. This makes the code somewhat more elegant.
+
+```{r}
+library(zeallot)
+
+c(value, s) %<-% pop(s)
+value
+```
+
+Compare to an R6 implementation. The implementation of the class is basically identical: only the structure of the methods has changed. The main difference is in `$pop()`. Because the object is mutable, we can modify the object itself, and don't need to return it.
 
 ```{r}
 Stack <- R6::R6Class("Stack", list(
@@ -96,38 +163,32 @@ Stack <- R6::R6Class("Stack", list(
     length(self$items)
   }
 ))
-
-new_stack <- function(items = list()) {
-  structure(list(items = items), class = "stack")
-}
-
-length.stack <- function(x) length(x$items)
-
-push <- function(x, y) UseMethod("push")
-push.stack <- function(x, y) {
-  x$items[length(x) + 1] <- y
-  x
-}
-
-pop <- function(x) UseMethod("pop")
-pop.stack <- function(x) {
-  n <- length(x)
-  item <- x$items[[n]]
-  x$items <- x$items[-n]
-  
-  list(item = item, x = x)
-}
 ```
+
+This leads to 
 
 ```{r}
-library(zeallot)
-
-s <- new_stack()
-s <- push(s, 10)
-s <- push(s, 20)
-{value : s} %<-% pop(s)
-value
-{value : s} %<-% pop(s)
-value
+s <- Stack$new()
+s$push(10)
+s$push(20)
+s$pop()
 ```
 
+### The real-world
+
+Another option would be to build the S3 object on top of an environment, which has reference semantics. In general, I don't think this is a good idea because you've create an object that looks like a regular R object from the outside, but has reference semantics. Better to keep them clearly separate.
+
+This also means R6 is a more natural interface to things in the real-world which do change over time.  For example, the processx package models an external process: it does change over time, so have an S3 object is fundamentally misleading.
+
+### Piping vs. method chaining {#tradeoffs-pipe}
+
+Method chaining achieves similar goals to the pipe operator (`%>%`) in R. The primary advantage of method chaining is that you get useful autocomplete; the primary disadvantage is that only the creator of the class can add new methods.
+
+```{r}
+s$
+  push(10)$
+  push(20)$
+  pop()
+```
+
+This is also supports the use of pipes. In contrast to method chaining (where only the class author can add a new method), anyone can write a function that works in a chain, and it will do the right thing. This is a small but pervasive tension that in python tends to lead to large monolithic packages.
