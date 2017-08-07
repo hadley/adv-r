@@ -233,6 +233,133 @@ hadley4$name
 
 The distinction between public and private fields is important when you create complex networks of classes, and you want to make it as clear as possible what it's ok for others to access. Anything that's private can be more easily refactored because you know others aren't relying on it. Private methods tend to be more important in other programming langauges compared to R because the object hierarchies in R tend to be simpler.
 
+### Active fields
+Public fields allows direct access to the data they contains. There is no control, or validation, when their value is being modified, so their use can be inherently unsafe (in the sense that your program could fail). An alternative to this is to implement specific setter and getter method for values while keeping the actual value private. As an example, we could add a job title to the Person class. As this could be subject to change we would like users to be able to change it after the object has been created, but we want to be able to ensure that only a string can be added to the field.
+
+```{r}
+Person <- R6Class("Person", 
+  public = list(
+    initialize = function(name, age = NA, job = NA) {
+      private$name <- name
+      private$age <- age
+      private$job <- job
+    },
+    print = function(...) {
+      cat("Person: \n")
+      cat("  Name: ", private$name, "\n", sep = "")
+      cat("  Age:  ", private$age, "\n", sep = "")
+      cat("  job:  ", private$job, "\n", sep = "")
+    },
+    set_job = function(title) {
+      stopifnot(length(title) == 1)
+      stopifnot(is.character(title))
+      private$job <- title
+      invisible(self)
+    },
+    get_job = function() {
+      private$job
+    }
+  ),
+  private = list(
+    age = NA,
+    name = NULL,
+    job = NA
+  )
+)
+
+hadley5 <- Person$new("Hadley")
+hadley5$set_job("R programmer")
+hadley5$get_job()
+```
+
+While this provides a lot of control, it can become cumbersome to write separate setter and getter methods for each field. Furthermore, it masks the fact that the user is dealing with a field. An alternative approach is to use active fields, which are fields that calls a function when they are accessed and modified. Let's rewrite the class above.
+
+```{r}
+Person <- R6Class("Person", 
+  public = list(
+    initialize = function(name, age = NA, job = NA) {
+      private$name <- name
+      private$age <- age
+      private$JOB <- job
+    },
+    print = function(...) {
+      cat("Person: \n")
+      cat("  Name: ", private$name, "\n", sep = "")
+      cat("  Age:  ", private$age, "\n", sep = "")
+      cat("  job:  ", private$JOB, "\n", sep = "")
+    }
+  ),
+  active = list(
+    job = function(value) {
+      if (missing(value)) return(private$JOB)
+      stopifnot(length(value) == 1)
+      stopifnot(is.character(value))
+      private$JOB <- value
+    }
+  ),
+  private = list(
+    age = NA,
+    name = NULL,
+    JOB = NA
+  )
+)
+
+hadley6 <- Person$new("Hadley", job = "R programmer")
+hadley6$job
+hadley6$job <- "Bartender"
+try(hadley6$job <- 10)
+```
+
+As can be seen the `job` field acts like any other field, except that it now contains its own validation logic. There is no limit to the code that can be put into the function of an active field. They can be used to provide read-only values as well as access to and modification of virtual values. As a last example, the `Person` class can be rewritten to make age read-only and provide an active field for the full name.
+
+```{r}
+Person <- R6Class("Person", 
+  public = list(
+    initialize = function(first_name, last_name, age = NA, job = NA) {
+      private$first_name <- first_name
+      private$last_name <- last_name
+      private$AGE <- age
+      private$JOB <- job
+    },
+    print = function(...) {
+      cat("Person: \n")
+      cat("  Name: ", private$last_name, ', ', private$first_name, "\n", sep = "")
+      cat("  Age:  ", private$AGE, "\n", sep = "")
+      cat("  job:  ", private$JOB, "\n", sep = "")
+    }
+  ),
+  active = list(
+    job = function(value) {
+      if (missing(value)) return(private$JOB)
+      stopifnot(length(value) == 1)
+      stopifnot(is.character(value))
+      private$JOB <- value
+    },
+    age = function() {
+      private$AGE
+    },
+    full_name = function(value) {
+      if (missing(value)) return(paste(private$first_name, private$last_name))
+      all_names <- strsplit(value, ' ')[[1]]
+      private$first_name <- all_names[1]
+      private$last_name <- all_names[2]
+    }
+  ),
+  private = list(
+    AGE = NA,
+    first_name = NULL,
+    last_name = NULL,
+    JOB = NA
+  )
+)
+
+hadley7 <- Person$new("Hadley", "Wickham", age = 10)
+hadley7$age
+try(hadley7$age <- 20)
+hadley7$full_name <- "John Doe"
+hadley7
+```
+
 ### Inheritance
 
 To inherit behaviour from an existing class, provide the class object to the `inherit` argument:
