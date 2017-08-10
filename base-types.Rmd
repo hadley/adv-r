@@ -1,49 +1,64 @@
 # Base types {#base-types}
 
-Underlying every R object is a C structure (or struct) that describes how that object is stored in memory. The struct includes the contents of the object, the information needed for memory management, and, most importantly for this section, a __type__. This is the __base type__ of an R object.
+Underlying every R object is a C structure (or struct) that describes how that object is stored in memory. The struct includes the contents of the object, the information needed for memory management, and, most importantly for this section, a __type__. This is the __base type__ of an R object. 
 
 Base types are not really an object system because only the R core team can create new types. Functions that behave differently for different base types are almost always written in C, where dispatch occurs using switch statements (e.g., `switch(TYPEOF(x))`). As a result, new base types are added very rarely: the most recent change, in 2011, added two exotic types that you never see in R, but are useful for diagnosing memory problems (`NEWSXP` and `FREESXP`). Prior to that, the last type added was a special base type for S4 objects (`S4SXP`) in 2005. \indexc{SEXP} \index{base types} \index{objects!base types}
 
-Even if you never write C code, it's important to understand base types because everything else is built on top of them: S3 objects can be built on top of any base type, S4 objects use a special base type, and R6 objects are a combination of S3 and environments (another base type). To see if an object is a pure base type, i.e., it doesn't also have S3, S4, or R6 behaviour, check that `is.object(x)` returns `FALSE`.
+It's important to understand the base types because everything else is built on top of them: S3 objects can be built on top of any base type, S4 objects use a special base type, and R6 is built on top of the environment base type. S3 and S4 also need to interact with the base type system, so we'll need some vocab. The precision of distinguishing between and S3 object and it's underlying base type will also be useful.
 
-## Types
+## Types in R
 
-In [data structures] you learned about the most important set of base types, the vectors (logical, integer, real, complex, character, list, and raw). Other important types are:
-
-Show type hierarchy again. Numeric, atomic vector and vector, are concepts or implicit virtual super classes.
-
-* Functions, including primitive and special functions.
-
-* Environments.
-
-* Symbols and pairlists, used to represent the "abstract syntax tree"
-  of parsed R code..
-
-In total, there are XXX base types, but it's not important to understand most of them unless you are writing C code.
-
-You can determine an object's base type with `typeof()`:  \indexc{typeof()} 
+You can determine the base type of an object with `typeof()`:  \indexf{typeof}
 
 ```{r}
-f <- function() {}
-typeof(f)
-
-typeof(sum)
+typeof(mean)
+typeof(mtcars)
 ```
+
+You can see if an object is a pure base type, i.e., it doesn't also have S3, S4, or R6 behaviour, with `is.object(x)`:
+
+```{r}
+is.object(list())
+is.object(mtcars)
+```
+
+You may have heard of `mode()` and `storage.mode()`. I recommend ignoring these functions because they're just aliases of the names returned by `typeof()`, and exist solely for S compatibility. Read their source code if you want to understand exactly what they do. \indexc{mode()}
+
+### The is functions
 
 Be careful with the `is.` functions as they use a different set of naming conventions:
 
 ```{r}
-is.function(f)
+is.function(mean)
 is.primitive(sum)
 ```
 
 Generally, "is" functions that check if an object is a specific type are ok. "is" functions that check for a family of types are often surprising. For example, `is.atomic(NULL)` is true, and as well as checking that an object is a vector, `is.vector()` also checks that it has no attributes apart from names.
 
-Instead use rlang.
+* Specific base type: `is.call()`, `is.character()`, `is.complex()`, 
+  `is.double()`, `is.environment()`, `is.expression()`, `is.integer()`,
+  `is.list()`, `is.logical()`, `is.name()`, `is.null()`, `is.pairlist()`,
+  `is.raw()`, `is.symbol()`
 
-You may have heard of `mode()` and `storage.mode()`. I recommend ignoring these functions because they're just aliases of the names returned by `typeof()`, and exist solely for S compatibility. Read their source code if you want to understand exactly what they do. \indexc{mode()}
+* Combination of base types: `is.atomic()`, `is.function()`,
+  `is.language()`, `is.primitive()`, `is.recursive()`
 
-### Numeric
+* Has an S3 class: `is.data.frame()`, `is.factor()`, `is.mts()`, 
+  `is.numeric_version()`, `is.ordered()`, `is.package_version()`, `is.qr()`, 
+  `is.raster()`, `is.relistable()`, `is.stepfun()`, `is.table()`, `is.ts()`,
+  `is.tskernel()`, 
+
+* Check attributes: `is.array()`, `is.leaf()`, `is.matrix()`, `is.vector()`
+
+* Vectorised math ops: `is.finite()`, `is.infinite()`, `is.na()`, `is.nan()`
+
+* Finally there are a bunch of special purpose functions that don't 
+  fall into any other category: `is.element(x, y)`, `is.empty.model()`
+  `is.loaded()`, `is.object()`, `is.R()`, `is.single()`, `is.unsorted()`
+
+One, `is.numeric()`, is sufficiently special that it gets it's own section.
+
+### The numeric "type"
 
 We need a little extra discussion of the numeric "type" because it's used in three different ways in different places in R.
 
@@ -74,12 +89,12 @@ We need a little extra discussion of the numeric "type" because it's used in thr
 
 Finally, there are few places in which R uses "real" instead of double; `NA_real_` is the one place that you're likely to encounter this in practice.
 
-## Switchpatch
+### Switchpatch
+
+If you're writing your own function and you want different behaviour based on the base type, use this pattern:
 
 ```{r}
 bytes <- function(x) {
-  # stopifnot(rlang::is_vector(x))
-  
   switch(
     typeof(x),
     integer = 4,
@@ -90,7 +105,45 @@ bytes <- function(x) {
 }
 ```
 
-## Internal generics
+We call it __switchpatch__, a portmanteau of switch and dispatch.
 
-Some S3 generics, like `[`, `sum()`, and `cbind()`, don't call `UseMethod()` because they are implemented in C. Instead, they call the C functions `DispatchGroup()` or `DispatchOrEval()`. These functions are called __internal generics__, because they do dispatch internally, in C code. Internal generics only exist in base R, so you can not create an internal generic in a package.
+## Types in C
 
+The internal types, or formally the SEXPTYPE, are defined in C code by an enum, a C progamming construct that maps strings to integers. I've reorganise the enum into blocks of related types, but you can get a rough sense of timeline of the types by looking at their associated number.
+
+```c
+typedef enum {
+  NILSXP      =  0, // NULL
+
+  // Atomic vectors
+  LGLSXP      = 10, // logical
+  INTSXP      = 13, // integer
+  REALSXP     = 14, // double
+  CPLXSXP     = 15, // complex
+  STRSXP      = 16, // character
+  RAWSXP      = 24, // raw
+  VECSXP      = 19, // list
+
+  // Language components
+  SYMSXP      =  1, // symbols/names
+  LISTSXP     =  2, // pairlists
+  CLOSXP      =  3, // functions
+  ENVSXP      =  4, // environments
+  PROMSXP     =  5, // promises
+  LANGSXP     =  6, // calls
+  SPECIALSXP  =  7, // internal functions
+  BUILTINSXP  =  8, // primitive functions
+  
+  // Internal
+  S4SXP       = 25, // S4 objects not built on existing type
+  ANYSXP      = 18, // ANY args for S4 dispatch
+  DOTSXP      = 17, // ...
+  EXPRSXP     = 20, // expression()
+  BCODESXP    = 21, // byte code
+  EXTPTRSXP   = 22, // external pointer
+  WEAKREFSXP  = 23, // weak reference
+  CHARSXP     =  9, // "scalar" string type (internal only)
+  NEWSXP      = 30, // fresh node creaed in new page
+  FREESXP     = 31, // node released by GC
+} SEXPTYPE;
+```
