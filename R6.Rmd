@@ -383,6 +383,89 @@ Note that `$add()` overrides the implementation in the superclass, but we can ac
 
 R6 only supports single inheritance: you cannot supply a vector of classes to inherit.
 
+### Share elements across all instances of a class
+
+You can make objects shareable inside all the instances of a class, i.e. a change in one class instance will be reflected in all the instances of this class. For this, you'll need to create an environment in the `shared` element, which is to be put inside your `private` field. 
+
+Let's compare a class which doesn't share its object:
+
+```{r}
+GrandParentClassic <- R6Class("GrandParent", 
+                   public = list(
+                     name = "Grandparent"
+                   ))
+
+grand_pa_classic <- GrandParentClassic$new()
+grand_ma_classic <- GrandParentClassic$new()
+grand_pa_classic$name == grand_ma_classic$name
+grand_pa_classic$name <- "Grand Pa"
+grand_pa_classic$name == grand_ma_classic$name
+```
+
+A change in one of the instance is not reflected inside another. That's usually the behaviour you want your objects to have. But sometime you don't. For that, you need to create the objects to be share in an environment inside the `shared` method in your `private` field. You can then access it with active binding. 
+
+```{r}
+GrandParentShared <- R6Class("GrandParent",
+                       private = list(
+                         shared = {
+                        env <- new.env()
+                        env$name <- "Grand Parent"
+                        env
+                         }
+                       ),
+                       active = list(
+                         name = function(value){
+                           if(missing(value)) return(private$shared$name)
+                           else private$shared$name <- value
+                         }
+                       )
+)
+
+grand_pa_shared <- GrandParentShared$new()
+grand_ma_shared <- GrandParentShared$new()
+
+grand_pa_shared$name == grand_ma_shared$name
+
+grand_pa_shared$name <- "Grand Pa"
+grand_pa_shared$name == grand_ma_shared$name
+```
+
+The same can goes if you want to pass shared objects along the inheritance tree:
+
+```{r}
+# Without Shared field
+PapaClassic <- R6Class("PapaClassic", 
+                inherit = GrandParentClassic)
+
+ChildClassic <- R6Class("ChildClassic", 
+                 inherit = PapaClassic)
+grand_pa_classic <- GrandParentClassic$new()
+papa_classic <- PapaClassic$new()
+child_classic <- ChildClassic$new()
+grand_pa_classic$name == papa_classic$name
+papa_classic$name == child_classic$name
+
+papa_classic$name <- "Papa"
+grand_pa_classic$name == papa_classic$name
+papa_classic$name == child_classic$name
+
+# With Shared field
+PapaShared <- R6Class("PapaShared", 
+                inherit = GrandParentShared)
+
+ChildShared <- R6Class("ChildShared", 
+                 inherit = PapaShared)
+grand_pa_shared <- GrandParentShared$new()
+papa_shared <- PapaShared$new()
+child_shared <- ChildShared$new()
+grand_pa_shared$name == papa_shared$name
+papa_shared$name == child_shared$name
+
+papa_shared$name <- "Papa"
+grand_pa_shared$name == papa_shared$name
+papa_shared$name == child_shared$name
+```
+
 ### Introspection
 
 Every R6 object has an S3 class that reflects the hierarchy of R6 classes. This means that the easiest way to determine the class (and all classes it inherits from) is to use `class()`:
