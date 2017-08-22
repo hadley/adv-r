@@ -1,23 +1,24 @@
 # Base types {#base-types}
 
-To talk about objects and OOP in R we need to first deal with a fundamental confusion: we use the word object to mean two different things. So far in this book, we've used object in a general sense, as captured by John Chambers' summary: "Everything that exists in R is an object". However, while everything _is_ an object, not everything is "object-oriented". Most of the time, this distinction is not important. But here we need to get into the nitty gritty details so we'll use the terms __base objects__ and __OO objects__ to distinguish the categories.
+To talk about objects and OOP in R we need to first deal with a fundamental confusion: we use the word object to mean two different things. So far in this book, we've used object in a general sense, as captured by John Chambers' summary: "Everything that exists in R is an object". However, while everything _is_ an object, not everything is "object-oriented". This confusion arises because the base objects come from S, and were developed before anyone was thinking that S might need an OOP system. This means that the tools and nomenclature evolved organically without a single guiding principle.
+
+Most of the time, this distinction is not important. But here we need to get into the nitty gritty details so we'll use the terms __base objects__ and __OO objects__ to distinguish the categories. OO objects have a class. The equivalent for a base object is the __base type__.
 
 ```{r, out.width = NULL, echo = FALSE}
 knitr::include_graphics("diagrams/oo-venn.png", dpi = 300)
 ```
 
-This is one of the more confusing parts of the book because this system was not designed, but evolved over the course of many years, and many iterations of S.
-
-```{r setup}
-library(sloop)
-```
+We'll also discuss the `is.*` functions in this chapter. These functions are used for many purposes, but the reason why we discuss them here is that they are commonly used to determine if an object has a specific base type.
 
 ## Base objects vs OO objects
 
 To tell the difference between a base and OO object, use `is.object()`:
 
 ```{r}
+# A base object:
 is.object(1:10)
+
+# An OO object
 is.object(mtcars)
 ```
 
@@ -30,11 +31,7 @@ attr(1:10, "class")
 attr(mtcars, "class")
 ```
 
-Note, however, that `class()` never returns `NULL`: it's the class attribute that determines whether an object is OO or not, not the value of the `class()` _function_.  Later, we'll come back to what `class()` does return for base objects.
-
-```{r}
-class(1:10)
-```
+Note, however, that `class()` never returns `NULL`: it's the class attribute that determines whether an object is OO or not, not the value of the `class()` _function_.  
 
 While only OO objects have a class attribute, every object has a __base type__:
 
@@ -43,21 +40,34 @@ typeof(1:10)
 typeof(mtcars)
 ```
 
-This is because every OO object is built on top of a base object.
+You may have heard of `mode()` and `storage.mode()`. I recommend ignoring these functions because they just provide S compatible aliases of `typeof()`. Read the source code if you want to understand exactly what they do. \indexc{mode()}
 
-Base objects do not form an OOP system because functions that behave differently for different base types are almost always written in C, where dispatch occurs using switch statements (e.g., `switch(TYPEOF(x))`). This means only R-core can create new types. As a consequence, new base types are added very rarely. The most recent change, in 2011, added two exotic types that you never see in R, but are needed for diagnosing memory problems (`NEWSXP` and `FREESXP`). Prior to that, the last type added was a special base type for S4 objects (`S4SXP`) in 2005. \indexc{SEXP} \index{base types} \index{objects!base types}
+Base objects do not form an OOP system because functions that behave differently for different base types are primarily written in C, where dispatch occurs using switch statements. This means only R-core can create new types, and creating a new type is a lot of work. As a consequence, new base types are rarely added. The most recent change, in 2011, added two exotic types that you never see in R, but are needed for diagnosing memory problems (`NEWSXP` and `FREESXP`). Prior to that, the last type added was a special base type for S4 objects (`S4SXP`) added in 2005.
 
-## Type, class, mode, storage mode
+## Base types
 
-Above you saw 
+<!-- https://github.com/wch/r-source/blob/bf0a0a9d12f2ce5d66673dc32cd253524f3270bf/src/include/Rinternals.h#L149-L180 -->
 
-*   The vectors and NULL: NULL, logical, integer, double, complex, character,
+In total, there are 25 different base types. They are listed below, loosely grouped according to where they're discussed in this book.
+
+*   The vectors: NULL, logical, integer, double, complex, character,
     list, raw.
     
     ```{r}
     typeof(1:10)
     typeof(NULL)
     typeof(1i)
+    ```
+
+*   Functions: closure (regular R functions), special (internal functions), 
+    builtin (primitive functions) and environments
+    
+    ```{r}
+    typeof(mean)
+    typeof(sum)
+    typeof(`[`)
+    
+    typeof(globalenv())
     ```
     
 *   Language components: symbol (aka names), language (usually called calls),
@@ -68,32 +78,14 @@ Above you saw
     typeof(quote(a + 1))
     typeof(formals(mean))
     ```
-    
-*   Environments
-
-    ```{r}
-    typeof(globalenv())
-    ```
-    
-*   Functions: closure (regular R functions), special (internal functions), 
-    builtin (primitive functions).
-    
-    ```{r}
-    typeof(mean)
-    typeof(sum)
-    typeof(`[`)
-    ```
    
+ 
 *  Expressions are a special purpose data type that's only returned by 
    `parse()` and `expression()`. They are not needed in user code.
         
 *  There are a few esoteric types that are important for C code but not 
    generally available at the R level: externalptr, weakref, bytecode, S4,
    promise, "...", and any.
-
-You may have heard of `mode()` and `storage.mode()`. I recommend ignoring these functions because they just provide S compatible aliases of `typeof()`. Read the source code if you want to understand exactly what they do. \indexc{mode()}
-
-The `class()` of a base type is confusing set of rules that evolved over multiple years. Generally, it is not important except when it comes to S3 dispatch, which we'll discuss in the next section.
 
 ## The is functions
 
@@ -106,54 +98,59 @@ is.function(mean)
 is.primitive(sum)
 ```
 
-Generally, "is" functions that check if an object is a specific type are ok. "is" functions that check for a family of types are often surprising. For example, `is.atomic(NULL)` is true, and as well as checking that an object is a vector, `is.vector()` also checks that it has no attributes apart from names.
+Generally, "is" functions can be surprising because there are several different classes, they often have a few special cases, and their names are historical so don't always reflect modern usage (or the usage found in this book.)
 
-Can be suprising if you don't understand which category a function belongs to.
+The "is" functions fall into six rough classes as described below.
 
-*   Specific base types check for a single specific value of `typeof()`:
+*   A specific value of `typeof()`:
     `is.call()`, `is.character()`, `is.complex()`, 
     `is.double()`, `is.environment()`, `is.expression()`,
     `is.list()`, `is.logical()`, `is.name()`, `is.null()`, `is.pairlist()`,
     `is.raw()`, `is.symbol()`.
     
     `is.integer()` is almost in this class, but it specifically checks for the
-    absense of a class attribute containing "factor".
+    absense of a class attribute containing "factor". Note that `is.vector()`
+    is not in this group.
   
-*   Combination of base types: 
+*   A set of possible of base types: 
 
     * `is.atomic()` = logical, integer, double, characer, raw, and 
       (surprisingly) NULL.
       
     * `is.function()` = special, builtin, closure.
-    * `is.primitive()` = special, built-in
+    
+    * `is.primitive()` = special, builtin.
     
     * `is.language()` = symbol, language, expression.
     
-    * `is.recursive()` = list, language, expression
+    * `is.recursive()` = list, language, expression.
 
-*   Some functions the check attributes: `is.array()` (looks at dim), 
-    `is.leaf()`, `is.matrix()` (dim), `is.vector()` (anything except names).
-  
-    `is.vector()` is particularly confusing because you might expect it 
-    to check for 
+*   Attributes: 
 
-* Has an S3 class: `is.data.frame()`, `is.factor()`, `is.mts()`, 
-  `is.numeric_version()`, `is.ordered()`, `is.package_version()`, `is.qr()`, 
-  `is.raster()`, `is.relistable()`, `is.stepfun()`, `is.table()`, `is.ts()`,
-  `is.tskernel()`, 
+    * `is.matrix(x)` tests if `length(dim(x))` is 2.
+    
+    * `is.array(x)` tests if `length(dim(x))` is 1 or 3+.
+    
+    * `is.vector(x)` tests that `x` has no attributes apart from names.
+      It does __not__ check if an object is an atomic vector or list.
+      
+*   Has an S3 class: `is.data.frame()`, `is.factor()`, `is.numeric_version()`,
+    `is.ordered()`, `is.package_version()`, `is.qr()`, `is.table()`.
 
-* Vectorised math ops: `is.finite()`, `is.infinite()`, `is.na()`, `is.nan()`
+*   Vectorised math operation: `is.finite()`, `is.infinite()`, `is.na()`, 
+    `is.nan()`
 
-* Finally there are a bunch of special purpose functions that don't 
-  fall into any other category: `is.empty.model()` `is.loaded()`, 
-  `is.object()`, `is.R()`, `is.single()`, `is.unsorted()`. 
-  
-      `is.element()` is even more different as it takes two arguments,
-      unlike every other `is`. function.
+*   Finally there are a bunch of special purpose functions that don't 
+    fall into any other category: 
+        
+    * `is.loaded()`: tests if a C/Forton subroutine is loaded.
+    * `is.object()`: discussed above.
+    * `is.R()` and `is.single()`: are included for S+ compatibility
+    * `is.unsorted()` tests if a vector is unsorted.
+    * `is.element(x, y)` checks if `x` is an element of `y`: it's even more 
+       different as it takes two arguments, unlike every other `is`. function.
 
 One, `is.numeric()`, is sufficiently special that it gets its own section.
-
-
 
 ### The numeric "type"
 
@@ -163,24 +160,23 @@ We need a little extra discussion of the numeric "type" because it's used in thr
     `as.numeric()` is identical to `as.double()`, and `numeric()` is
     identical to `double()`.
     
+    R also occasionally uses "real" instead of double; `NA_real_` is the one 
+    place that you're likely to encounter this in practice.
+    
 1.  In S3 and S4 it is used to mean either integer or double. We'll
     talk about `s3_class()` in the next chapter:
 
     ```{r}
-    s3_class(1)
-    s3_class(1L)
+    sloop::s3_class(1)
+    sloop::s3_class(1L)
     ```
 
-1.  In some places it means an object built on a base type of integer or 
-    double that also has numeric behaviour (i.e. arithmetic makes sense and 
-    you can order by numeric values)
+1.  In `is.numeric()` it means an object built on a base type of integer or 
+    double that is not a factor (i.e. it is a number and behaves like a number).
     
     ```{r}
     is.numeric(1)
     is.numeric(1L)
-    
     is.numeric(factor("x"))
-    is.integer(factor("x"))
     ```
 
-Finally, there are few places in which R uses "real" instead of double; `NA_real_` is the one place that you're likely to encounter this in practice.
