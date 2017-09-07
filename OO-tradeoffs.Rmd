@@ -4,7 +4,7 @@ You now know about the three most important OOP toolkits available in R. Now tha
 
 When picking an OO system, I recommend that you default to S3. S3 is simple, and widely used throughout base R and CRAN. While it's far from perfect, its idiosyncracries are well understood and there are known approaches to overcome most shortcomings. If you have an existing background in programming you are likelyto lean towards R6 because it will feel familiar. I think you should resist this tendency for two reasons. Firstly, if you use R6 it's very easy to create an non-idiomatic API that will feel very odd to native R users, and will have surprising pain points because of the reference semantics. Secondly, if you stick to R6, you'll lose out on learning a new way of thinking about OOP that gives you a new set of tools for solving problems. 
 
-This chapter is divided into two parts. [S4 vs S3](#s3-s4) discusses when you should use S4 instead of S3, typically when you're working on large projects developed by teams, not individuals. [R6 vs S3](#s3-r6) discusses when you should use R6 instead of S3. This section is quite long because R6 and S3 are fundamentally different OO systems and there are a number of tradeoffs that you need to consider.
+This chapter is divided into two parts. [S4 vs S3](#s3-s4) compares S3 and S4. In brief, S4 is more formal and tends to require more upfront planning. That makes it more suitable for big projects developed by teams, not individuals. [R6 vs S3](#s3-r6) compares S3 and R6. This section is quite long because these two systems are fundamentally different and there are a number of tradeoffs that you need to consider.
 
 ## S4 vs S3 {#s3-s4}
 
@@ -40,34 +40,31 @@ The biggest challenge to using S4 is the combination of increased complexity and
 
 ## R6 vs S3  {#s3-r6}
 
-There are three primary differences between S3 and R6:
+R6 is a profoundly different OO system from S3 and S4 because it built on encapsulated objects, rather than generic functions. Additionally R6 objects have reference semantics, which means that they can be modified in place. These two big differences have a number of non-obvious consequences which we'll explore in this chapter:
 
-* In R6, methods belong to objects. In S3, methods belong to generic functions.
-  This leads to some differences around namespacing.
+* A generic is a regular function so lives in the global namespace. A R6 method 
+  belongs to an object so lives in a local namespace. This influences how we
+  think about naming.
 
-* R6 objects are mutable; they do not copy-on-modify. This makes
-  allow you to avoid a painful process called "threading state", and 
-  makes them suitable for modelling real world objects (which do change
-  over time).
+* R6's reference semantics allow methods to simultaneously return a value
+  and update the object. This solves a painful problem called "threading state".
   
-* You can use "method chaining" as an alternative way of composing multiple
-  steps in a transformation.
-  
-* In R6, you can hide data and methods from the end user in private fields.
-  In S3, you can not.
-  
+* You invoke an R6 method using `$`, which is an infix operator. If you set up
+  your methods correctly you can use chains of method calls as an alternative
+  to the pipe.
 
+(All these trade-offs apply in general to immutable functional OOP vs mutable encapsulated OOP so also serve as a discussion of the tradeoffs between S3 and OOP in languages like Python.)
 
 ### Namespacing
 
 One non-obvious difference between S3 and R6 is the "space" in which methods are found:
 
-* Generic functions are global: all packages have to share the same namespace. 
+* Generic functions are global: all packages share the same namespace. 
 * Encapsulated methods are local: methods are bound to a single object.
 
-The advantage of a global namespace is that multiple packages can use the same verbs for working with different types of objects, and in data analyses you often want to do the same thing to different types of objects. This is one reason that R's modelling system is so useful: regardless of where the model has been implemented you always work with it using the same set of tools (`summary()`, `predict()`, ...). Generic functions provide a uniform API that make it much easier to perform typical actions with a new object because there are strong naming conventions.
+The advantage of a global namespace is that multiple packages can use exactly the same verbs for working with different types of objects. Generic functions provide a uniform API that makes it easier to perform typical actions with a new object because there are strong naming conventions. This works well for data analysis because you often want to do the same thing to different types of objects. In particular, this is one reason that R's modelling system is so useful: regardless of where the model has been implemented you always work with it using the same set of tools (`summary()`, `predict()`, ...).
 
-The disadvantage of a global namespace is that forces you to think more deeply about naming. Having generics with the same name in different pakages is annyoing because it requires the user to type `::` frequently. This is challenging because function names are usually written in English, and English words have multiple meanings. The following example is confusing becaue it uses "plot" in four different ways, and three of them are different to the intent of the base `plot()` function.
+The disadvantage of a global namespace is that forces you to think more deeply about naming. You want to avoid multiple generics with the same name in different pakages because it requires the user to type `::` frequently. This can be hard because function names are usually English verbs, and verbs often have multiple meanings. Take `plot()` for example:
 
 ```{r, eval = FALSE}
 plot(data)       # plot some data
@@ -76,7 +73,7 @@ plot(land)       # create a new plot of land
 plot(movie)      # extract plot of a movie
 ```
 
-This problem doesn't occur with R6 methods because they are scoped to the object. The following code is fine, because there is no implication that the plot method of two different R6 objects means the same thing:
+Generally, you should avoid defining methods like this. Don't use homonyms of the original generic, but instead define a new generic. This problem doesn't occur with R6 methods because they are scoped to the object. The following code is fine, because there is no implication that the plot method of two different R6 objects has the same meaning:
 
 ```{r, eval = FALSE}
 data$plot()
@@ -85,51 +82,44 @@ land$plot()
 movie$plot()
 ```
 
-These considerations also apply to the arguments to the generic. S3 generics must have the same core arguments, which mean they generally have to have non-specific names like `x` or `.data`. R6 methods can vary more widely and use more evocative function names.
+These considerations also apply to the arguments to the generic. S3 generics must have the same core arguments, which mean they generally have to have non-specific names like `x` or `.data`. S3 generics generally need `...` to pass on additional arguments to methods, but this has the downside that mispelled argument names will not create an error. In comparison, R6 methods can vary more widely and use more specific and evocative argument names.
 
-Another advantage of the local namespacing is that creating an R6 method is basically free. Most encapsulated OO languages encourage you to create many small methods, each doing one thing well with an evocative name. The same advice does not apply to S3: it's still a good idea to break your code down into small, easily understood chunks, but they should not be methods, because creating a new method is expensive because you have to also create a new generic.
-
-### Mutability
-
-If you've programmed in a mainstream OO language, R6 will seem very natural. But because they can introduce side effects through mutable state, they are harder to understand. For example, when you call `f(a, b)` in R you can usually assume that `a` and `b` will not be modified. But if `a` and `b` are RC objects, they might be modified in place. Generally, when using RC objects you want to minimise side effects as much as possible, and use them only where mutable states are absolutely required. The majority of functions should still be "functional", and free of side effects. This makes code easier to reason about and easier for other R programmers to understand.
-
-It's possible to get the best of both worlds. Use R6 internally, but don't expose.
-
-Another option would be to build the S3 object on top of an environment, which has reference semantics. In general, I don't think this is a good idea because then you've created an object that looks like a regular R object from the outside, but has reference semantics. Better to keep them clearly separate.
-
-The presumption of S3 methods is that they are pure: calling the same method with the same inputs should return the same output. The presumption of R6 methods is that they are not pure: you can only expect purity if explicitly documented to be so.
-
-This also means R6 is a more natural interface to things in the real-world which do change over time. For example, the processx package models an external process: it does change over time, so to have an S3 object is fundamentally misleading.
+A secondary advantage of local namespacing is that creating an R6 method very cheap. Most encapsulated OO languages encourage you to create many small methods, each doing one thing well with an evocative name. Creating a new S3 method is more expensive, because you may also have to create a generic, and think about the naming issues described above. That means that the advice to create many small methods does not apply to S3. It's still a good idea to break your code down into small, easily understood chunks, but they should generally just be regular functions, not methods.
 
 ### Threading state
 
-For example, imagine you want to create a stack of objects. There are two main methods for a stack: push adds a new object to the top of the stack, and pop removes it. The implementation of `stack` in S3 is fairly simple:
+One challenge of programming with S3 is when you want to both return a value and modify the object. This violates our guideline that a function should either be called for its return value or for its side effects, but is necessary in a handful of cases. For example, imagine you want to create a __stack__ of objects. A stack has two main methods: 
+
+* `push()` adds a new object to the top of the stack.
+* `pop()` returns the top most value, and removes it from the stack. 
+
+The implementation of the constructor and the `push()` method is straightforward. A stack contains a list of items, and pushing an object to the stack simply appends to this list.
 
 ```{r}
 new_stack <- function(items = list()) {
   structure(list(items = items), class = "stack")
 }
-length.stack <- function(x) length(x$items)
 
 push <- function(x, y) {
-  x$items[length(x) + 1] <- y
+  x$items <- c(x$items, list(y))
   x
 }
 ```
 
-Until we get to `pop()`. Pop is challenging because it has to both return a value (the object at the top of the stack), and have a side-effect (remove that object from that top). How can we do this in S3, where we can modify the input object? We need to return two things: the value, and the updated object:
+(Note that I haven't created a real method for `push()` because making it generic would just make this example more complicated for no real benefit.)
+
+Implementing `pop()` is more challenging because it has to both return a value (the object at the top of the stack), and have a side-effect (remove that object from that top). Since we can't modify the input object in S3 we need to return two things: the value, and the updated object.
 
 ```{r}
 pop <- function(x) {
-  n <- length(x)
+  n <- length(x$items)
+  
   item <- x$items[[n]]
   x$items <- x$items[-n]
   
   list(item = item, x = x)
 }
 ```
-
-(Note that I've chosen not to make `push()` and `pop()` generic because there currently aren't any other data structures that use them.)
 
 This leads to rather awkward usage:
 
@@ -146,7 +136,7 @@ s
 
 This problem is known as __threading state__ or __accumulator programming__,  because no matter how deeply the `pop()` is called, you have to feed the modified stack object all the way back to where the stack lives.
 
-One way that other FP languages deal with this challenge is to expose a "multiple assign" (or destructing bind) that allows you to assign multiple values in a single step. The zeallot R package, by Nathan and Paul Teetor, provides multi-assign for R: `%<-%`. This makes the code more elegant.
+One way that other FP languages deal with this challenge is to provide a "multiple assign" (or destructing bind) operator that allows you to assign multiple values in a single step. The zeallot R package, by Nathan and Paul Teetor, provides multi-assign for R with `%<-%`. This makes the code more elegant, but doesn't solve the key problem:
 
 ```{r}
 library(zeallot)
@@ -155,13 +145,13 @@ c(value, s) %<-% pop(s)
 value
 ```
 
-Compare to an R6 implementation. The implementation of the class is basically identical: only the structure of the methods has changed. The main difference is in `$pop()`. Because the object is mutable, we can modify the object itself, and don't need to return it.
+An R6 implementation of a stack is simpler because `$pop()` we can modify the object in place, and return only the top-most value:
 
 ```{r}
 Stack <- R6::R6Class("Stack", list(
   items = list(),
   push = function(x) {
-    self$items[[self$length() + 1]] <- x
+    self$items <- c(self$items, x)
     invisible(self)
   },
   pop = function() {
@@ -175,7 +165,7 @@ Stack <- R6::R6Class("Stack", list(
 ))
 ```
 
-This leads to 
+This leads to more natural code:
 
 ```{r}
 s <- Stack$new()
@@ -186,24 +176,16 @@ s$pop()
 
 ### Method chaining {#tradeoffs-pipe}
 
-The local namespace of R6 methods makes it possible to implement an alternative to the pipe. Any R6 method that is primarily called for its side-effects (usually modifying the object) should return `invisible(self)`. This allows the user to chain together multiple method calls in a single expression, a technique known as __method chaining__. Method chaining is commonly used in Python and Javascript.
+The pipe, `%>%`, is useful because it provides an infix operator that makes it easy to compose functions from left-to-right. Interestingly, the pipe is not so important for R6 objects because they already use an infix operator: `$`. This allows the user to chain together multiple method calls in a single expression, a technique known as __method chaining__:
 
-This allows us to rewrite the previous code chunk as a single expression:
-
-```{r, eval = FALSE}
+```{r}
+s <- Stack$new()
 s$
   push(10)$
   push(20)$
   pop()
 ```
 
-Method chaining achieves similar goals to the pipe (`%>%`). The goal of both techniques is to allow you to read code from left-to-right, as an imperative series of actions, do this, then do that, then do something else. Each technique has strengths and weaknesses. The primary advantage of method chaining is that you can get useful autocomplete; the primary disadvantage is that only the creator of the class can add new methods (and there's no way to use multiple dispatch).
+This technique is commonly used in other programming languages, like Python and Javascript, and is made possible with one convention: any R6 method that is primarily called for its side-effects (usually modifying the object) should return `invisible(self)`. 
 
-### Privacy
-
-
-Another difference with R6 is that you can have private fields that are not easily accessible to the user. There is no way to do the same in S3. There are advantages and disadvantages to private methods and fields. On the plus side, private elements enforce a "separation of concerns" making it possible to clearly delineate what you consider to be an internal implementation detail, compared to what the user should work with. On the downside, you need to more carefully consider what to expose: the user can not easily reach inside your object and get what they want.
-
-Privacy is unambiguously good in most programming languages. But most R users are familiar with reaching inside an S3 object to get what they want.
-
-R is not as strict as other programming languages. It's contracts are not enforced by a team of lawyers. They are a hand shake between friends. 
+The primary advantage of method chaining is that you can get useful autocomplete; the primary disadvantage is that only the creator of the class can add new methods (and there's no way to use multiple dispatch).
