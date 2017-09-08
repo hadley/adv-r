@@ -1,30 +1,30 @@
 # S4
 
-The S4 system is built on the same ideas as S3 (generic functions), but provides a rigorous and strict implementation. There are three main differences between S3 and S4:
+Like S3, S4 implements functional OOP, but is much more rigorous and strict. There are three main differences between S3 and S4:
 
 * S4 classes have formal definitions provided by a call to `setClass()`.
-  An S4 class can have multiple parent classes.
+  An S4 class can have multiple parents (multiple inheritance).
   
-* The fields of an S4 object don't use attributes or named elements, but 
+* The fields of an S4 object are not attributes or named elements, but 
   instead are called __slots__ and are accessed with the special `@` operator.
   
 * Methods are not defined with a naming convention, but are instead
-  defined by a call to `setMethod()`. S4 methods can dispatch on multiple
-  arguments.
+  defined by a call to `setMethod()`. S4 generics can dispatch on multiple
+  arguments (multiple dispatch).
 
 A good overview of the motivation of S4 and its historical context can be found in @chambers-2014, <https://projecteuclid.org/download/pdfview_1/euclid.ss/1408368569>.
 
 S4 is a rich system, and it's not possible to cover all of it in one chapter. Instead, we'll focus on what you need to know to read most S4 code, and write basic S4 components. Unfortunately there is not one good reference for S4 and as you move towards more advanced usage, you will need to piece together needed information by carefully reading the documentation and performing experiments. Some good places to start are:
 
 * [Bioconductor course materials][bioc-courses], a list of all courses
-  taught by Bioconductor, a big user of S4. One recent course by Martin
+  taught by Bioconductor, a big user of S4. One recent (2017) course by Martin
   Morgan and Hervé Pagès is [S4 classes and methods][bioc-s4-class].
 
 * [S4 questions on stackoverflow][SO-Morgan] answered by Martin Morgan.
 
 * [_Software for Data Analysis_][S4DA], a book by John Chambers.
 
-All functions related to S4 live in the methods package. This package is always available when you're running R interactively, but may not be available when running R in batch mode (i.e. from `Rscript`). For this reason, it's a good idea to call `library(methods)` whenever you use S4. This also signals to the reader that you'll be using the S4 object system.
+All S4 related functions live in the methods package. This package is always available when you're running R interactively, but may not be available when running R in batch mode (i.e. from `Rscript`). For this reason, it's a good idea to call `library(methods)` whenever you use S4. This also signals to the reader that you'll be using the S4 object system.
 
 ```{r setup}
 library(methods)
@@ -52,31 +52,16 @@ Unlike S3, S4 classes have a formal definition. To define an S4 class, you must 
 
 Slots and contains can specify the names of S4 classes, S3 classes (if registered), and base types. We'll go into more detail about non-S4 classes at the end of the chapter, in [S4 and existing code].
 
-To create a class, you call `setClass()`, supplying these three properties. Lets make this concrete with an example. Here we create two classes: a person with character `name` and numeric `age`, and an `Employee` that inherits slots and methods from `Person`, adding an additional `boss` slot that must be a `Person`.
-
-<!-- FIXME: the underlying model here is of two tables 'Person' and 'Employee' in a database. The 'isa' relationship is an implicit join. You've modelled rows, which means that each instance of the class is a scalar. But R works well on vectors. Effective S4 would model columns, and each instance would contain vectors -- 'People' and 'Employees', though since R uses singular integer(), etc, then 'Person' and 'Employee' but with the understanding that these are of length 0, 1, ...
-
-setClass() returns a constructor that wraps new(); my own convention is
-
-## internal use
-.Person <- setClass("Person", ...)
-
-## public constructor, with named & typed arguments
-Person <- function(name=character(), age=numeric()) {
-    stopifnot(length(name) == length(age))  # or in validity method
-    .Person(name=name, age=age)
-}
-
--->
+To create a class, you call `setClass()`, supplying these three properties. Lets make this concrete with an example. Here we create two classes: a person with character `name` and numeric `age`, and an `Employee` that inherits slots and methods from `Person`, adding an additional `boss` slot that must be a `Person`. `setClass()` returns a low-level constructor function. The name of constructor function is prefixed with a `.` by convention.
 
 ```{r, cache = FALSE}
-setClass("Person", 
+.Person <- setClass("Person", 
   slots = c(
     name = "character", 
     age = "numeric"
   )
 )
-setClass("Employee", 
+.Employee <- setClass("Employee", 
   contains = "Person", 
   slots = c(
     boss = "Person"
@@ -84,22 +69,31 @@ setClass("Employee",
 )
 ```
 
+<!-- FIXME: the underlying model here is of two tables 'Person' and 'Employee' in a database. The 'isa' relationship is an implicit join. You've modelled rows, which means that each instance of the class is a scalar. But R works well on vectors. Effective S4 would model columns, and each instance would contain vectors -- 'People' and 'Employees', though since R uses singular integer(), etc, then 'Person' and 'Employee' but with the understanding that these are of length 0, 1, ...
+-->
+
 `setClass()` has 10 other arguments, but they are all either deprecated or not recommended. If you have existing S4 code that uses them, I'd recommend carefully reading the documentation and upgrading to modern practice.
 
-Once you have defined the class, you can create an object from that class by calling the collective constructor `new()`. The first argument gives the name of the class, and the remaining named arguments specify the values of the slots.
+We can now use the constructor to create an object from that class:
 
 ```{r}
-hadley <- new("Person", name = c("Hadley", "Charlotte"), age = c(37, NA))
+hadley <- .Person(name = "Hadley", age = 37)
 hadley
+```
+
+It's also possible to create an instance using `new()` and the name of the class. This is not recommended because it introduces some ambiguity. What happens if there are two packages that both define the `Person` class?
+
+```{r}
+hadley2 <- new("Person", name = "Hadley", age = 37)
 ```
 
 In most programming languages, class definition occurs at compile-time, and object construction occurs later, at run-time. In R, however, both definition and construction occur at run time. When you call `setClass()`, you are registering a class definition in a (hidden) global variable. As with all state-modifying functions you need to use `setClass()` with care. It's possible to create invalid objects if you redefine a class after already having instantiated an object:
 
 ```{r, error = TRUE}
-setClass("A", slots = c(x = "numeric"))
-a <- new("A", x = 10)
+.A <- setClass("A", slots = c(x = "numeric"))
+a <- .A(x = 10)
 
-setClass("A", slots = c(a_different_slot = "numeric"))
+.A <- setClass("A", slots = c(a_different_slot = "numeric"))
 a
 ```
 
@@ -125,74 +119,86 @@ You can list all available slots with `slotNames()`:
 slotNames(hadley)
 ```
 
-<!-- FIXME: introduce and use accessors here -->
+Slots are considered an internal implementation detail. This has two consequnees:
 
-As a user, you should generally not extract values out of someone else's object using `@`. The names of the slots are considered an implementation detail and may change without warning. Instead, look for a method that provides the information you want.
+* As a user, you should not reach into someone else's object with `@`, 
+  but instead, look for a method that provides the information you want.
+
+* As a developer, you should make sure that all public facing slots have
+  their own accessor methods.
+
+We'll come back how to implement accessors in [Accessors], once you've learned how S4 generics and methods work.
 
 ### Initializer
 
-`new()` is a low-level constructor so you don't need to write one yourself like in S3. However, the default behaviour has two drawbacks:
+The result of `setClass()` is a low-level constructor, which means that don't need to write one yourself (like in S3). However, the default behaviour has three drawbacks:
 
+*   The defintion of the constructor uses `...` so if you print it, you 
+    don't get any useful information about the arguments, and you can't 
+    autcomplete the arguments.
+    
+    ```{r}
+    .Person
+    ```
 
-*   If you don't supply values for the slots, `new()` will automatically 
-    supply default values based on the class of the slot:
+*   If you don't supply values for the slots, the default constructor will
+    automatically supply default values based on the class of the slot:
 
     ```{r}
-    new("Person")
+    .Person()
     ```
     
     Here, you might prefer that `name` is always required, or that `age` 
     defaults to `NA`.
     
-*   It's not possible to create a S4 object with the wrong slots or 
+*   It's not possible to create an S4 object with the wrong slots or 
     slots of the wrong type:
 
     ```{r, error = TRUE}
-    new("Person", name = "Hadley", age = "thirty")
-    new("Person", name = "Hadley", sex = "male")
+    .Person(name = "Hadley", age = "thirty")
+    .Person(name = "Hadley", sex = "male")
     ```
     
-    But it is possible to create slots with the wrong lengths:
+    But it is possible to create slots with the wrong lengths, or otherwise
+    invalid values:
     
     ```{r}
-    new("Person", age = 1:10)
+    .Person(age = 1:10)
     ```
 
-We can override the default behaviour by providing an `initialize()` method. You'll learn more about the details of creating methods in the next section, but in brief, the following code defines a `Person` method for the `initialize` generic.
+Like with S3, we resolve these issues by writing a helper function.
 
-<!-- FIXME: initialize has a complicated contract that is not easily satisfied; most experienced Bioconductor developers don't actually write initialize methods, but rather a constructor Person() that checks / etc and then calls new() (like Factor(), below). For instance, S4Vectors defines 35 classes but no initialize methods, IRanges has 85 classes and no initialize methods.
-
-A 'best practice' would be to ensure that validObject(new("Person")) succeeds. This is because, internally, the implementation of derived classes will sometimes require construction of the base class via this simple call. When modeling rows, it doesn't make sense to have a zero-length slot, but it does when modeling columns.
-
-Slot assignment triggers whole-object copies, so your style here is expensive; better to
-
-    callNextMethod(.Object, name=name, age=age, ...)
-
--->
-
-```{r, cache = FALSE}
-setMethod("initialize", "Person", function(.Object, name, age = NA_real_, ...) {
+```{r}
+Person <- function(name, age = NA_real_, ...) {
   stopifnot(length(name) == 1)
   stopifnot(length(age) == 1)
   
-  .Object@name <- name
-  .Object@age <- age
-  
-  callNextMethod(.Object, ...)
-})
+  .Person(name = name, age = age)
+}
 ```
 
-Your `intialize()` method should include named arguments for the slots whose default behaviour you want to modify. __You__ are then responsible for setting those values with `@`. You should also accept `...` and pass that on to `callNextMethod()`. This is a technical requirement that allows future subclasses to make use of your initialize method.
+This provides the behaviour that we want:
 
 ```{r, error = TRUE}
 # Name is now required
-new("Person")
+Person()
 
 # And must be length 1
-new("Person", name = letters)
+Person(name = letters)
 
 # And if not supplied, age gets a default value of NA
-new("Person", name = "Hadley")
+Person("Hadley")
+```
+
+It is also possible to achieve the same effect by implementing an `initialize()` method, but it has a complicated contract and it is very hard to get all the details right.
+
+To re-use checking code in a subclass, you can take advantage of the fact that the first argument to the contructor is the parent class.
+
+```{r}
+Employee <- function(name, age, boss) {
+  person <- Person(name = name, age = age)
+  .Employee(person, boss = boss)
+}
 ```
 
 ### Helper
@@ -370,6 +376,8 @@ setAs("Person", "Employee", function(from) {
 })
 as(mary, "Employee")
 ```
+
+### Accessors
 
 ### Introspection
 
