@@ -426,15 +426,6 @@ y1$add(10)
 y2$sum
 ```
 
-You can manually copy an R6 object by calling `$clone()`.
-
-```{r}
-y1 <- Accumulator$new() 
-y2 <- y1$clone()
-
-y1$add(10)
-y2$sum
-```
 
 There are three other less obvious consequences:
 
@@ -447,7 +438,64 @@ There are three other less obvious consequences:
 * If one of the fields is an R6 class, you must call `$new()` inside
   `$initialize()` not inside `R6Class()`.
   
-These three consequences are discussed in more detail below.
+These four consequences are discussed in more detail below.
+
+### Cloning objects
+
+You can manually copy by value an R6 object by calling `$clone()`.
+
+```{r}
+y1 <- Accumulator$new() 
+y2 <- y1$clone()
+
+y1$add(10)
+y2$sum
+```
+
+The basic `$clone()` method only copies by value methods and data. That means that if you have any nested R6 object, it will be copied by reference. For example, here is a class which creates an R6 object which contains another R6 object.
+
+```{r}
+HadleyBis<- R6Class("HadleyBis",
+  public = list(
+    hadley = NULL,
+    initialize = function() self$hadley <- Person$new("Hadley", "Wickham", age = 37)
+  )
+)
+
+original <- HadleyBis$new()
+cloned <- original$clone()
+class(original$hadley)
+
+original$hadley$full_name == cloned$hadley$full_name
+
+cloned$hadley$full_name <- "Wickham Hadley"
+original$hadley$full_name == cloned$hadley$full_name
+
+```
+
+A change in `cloned$hadley` is reflected in `original$hadley`: both refer to the same object. To override this behavior, you have to use `$clone(deep = TRUE)`. 
+
+```{r}
+original2 <- HadleyBis$new()
+cloned_deep <- original2$clone(deep = TRUE)
+
+original2$hadley$full_name == cloned_deep$hadley$full_name
+
+cloned_deep$hadley$full_name <- "Wickham Hadley"
+original2$hadley$full_name == cloned_deep$hadley$full_name
+```
+
+When `cloned_deep$hadley` is modified, `original$hadley` is not: they no longer refer to the same object.
+
+Deep clone in R6 only copies data, methods and R6 classes. You have to implement your own methods if you're working with custom environments, reference class objects, or any other kind of object with reference semantics. 
+
+Note that you can prevent your R6 class from being clonable by adding `clonable = FALSE` in your class definition. 
+
+```{r}
+NonClonable <- R6Class("NonClonable", cloneable = FALSE)
+non_clonable <- NonClonable$new()
+try(non_clonable$clone())
+```
 
 ### Reasoning
 
