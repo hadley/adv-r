@@ -280,9 +280,9 @@ There's one method that we haven't defined: `$clone()`. It's provided by R6 and 
 
 `R6Class()` has two other arguments that work similarly to `public`: `private` and `active`. `private` allows you to create components that the user can not easily access, and `active` allows you to use accessor functions to define dynamic, or active, fields.
 
-### Private fields and methods
+### Privacy
 
-With R6 you can define "private" fields and methods, elements that can only be accessed from within the class, but not from the outside. There are two things that you need to know to take advantage of private elements:
+With R6 you can define __private__ fields and methods, elements that can only be accessed from within the class, not from the outside. There are two things that you need to know to take advantage of private elements:
 
 * The `private` argument works in the same way as the `public` argument:
   you give it a named list of methods (functions) and fields (everything else).
@@ -320,11 +320,11 @@ The distinction between public and private fields is important when you create c
 
 ### Active fields
 
-Active fields make allow you to define components that look like fields from the outside, but are defined with functions, like methods, from the inside. For example, we can define a field called `x` that returns a different value every time you access it:
+Active fields make allow you to define components that look like fields from the outside, but are defined with functions, like methods. For example, we can define an active field `x`  that returns a different value every time you access it:
 
 ```{r}
 Rando <- R6::R6Class("Rando", active = list(
-  random = function() {
+  random = function(value) {
     runif(1)
   }
 ))
@@ -334,7 +334,9 @@ x$random
 x$random
 ```
 
-Activate fields are particularly useful in confunction with private fields, because they allow you to implement read-only fields, and fields that validate before setting. For example, the following code makes `age` readonly, and checks that `name` is a length 1 character vector before setting.
+Active fields are particularly useful in conjunction with privacy, because they make it possible to implement componenets that work like fields from the outside but provide additional checks. For example, you can use them to implement read-only fields or fields that validate their inputs. 
+
+Active fields are implemented using active bindings from base R. Each active binding is a function that takes a single argument: `value`. If the argument is `missing()`, the value is being retrieved; otherwise it's being modified. We can use that idea to make a read-only `age` field, and to ensure that `name` is a length 1 character vector.
 
 ```{r, error = TRUE}
 Person <- R6Class("Person", 
@@ -376,8 +378,6 @@ hadley5$age
 hadley5$age <- 20
 ```
 
-Note the structure of the active field functions: they take a single argument `value`, and branch on whether or not the argument is missing. If it's missing, the user is performing a get, and if it's not missing the user is performing a set.
-
 ### Exercises
 
 1.  How would you define a write-only field?
@@ -397,10 +397,20 @@ y1 <- Accumulator$new()
 y2 <- y1
 
 y1$add(10)
-y2$sum
+c(y1 = y1$sum, y2 = y2$sum)
 ```
 
-Instead, if you want a copy, you'll need to explicitly `$clone()` the objecg.
+Instead, if you want a copy, you'll need to explicitly `$clone()` the object:
+
+```{r}
+y1 <- Accumulator$new() 
+y2 <- y1$clone()
+
+y1$add(10)
+c(y1 = y1$sum, y2 = y2$sum)
+```
+
+(Note that `$clone()` does not recursively clone nested R6 objects. If you want that, you'll need to use `$clone(deep = TRUE)`. Note that this only clones R6 objects: if you have other fields with reference semantics (e.g. environments) you'll need to define your own `$clone()`.)
 
 There are three other less obvious consequences:
 
@@ -413,21 +423,7 @@ There are three other less obvious consequences:
 * If one of the fields is an R6 class, you must call `$new()` inside
   `$initialize()` not inside `R6Class()`.
   
-These four consequences are discussed in more detail below.
-
-### Cloning objects
-
-You can manually copy by value an R6 object by calling `$clone()`.
-
-```{r}
-y1 <- Accumulator$new() 
-y2 <- y1$clone()
-
-y1$add(10)
-y2$sum
-```
-
-The basic `$clone()` method only copies by value methods and data. That means that if you have any nested R6 object, it will be copied by reference. To also clone R6 objects contained in your object, you'll need to use `$clone(deep = TRUE)`. Note that this only clones R6 objects: if you have other fields with reference semantics (e.g. environments) you'll need to define your own `$clone()`.
+These are described in more detail below.
 
 ### Reasoning
 
@@ -457,7 +453,7 @@ That said, modifying R6 inputs can lead to substantially simpler code in some ca
 
 ### Finalizer
 
-One useful property of reference semantics is that it makes sense to think about when an R6 object is __finalised__, or when it's deleted. This doesn't make sense for S3 and S4 objects because copy-on-modify semantics mean that there may be many transient versions of an object. For example, in the following code, there are actually two factor objects: the second is created when the levels are modified, leaving the first to be destroyed at the next garbage collection (GC).
+One useful property of reference semantics is that it makes sense to think about when an R6 object is __finalised__, i.e. when it's deleted. This doesn't make sense for S3 and S4 objects because copy-on-modify semantics mean that there may be many transient versions of an object. For example, in the following code, there are actually two factor objects: the second is created when the levels are modified, leaving the first to be destroyed at the next garbage collection.
 
 ```{r}
 x <- factor(c("a", "b", "c"))
@@ -490,7 +486,7 @@ invisible(gc())
 
 ### R6 fields
 
-A final consequence of reference semantics can crop up where you don't expect it. Beware of setting a default value to an R6 class: it will be shared across all instances of the object. This is because `$new()` is only called once when you defined the class, not each time you call new.
+A final consequence of reference semantics can crop up where you don't expect it. Beware of setting a default value to an R6 class: it will be shared across all instances of the object. This is because the child object is only initialized once, when you defined the class, not each time you call new.
 
 ```{r}
 TemporaryDatabase <- R6Class("TemporaryDatabase", list(
