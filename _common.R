@@ -14,6 +14,14 @@ knitr::opts_chunk$set(
   fig.show = "hold"
 )
 
+knitr::knit_hooks$set(
+  small_mar = function(before, options, envir) {
+    if (before) {
+      par(mar = c(4.1, 4.1, 0.5, 0.5))
+    }
+  }
+)
+
 # Previously in oldbookdown -----------------------------------------------
 
 doc_type <- function() knitr::opts_knit$get('rmarkdown.pandoc.to')
