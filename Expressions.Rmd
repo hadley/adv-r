@@ -10,11 +10,7 @@ library(rlang)
 library(rlang)
 ```
 
-The structure of code is a tree. The leaves of the tree are constants and names. The branches of the tree are calls. Define graphical conventions.
-
-The AST is is usally construcuted from a string, by parsing code. The opposite operation is deparsing. But you can also modify the tree by hand, and insert any R object. This can be useful when you need to override the usual lookup rules.
-
-## Structure of expressions {#structure-of-expressions}
+## Introduction {#structure-of-expressions}
 
 To compute on the language, we first need to understand the structure of the language. That will require some new vocabulary, some new tools, and some new ways of thinking about R code. The first thing you'll need to understand is the distinction between an operation and a result: \index{expressions}
 
@@ -33,13 +29,110 @@ z
 
 `quote()` returns an __expression__: an object that represents an action that can be performed by R. (Unfortunately `expression()` does not return an expression in this sense. Instead, it returns something more like a list of expressions. See [parsing and deparsing](#parsing-and-deparsing) for more details.) \indexc{quote()}
 
-An expression is also called an abstract syntax tree (AST) because it represents the hierarchical tree structure of the code. We'll use `pryr::ast()` to see this more clearly: \index{abstract syntax tree} \indexc{ast()}
+## Tree
 
-```{r}
-ast(y <- x * 10)
+An expression is also called an abstract syntax tree (AST) because it represents the hierarchical tree structure of the code.  \index{abstract syntax tree}
+
+The following diagram illustrates the graphical conventions that we'll use, drawing a tree of `f(x, 1)`.
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/expression-simple.png", dpi = 450)
 ```
 
-There are four possible components of an expression: constants, names, calls, and pairlists.
+* The leaves of the tree are names like `f` and `x` and constants like `1` or 
+  `"a"`. Names have a purple border and rounded corners. Constants, which 
+  are atomic vectors of length one, have black borders and square corners.
+
+* Function calls make a tree-like strucutre. The call object is represented
+  by an orange circle. The first child of the call is the function: which
+  is typically a name. The second and subsequent children are the arguments.
+  Unlike many tree diagrams the order of the child is important:
+  `f(x, 1)` is not the same as `f(1, x)`.
+
+Every call in R can be written in this form. Take `y <- x * 10`, for example. It doesn't seem like it's the same form as `f(x, 1)`. That's because it uses the __infix__ operators `<-` and `*`. These are call infix because the arguments come in between the name of the function. Most functions in R are __prefix__ functions where the name of the function comes first. (Some programming languages also use __postfix__ where the name of the function comes last). In R, any infix operator can be converted to prefix form as long as you escape the name. That means that these too lines of code are equivalent:
+
+```{r}
+y <- x * 10
+`<-`(y, `*`(x, 10))
+```
+
+And yield the same AST:
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/expression-prefix.png", dpi = 450)
+```
+
+Drawing these diagrams by hand takes some time, and obviously you can't use with your own code. So to supplement them we'll also use `lobstr::ast()` which uses similar conventions.
+
+### Ambiguity and precedence
+
+These diagrams help resolve several sources of ambiguity. 
+
+First, what does `1 + 2 * 3` yield? Do you get 7 (i.e. `(1 + 2) * 3`), or 9 (i.e. `1 + (2 * 3)`). 
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/expression-ambig-order.png", dpi = 450)
+```
+
+Infix functions introduce an ambiguity in the parser in a way that prefix functions do not. Programming langauges resolve this using a set of conventions known as operator precdence.
+
+What's the difference between these three things?
+
+```{r}
+x1 <- quote(1 + 2)
+x2 <- quote(`1 + 2`)
+x3 <- quote("1 + 2")
+```
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/expression-ambig-value.png", dpi = 450)
+```
+
+While the first component of the call is a usually a symbol providing a function name, it can also be a function that returns a function (i.e. a function factory). 
+
+```{r, eval = FALSE}
+f(a, 1)
+f()(a, 1)
+f(a, 1)()
+```
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/expression-ambig-nesting.png", dpi = 450)
+```
+
+### Base R naming conventions
+
+Note that `str()` does not follow these naming conventions when describing objects. Instead, it describes names as symbols and calls as language objects:
+
+```{r}
+str(quote(a))
+str(quote(a + b))
+```
+
+Beware printing language objects because R can print different things in the same way - it's not always possible to uniquely convert a tree into text.
+
+### Exercises
+
+1.  There's no existing base function that checks if an element is
+    a valid component of an expression (i.e., it's a constant, name,
+    call, or pairlist). Implement one by guessing the names of the "is"
+    functions for calls, names, and pairlists.
+
+1.  `pryr::ast()` uses non-standard evaluation. What's its escape hatch to
+    standard evaluation?
+
+1.  What does the call tree of an if statement with multiple else conditions
+    look like?
+
+1.  Compare `ast(x + y %+% z)` to `ast(x ^ y %+% z)`. What do they
+    tell you about the precedence of custom infix functions?
+
+1.  Why can't an expression contain an atomic vector of length greater than one?
+    Which one of the six types of atomic vector can't appear in an expression?
+    Why?
+
+
+## Leaves: constants and symbols {#names}
 
 * __constants__ include the length one atomic vectors, like `"a"` or `10`,
    and `NULL`. `ast()` displays them as is. \index{constants}
@@ -66,79 +159,6 @@ There are four possible components of an expression: constants, names, calls, an
     ast(mean)
     ast(`an unusual name`)
     ```
-
-* __calls__ represent the action of calling a function. Like lists, calls are
-  recursive: they can contain constants, names, pairlists, and other calls.
-  `ast()` prints `()` and then lists the children. The first child is the
-  function that is called, and the remaining children are the function's 
-  arguments. \index{calls}
-
-    ```{r}
-    ast(f())
-    ast(f(1, 2))
-    ast(f(a, b))
-    ast(f(g(), h(1, a)))
-    ```
-
-    As mentioned in
-    [every operation is a function call](#all-calls),
-    even things that don't look like function calls still have this
-    hierarchical structure:
-
-    ```{r}
-    ast(a + b)
-    ast(if (x > 1) x else 1/x)
-    ```
-
-* __pairlists__, short for dotted pair lists, are a legacy of R's past.
-  They are only used in one place: the formal arguments of a function.
-  `ast()` prints `[]` at the top-level of a pairlist. Like calls, pairlists
-  are also recursive and can contain constants, names, and calls.
-  \index{pairlists}
-
-    ```{r}
-    ast(function(x = 1, y) x)
-    ast(function(x = 1, y = x * 2) {x / y})
-    ```
-
-Note that `str()` does not follow these naming conventions when describing objects. Instead, it describes names as symbols and calls as language objects:
-
-```{r}
-str(quote(a))
-str(quote(a + b))
-```
-
-Using low-level functions, it is possible to create call trees that contain objects other than constants, names, calls, and pairlists. The following example uses `substitute()` to insert a data frame into a call tree. This is a bad idea, however, because the object does not print correctly: the printed call looks like it should return "list" but when evaluated, it returns "data.frame". \indexc{substitute()}
-
-```{r}
-class_df <- substitute(class(df), list(df = data.frame(x = 10)))
-class_df
-eval(class_df)
-```
-
-Together these four components define the structure of all R code. They are explained in more detail in the following sections.
-
-### Exercises
-
-1.  There's no existing base function that checks if an element is
-    a valid component of an expression (i.e., it's a constant, name,
-    call, or pairlist). Implement one by guessing the names of the "is"
-    functions for calls, names, and pairlists.
-
-1.  `pryr::ast()` uses non-standard evaluation. What's its escape hatch to
-    standard evaluation?
-
-1.  What does the call tree of an if statement with multiple else conditions
-    look like?
-
-1.  Compare `ast(x + y %+% z)` to `ast(x ^ y %+% z)`. What do they
-    tell you about the precedence of custom infix functions?
-
-1.  Why can't an expression contain an atomic vector of length greater than one?
-    Which one of the six types of atomic vector can't appear in an expression?
-    Why?
-
-## Names {#names}
 
 Typically, we use `quote()` to capture names. You can also convert a string to a name with `as.name()`. However, this is most useful only when your function receives strings as input. Otherwise it involves more typing than using `quote()`. (You can use `is.name()` to test if an object is a name.) \index{names} \indexc{as.name()}
 
@@ -201,6 +221,8 @@ quote(expr =)
 
 A call is very similar to a list. It has `length`, `[[` and `[` methods, and is recursive because calls can contain other calls. The first element of the call is the function that gets called. It's usually the _name_ of a function: \index{calls}
 
+### Subsetting
+
 ```{r}
 x <- quote(read.csv("important.csv", row.names = FALSE))
 x[[1]]
@@ -224,6 +246,12 @@ x$row.names
 names(x)
 ```
 
+You can use `[` to, but removing the first element is not usually useful:
+
+```{r}
+x[-1]
+```
+
 The length of a call minus 1 gives the number of arguments:
 
 ```{r}
@@ -232,6 +260,30 @@ length(x) - 1
 
 There are many ways to supply the arguments to a function. 
 To work around this problem, pryr provides `standardise_call()`. It uses the base `match.call()` function to convert all positional arguments to named arguments: \indexc{standardise\_call()} \indexc{match.call()}
+
+### Constructing
+
+```{r}
+lang(`+`, 1, 2)
+lang(quote(`+`), 1, 2)
+lang("+", 1, 2)
+
+args <- list(1 , 2)
+lang("f", args, 3)
+lang("f", quote(list(1, 2)), 3)
+lang("f", splice(args), 3)
+```
+
+### Inlining
+
+Using low-level functions, it is possible to create call trees that contain objects other than constants, names, calls, and pairlists. The following example uses `substitute()` to insert a data frame into a call tree. This is a bad idea, however, because the object does not print correctly: the printed call looks like it should return "list" but when evaluated, it returns "data.frame". \indexc{substitute()}
+
+```{r}
+class_df <- substitute(class(df), list(df = data.frame(x = 10)))
+class_df
+eval(class_df)
+```
+
 
 ### Exercises
 
