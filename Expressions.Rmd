@@ -49,7 +49,7 @@ knitr::include_graphics("diagrams/expression-simple.png", dpi = 450)
   Unlike many tree diagrams the order of the child is important:
   `f(x, 1)` is not the same as `f(1, x)`.
 
-Every call in R can be written in this form. Take `y <- x * 10`, for example. It doesn't seem like it's the same form as `f(x, 1)`. That's because it uses the __infix__ operators `<-` and `*`. These are call infix because the arguments come in between the name of the function. Most functions in R are __prefix__ functions where the name of the function comes first. (Some programming languages also use __postfix__ where the name of the function comes last). In R, any infix operator can be converted to prefix form as long as you escape the name. That means that these too lines of code are equivalent:
+Every call in R can be written in this form. Take `y <- x * 10`, for example. It doesn't seem like it's the same form as `f(x, 1)`. That's because it uses the __infix__ operators `<-` and `*`. These are call infix because the arguments come in between the name of the function. Most functions in R are __prefix__ functions where the name of the function comes first. (Some programming languages also use __postfix__ where the name of the function comes last. Reverse polish notation. Stack based languages like ). In R, any infix operator can be converted to prefix form as long as you escape the name. That means that these too lines of code are equivalent:
 
 ```{r}
 y <- x * 10
@@ -62,7 +62,26 @@ And yield the same AST:
 knitr::include_graphics("diagrams/expression-prefix.png", dpi = 450)
 ```
 
-Drawing these diagrams by hand takes some time, and obviously you can't use with your own code. So to supplement them we'll also use `lobstr::ast()` which uses similar conventions.
+Drawing these diagrams by hand takes some time, and obviously you can't use with your own code. So to supplement them we'll also use `lobstr::ast()` which uses similar conventions: calls are displayed as squares. If you're running in an interactive terminal, you'll see calls in orange and names in purple.
+
+```{r}
+lobstr::ast(y <- x * 10)
+```
+
+Note that `ast()` supports "unquoting" with `!!` (pronounced bang-bang). We'll talk about this in detail later on but for now notice that this is useful if you've already captured the expression in a variable.
+
+```{r}
+lobstr::ast(z)
+lobstr::ast(!!z)
+```
+
+Strings are always surrounded in quotes so you can reliably distinguish from symbols:
+
+```{r}
+lobstr::ast(y <- "y")
+```
+
+For more complex code snippets, you can use RStudio's tree viewer to interactively explore. `View(expr(x))`.
 
 ### Ambiguity and precedence
 
@@ -74,19 +93,19 @@ First, what does `1 + 2 * 3` yield? Do you get 7 (i.e. `(1 + 2) * 3`), or 9 (i.e
 knitr::include_graphics("diagrams/expression-ambig-order.png", dpi = 450)
 ```
 
-Infix functions introduce an ambiguity in the parser in a way that prefix functions do not. Programming langauges resolve this using a set of conventions known as operator precdence.
-
-What's the difference between these three things?
+Infix functions introduce an ambiguity in the parser in a way that prefix functions do not. Programming langauges resolve this using a set of conventions known as __operator precedence__. We can reveal the answer using `ast()`: 
 
 ```{r}
-x1 <- quote(1 + 2)
-x2 <- quote(`1 + 2`)
-x3 <- quote("1 + 2")
+lobstr::ast(1 + 2 * 3)
 ```
 
-```{r, echo = FALSE, out.width = NULL}
-knitr::include_graphics("diagrams/expression-ambig-value.png", dpi = 450)
+A similar ambiguity occurs when adding multiple numbers. Is `1 + 2 + 3` parsed as `(1 + 2) + 3` or `1 + (2 + 3)`. We can also see the order in which addition happens:
+
+```{r}
+lobstr::ast(1 + 2 + 3)
 ```
+
+This is called __left-associativity__ because the the operations on the left are evaluated first. The order of arithmetic doesn't usually matter because `x + y == y + x`. It does matter for packages like ggplot2 which override arithmetic.
 
 While the first component of the call is a usually a symbol providing a function name, it can also be a function that returns a function (i.e. a function factory). 
 
@@ -98,6 +117,20 @@ f(a, 1)()
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/expression-ambig-nesting.png", dpi = 450)
+```
+
+### The treachery of images
+
+What's the difference between these three things? 
+
+```{r}
+x1 <- quote(1 + 2)
+x2 <- quote(`1 + 2`)
+x3 <- quote("1 + 2")
+```
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/expression-ambig-value.png", dpi = 450)
 ```
 
 ### Base R naming conventions
@@ -112,6 +145,10 @@ str(quote(a + b))
 Beware printing language objects because R can print different things in the same way - it's not always possible to uniquely convert a tree into text.
 
 ### Exercises
+
+1.  Which arithmetic operation is right associative?
+
+1.  Why does `x1 <- x2 <- x3 <- 0` work? There are two reasons.
 
 1.  There's no existing base function that checks if an element is
     a valid component of an expression (i.e., it's a constant, name,
@@ -272,6 +309,34 @@ args <- list(1 , 2)
 lang("f", args, 3)
 lang("f", quote(list(1, 2)), 3)
 lang("f", splice(args), 3)
+```
+
+### The treachery of images
+
+```{r}
+x1 <- lang("+", 1, lang("+", 2, 3))
+x1
+lobstr::ast(!!x1)
+
+x2 <- quote(1 + (2 + 3))
+x2
+lobstr::ast(!!x2)
+```
+
+```{r}
+x1 <- lang("f", 1:10)
+x1
+lobstr::ast(!!x1)
+
+x2 <- lang("f", quote(1:10))
+x2
+lobstr::ast(!!x2)
+```
+
+```{r}
+x1 <- quote(!!x)
+x1
+lobstr::ast(!!x1)
 ```
 
 ### Inlining
