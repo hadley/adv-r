@@ -2,92 +2,101 @@
 
 ```{r setup, include = FALSE}
 source("common.R")
-library(pryr)
-library(rlang)
 ```
 
-```{r}
-library(rlang)
-```
+To compute on the language, we first need to understand its structure. That requires some new vocabulary, some new tools, and some new ways of thinking about R code. The first thing you'll need to understand is the distinction between an operation and a result: \index{expressions}
 
-## Introduction {#structure-of-expressions}
+Take this code, which takes a variable `x` multiplies it by 10 and saves the result to a new variable called `y`. It doesn't work because we haven't defined a variable called `x`:
 
-To compute on the language, we first need to understand the structure of the language. That will require some new vocabulary, some new tools, and some new ways of thinking about R code. The first thing you'll need to understand is the distinction between an operation and a result: \index{expressions}
-
-```{r}
-x <- 4
+```{r, error = TRUE}
 y <- x * 10
-y
 ```
 
-We want to distinguish the action of multiplying `x` by 10 and assigning that result to `y` from the actual result (40). You can capture the action with `quote()`:
+It would be nice if we could capture this intent, without actually trying to do it. How can we separate our description of the action from actually performing it? One way is to use `base::quote()`: it captures the code without executing it.
 
 ```{r}
 z <- quote(y <- x * 10)
 z
 ```
 
-`quote()` returns an __expression__: an object that represents an action that can be performed by R. (Unfortunately `expression()` does not return an expression in this sense. Instead, it returns something more like a list of expressions. See [parsing and deparsing](#parsing-and-deparsing) for more details.) \indexc{quote()}
+`quote()` returns a quoted __expression__: an object that represents an action that can be performed by R. In this chapter, you'll learn about the structure of those expressions which will also help you understand how R executes code. Later, we'll learn about `eval()` which allows you to take such an expression and actually evaluate it:
 
-## Tree
+```{r}
+x <- 4
+eval(z)
+y
+```
 
-An expression is also called an abstract syntax tree (AST) because it represents the hierarchical tree structure of the code.  \index{abstract syntax tree}
+(Unfortunately `expression()` does not return an expression in this sense. Instead, it returns something more like a list of expressions. See [parsing and deparsing](#parsing-and-deparsing) for more details.) \indexc{quote()}
 
-The following diagram illustrates the graphical conventions that we'll use, drawing a tree of `f(x, 1)`.
+## Abstract syntax tree
+
+An expression is also called an abstract syntax tree (AST) because it represents the hierarchical tree structure of the code. To make that more obvious we're going introduces some graphical conventions, illustrated with the very simple call `f(x, "y", 1)`. \index{abstract syntax tree}
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/expression-simple.png", dpi = 450)
 ```
 
-* The leaves of the tree are names like `f` and `x` and constants like `1` or 
-  `"a"`. Names have a purple border and rounded corners. Constants, which 
-  are atomic vectors of length one, have black borders and square corners.
+* The leaves of the tree are either __symbols__, like `f` and `x`, or 
+  __constants__ like `1` or `"y"`. Symbols have a purple border and rounded 
+  corners. Constants, which are atomic vectors of length one, have black 
+  borders and square corners. Strings are always surrounded in quotes so
+  you can more easily distinguish from symbols - more on that important
+  difference later.
 
-* Function calls make a tree-like strucutre. The call object is represented
-  by an orange circle. The first child of the call is the function: which
-  is typically a name. The second and subsequent children are the arguments.
-  Unlike many tree diagrams the order of the child is important:
-  `f(x, 1)` is not the same as `f(1, x)`.
+* Function __calls__ define the hierarchy of the tree. Calls are shown
+  with an orange square. The first child is the function that gets called,
+  here `f`. The second and subsequent children are the arguments. Unlike many 
+  tree diagrams the order of the children is important: `f(x, 1)` is not the 
+  same as `f(1, x)`.
 
-Every call in R can be written in this form. Take `y <- x * 10`, for example. It doesn't seem like it's the same form as `f(x, 1)`. That's because it uses the __infix__ operators `<-` and `*`. These are call infix because the arguments come in between the name of the function. Most functions in R are __prefix__ functions where the name of the function comes first. (Some programming languages also use __postfix__ where the name of the function comes last. Reverse polish notation. Stack based languages like ). In R, any infix operator can be converted to prefix form as long as you escape the name. That means that these too lines of code are equivalent:
+Every call in R can be written in this form, even if it doesn't look like it at first glance. Take `y <- x * 10`: what function is being called? It not as easy to spot as `f(x, 1)` because it uses __infix__ operators. These are called infix because the name of the function is __in__between the arguments (and so an infix function can only have two arguments). Most functions in R are __prefix__ functions where the name of the function comes first. 
+
+(Some programming languages use __postfix__ form where the name of the function comes last. If you ever used an old HP calculator, you might have fallen in love with reverse Polish notation, postfix notation for algebra. There is also a family of "stack"-based programming languages descending from Forth which takes this idea as far as it might possibly go.)
+
+In R, any infix call can be converted to a prefix call if you you escape the name with backticks. That means that these two lines of code are equivalent:
 
 ```{r}
 y <- x * 10
 `<-`(y, `*`(x, 10))
 ```
 
-And yield the same AST:
+And yield the same AST, which looks like this:
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/expression-prefix.png", dpi = 450)
 ```
 
-Drawing these diagrams by hand takes some time, and obviously you can't use with your own code. So to supplement them we'll also use `lobstr::ast()` which uses similar conventions: calls are displayed as squares. If you're running in an interactive terminal, you'll see calls in orange and names in purple.
+Drawing these diagrams by hand takes me some time, and obviously you can't rely on me to draw diagrams for own code. So to supplement the hand-drawn trees, we'll also use some computed-drawn trees made by `lobstr::ast()`. `ast()` tries to make trees as similar as possible to my hand drawn trees, while respecting the limitations of the console. I don't think they're quite as easy to visually parse, but they're not too bad. If you're running in an interactive terminal, you'll see calls in orange and names in purple.
 
 ```{r}
 lobstr::ast(y <- x * 10)
 ```
 
-Note that `ast()` supports "unquoting" with `!!` (pronounced bang-bang). We'll talk about this in detail later on but for now notice that this is useful if you've already captured the expression in a variable.
+This allows us to peak into more complex calls and see that they too have this form.
+
+```{r}
+lobstr::ast(foo <- function(x, y, z) {
+  if (x > y) {
+    z - x
+  } else {
+    z + y
+  }
+})
+```
+
+For more complex code chunks, you can use RStudio's tree viewer to interactively explore them - activate with `View(quote(y <- x * 10))`.
+
+Note that `ast()` supports "unquoting" with `!!` (pronounced bang-bang). We'll talk about this in detail later on but for now notice that this is useful if you've already captured the expression in a variable with `quote()`.
 
 ```{r}
 lobstr::ast(z)
 lobstr::ast(!!z)
 ```
 
-Strings are always surrounded in quotes so you can reliably distinguish from symbols:
-
-```{r}
-lobstr::ast(y <- "y")
-```
-
-For more complex code snippets, you can use RStudio's tree viewer to interactively explore. `View(expr(x))`.
-
 ### Ambiguity and precedence
 
-These diagrams help resolve several sources of ambiguity. 
-
-First, what does `1 + 2 * 3` yield? Do you get 7 (i.e. `(1 + 2) * 3`), or 9 (i.e. `1 + (2 * 3)`). 
+These diagrams help resolve several sources of ambiguity. First, what does `1 + 2 * 3` yield? Do you get 7 (i.e. `(1 + 2) * 3`), or 9 (i.e. `1 + (2 * 3)`).  Which of the two possible parse trees below does R use?
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/expression-ambig-order.png", dpi = 450)
@@ -105,32 +114,49 @@ A similar ambiguity occurs when adding multiple numbers. Is `1 + 2 + 3` parsed a
 lobstr::ast(1 + 2 + 3)
 ```
 
-This is called __left-associativity__ because the the operations on the left are evaluated first. The order of arithmetic doesn't usually matter because `x + y == y + x`. It does matter for packages like ggplot2 which override arithmetic.
+This is called __left-associativity__ because the the operations on the left are evaluated first. Now the order of arithmetic doesn't usually matter because `x + y == y + x`. However, some S3 classes define `+` in a non-associative way. For example, in ggplot2 the order of arithmetic does matter.
 
-While the first component of the call is a usually a symbol providing a function name, it can also be a function that returns a function (i.e. a function factory). 
+(These two sources of ambiguity do not exist in postfix languages which is one reason that people like them. They also don't exist in prefix languages, but you have to type a bunch of extra parentheses.)
 
-```{r, eval = FALSE}
-f(a, 1)
-f()(a, 1)
-f(a, 1)()
+R, in general, is not very sensitive to white space. There is one place, however, where it quite important:
+
+```{r}
+lobstr::ast(y <- x)
+lobstr::ast(y < -x)
 ```
+
+Finally, `ast()` can help us diambiguate things that otherwise look quite similar:
+
+```{r}
+lobstr::ast(1 + 2)
+lobstr::ast(`1 + 2`)
+lobstr::ast("1 + 2")
+```
+
+### The function component
+
+The first component of the call is a usually a symbol that resolves to a function:
+
+```{r}
+lobstr::ast(f(a, 1))
+```
+
+But it might also be a function factory, a function that when called returns another function:
+
+```{r}
+lobstr::ast(f()(a, 1))
+```
+
+And of course that function might also take arguments:
+
+```{r}
+lobstr::ast(f(a, 1)())
+```
+
+These forms are relatively rare, but it's good to be able to recognise them when they crop up. Here they are in hand-drawn trees:
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/expression-ambig-nesting.png", dpi = 450)
-```
-
-### The treachery of images
-
-What's the difference between these three things? 
-
-```{r}
-x1 <- quote(1 + 2)
-x2 <- quote(`1 + 2`)
-x3 <- quote("1 + 2")
-```
-
-```{r, echo = FALSE, out.width = NULL}
-knitr::include_graphics("diagrams/expression-ambig-value.png", dpi = 450)
 ```
 
 ### Base R naming conventions
@@ -143,6 +169,12 @@ str(quote(a + b))
 ```
 
 Beware printing language objects because R can print different things in the same way - it's not always possible to uniquely convert a tree into text.
+
+`expression()`
+
+Name and symbol used interchangeably.
+
+Language object sometimes used to refer to name or call (but not constant or pairlist).
 
 ### Exercises
 
@@ -168,6 +200,17 @@ Beware printing language objects because R can print different things in the sam
     Which one of the six types of atomic vector can't appear in an expression?
     Why?
 
+## Quasiquotation
+
+With these basics in place it's time to come back to quasiquotation.
+
+We call functions like `ast()` and `quote()` that capture their arguments without evaluating them quoting functions. 
+
+Functions that quote their arguments in rlang all also support unquoting.
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/expression-bang-bang.png", dpi = 450)
+```
 
 ## Leaves: constants and symbols {#names}
 
