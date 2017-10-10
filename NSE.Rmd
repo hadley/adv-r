@@ -699,3 +699,87 @@ Non-standard evaluation allows you to write functions that are extremely powerfu
 3.  Read the standard non-standard evaluation rules found at
     <http://developer.r-project.org/nonstandard-eval.pdf>.
 
+
+
+## Pairlists {#pairlists}
+
+Pairlists are a holdover from R's past. They behave identically to lists, but have a different internal representation (as a linked list rather than a vector). Pairlists have been replaced by lists everywhere except in function arguments. \index{pairlists}
+
+The only place you need to care about the difference between a list and a pairlist is if you're going to construct functions by hand. For example, the following function allows you to construct a function from its component pieces: a list of formal arguments, a body, and an environment. The function uses `as.pairlist()` to ensure that the `function()` has the pairlist of `args` it needs. \indexc{as.pairlist()} \indexc{make\_function()} \index{functions!creating with code}
+
+```{r, eval = FALSE}
+make_function <- function(args, body, env = parent.frame()) {
+  args <- as.pairlist(args)
+
+  eval(call("function", args, body), env)
+}
+```
+
+This function is also available in pryr, where it does a little extra checking of arguments. `make_function()` is best used in conjunction with `alist()`, the **a**rgument list function. `alist()` doesn't evaluate its arguments so that `alist(x = a)` is shorthand for `list(x = quote(a))`.
+
+```{r}
+add <- make_function(alist(a = 1, b = 2), quote(a + b))
+add(1)
+add(1, 2)
+
+# To have an argument with no default, you need an explicit =
+make_function(alist(a = , b = a), quote(a + b))
+# To take `...` as an argument put it on the LHS of =
+make_function(alist(a = , b = , ... =), quote(a + b))
+```
+
+`make_function()` has one advantage over using closures to construct functions: with it, you can easily read the source code. For example:
+
+```{r}
+adder <- function(x) {
+  make_function(alist(y =), substitute({x + y}), parent.frame())
+}
+adder(10)
+```
+
+One useful application of `make_function()` is in functions like `curve()`. `curve()` allows you to plot a mathematical function without creating an explicit R function:
+
+```{r curve-demo, fig.width = 3.5, fig.height = 2.5, small_mar = TRUE}
+curve(sin(exp(4 * x)), n = 1000)
+```
+
+Here `x` is a pronoun. `x` doesn't represent a single concrete value, but is instead a placeholder that varies over the range of the plot. One way to implement `curve()` would be with `make_function()`:
+
+```{r curve2}
+curve2 <- function(expr, xlim = c(0, 1), n = 100, 
+                   env = parent.frame()) {
+  f <- make_function(alist(x = ), substitute(expr), env)
+
+  x <- seq(xlim[1], xlim[2], length = n)
+  y <- f(x)
+
+  plot(x, y, type = "l", ylab = deparse(substitute(expr)))
+}
+```
+
+Functions that use a pronoun are called [anaphoric](http://en.wikipedia.org/wiki/Anaphora_(linguistics)) functions. They are used in [Arc](http://www.arcfn.com/doc/anaphoric.html) (a lisp like language), [Perl](http://www.perlmonks.org/index.pl?node_id=666047), and [Clojure](http://amalloy.hubpages.com/hub/Unhygenic-anaphoric-Clojure-macros-for-fun-and-profit). \index{anaphoric functions} \index{functions!anaphoric}
+
+### Exercises
+
+1.  How are `alist(a)` and `alist(a = )` different? Think about both the
+    input and the output.
+
+1.  Read the documentation and source code for `pryr::partial()`. What does it
+    do? How does it work? Read the documentation and source code for
+    `pryr::unenclose()`. What does it do and how does it work?
+
+1.  The actual implementation of `curve()` looks more like
+
+    ```{r curve3}
+    curve3 <- function(expr, xlim = c(0, 1), n = 100,
+                       env = parent.frame()) {
+      env2 <- new.env(parent = env)
+      env2$x <- seq(xlim[1], xlim[2], length = n)
+
+      y <- eval(substitute(expr), env2)
+      plot(env2$x, y, type = "l", 
+        ylab = deparse(substitute(expr)))
+    }
+    ```
+
+    How does this approach differ from `curve2()` defined above?
