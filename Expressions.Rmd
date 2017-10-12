@@ -49,7 +49,6 @@ knitr::include_graphics("diagrams/expression-simple.png", dpi = 450)
     you can more easily distinguish from symbols --- more on that important
     difference later.
 
-
 Every call in R can be written in this form, even if it doesn't look like it at first glance. Take `y <- x * 10` again: what function is being called? It not as easy to spot as `f(x, 1)` because this expression uses __infix__ form. Infix functions come **in**between their arguments (so an infix function can only have two arguments). Most functions in R are __prefix__ functions where the name of the function comes first. 
 
 (Some programming languages use __postfix__ functions where the name of the function comes last. If you ever used an old HP calculator, you might have fallen in love with reverse Polish notation, postfix notation for algebra. There is also a family of "stack"-based programming languages descending from Forth which takes this idea as far as it might possibly go.)
@@ -156,23 +155,25 @@ lobstr::ast(!!z)
 
 ### Base R naming conventions
 
-Before we go much further, we need a word of caution about the naming conventions we've used here. Unfortunately, base R does not have a consistent set of conventions that are used throughout functions and documentation. 
+Before we go much further, you need a word of caution about the naming conventions we've used here. Unfortunately, base R does not have a consistent set of conventions that are used throughout functions and documentation, and this book introduces another set of mild variations (which at least we do use consistently).
 
-Note that `str()` does not follow these naming conventions when describing objects. Instead, calls as language objects:
+* Language object is used in two senses in base R. `is.language()` defines
+  as the union of symbols, calls, and expressions; `str()` uses as synonoym
+  for call.
 
-```{r}
-str(quote(a + b))
-```
+* Symbol and name used interchangeably in base R. `as.name()` and `is.name()` 
+  are identical to `as.symbol()` and `is.symbol()`. We prefer symbol because 
+  name is too overloaded (i.e. the name of a variable).
 
-`expression()`
-
-Name and symbol used interchangeably in base R. (Names are also called symbols. `as.symbol()` and `is.symbol()` are identical to `as.name()` and `is.name()`.)  We'll use symbol exclusively because name is too overloaded (i.e. the name of a variable).
-
-Language object sometimes used to refer to name or call (but not constant or pairlist). `is.language()`
-
-(NB: you may have heard of `expression()`. Unfortunately this function does not return an expression in the sense we use in this book. Instead, it returns something more like a list of expressions. See [parsing and deparsing](#parsing-and-deparsing) for more details.) 
+* `expression()` and `parse()` create expression objects, which are basically a 
+  list of calls. This is not very useful since you can just put calls in a list.
+  There is no reason to ever use `expression()`.
 
 ### Exercises
+
+1.  Use `ast()` and experimentation to figure out the three arguments in an
+    `if()` call. Which components are required? What are the arguments to
+    the `for()` and `while()` calls?
 
 1.  What does the call tree of an `if` statement with multiple `else` 
     conditions look like?
@@ -183,7 +184,7 @@ Language object sometimes used to refer to name or call (but not constant or pai
 
 ## Understanding R's grammar
 
-The set of rules used to generate these trees are known as a grammar. In this section we'll explore some of the details of that grammar learning more about precisely how R takes a string representing code and turning it into a tree.
+The set of rules used to go from a sequence of tokens (like `x`, `y`, `+`) to a tree is known as a grammar. In this section, we'll explore some of the details of R's grammar learning more about how a potentially ambiguous string is turned into a tree.
 
 ### Operator precedence and associativity
 
@@ -207,13 +208,17 @@ lobstr::ast(1 + 2 + 3)
 
 This is called __left-associativity__ because the the operations on the left are evaluated first. The order of arithmetic doesn't usually matter because `x + y == y + x`. However, some S3 classes define `+` in a non-associative way. For example, in ggplot2 the order of arithmetic does matter.
 
-(These two sources of ambiguity do not exist in postfix languages which is one reason that people like them. They also don't exist in prefix languages, but you have to type a bunch of extra parentheses.)
+(These two sources of ambiguity do not exist in postfix languages which is one reason that people like them. They also don't exist in prefix languages, but you have to type a bunch of extra parentheses. For example, in LISP you'd write `(+ (+ 1 2) 3))`. In a postfix language you write `1 2 + 3 +`)
+
+You override the default precendence rules by using parentheses. These also appear in the AST:
+
+```{r}
+lobstr::ast((1 + 2) + 3)
+```
 
 ### Whitespace
 
-R, in general, is not very sensitive to white space. Most white space is not signficiant and is not recorded in the AST. `x+y` yields exactly the same AST as `x +        y`.
-
-There is one place, however, where whitespace is quite important:
+R, in general, is not very sensitive to white space. Most white space is not signficiant and is not recorded in the AST. `x+y` yields exactly the same AST as `x +        y`. There's is only one place where whitespace is quite important:
 
 ```{r}
 lobstr::ast(y <- x)
@@ -240,11 +245,13 @@ And of course that function might also take arguments:
 lobstr::ast(f(a, 1)())
 ```
 
-These forms are relatively rare, but it's good to be able to recognise them when they crop up. Here they are in hand-drawn trees:
+And finally, there might be arguments at multiple levels:
 
-```{r, echo = FALSE, out.width = NULL}
-knitr::include_graphics("diagrams/expression-ambig-nesting.png", dpi = 450)
+```{r}
+lobstr::ast(f(a, b)(1, 2))
 ```
+
+These forms are relatively rare, but it's good to be able to recognise them when they crop up. 
 
 ### Exercises
 
@@ -252,25 +259,27 @@ knitr::include_graphics("diagrams/expression-ambig-nesting.png", dpi = 450)
 
 1.  Why does `x1 <- x2 <- x3 <- 0` work? There are two reasons.
 
-1.  Compare `x + y %+% z` to `x ^ y %+% z`. What do they
-    tell you about the precedence of custom infix functions?
+1.  Compare `x + y %+% z` to `x ^ y %+% z`. What does that tell you about 
+    the precedence of custom infix functions?
 
 ## Extracting, modifying, and creating calls {#calls}
 
-A call is very similar to a list. It has `length`, `[[` and `[` methods, and is recursive because calls can contain other calls. The first element of the call is the function that gets called. \index{calls}
+A call behaves similarly to a list. It has a `length()` and you can extract elements with  `[[`, `[`, and `$`. Like lists, calls are recursive, because a call can contain other calls. The main difference is that the first element of a call is special: it's the function that will get called. \index{calls}
+
+Let's explore these ideas with a simple example:
 
 ```{r}
 x <- quote(read.table("important.csv", row = FALSE))
 lobstr::ast(!!x)
 ```
 
-The length of a call minus 1 gives the number of arguments:
+The length of a call minus one gives the number of arguments:
 
 ```{r}
 length(x) - 1
 ```
 
-And the names includes any named arguments:
+The names of a call are always empty for the first element and for unnamed arguments. 
 
 ```{r}
 names(x)
@@ -278,7 +287,7 @@ names(x)
 
 ### Subsetting
 
-You can extract the leaves of the call by position or by name:
+You can extract the leaves of the call by position and by name using `[[` and `$` in the usual way:
 
 ```{r}
 x[[1]]
@@ -293,98 +302,126 @@ You can use `[` to extract multiple components, but if you drop the the first el
 x[2:3]
 ```
 
-There are many ways to supply the arguments to a function. To work around this problem, you can use `rlang::lang_standardise()` which uses the base `match.call()` function to convert all positional arguments to named arguments: \indexc{standardise\_call()} \indexc{match.call()}
+If you do want to extract multiple elements in this way, it's good practice to coerce the results to a list:
+
+```{r}
+as.list(x[2:3])
+```
+
+Note that if you want to extract a specific argument from a function call, it's going to be challenge because it could potentially be in any location, with the full name, with an abreviated name, or with no name. To work around this problem, you can use `rlang::lang_standardise()` which standardises all arguments to use the full name: \indexc{standardise\_call()}
 
 ```{r}
 rlang::lang_standardise(x)
 ```
 
-### Constructing
+(Note that if the function uses `...` it's not possible to standardise all arguments.)
+
+It's also possible to modify calls:
 
 ```{r}
-lang(quote(`+`), 1, 2)
+x$header <- TRUE
+x
+```
+
+But there are some important caveats which we'll come back to after discussion how to construct a call from scratch.
+
+### Constructing calls
+
+In base R, you can construct a call using the `call()` function. We are going to use the similar function `rlang::lang()`. The chief difference is that `lang()` supports quasiquotation. This makes it considerably easier to generate certain types of call.
+
+The basics of `lang()` are simple. You create a call giving the name of a function, followed by the arguments:
+
+```{r}
 lang("+", 1, 2)
-
-args <- list(1 , 2)
-lang("f", args, 3)
-lang("f", quote(list(1, 2)), 3)
-lang("f", splice(args), 3)
+lang("foo", x = 1, y = 2)
 ```
 
-### Quasiquotation
+Here we've used a convenient shortcut: we've given it the name of the fuction as a string not a call. In most cases a string is easier to type and directly equivalent to the `quote()`d equivalent:
 
-With these basics in place it's time to come back to quasiquotation.
-
-We call functions like `ast()` and `quote()` that capture their arguments without evaluating them quoting functions. 
-
-Functions that quote their arguments in rlang all also support unquoting.
-
-```{r, echo = FALSE, out.width = NULL}
-knitr::include_graphics("diagrams/expression-bang-bang.png", dpi = 450)
+```{r}
+lang(expr(f), 1, 2)
+lang("f", 1, 2)
 ```
+
+However, this will not work if the function is generated by a function call. Note the subtle difference in these two calls:
+
+```{r}
+lang(quote(f()), 1, 2)
+lang("f()", 1, 2)
+```
+
+The first uses the function generated by calling `f()`, the second calls a function with the confusing name `f()`:
+
+```{r}
+`f()` <- function(x) x + 1
+`f()`(1)
+```
+
+To construct more complex calls, two new quasiquotation calls come in handy: 
+
+*   `!!!`, pronounced bang-bang-bang, the unquote-splice operator. It allows you
+    to splice in a list. Simply including the list in the call doesn't yield 
+    quite what you want:
+
+    ```{r}
+    args <- list(x = 1, y = 2)
+    lang("f", args, z = 3)
+    ```
+    
+    Here we the unquote-splice operator:
+    
+    ```{r}
+    lang("f", !!!args, z = 3)
+    ```
+
+*   `:=`, pronounced colon-equals, the definition operator. It works like `=` but
+    allows you to splice on the left-hand side.
+
+    ```{r}
+    var <- "x"
+    val <- 10
+    
+    lang("foo", var = val)
+    lang("foo", !!var := val)
+    ```
 
 ### Inlining and the deparser
 
-If you construct ASTs by hand, it's possible to construct things that you could not construct by parsing code. You can inline more complex objects. This is useful in a handful of very advanced places. But important to be aware that the printed representation
+If you construct ASTs by hand, it's possible to construct things that you could not construct by parsing code.  For example, if you forget to quote the first argument to `lang` it will literally inline the funtion call:
 
 ```{r}
-lang(`+`, 1, 2)
+lang(sum, quote(x))
 ```
+
+It's also possible to inline objects that are not constants, symbols, or calls. This is useful in a handful of places (beyond the scope of the book, but typically useful in overscoping). The main thing to be aware of is that the the printed representation does not always accurately reflect the underlying tree. Trust `ast()` over what the console will print.
+
+R will print parentheses that don't exist in the call tree:
 
 ```{r}
 x1 <- lang("+", 1, lang("+", 2, 3))
 x1
 lobstr::ast(!!x1)
+```
 
-x2 <- quote(1 + (2 + 3))
+It will also display integer sequences as if they were generated with `:`.
+
+```{r}
+x2 <- lang("f", c(1L, 2L, 3L, 4L, 5L))
 x2
 lobstr::ast(!!x2)
 ```
 
-Integer sequences are printed with `:`
+If you inline more complex objects, their attributes are not printed which might lead to confusing output:
 
 ```{r}
-x1 <- lang("f", 1:10)
-x1
-lobstr::ast(!!x1)
+x3 <- lang("class", data.frame(x = 10))
+x3
+eval(x3)
 
-x2 <- lang("f", quote(1:10))
-x2
-lobstr::ast(!!x2)
+lobstr::ast(!!x3)
 ```
 
-```{r}
-x1 <- quote(!!x)
-x1
-lobstr::ast(!!x1)
-```
-
-The following constructs an AST containing an inline data frame. This is a bad idea, however, because the object does not print correctly: the printed call looks like it should return "list" but when evaluated, it returns "data.frame". \indexc{substitute()}
-
-```{r}
-class_df <- lang("class", data.frame(x = 10))
-class_df
-lobstr::ast(!!class_df)
-
-eval(class_df)
-```
-
-### Exercises
-
-1.  You can use `formals()` to both get and set the arguments of a function.
-    Use `formals()` to modify the following function so that the default value
-    of `x` is missing and `y` is 10.
-
-    ```{r}
-    g <- function(x = 20, y) {
-      x + y
-    }
-    ```
-
-1.  Write an equivalent to `get()` using `as.name()` and `eval()`. Write an
-    equivalent to `assign()` using `as.name()`, `substitute()`, and `eval()`.
-    (Don't worry about the multiple ways of choosing an environment; assume
-    that the user supplies it explicitly.)
+In general, if you're ever confused, remember to check the object with `ast()`!
 
 ### Exercises
 
@@ -398,33 +435,6 @@ eval(class_df)
 
     What's the difference? Which one should you prefer?
 
-1.  Implement a pure R version of `do.call()`.
-
-1.  Concatenating a call and an expression with `c()` creates a list. Implement
-    `concat()` so that the following code works to combine a call and
-    an additional argument.
-
-    ```{r, eval = FALSE}
-    concat(quote(f), a = 1, b = quote(mean(a)))
-    #> f(a = 1, b = mean(a))
-    ```
-
-1.  Since `list()`s don't belong in expressions, we could create a more
-    convenient call constructor that automatically combines lists into the
-    arguments. Implement `make_call()` so that the following code works.
-
-    ```{r, eval = FALSE}
-    make_call(quote(mean), list(quote(x), na.rm = TRUE))
-    #> mean(x, na.rm = TRUE)
-    make_call(quote(mean), quote(x), na.rm = TRUE)
-    #> mean(x, na.rm = TRUE)
-    ```
-
-1.  How does `mode<-` work? How does it use `call()`?
-
-1.  Read the source for `pryr::standardise_call()`. How does it work?
-    Why is `is.primitive()` needed?
-
 1.  `standardise_call()` doesn't work so well for the following calls.
     Why?
 
@@ -434,12 +444,32 @@ eval(class_df)
     standardise_call(quote(mean(x = 1:10, , TRUE)))
     ```
 
-1.  Read the documentation for `pryr::modify_call()`. How do you think
+1.  Read the documentation for `rlang::lang_modify()`. How do you think
     it works? Read the source code.
 
-1.  Use `ast()` and experimentation to figure out the three arguments in an
-    `if()` call. Which components are required? What are the arguments to
-    the `for()` and `while()` calls?
+
+
+## Quasiquotation
+
+With these basics in place it's time to come back to quasiquotation:
+
+* `!!`
+* `!!!`
+* `:=`
+
+We call functions like `ast()` and `quote()` that capture their arguments without evaluating them quoting functions. 
+
+Functions that quote their arguments in rlang all also support unquoting.
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/expression-bang-bang.png", dpi = 450)
+```
+
+(We're working on improving the documentation to make this more clear. Hopefully by the time that you're reading this things are better.)
+
+### Exercises
+
+
 
 
 ## Parsing and deparsing {#parsing-and-deparsing}
@@ -510,3 +540,33 @@ The real `source()` is considerably more complicated because it can `echo` input
     test your code by sourcing a function that contains a comment. If
     successful, when you look at the function, you'll see the comment and
     not just the source code.
+
+
+## Exercises that need a home
+
+1.  You can use `formals()` to both get and set the arguments of a function.
+    Use `formals()` to modify the following function so that the default value
+    of `x` is missing and `y` is 10.
+
+    ```{r}
+    g <- function(x = 20, y) {
+      x + y
+    }
+    ```
+
+1.  Write an equivalent to `get()` using `as.name()` and `eval()`. Write an
+    equivalent to `assign()` using `as.name()`, `substitute()`, and `eval()`.
+    (Don't worry about the multiple ways of choosing an environment; assume
+    that the user supplies it explicitly.)
+
+1.  Implement a pure R version of `do.call()`.
+
+1.  Concatenating a call and an expression with `c()` creates a list. Implement
+    `concat()` so that the following code works to combine a call and
+    an additional argument.
+
+    ```{r, eval = FALSE}
+    c(quote(f()), list(a = 1, b = quote(mean(a)))
+    concat(quote(f), a = 1, b = quote(mean(a)))
+    #> f(a = 1, b = mean(a))
+    ```
