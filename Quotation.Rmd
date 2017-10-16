@@ -1,0 +1,172 @@
+# Quotation {#tidy-eval}
+
+```{r setup, include = FALSE}
+source("common.R")
+library(rlang)
+```
+
+## Introduction
+
+With these basics in place it's time to come back to quasiquotation. Part of the magic of R is that a number of functions use the AST of the input, rather than the result of the computation. This is sometimes called __quoting__ an argument, because instead of using it directly we give a reference to it. 
+
+Let's make this more concrete with an example. For example, imagine you're creating a lot of strings by joining together words:
+
+```{r}
+paste("Good", "morning", "Hadley")
+paste("Good", "afternoon", "Alice")
+```
+
+You might get sick of writing all the quotes, and instead come up with a function like this (later we'll come back to how this function is implemented. For now just look at the results)
+
+```{r}
+cement <- function(...) {
+  expr <- exprs(...)
+  paste(lapply(expr, expr_name), collapse = " ")
+}
+
+cement(Good, morning, Hadley)
+cement(Good, afternoon, Alice)
+```
+
+This is useful because it allows us to save some typing. (The tradeoff is probably not really worth it here, but it's an illustrative example). The problem, however, comes when we want to use variables. It's easy to use variables with `paste()`, because we simple don't quote them:
+
+```{r}
+name <- "Hadley"
+time <- "morning"
+
+paste("Good", name, time)
+```
+
+This doesn't work with `cement()` because every input is implicitly quoted:
+
+```{r}
+cement(Good, time, name)
+```
+
+We need some way to explicit __unquote__ the input, to tell `cement` to use the value stored inside the variables instead of the name of the variables. Quasiquotation give us a standard tool to do so: `!!`, prounounced bang-bang.
+
+```{r}
+cement(Good, !!time, !!name)
+```
+
+### How it works
+
+Can unquote at any level.
+
+This is how `lobstr::ast()` works. 
+
+```{r}
+x <- expr(g(z))
+lobstr::ast(f(!!x, y))
+```
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/expression-bang-bang.png", dpi = 450)
+```
+
+```{r}
+x <- exprs(g(z), a, b)
+lobstr::ast(f(!!!x, y))
+```
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/expression-bang-bang-bang.png", dpi = 450)
+```
+
+There's one final component to quasiquotation: `:=`. One challenge that sometimes crops up is that the LHS of `=` is always quoted. 
+
+```{r}
+name <- "x"
+value <- 10
+
+lobstr::ast(c(name = value))
+lobstr::ast(c(name = !!value))
+```
+
+And you can't unquote on the LHS because in R's grammar is has to be a bare name, so attempting to unquote is a syntax error.
+
+```{r, eval = FALSE}
+lobstr::ast(c(!!name = !!value))
+```
+
+This doesn't work quite yet: https://github.com/tidyverse/rlang/issues/279
+
+```{r}
+lobstr::ast(c(!!name := !!value))
+```
+
+### Terminology
+
+We call functions like `ast()` and `quote()` that capture their arguments without evaluating them quoting functions. 
+
+Support quasiquotation if ...
+
+Functions that quote their arguments in rlang all also support unquoting.
+
+(We're working on improving the documentation to make this more clear. Hopefully by the time that you're reading this things are better.)
+
+### Operator precedence
+
+```{r, error = TRUE}
+x <- quote(X)
+y <- quote(Y)
+lobstr::ast(!!x + !!y)
+```
+
+THIS MIGHT CHANGE.
+
+```{r}
+z1 <- quote(!!x + !!y)
+lobstr::ast(!!z1)
+
+z1 <- quote((!!x) + (!!y))
+lobstr::ast(!!z1)
+
+z2 <- quote(UQ(x) + UQ(y))
+lobstr::ast(!!z2)
+
+lobstr::ast(UQ(x) + UQ(y))
+```
+
+### Constructing calls
+
+To construct more complex calls, two new quasiquotation calls come in handy: 
+
+*   `!!!`, pronounced bang-bang-bang, the unquote-splice operator. It allows you
+    to splice in a list. Simply including the list in the call doesn't yield 
+    quite what you want:
+
+    ```{r}
+    args <- list(x = 1, y = 2)
+    lang("f", args, z = 3)
+    ```
+    
+    Here we the unquote-splice operator:
+    
+    ```{r}
+    lang("f", !!!args, z = 3)
+    ```
+
+*   `:=`, pronounced colon-equals, the definition operator. It works like `=` but
+    allows you to splice on the left-hand side.
+
+    ```{r}
+    var <- "x"
+    val <- 10
+    
+    lang("foo", var = val)
+    lang("foo", !!var := val)
+    ```
+
+### Creating your own functions 
+
+
+`enexpr()`, `exprs()`
+`enquo()`, `quos()`
+
+### Exercises
+
+
+## Base R
+
+No general quasiquotation. Partial supprt in `bquote()`.  Uses `.` for unquoting.
