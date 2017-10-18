@@ -90,6 +90,9 @@ Generally, this two step process of quoting and evaluation is equivalent to eval
 
 ### How it works
 
+`substitute()` works because function arguments are represented by a special type of object called a __promise__. A promise captures the expression needed to compute the value and the environment in which to compute it. You're not normally aware of promises because the first time you access a promise its code is evaluated in its environment, yielding a value. \index{promises}
+
+
 `!!` is treated differently  Can unquote at any level.
 
 This is how `lobstr::ast()` works. 
@@ -197,25 +200,52 @@ To construct more complex calls, two new quasiquotation calls come in handy:
     lang("foo", !!var := val)
     ```
 
-### Creating your own functions 
-
-
-`enexpr()`, `exprs()`
-`enquo()`, `quos()`
-
 ### Exercises
+
+1.  Use `subs()` to convert the LHS to the RHS for each of the following pairs:
+    * `a + b + c` -> `a * b * c`
+    * `f(g(a, b), c)` -> `(a + b) * c`
+    * `f(a < b, c, d)` -> `if (a < b) c else d`
+
+2.  For each of the following pairs of expressions, describe why you can't
+    use `subs()` to convert one to the other.
+    * `a + b + c` -> `a + b * c`
+    * `f(a, b)` -> `f(a, b, c)`
+    * `f(a, b, c)` -> `f(a, b)`
 
 ## Base R
 
-No general quasiquotation. Partial supprt in `bquote()`.  Uses `.` for unquoting.
+### Quoting equivalents
 
-Many quoting functions have no way to unquote. Those that do tend to have idiosyncratic approaches.
+* `quote()` is like `expr()` with quasiquotation.
+
+* `bquote()` is like `expr()` but provides a more limited form of 
+  quasiquotation. Can only unquote, not unquote-splice, using `.`.
+  Not used to provide quasiquotation for any other function in R.
+
+* `substitute()` is similar to `enexpr()`. Its primary purpose is to
+  capture unevaluated arguments, but it also does a bunch of other stuff
 
 ### Unquoting
+
+Many quoting functions have no way to unquote. Those that do tend to have idiosyncratic approaches.
 
 * `rm()` uses a different arguemnt
 * `library()` uses an argument to switch between
 * `$` is paired with `[[`
+
+How to use `expr()` + `eval_tidy()` to support wrap base functions.
+
+```{r, error = TRUE, fig.keep = "none"}
+library(lattice)
+xyplot(mpg ~ disp, data = mtcars)
+
+x <- quote(mpg)
+y <- quote(disp)
+xyplot(x ~ y, data = mtcars)
+```
+
+
 
 ### The downsides of non-standard evaluation {#nse-downsides}
 
@@ -280,3 +310,26 @@ Non-standard evaluation allows you to write functions that are extremely powerfu
 3.  Read the standard non-standard evaluation rules found at
     <http://developer.r-project.org/nonstandard-eval.pdf>.
 
+1.  Why does `as.Date.default()` use `substitute()` and `deparse()`?
+    Why does `pairwise.t.test()` use them? Read the source code.
+
+1.  `pairwise.t.test()` assumes that `deparse()` always returns a length one 
+    character vector. Can you construct an input that violates this expectation? 
+    What happens?
+
+1.  `f()`, defined above, just calls `substitute()`. Why can't we use it
+    to define `g()`? In other words, what will the following code return?
+    First make a prediction. Then run the code and think about the results.
+
+    ```{r, eval = FALSE}
+    f <- function(x) substitute(x)
+    g <- function(x) deparse(f(x))
+    g(1:10)
+    g(x)
+    g(x + y ^ 2 / z + exp(a * sin(b)))
+    ```
+
+1.  Base functions `match.fun()`, `page()`, and `ls()` all try to
+    automatically determine whether you want standard or non-standard
+    evaluation. Each uses a different approach. Figure out the essence
+    of each approach then compare and contrast.

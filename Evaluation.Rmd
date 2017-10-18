@@ -10,3 +10,208 @@ library(rlang)
 ## Overscopes
 
 ## Base R
+
+
+## Non-standard evaluation in subset {#subset}
+
+While printing out the code supplied to an argument value can be useful, we can actually do more with the unevaluated code. Take `subset()`, for example. It's a useful interactive shortcut for subsetting data frames: instead of repeating the name of data frame many times, you can save some typing: \indexc{subset()}
+
+```{r}
+sample_df <- data.frame(a = 1:5, b = 5:1, c = c(5, 3, 1, 4, 1))
+
+subset(sample_df, a >= 4)
+# equivalent to:
+# sample_df[sample_df$a >= 4, ]
+
+subset(sample_df, b == c)
+# equivalent to:
+# sample_df[sample_df$b == sample_df$c, ]
+```
+
+`subset()` is special because it implements different scoping rules: the expressions `a >= 4` or `b == c` are evaluated in the specified data frame rather than in the current or global environments. This is the essence of non-standard evaluation.
+
+How does `subset()` work? We've already seen how to capture an argument's expression rather than its result, so we just need to figure out how to evaluate that expression in the right context. Specifically, we want `x` to be interpreted as `sample_df$x`, not `globalenv()$x`. To do this, we need `eval()`. This function takes an expression and evaluates it in the specified environment. \indexc{eval()}
+
+Before we can explore `eval()`, we need one more useful function: `quote()`. It captures an unevaluated expression like `substitute()`, but doesn't do any of the advanced transformations that can make `substitute()` confusing. `quote()` always returns its input as is: \indexc{quote()} \index{quoting}
+
+```{r}
+quote(1:10)
+quote(x)
+quote(x + y^2)
+```
+
+We need `quote()` to experiment with `eval()` because `eval()`'s first argument is an expression. So if you only provide one argument, it will evaluate the expression in the current environment. This makes `eval(quote(x))` exactly equivalent to `x`, regardless of what `x` is:
+
+```{r, error = TRUE}
+eval(quote(x <- 1))
+eval(quote(x))
+
+eval(quote(y))
+```
+
+`quote()` and `eval()` are opposites. In the example below, each `eval()` peels off one layer of `quote()`'s.
+
+```{r}
+quote(2 + 2)
+eval(quote(2 + 2))
+
+quote(quote(2 + 2))
+eval(quote(quote(2 + 2)))
+eval(eval(quote(quote(2 + 2))))
+```
+
+`eval()`'s second argument specifies the environment in which the code is executed:
+
+```{r}
+x <- 10
+eval(quote(x))
+
+e <- new.env()
+e$x <- 20
+eval(quote(x), e)
+```
+
+Because lists and data frames bind names to values in a similar way to environments, `eval()`'s second argument need not be limited to an environment: it can also be a list or a data frame. 
+
+```{r}
+eval(quote(x), list(x = 30))
+eval(quote(x), data.frame(x = 40))
+```
+
+This gives us one part of `subset()`:
+
+```{r}
+eval(quote(a >= 4), sample_df)
+eval(quote(b == c), sample_df)
+```
+
+A common mistake when using `eval()` is to forget to quote the first argument. Compare the results below:
+
+```{r, error = TRUE}
+a <- 10
+eval(quote(a), sample_df)
+eval(a, sample_df)
+
+eval(quote(b), sample_df)
+eval(b, sample_df)
+```
+```{r, echo = FALSE}
+rm(a)
+```
+
+We can use `eval()` and `substitute()` to write `subset()`. We first capture the call representing the condition, then we evaluate it in the context of the data frame and, finally, we use the result for subsetting:
+
+```{r}
+subset2 <- function(x, condition) {
+  condition_call <- substitute(condition)
+  r <- eval(condition_call, x)
+  x[r, ]
+}
+subset2(sample_df, a >= 4)
+```
+
+### Exercises
+
+1.  Predict the results of the following lines of code:
+
+    ```{r, eval = FALSE}
+    eval(quote(eval(quote(eval(quote(2 + 2))))))
+    eval(eval(quote(eval(quote(eval(quote(2 + 2)))))))
+    quote(eval(quote(eval(quote(eval(quote(2 + 2)))))))
+    ```
+
+1.  `subset2()` has a bug if you use it with a single column data frame.
+    What should the following code return? How can you modify `subset2()`
+    so it returns the correct type of object?
+
+    ```{r}
+    sample_df2 <- data.frame(x = 1:10)
+    subset2(sample_df2, x > 8)
+    ```
+
+1.  The real subset function (`subset.data.frame()`) removes missing
+    values in the condition. Modify `subset2()` to do the same: drop the 
+    offending rows.
+
+1.  What happens if you use `quote()` instead of `substitute()` inside of
+    `subset2()`?
+
+1.  The third argument in `subset()` allows you to select variables. It
+    treats variable names as if they were positions. This allows you to do 
+    things like `subset(mtcars, , -cyl)` to drop the cylinder variable, or
+    `subset(mtcars, , disp:drat)` to select all the variables between `disp`
+    and `drat`. How does this work? I've made this easier to understand by
+    extracting it out into its own function.
+
+    ```{r, eval = FALSE}
+    select <- function(df, vars) {
+      vars <- substitute(vars)
+      var_pos <- setNames(as.list(seq_along(df)), names(df))
+      pos <- eval(vars, var_pos)
+      df[, pos, drop = FALSE]
+    }
+    select(mtcars, -cyl)
+    ```
+
+1.  What does `evalq()` do? Use it to reduce the amount of typing for the
+    examples above that use both `eval()` and `quote()`.
+
+## Scoping issues {#scoping-issues}
+
+It certainly looks like our `subset2()` function works. But since we're working with expressions instead of values, we need to test things more extensively. For example, the following applications of `subset2()` should all return the same value because the only difference between them is the name of a variable: \index{lexical scoping}
+
+```{r, error = TRUE}
+y <- 4
+x <- 4
+condition <- 4
+condition_call <- 4
+
+subset2(sample_df, a == 4)
+subset2(sample_df, a == y)
+subset2(sample_df, a == x)
+subset2(sample_df, a == condition)
+subset2(sample_df, a == condition_call)
+```
+
+What went wrong? You can get a hint from the variable names I've chosen: they are all names of variables defined inside `subset2()`. If `eval()` can't find the variable inside the data frame (its second argument), it looks in the environment of `subset2()`. That's obviously not what we want, so we need some way to tell `eval()` where to look if it can't find the variables in the data frame.
+
+The key is the third argument to `eval()`: `enclos`. This allows us to specify a parent (or enclosing) environment for objects that don't have one (like lists and data frames). If the binding is not found in `env`, `eval()` will next look in `enclos`, and then in the parents of `enclos`. `enclos` is ignored if `env` is a real environment. We want to look for `x` in the environment from which `subset2()` was called. In R terminology this is called the __parent frame__ and is accessed with `parent.frame()`. This is an example of [dynamic scope](http://en.wikipedia.org/wiki/Scope_%28programming%29#Dynamic_scoping): the values come from the location where the function was called, not where it was defined. \indexc{parent.frame()}
+
+With this modification our function now works:
+
+```{r}
+subset2 <- function(x, condition) {
+  condition_call <- substitute(condition)
+  r <- eval(condition_call, x, parent.frame())
+  x[r, ]
+}
+
+x <- 4
+subset2(sample_df, a == x)
+```
+
+Using `enclos` is just a shortcut for converting a list or data frame to an environment. We can get the same behaviour by using `list2env()`. It turns a list into an environment with an explicit parent: \indexc{list2env()}
+
+```{r}
+subset2a <- function(x, condition) {
+  condition_call <- substitute(condition)
+  env <- list2env(x, parent = parent.frame())
+  r <- eval(condition_call, env)
+  x[r, ]
+}
+
+x <- 5
+subset2a(sample_df, a == x)
+```
+
+### Exercises
+
+1.  What does `transform()` do? Read the documentation. How does it work?
+    Read the source code for `transform.data.frame()`. What does
+    `substitute(list(...))` do?
+
+1.  What does `with()` do? How does it work? Read the source code for
+    `with.default()`. What does `within()` do? How does it work? Read the
+    source code for `within.data.frame()`. Why is the code so much more
+    complex than `with()`?
+
