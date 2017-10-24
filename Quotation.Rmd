@@ -8,24 +8,30 @@ library(purrr)
 
 ## Introduction
 
-Now that you understand the tree structure of R code, it's time to come back to some of the fundamental ideas that make `quote()` and `ast()` work. Now we're going to talk about __quotation__, the art of capturing R code in arguments without evaluating it. 
+Now that you understand the tree structure of R code, it's time to come back to one of the fundamental ideas that make `quote()` and `ast()` work: __quasiquotation__.  Quasiquotation is the combination of two ideas:
 
-As well as quoting, we'll also learn more about unquoting. We'll first dive into the details of quasiquotation as implemented by rlang. Quasiquotation provides a complete system of quotation because it as well as "quoting" the input, it also allows you to selectively __unquote__ make it easy to compose expressions that are mixture of direct and indirect specification.
+* Quoting, which allows you to capture the AST associated with a function argument 
+  without evaluating it.
+  
+* Unquoting, which allows you to selectively evaulate parts of an expression that 
+  would otherwise be quoted.
 
-We'll finish off the chapter with a look at how base R handles the problem. You'll see the quoting equivalents of rlang's quasiquotation operators, and learn about some of the variety of options that base R uses.
+This combination of two makes it easy to make compose expressions that are mixture of direct and indirect specifications, and simplifies the solution to wide variety of challenging problems. Quasiquotation is not implement in base R, but is instead provided by the rlang package. 
+
+Once you've mastered quasiquotation, we'll circle back around to base R. You'll learn the closest equivalents to rlang's quoting functions, learn about the variety of techniques that base R uses implement unquoting, and see some of the drawbacks.
+
+We'll finish the chapter with a case study: using quasiquotation to construct calls "by hand". This is a useful technique for creating simple function operators with readable source code, and is a handy technique to work around functions (in base R and elsewhere) that don't support unquoting.
 
 ## Motivation
 
-With these basics in place it's time to come back to quasiquotation. Part of the magic of R is that a number of functions use the AST of the input, rather than the result of the computation. This is sometimes called __quoting__ an argument, because instead of using it directly we give a reference to it. 
-
-Let's make this more concrete with an example. For example, imagine you're creating a lot of strings by joining together words:
+We'll start with a simple, concrete, example that helps motivate the need for unquoting, and hence quasiquotation. Imagine you're creating a lot of strings by joining together words:
 
 ```{r}
 paste("Good", "morning", "Hadley")
 paste("Good", "afternoon", "Alice")
 ```
 
-You might get sick of writing all the quotes, and instead come up with a function like this (later we'll come back to how this function is implemented. For now just look at the results)
+You are sick and tired of writing all those quotes, and instead you just want to use bare words. To that end, you've managed to write the following function and it works! (We'll talk about the details of this implementation later; for now just look at the results.)
 
 ```{r}
 cement <- function(...) {
@@ -38,7 +44,7 @@ cement(Good, morning, Hadley)
 cement(Good, afternoon, Alice)
 ```
 
-This is useful because it allows us to save some typing. (The tradeoff is probably not really worth it here, but it's an illustrative example). The problem, however, comes when we want to use variables. It's easy to use variables with `paste()`, because we simple don't quote them:
+This is useful because we no longer need to type quotes. The problem, however, comes when we want to use variables. It's easy to use variables with `paste()`, because we just don't surround them with double quotes:
 
 ```{r}
 name <- "Hadley"
@@ -47,21 +53,44 @@ time <- "morning"
 paste("Good", name, time)
 ```
 
-This doesn't work with `cement()` because every input is automatically quoted:
+Obviously this doesn't work with `cement()` because every input is automatically quoted:
 
 ```{r}
 cement(Good, time, name)
 ```
 
-We need some way to explicit __unquote__ the input, to tell `cement` to use the value stored inside the variables instead of the name of the variables. We need to tell `cement()` that `time` and `name` should be handled differently to `Good`. 
+Functions that behave this way in R are often called __non-standard evaluation__ (NSE for short) functions. NSE isn't quite the right name here since we're not actually evaluating anything. We'll talk more about evaluation and NSE in the next chapter.
 
-Quasiquotation give us a standard tool to do so: `!!`, prounounced bang-bang.
+We need some way to explicit __unquote__ the input, to tell `cement` to use the value stored inside the variable instead of the name of the variable. In this example, we need someway to tell `cement()` that `time` and `name` should be handled differently to `Good`. Quasiquotation give us a standard tool to do so: `!!`, prounounced bang-bang.
 
 ```{r}
 cement(Good, !!time, !!name)
 ```
 
+It's useful to compare `cement()` and `paste()` directly. `paste()` is a regular function, so we have to add the quote marks ourselves. `cement()` is a quoting function, so we need to tell it when to unquote.
+
+```{r, eval = FALSE}
+paste("Good", name, time)
+cement(Good, !!time, !!name)
+```
+
 ## Quasiquotation
+
+The idea of quasiquotation was first developed by the analytic philsopher Willard van Orman Quine in the early 1940s [^1]. It's helpful in philosophy in order to clearly distinguish because use and mention, or equivalently an object and the words we use to refer to that object. For example, here are three examples from the "[Substitutional Quantifiers](https://johnmacfarlane.net/142/substitutional-quantifiers.pdf)" class taught by John MacFarlane [^2].
+
+*  'net' is part of 'clarinet', but a net is not part of a clarinet.
+
+*  Boston is a city. 'Boston' is the name of a city. ‘ 'Boston' ’ is not the 
+   name of a city; it denotes the name of a city.
+
+*  An hour is longer than a minute, but 'minute' is longer than 'hour'.
+
+[^1]: You might be familiar with the name Quine from "quines", computer programs that when run return a copy of their own source code.
+[^2]: In another interesting connection, John MacFarlane is the author of pandoc which is used as part of the RMarkdown toolchain to generate pdfs, ebooks, and websites like this book.
+
+It wasn't until the mid-1970s that quasiquotation entered common use in a programming language: LISP. Useful history at <http://repository.readscheme.org/ftp/papers/pepm99/bawden.pdf>. Another way of thinking about quasiquotation is that it provides a code template. You define an AST with some "holes" that get filled in using the values of other variables.
+
+Quasiquotation is useful in R because it allows us to have a systematic way of distinguishing when we want to refer to the name `x` vs. the contents of the variable called `x`.
 
 ### Key functions
 
