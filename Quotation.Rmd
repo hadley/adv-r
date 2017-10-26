@@ -22,7 +22,7 @@ Once you've mastered quasiquotation, we'll circle back around to base R. You'll 
 
 We'll finish the chapter with a case study: using quasiquotation to construct calls "by hand". This is a useful technique for creating simple function operators with readable source code, and is a handy technique to work around functions (in base R and elsewhere) that don't support unquoting.
 
-## Motivation
+### Motivation
 
 We'll start with a simple, concrete, example that helps motivate the need for unquoting, and hence quasiquotation. Imagine you're creating a lot of strings by joining together words:
 
@@ -94,7 +94,7 @@ Quasiquotation is useful in R because it allows us to have a systematic way of d
 
 ### Implementation
 
-Every function that quotes one or more arguments and provides quasiquotation must call one of  the following three functions:
+Every function that quotes one or more arguments and provides quasiquotation must call one of  the following three functions provided by rlang:
 
 * `expr()` captures its argument exactly as given. You'll use this most
   commonly for interactive exploration.
@@ -106,7 +106,7 @@ Every function that quotes one or more arguments and provides quasiquotation mus
   interactively to generate a list of expressions, or inside a function to 
   capture all arguments provided to `...`.
 
-(There are few variants we'll learn about in the next chapter, but they follow a similar pattern.)
+(There are three variants called `quo()`, `enquo()`, `quos()` that capture both the expression and the environment. We'll come back to those in the next chapter.
 
 Let's compare the use of `expr()` and `enexpr()` inside a function: 
 
@@ -143,6 +143,7 @@ foo <- function(...) {
 }
 ```
 
+There's not much you can do with a list of expressions yet, but we'll see a few techniques later on in this chapter. Lists of expressions + rlang + purrr give you a surprising amount of power, which we'll get to in XXX.
 
 The opposite of quoting is evaluating. This is a big topic, so it is covered in depth in the next chapter. For now, we'll focus on a single function: `rlang::eval_tidy()`. This takes an expression and evaluates in it.
 
@@ -154,56 +155,13 @@ eval_tidy(x)
 eval_tidy(x)
 ```
 
-Generally, this two step process of quoting and evaluation is equivalent to evaluating directly, but you'll some caveats in the next chapter.
+Notice that every time we evaluate this expression we get a different result. This makes these expression different to the lazy evaluation of functions which are only evaluated once, and then return the same results return again and again.
 
-(We're working on improving the documentation to make this more clear. Hopefully by the time that you're reading this things are better.)
-
-There are also three variants called `quo()`, `enquo()`, `quos()`. These capture both the expression and the environment, and we'll come back to in the next chapter.
-
-### Promises
-
-These functions work because internally R represents function arguments with a special type of object called a __promise__. A promise captures the expression needed to compute the value and the environment in which to compute it. You're not normally aware of promises because the first time you access a promise its code is evaluated in its environment, yielding a value. \index{promises}
-
-You can see both the expression and it's environment if you capture with a quosure, rather than an expression.
-
-```{r}
-capture <- function(x) {
-  enquo(x)
-}
-
-f <- function(x) {
-  x <- 10
-  capture(x + 1)
-}
-
-x <- 1
-f1 <- capture(x + 1)
-f2 <- f(x + 1)
-
-get_expr(f1)
-get_expr(f2)
-
-get_env(f1)
-get_env(f2)
-
-eval_tidy(f1)
-eval_tidy(f2)
-```
-
-We'll come back to quosures in the next chapter: because they capture the environment they're most useful for non-standard evaluation.
-
-Quoting functions side-step evaluation, allowing you to capture the code. This allows you to inspect and transform the AST, or evaluate the code in a different way ("non-standard") to usual. Functions that use these tools are often called non-standard evaluation (NSE) functions. However, we'll generally avoid that term because it's imprecise. For example, `lobstr::ast()` doesn't evaluate it's input. It simply captures it and displays the AST in a useful way.
-
-```{r}
-x <- quote(g(z))
-lobstr::ast(f(!!x, y))
-```
-
-We'll talk about a function __quoting__ an argument (or arguments), and then later learn how it might be evaluated in different ways. The focus of this chapter is on the quoting, and the specific form of quotation provided by rlang: quasiquotation.
+Quoting functions side-step evaluation, allowing you to capture the code. This allows you to inspect and transform the AST, or evaluate the code in a different way ("non-standard") to usual. Functions that use these tools are often called non-standard evaluation (NSE) functions. 
 
 ### Unquoting
 
-There are two forms of unquoting, `!!` called unquote, and pronounced bang-bang, and `!!!` called unquote-splice, and pronounced bang-bang-bang. They both operate replace nodes in the AST. `!!` is a one-to-one replacement. It takes a single expression and inlines the AST at the location of the `!!`. 
+There are two forms of unquoting, `!!` called unquote, and pronounced bang-bang, and `!!!` called unquote-splice, and pronounced bang-bang-bang. They both replace nodes in the AST. `!!` is a one-to-one replacement. It takes a single expression and inlines the AST at the location of the `!!`. 
 
 ```{r}
 x <- expr(-1)
@@ -250,10 +208,11 @@ This doesn't work quite yet: https://github.com/tidyverse/rlang/issues/279
 lobstr::ast(c(!!name := !!value))
 ```
 
-### Dot dot dot
+### Operator precedence and prefix forms
 
+Sometimes using `!!` causese problems because `!!` isn't one thing - it's actually two `!` called back-to-back. We chose this notation in rlang because it's rarely used in R, and it's a clear signal that something weird is going on.
 
-### Operator precedence
+Unfortunately that sometimes causes problems because operator precednece:
 
 ```{r, error = TRUE}
 x <- quote(X)
@@ -261,24 +220,108 @@ y <- quote(Y)
 lobstr::ast(!!x + !!y)
 ```
 
-THIS MIGHT CHANGE.
+You can solve this problem either by adding parentheses:
 
 ```{r}
-z1 <- quote(!!x + !!y)
-lobstr::ast(!!z1)
+lobstr::ast((!!x) + (!!y))
+```
 
-z1 <- quote((!!x) + (!!y))
-lobstr::ast(!!z1)
+Or by using the regular function form of `!!`, `UQ()`:
 
-z2 <- quote(UQ(x) + UQ(y))
-lobstr::ast(!!z2)
-
+```{r}
 lobstr::ast(UQ(x) + UQ(y))
 ```
 
+Note that using parentheses introduces additional nodes into the AST. These are usually not important.
+
+THIS BEHAVIOUR MIGHT CHANGE.
+
+### The downsides of non-standard evaluation {#nse-downsides}
+
+The biggest downside of NSE is that functions that use it are no longer [referentially transparent](http://en.wikipedia.org/wiki/Referential_transparency_(computer_science)). A function is __referentially transparent__ if you can replace its arguments with their values and its behaviour doesn't change. For example, if a function, `f()`, is referentially transparent and both `x` and `y` are 10, then `f(x)`, `f(y)`, and `f(10)` will all return the same result. Referentially transparent code is easier to reason about because the names of objects don't matter, and because you can always work from the innermost parentheses outwards. \index{non-standard evaluation!drawbacks}
+
+There are many important functions that by their very nature are not referentially transparent. Take the assignment operator. You can't take `a <- 1` and replace `a` by its value and get the same behaviour. This is one reason that people usually write assignments at the top-level of functions. It's hard to reason about code like this:
+
+```{r}
+a <- 1
+b <- 2
+if ((b <- a + 1) > (a <- b - 1)) {
+  b <- b + 2
+}
+```
+
+Using NSE prevents a function from being referentially transparent. This makes the mental model needed to correctly predict the output much more complicated. So, it's only worthwhile to use NSE if there is significant gain. For example, `library()` and `require()` can be called either with or without quotes, because internally they use `deparse(substitute(x))` plus some other tricks. This means that these two lines do exactly the same thing: \index{referential transparency}
+
+```{r, eval = FALSE}
+library(ggplot2)
+library("ggplot2")
+```
+
+Things start to get complicated if the variable is associated with a value. What package will this load?
+
+```{r, eval = FALSE}
+ggplot2 <- "plyr"
+library(ggplot2)
+```
+
+There are a number of other R functions that work in this way, like `ls()`, `rm()`, `data()`, `demo()`, `example()`, and `vignette()`. To me, eliminating two keystrokes is not worth the loss of referential transparency, and I don't recommend you use NSE for this purpose.
+
+One situation where non-standard evaluation is worthwhile is `data.frame()`. If not explicitly supplied, it uses the input to automatically name the output variables:
+
+```{r}
+x <- 10
+y <- "a"
+df <- data.frame(x, y)
+names(df)
+```
+
+I think it's worthwhile because it eliminates a lot of redundancy in the common scenario when you're creating a data frame from existing variables. More importantly, if needed, it's easy to override this behaviour by supplying names for each variable.
+
+Non-standard evaluation allows you to write functions that are extremely powerful. However, they are harder to understand and to program with. As well as always providing an escape hatch, carefully consider both the costs and benefits of NSE before using it in a new domain.
+
+### Exercises
+
+1.  It's challenging to see the AST of code like `!!x + !!y` because  
+    `ast()` does unquoting. We can work around this by using the base
+    equivalent of `expr()` that doesn't do unquoting: `quote()`. Why does
+    this work? What does it tell you about unquoting?
+    
+    ```{r}
+    expr <- quote(!!x + !!y)
+    lobstr::ast(!!expr)
+    ```
+    
+
 ## Base R
 
-Base R has no systematic equivalent of quasiquotation. Instead, functions that quote their arguments tend to offer one of three approaches: 
+Now that you understand the basics of quasiquotation it's time to take a look at what base R does. Base R has no systematic equivalent of quasiquotation. 
+
+### Quoting functions
+
+* `quote()` is like `expr()` with quasiquotation.
+
+* `substitute()` is similar to `enexpr()`. Its primary purpose is to
+  capture unevaluated arguments, but it also does a bunch of other stuff
+  including code expansion, and differs in behaviour when called from
+  the top-level vs. inside a function.
+
+* There is no built-in equivalent to `exprs()` but you can write your own:
+  
+    ```R
+    dots <- function(...) eval(substitute(alist(...)))
+    ```
+    
+    This uses the code expansion part of `substitute()`.
+
+* `bquote()` is like `expr()` but provides a more limited form of 
+  quasiquotation. Can only unquote, not unquote-splice, using `.`.
+  Not used to provide quasiquotation for any other function in R.
+
+
+
+### Unquoting
+
+Since base R doesn't have quasiquotation, different functions that quote their arguments offer different approaches. Three apptend to offer one of three approaches to allow you to unquote: 
 
 *   A pair of functions: one that quotes, and one that doesn't. For example, 
     take the very commonly used `$`. It quotes it's second argument: `df$x`. 
@@ -327,61 +370,7 @@ help(var)
 
 Finally, many quoting functions provide no way to unquote. That means you need to construct a call and evaluate it. For example, there's no way to unquote in `~`. This makes generating model formulas challenging.
 
-### Quoting equivalents
 
-* `quote()` is like `expr()` with quasiquotation.
-
-* `bquote()` is like `expr()` but provides a more limited form of 
-  quasiquotation. Can only unquote, not unquote-splice, using `.`.
-  Not used to provide quasiquotation for any other function in R.
-
-* `substitute()` is similar to `enexpr()`. Its primary purpose is to
-  capture unevaluated arguments, but it also does a bunch of other stuff
-
-
-
-### The downsides of non-standard evaluation {#nse-downsides}
-
-The biggest downside of NSE is that functions that use it are no longer [referentially transparent](http://en.wikipedia.org/wiki/Referential_transparency_(computer_science)). A function is __referentially transparent__ if you can replace its arguments with their values and its behaviour doesn't change. For example, if a function, `f()`, is referentially transparent and both `x` and `y` are 10, then `f(x)`, `f(y)`, and `f(10)` will all return the same result. Referentially transparent code is easier to reason about because the names of objects don't matter, and because you can always work from the innermost parentheses outwards. \index{non-standard evaluation!drawbacks}
-
-There are many important functions that by their very nature are not referentially transparent. Take the assignment operator. You can't take `a <- 1` and replace `a` by its value and get the same behaviour. This is one reason that people usually write assignments at the top-level of functions. It's hard to reason about code like this:
-
-```{r}
-a <- 1
-b <- 2
-if ((b <- a + 1) > (a <- b - 1)) {
-  b <- b + 2
-}
-```
-
-Using NSE prevents a function from being referentially transparent. This makes the mental model needed to correctly predict the output much more complicated. So, it's only worthwhile to use NSE if there is significant gain. For example, `library()` and `require()` can be called either with or without quotes, because internally they use `deparse(substitute(x))` plus some other tricks. This means that these two lines do exactly the same thing: \index{referential transparency}
-
-```{r, eval = FALSE}
-library(ggplot2)
-library("ggplot2")
-```
-
-Things start to get complicated if the variable is associated with a value. What package will this load?
-
-```{r, eval = FALSE}
-ggplot2 <- "plyr"
-library(ggplot2)
-```
-
-There are a number of other R functions that work in this way, like `ls()`, `rm()`, `data()`, `demo()`, `example()`, and `vignette()`. To me, eliminating two keystrokes is not worth the loss of referential transparency, and I don't recommend you use NSE for this purpose.
-
-One situation where non-standard evaluation is worthwhile is `data.frame()`. If not explicitly supplied, it uses the input to automatically name the output variables:
-
-```{r}
-x <- 10
-y <- "a"
-df <- data.frame(x, y)
-names(df)
-```
-
-I think it's worthwhile because it eliminates a lot of redundancy in the common scenario when you're creating a data frame from existing variables. More importantly, if needed, it's easy to override this behaviour by supplying names for each variable.
-
-Non-standard evaluation allows you to write functions that are extremely powerful. However, they are harder to understand and to program with. As well as always providing an escape hatch, carefully consider both the costs and benefits of NSE before using it in a new domain.
 
 ### Exercises
 
