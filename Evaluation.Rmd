@@ -250,3 +250,124 @@ subset2a(sample_df, a == x)
     source code for `within.data.frame()`. Why is the code so much more
     complex than `with()`?
 
+
+
+## Capturing the current call {#capturing-call}
+
+```{r, eval = FALSE, echo = FALSE}
+std <- c("package:base", "package:utils", "package:stats")
+names(find_uses(std, "sys.call"))
+names(find_uses(std, "match.call"))
+```
+
+Many base R functions use the current call: the expression that caused the current function to be run. There are two ways to capture a current call: \indexc{calls|capturing current}
+
+* `sys.call()` captures exactly what the user typed. \indexc{sys.call()}
+
+* `match.call()` makes a call that only uses named arguments. It's like
+  automatically calling `pryr::standardise_call()` on the result of
+  `sys.call()` \indexc{match.call()}
+
+The following example illustrates the difference between the two:
+
+```{r}
+f <- function(abc = 1, def = 2, ghi = 3) {
+  list(sys = sys.call(), match = match.call())
+}
+f(d = 2, 2)
+```
+
+Modelling functions often use `match.call()` to capture the call used to create the model. This makes it possible to `update()` a model, re-fitting the model after modifying some of original arguments. Here's an example of `update()` in action: \indexc{update()}
+
+```{r}
+mod <- lm(mpg ~ wt, data = mtcars)
+update(mod, formula = . ~ . + cyl)
+```
+
+How does `update()` work? We can rewrite it using some tools from pryr to focus on the essence of the algorithm.
+
+```{r, eval = FALSE}
+update_call <- function (object, formula., ...) {
+  call <- object$call
+
+  # Use update.formula to deal with formulas like . ~ .
+  if (!missing(formula.)) {
+    call$formula <- update.formula(formula(object), formula.)
+  }
+
+  modify_call(call, dots(...))
+}
+update_model <- function(object, formula., ...) {
+  call <- update_call(object, formula., ...)
+  eval(call, parent.frame())
+}
+update_model(mod, formula = . ~ . + cyl)
+```
+
+The original `update()` has an `evaluate` argument that controls whether the function returns the call or the result. But I think it's better, on principle, that a function returns only one type of object, rather than different types depending on the function's arguments.
+
+This rewrite also allows us to fix a small bug in `update()`: it re-evaluates the call in the global environment, when what we really want is to re-evaluate it in the environment where the model was originally fit --- in the formula.
+
+```{r, error = TRUE}
+f <- function() {
+  n <- 3
+  lm(mpg ~ poly(wt, n), data = mtcars)
+}
+mod <- f()
+update(mod, data = mtcars)
+
+update_model <- function(object, formula., ...) {
+  call <- update_call(object, formula., ...)
+  eval(call, environment(formula(object)))
+}
+update_model(mod, data = mtcars)
+```
+
+This is an important principle to remember: if you want to re-run code captured with `match.call()`, you also need to capture the environment in which it was evaluated, usually the `parent.frame()`. The downside to this is that capturing the environment also means capturing any large objects which happen to be in that environment, which prevents their memory from being released. This topic is explored in more detail in [garbage collection](#gc). \index{environments|capturing}
+
+Some base R functions use `match.call()` where it's not necessary. For example,  `write.csv()` captures the call to `write.csv()` and mangles it to call `write.table()` instead:
+
+```{r}
+write.csv <- function(...) {
+  Call <- match.call(expand.dots = TRUE)
+  for (arg in c("append", "col.names", "sep", "dec", "qmethod")) {
+    if (!is.null(Call[[arg]])) {
+      warning(gettextf("attempt to set '%s' ignored", arg))
+    }
+  }
+  rn <- eval.parent(Call$row.names)
+  Call$append <- NULL
+  Call$col.names <- if (is.logical(rn) && !rn) TRUE else NA
+  Call$sep <- ","
+  Call$dec <- "."
+  Call$qmethod <- "double"
+  Call[[1L]] <- as.name("write.table")
+  eval.parent(Call)
+}
+```
+
+To fix this, we could implement `write.csv()` using regular function call semantics:
+
+```{r}
+write.csv <- function(x, file = "", sep = ",", qmethod = "double", 
+                      ...) {
+  write.table(x = x, file = file, sep = sep, qmethod = qmethod, 
+    ...)
+}
+```
+
+This is much easier to understand: it's just calling `write.table()` with different defaults. This also fixes a subtle bug in the original `write.csv()`: `write.csv(mtcars, row = FALSE)` raises an error, but `write.csv(mtcars, row.names = FALSE)` does not. The lesson here is that it's always better to solve a problem with the simplest tool possible.
+
+### Exercises
+
+1.  Compare and contrast `update_model()` with `update.default()`.
+
+1.  Why doesn't `write.csv(mtcars, "mtcars.csv", row = FALSE)` work?
+    What property of argument matching has the original author forgotten?
+
+1.  Rewrite `update.formula()` to use R code instead of C code.
+
+1.  Sometimes it's necessary to uncover the function that called the
+    function that called the current function (i.e., the grandparent, not
+    the parent). How can you use `sys.call()` or `match.call()` to find
+    this function?
