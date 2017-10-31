@@ -6,22 +6,22 @@ library(rlang)
 library(lobstr)
 ```
 
-To compute on the language, we first need to understand its structure. That requires some new vocabulary, some new tools, and some new ways of thinking about R code. \index{expressions}
-
-The first thing you'll need to understand is the distinction between an operation and its result. Take this code, which takes a variable `x` multiplies it by 10 and saves the result to a new variable called `y`. It doesn't work because we haven't defined a variable called `x`:
+To compute on the language, we first need to understand its structure. That requires some new vocabulary, some new tools, and some new ways of thinking about R code. \index{expressions} The first thing you'll need to understand is the distinction between an operation and its result. Take this code, which takes a variable `x` multiplies it by 10 and saves the result to a new variable called `y`. It doesn't work because we haven't defined a variable called `x`:
 
 ```{r, error = TRUE}
 y <- x * 10
 ```
 
-It would be nice if we could capture the intent of the code, without executing the code. In other words, how can we separate our description of the action from performing it? One way is to use `base::quote()`: it captures an expression without evaluating it: \indexc{quote()}
+It would be nice if we could capture the intent of the code, without executing the code. In other words, how can we separate our description of the action from performing it? One way is to use `base::quote()`: \indexc{quote()}
 
 ```{r}
 z <- quote(y <- x * 10)
 z
 ```
 
-`quote()` returns a quoted __expression__: an object that contains R code. In this chapter, you'll learn about the structure of those expressions, which will also help you understand how R executes code. Later, we'll learn about `eval()` which allows you to take such an expression and perform, or __evaluate__, it:
+`quote()` returns a quoted __expression__: the R code that captures our intent.
+
+In this chapter, you'll learn about the structure of those expressions, which will also help you understand how R executes code. Later, we'll learn about `eval()` which allows you to take such an expression and perform, or __evaluate__, it:
 
 ```{r}
 x <- 4
@@ -38,24 +38,24 @@ knitr::include_graphics("diagrams/expression-simple.png", dpi = 450)
 ```
   
 *   Function __calls__ define the hierarchy of the tree. Calls are shown
-    with an orange square. The first child is the function that gets called,
-    here `f`. The second and subsequent children are the arguments. 
+    with an orange square. The first child (`f`) is the function that gets 
+    called. The second and subsequent children (`x`, `"y"`, and `1`) are the 
+    arguments. 
   
-    NB:Unlike many tree diagrams the order of the children is important: 
+    __NB__: Unlike many tree diagrams the order of the children is important: 
     `f(x, 1)` is not the same as `f(1, x)`.
     
 *   The leaves of the tree are either __symbols__, like `f` and `x`, or 
     __constants__ like `1` or `"y"`. Symbols have a purple border and rounded 
     corners. Constants, which are atomic vectors of length one, have black 
-    borders and square corners. Strings are always surrounded in quotes so
-    you can more easily distinguish from symbols --- more on that important
-    difference later.
+    borders and square corners. Strings are always surrounded in quotes to
+    emphasise their difference to symbols --- more on that later.
 
-Every call in R can be written in this form, even if it doesn't look like it at first glance. Take `y <- x * 10` again: what function is being called? It not as easy to spot as `f(x, 1)` because this expression uses __infix__ form. Infix functions come **in**between their arguments (so an infix function can only have two arguments). Most functions in R are __prefix__ functions where the name of the function comes first. 
+### Infix vs. prefix calls
 
-(Some programming languages use __postfix__ functions where the name of the function comes last. If you ever used an old HP calculator, you might have fallen in love with reverse Polish notation, postfix notation for algebra. There is also a family of "stack"-based programming languages descending from Forth which takes this idea as far as it might possibly go.)
+Every call in R can be written in tree form, even if it doesn't look like it at first glance. Take `y <- x * 10` again: what are the functions that are being called? It not as easy to spot as `f(x, 1)` because this expression contains two calls in __infix__ form: `<-` and `*`. Infix functions come **in**between their arguments (so an infix function can only have two arguments), whereas most functions in R are __prefix__ functions where the name of the function comes first [^1]. 
 
-### Infix vs. prefix
+[^1]: Some programming languages use __postfix__ functions where the name of the function comes last. If you ever used an old HP calculator, you might have fallen in love with reverse Polish notation, postfix notation for algebra. There is also a family of "stack"-based programming languages descending from Forth which takes this idea as far as it might possibly go.
 
 In R, any infix call can be converted to a prefix call if you you escape the function name with backticks. That means that these two lines of code are equivalent:
 
@@ -64,17 +64,23 @@ y <- x * 10
 `<-`(y, `*`(x, 10))
 ```
 
-And their AST looks like this:
+And they have this AST:
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/expression-prefix.png", dpi = 450)
 ```
 
-Drawing these diagrams by hand takes me some time, and obviously you can't rely on me to draw diagrams for your own code. So to supplement the hand-drawn trees, we'll also use some computer-drawn trees made by `lobstr::ast()`. `ast()` tries to make trees as similar as possible to my hand-drawn trees, while respecting the limitations of the console. I don't think they're quite as easy to visually parse, but they're not too bad. If you're running in an interactive terminal, you'll see calls in orange and names in purple.
+Drawing these diagrams by hand takes me some time, and obviously you can't rely on me to draw diagrams for your own code. So to supplement the hand-drawn trees, we'll also use some computer-drawn trees made by `lobstr::ast()`. `ast()` tries to make trees as similar as possible to my hand-drawn trees, while respecting the limitations of the console. I don't think they're quite as easy to parse visually, but they're not bad, particularly if you're running in a terminal that can use colour.
+
+Let's use `ast()` to visualise the `y <- x * 10`:
 
 ```{r}
 lobstr::ast(y <- x * 10)
 ```
+
+For more complex code, you can also use RStudio's tree viewer to explore the AST interactively. Activate with `View(quote(y <- x * 10))`.
+
+### Visual conventions
 
 `ast()` also prints the argument names when they're used:
 
@@ -82,91 +88,60 @@ lobstr::ast(y <- x * 10)
 lobstr::ast(mean(x = mtcars$cyl, na.rm = TRUE))
 ```
 
-We can use `ast()` to peek into even more complex calls. In this call, note the special forms used by `function`, `if`, and `{}` are just regular nodes in the tree.
+(And note the appearance of another infix function: `$`)
+
+We can use `ast()` to peek into even more complex calls. In this call, note the special functions `function`, `if`, and `{}` just become regular nodes in the tree.
 
 ```{r}
-lobstr::ast(function(x, y, z) {
+lobstr::ast(function(x, y) {
   if (x > y) {
-    z - x
+    x
   } else {
-    z + y
+    y
   }
 })
 ```
 
-For more complex code, you can also use RStudio's tree viewer to explore the AST interactively. Activate with `View(quote(y <- x * 10))`.
+Empty arguments are shown as ``` `` ```.
 
-### Constants
-
-__constants__ include the length one atomic vectors, like `"a"` or `10`,
-They have the interesting property that quoting is idempotent:
+Non-syntactic symbols (names that would otherwise be invalid) are surrounded in backticks: \index{non-syntactic names}.
 
 ```{r}
-identical(1, quote(1))
-identical("test", quote("test"))
-```
-
-Note that you can't directly create longer vectors because there's no way to do that without calling a function:
-
-```{r}
-lobstr::ast(c(1, 2, 3))
-lobstr::ast(1:3)
-```
-
-### Symbols {#names}
-
-Symbols, represent the name of an object rather than its value. `ast()` prefixes names with a backtick. \index{names} \index{symbols|see{names}}
-
-```{r}
-lobstr::ast(x)
-lobstr::ast(mean)
 lobstr::ast(`an unusual name`)
 ```
 
-Names that would otherwise be invalid are automatically surrounded by backticks
-\index{non-syntactic names}.
-
 ### Unquoting
 
-Note that `ast()` supports "unquoting" with `!!` (pronounced bang-bang). We'll talk about this in detail later; for now notice that this is useful if you've already used `quote` to captured the expression in a variable.
+Note that `ast()` supports "unquoting" with `!!` (pronounced bang-bang). We'll talk about this in detail later; for now notice that this is useful if you've already used `quote()` to capture the expression.
 
 ```{r}
-lobstr::ast(z)
-lobstr::ast(!!z)
+expr <- quote(foo(1, 2))
+
+# not useful!
+lobstr::ast(expr)
+
+# what we want
+lobstr::ast(!!expr)
 ```
-
-### Base R naming conventions
-
-Before we go much further, you need a word of caution about the naming conventions we've used here. Unfortunately, base R does not have a consistent set of conventions that are used throughout functions and documentation, and this book introduces another set of mild variations (which at least we do use consistently).
-
-* Language object is used in two senses in base R. `is.language()` defines
-  as the union of symbols, calls, and expressions; `str()` uses as synonoym
-  for call.
-
-* Symbol and name used interchangeably in base R. `as.name()` and `is.name()` 
-  are identical to `as.symbol()` and `is.symbol()`. We prefer symbol because 
-  name is too overloaded (i.e. the name of a variable).
-
-* `expression()` and `parse()` create expression objects, which are basically a 
-  list of calls. This is not very useful since you can just put calls in a list.
-  There is no reason to ever use `expression()`.
 
 ### Exercises
 
-1.  Use `ast()` and experimentation to figure out the three arguments in an
-    `if()` call. Which components are required? What are the arguments to
-    the `for()` and `while()` calls?
+1.  Use `ast()` and experimentation to figure out the three arguments to an
+    `if()` call. What would you call them? Which components are required? 
+    
+1.  What are the arguments to the `for()` and `while()` calls? What would you
+    call them?
 
-1.  What does the call tree of an `if` statement with multiple `else` 
-    conditions look like?
+1.  What does the call tree of an `if` statement with multiple `else if` 
+    conditions look like? Why?
 
-1.  Why can't an expression contain an atomic vector of length greater than one?
-    Which two of the six types of atomic vector can't appear in an expression?
-    Why?
+1.  Which two of the six types of atomic vector can't appear in an expression? 
+    Why? Why can't you create an expression that contains an atomic vector of 
+    length greater than one? 
 
-## Understanding R's grammar
+## R's grammar
 
-The set of rules used to go from a sequence of tokens (like `x`, `y`, `+`) to a tree is known as a grammar. In this section, we'll explore some of the details of R's grammar, learning more about how a potentially ambiguous string is turned into a tree.
+The set of rules used to go from a sequence of tokens (like `x`, `y`, `+`) to a tree is known as a grammar, and the process is called parsing. In this section, we'll explore some of the details of R's grammar, learning more about how a potentially ambiguous string is turned into a tree.
 
 ### Operator precedence and associativity
 
@@ -235,6 +210,43 @@ lobstr::ast(f(a, b)(1, 2))
 
 These forms are relatively rare, but it's good to be able to recognise them when they crop up. 
 
+### Parsing and deparsing {#parsing-and-deparsing}
+
+`rlang::parse_expr()`, `parse_exprs()`
+
+Sometimes code is represented as a string, rather than as an expression. You can convert a string to an expression with `parse()`. `parse()` is the opposite of `deparse()`: it takes a character vector and returns an expression object. The primary use of `parse()` is parsing files of code to disk, so the first argument is a file path. Note that if you have code in a character vector, you need to use the `text` argument: \indexc{parse()}
+
+```{r}
+z <- quote(y <- x * 10)
+deparse(z)
+
+parse(text = deparse(z))
+```
+
+With `parse()` and `eval()`, it's possible to write a simple version of `source()`. We read in the file from disk, `parse()` it and then `eval()` each component in a specified environment. This version defaults to a new environment, so it doesn't affect existing objects. `source()` invisibly returns the result of the last expression in the file, so `simple_source()` does the same. \index{source()}
+
+```{r}
+simple_source <- function(file, envir = new.env()) {
+  stopifnot(file.exists(file))
+  stopifnot(is.environment(envir))
+
+  lines <- readLines(file, warn = FALSE)
+  exprs <- parse(text = lines)
+
+  n <- length(exprs)
+  if (n == 0L) return(invisible())
+
+  for (i in seq_len(n - 1)) {
+    eval(exprs[i], envir)
+  }
+  invisible(eval(exprs[n], envir))
+}
+```
+
+The real `source()` is considerably more complicated because it can `echo` input and output, and also has many additional settings to control behaviour.
+
+`_label()`, `_name()`, `_text()`.
+
 ### Exercises
 
 1.  Which arithmetic operation is right associative?
@@ -244,7 +256,47 @@ These forms are relatively rare, but it's good to be able to recognise them when
 1.  Compare `x + y %+% z` to `x ^ y %+% z`. What does that tell you about 
     the precedence of custom infix functions?
 
-## Extracting, modifying, and creating calls {#calls}
+1.  Compare and contrast `source()` and `sys.source()`.
+
+1.  Modify `simple_source()` so it returns the result of _every_ expression,
+    not just the last one.
+
+1.  The code generated by `simple_source()` lacks source references. Read
+    the source code for `sys.source()` and the help for `srcfilecopy()`,
+    then modify `simple_source()` to preserve source references. You can
+    test your code by sourcing a function that contains a comment. If
+    successful, when you look at the function, you'll see the comment and
+    not just the source code.
+
+1.  One important feature of `deparse()` to be aware of when programming is that 
+    it can return multiple strings if the input is too long. For example, the 
+    following call produces a vector of length two:
+
+    ```{r, eval = FALSE}
+    g(a + b + c + d + e + f + g + h + i + j + k + l + m +
+      n + o + p + q + r + s + t + u + v + w + x + y + z)
+    ```
+
+    Why does this happen? Carefully read the documentation for `?deparse`. Can you write a
+    wrapper around `deparse()` so that it always returns a single string?
+
+## Data structures
+
+Before we go much further, you need a word of caution about the naming conventions we've used here. Unfortunately, base R does not have a consistent set of conventions that are used throughout functions and documentation, and this book introduces another set of mild variations (which at least we do use consistently).
+
+* Language object is used in two senses in base R. `is.language()` defines
+  as the union of symbols, calls, and expressions; `str()` uses as synonoym
+  for call.
+
+* Symbol and name used interchangeably in base R. `as.name()` and `is.name()` 
+  are identical to `as.symbol()` and `is.symbol()`. We prefer symbol because 
+  name is too overloaded (i.e. the name of a variable).
+
+* `expression()` and `parse()` create expression objects, which are basically a 
+  list of calls. This is not very useful since you can just put calls in a list.
+  There is no reason to ever use `expression()`.
+
+### Extracting, modifying, and creating calls {#calls}
 
 A call behaves similarly to a list. It has a `length()` and you can extract elements with  `[[`, `[`, and `$`. Like lists can contain other lists, calls contain other calls. The main difference is that the first element of a call is special: it's the function that will get called. \index{calls}
 
@@ -343,17 +395,7 @@ To explicitly create it when needed, call `quote()` with a named argument:
 quote(expr = )
 ```
 
-
-## Parsing and deparsing {#parsing-and-deparsing}
-
-Sometimes code is represented as a string, rather than as an expression. You can convert a string to an expression with `parse()`. `parse()` is the opposite of `deparse()`: it takes a character vector and returns an expression object. The primary use of `parse()` is parsing files of code to disk, so the first argument is a file path. Note that if you have code in a character vector, you need to use the `text` argument: \indexc{parse()}
-
-```{r}
-z <- quote(y <- x * 10)
-deparse(z)
-
-parse(text = deparse(z))
-```
+### Expressions
 
 Because there might be many top-level calls in a file, `parse()` doesn't return just a single expression. Instead, it returns an expression object, which is essentially a list of expressions: \index{expression object} 
 
@@ -365,67 +407,11 @@ exp <- parse(text = c("
 "))
 length(exp)
 typeof(exp)
-
-exp[[1]]
-exp[[2]]
 ```
+
+There is only one difference between expression objects and lists of language objects: `eval()` has special behaviour for expression objects. This is minor, and in the interest of using the fewest possible datatypes, I recommend working with lists.
 
 You can create expression objects by hand with `expression()`, but I wouldn't recommend it. There's no need to learn about this esoteric data structure if you already know how to use expressions. \indexc{expression()}
-
-With `parse()` and `eval()`, it's possible to write a simple version of `source()`. We read in the file from disk, `parse()` it and then `eval()` each component in a specified environment. This version defaults to a new environment, so it doesn't affect existing objects. `source()` invisibly returns the result of the last expression in the file, so `simple_source()` does the same. \index{source()}
-
-```{r}
-simple_source <- function(file, envir = new.env()) {
-  stopifnot(file.exists(file))
-  stopifnot(is.environment(envir))
-
-  lines <- readLines(file, warn = FALSE)
-  exprs <- parse(text = lines)
-
-  n <- length(exprs)
-  if (n == 0L) return(invisible())
-
-  for (i in seq_len(n - 1)) {
-    eval(exprs[i], envir)
-  }
-  invisible(eval(exprs[n], envir))
-}
-```
-
-The real `source()` is considerably more complicated because it can `echo` input and output, and also has many additional settings to control behaviour.
-
-`_label()`, `_name()`, `_text()`.
-
-### Exercises
-
-1.  What are the differences between `quote()` and `expression()`?
-
-1.  Read the help for `deparse()` and construct a call that `deparse()`
-    and `parse()` do not operate symmetrically on.
-
-1.  Compare and contrast `source()` and `sys.source()`.
-
-1.  Modify `simple_source()` so it returns the result of _every_ expression,
-    not just the last one.
-
-1.  The code generated by `simple_source()` lacks source references. Read
-    the source code for `sys.source()` and the help for `srcfilecopy()`,
-    then modify `simple_source()` to preserve source references. You can
-    test your code by sourcing a function that contains a comment. If
-    successful, when you look at the function, you'll see the comment and
-    not just the source code.
-
-1.  One important feature of `deparse()` to be aware of when programming is that 
-    it can return multiple strings if the input is too long. For example, the 
-    following call produces a vector of length two:
-
-    ```{r, eval = FALSE}
-    g(a + b + c + d + e + f + g + h + i + j + k + l + m +
-      n + o + p + q + r + s + t + u + v + w + x + y + z)
-    ```
-
-    Why does this happen? Carefully read the documentation for `?deparse`. Can you write a
-    wrapper around `deparse()` so that it always returns a single string?
 
 ## Case study: Walking the AST with recursive functions {#ast-funs}
 
@@ -443,14 +429,16 @@ To write functions like `findGlobals()` and `checkUsage()`, we'll need a new too
 
 ```{r, eval = FALSE}
 recurse_call <- function(x) {
-  if (is.atomic(x)) {
-    # Return a value
-  } else if (is.name(x)) {
-    # Return a value
-  } else if (is.call(x)) {
-    # Call recurse_call recursively
-  } else if (is.pairlist(x)) {
-    # Call recurse_call recursively
+  if (is_constant(x)) {
+    # Base case: return a value
+  } else if (is_symbol(x)) {
+    # Base case: return a value
+  } else if (is_lang(x)) {
+    # Recursive case
+    lapply(x, recurse_call)
+  } else if (is_pairlist(x)) {
+    # Recursive case
+    lapply(x, recurse_call)
   } else {
     # User supplied incorrect input
     stop("Don't know how to handle type ", typeof(x), 
