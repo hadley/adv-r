@@ -55,7 +55,7 @@ knitr::include_graphics("diagrams/expression-simple.png", dpi = 450)
 
 Every call in R can be written in tree form, even if it doesn't look like it at first glance. Take `y <- x * 10` again: what are the functions that are being called? It not as easy to spot as `f(x, 1)` because this expression contains two calls in __infix__ form: `<-` and `*`. Infix functions come **in**between their arguments (so an infix function can only have two arguments), whereas most functions in R are __prefix__ functions where the name of the function comes first [^1]. 
 
-[^1]: Some programming languages use __postfix__ functions where the name of the function comes last. If you ever used an old HP calculator, you might have fallen in love with reverse Polish notation, postfix notation for algebra. There is also a family of "stack"-based programming languages descending from Forth which takes this idea as far as it might possibly go.
+[^1]: Some programming languages use __postfix__ calls where the name of the function comes last. If you ever used an old HP calculator, you might have fallen in love with reverse Polish notation, postfix notation for algebra. There is also a family of "stack"-based programming languages descending from Forth which takes this idea as far as it might possibly go.
 
 In R, any infix call can be converted to a prefix call if you you escape the function name with backticks. That means that these two lines of code are equivalent:
 
@@ -70,27 +70,17 @@ And they have this AST:
 knitr::include_graphics("diagrams/expression-prefix.png", dpi = 450)
 ```
 
+### `lobstr::ast()`
+
 Drawing these diagrams by hand takes me some time, and obviously you can't rely on me to draw diagrams for your own code. So to supplement the hand-drawn trees, we'll also use some computer-drawn trees made by `lobstr::ast()`. `ast()` tries to make trees as similar as possible to my hand-drawn trees, while respecting the limitations of the console. I don't think they're quite as easy to parse visually, but they're not bad, particularly if you're running in a terminal that can use colour.
 
-Let's use `ast()` to visualise the `y <- x * 10`:
+Let's use `ast()` to display the tree defined by `y <- x * 10`:
 
 ```{r}
 lobstr::ast(y <- x * 10)
 ```
 
-For more complex code, you can also use RStudio's tree viewer to explore the AST interactively. Activate with `View(quote(y <- x * 10))`.
-
-### Visual conventions
-
-`ast()` also prints the argument names when they're used:
-
-```{r}
-lobstr::ast(mean(x = mtcars$cyl, na.rm = TRUE))
-```
-
-(And note the appearance of another infix function: `$`)
-
-We can use `ast()` to peek into even more complex calls. In this call, note the special functions `function`, `if`, and `{}` just become regular nodes in the tree.
+All language components have this same form, even if they don't look like it. In the following example, note the special forms `function`, `if`, and `{}` just become regular nodes in the tree. (Note that empty arguments are shown as ``` `` ```).
 
 ```{r}
 lobstr::ast(function(x, y) {
@@ -102,7 +92,13 @@ lobstr::ast(function(x, y) {
 })
 ```
 
-Empty arguments are shown as ``` `` ```.
+For more complex code, you can also use RStudio's tree viewer to explore the AST interactively. Activate with `View(quote(y <- x * 10))`.
+
+`ast()` also prints the argument names when they're used. (And note the appearance of another infix function: `$`)
+
+```{r}
+lobstr::ast(mean(x = mtcars$cyl, na.rm = TRUE))
+```
 
 Non-syntactic symbols (names that would otherwise be invalid) are surrounded in backticks: \index{non-syntactic names}.
 
@@ -110,9 +106,7 @@ Non-syntactic symbols (names that would otherwise be invalid) are surrounded in 
 lobstr::ast(`an unusual name`)
 ```
 
-### Unquoting
-
-Note that `ast()` supports "unquoting" with `!!` (pronounced bang-bang). We'll talk about this in detail later; for now notice that this is useful if you've already used `quote()` to capture the expression.
+`ast()` supports "unquoting" with `!!` (pronounced bang-bang). We'll talk about unquoting in detail in the next chapter; for now note that it's useful if you've already used `quote()` to capture the expression.
 
 ```{r}
 expr <- quote(foo(1, 2))
@@ -126,65 +120,74 @@ lobstr::ast(!!expr)
 
 ### Exercises
 
-1.  Use `ast()` and experimentation to figure out the three arguments to an
-    `if()` call. What would you call them? Which components are required? 
-    
-1.  What are the arguments to the `for()` and `while()` calls? What would you
-    call them?
-
-1.  What does the call tree of an `if` statement with multiple `else if` 
-    conditions look like? Why?
-
 1.  Which two of the six types of atomic vector can't appear in an expression? 
     Why? Why can't you create an expression that contains an atomic vector of 
     length greater than one? 
 
+1.  Use `ast()` and experimentation to figure out the three arguments to an
+    `if()` call. What would you call them? Which components are required? 
+    
+1.  What are the arguments to the `for()` and `while()` calls? 
+
+1.  What does the call tree of an `if` statement with multiple `else if` 
+    conditions look like? Why?
+    
+1.  Two arithmetic operators can be used in both prefix and infix style.
+    What are they?
+
 ## R's grammar
 
-The set of rules used to go from a sequence of tokens (like `x`, `y`, `+`) to a tree is known as a grammar, and the process is called parsing. In this section, we'll explore some of the details of R's grammar, learning more about how a potentially ambiguous string is turned into a tree.
+The process by which a computer language takes sequence of tokens (like `x`, `+`, `y`) and constructs a tree is called __parsing__, and is governed by a set of rules known as a __grammar__. In this section, we'll use `lobstr::ast()` to explore some of the details of R's grammar. 
+
+If this is your first reading the metaprogramming chapters, now is a good time to read the first sections of the next two chapters in order to get the big picture. Come back and learn more of the details once you've seen how all the big pieces fit together.
 
 ### Operator precedence and associativity
 
-The AST has to resolve two sources of ambiguity when parsing infix operators. First, what does `1 + 2 * 3` yield? Do you get 6 (i.e. `(1 + 2) * 3`), or 7 (i.e. `1 + (2 * 3)`).  Which of the two possible parse trees below does R use?
+Infix functions introduce ambiguity in a way that prefix functions do not[^2]. The parser has to resolve two sources of ambiguity when parsing infix operators. First, what does `1 + 2 * 3` yield? Do you get 9 (i.e. `(1 + 2) * 3`), or 7 (i.e. `1 + (2 * 3)`).  Which of the two possible parse trees below does R use?
+
+[^2] These two sources of ambiguity do not exist without infix operators, which is why some people like purely prefix and postfix languages. Postfix languages have an additional advantage in that they don't require as many parenthesis. For example, in LISP you'd write `(+ (+ 1 2) 3))`, while in a postfix language you write `1 2 + 3 +`
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/expression-ambig-order.png", dpi = 450)
 ```
 
-Infix functions introduce an ambiguity in the parser in a way that prefix functions do not. Programming langauges resolve this using a set of conventions known as __operator precedence__. We can reveal the answer using `ast()`: 
+Programming langauges resolve this using a set of conventions known as __operator precedence__. We can reveal the answer for R using `ast()`: 
 
 ```{r}
 lobstr::ast(1 + 2 * 3)
 ```
 
-Second, is `1 + 2 + 3` parsed as `(1 + 2) + 3` or `1 + (2 + 3)`? 
+You're probably familiar with these rules from high-school mathematics. There's one surprised with operator precedence that it's worth pointing out. ``!I think the most common source of confusion is the precedence of `!`. It tends to bind less tightly than you might expect:
+
+```{r}
+lobstr::ast(!x %in% y)
+```
+
+The second source of ambiguity is the order in which operations are performed with repeated application of the same infix function. For example, is `1 + 2 + 3` parsed as `(1 + 2) + 3` or `1 + (2 + 3)`?  This normally doesn't matter because arithmetic is associative, i.e. `x + y == y + x`. However, some S3 classes define `+` in a non-associative way. For example, addition of ggplot2 layers a non-associative because earlier layers are drawn underneath later layers. In R, most operators are __left-associative__, i.e. the operations on the left are evaluated first:
 
 ```{r}
 lobstr::ast(1 + 2 + 3)
 ```
 
-This is called __left-associativity__ because the the operations on the left are evaluated first. The order of arithmetic doesn't usually matter because `x + y == y + x`. However, some S3 classes define `+` in a non-associative way. For example, in ggplot2 the order of arithmetic does matter.
-
-(These two sources of ambiguity do not exist in postfix languages which is one reason that people like them. They also don't exist in prefix languages, but you have to type a bunch of extra parentheses. For example, in LISP you'd write `(+ (+ 1 2) 3))`. In a postfix language you write `1 2 + 3 +`)
-
-You override the default precendence rules by using parentheses. These also appear in the AST:
+R has over 30 infix operators divided into 18 precedence groups. While the details are descrbed in `?Syntax`, very few people have memorised the complete ordering. Instead, if there's any confusion, use parentheses to reduce ambiguity.
+These also appear in the AST, because like all other special forms, they can also be expressed as a regular function call:
 
 ```{r}
-lobstr::ast((1 + 2) + 3)
+lobstr::ast(1 + (2 + 3))
 ```
 
 ### Whitespace
 
-R, in general, is not very sensitive to white space. Most white space is not signficiant and is not recorded in the AST. `x+y` yields exactly the same AST as `x +        y`. There's is only one place where whitespace is quite important:
+R, in general, is not sensitive to white space. Most white space is not signficiant and is not recorded in the AST. `x+y` yields exactly the same AST as `x +        y`. This means that you're generally free to add whitespace to enhance the readability of your code. There's one major exception:
 
 ```{r}
 lobstr::ast(y <- x)
 lobstr::ast(y < -x)
 ```
 
-### The function component
+### Function factories
 
-The first component of the call is usually a symbol that resolves to a function:
+The first component of the call is usually a symbol:
 
 ```{r}
 lobstr::ast(f(a, 1))
@@ -196,7 +199,9 @@ But it might also be a function factory, a function that when called returns ano
 lobstr::ast(f()(a, 1))
 ```
 
-And of course that function might also take arguments:
+(See [Function factories] for more details)
+
+Of course that function might also take arguments:
 
 ```{r}
 lobstr::ast(f(a, 1)())
@@ -210,44 +215,54 @@ lobstr::ast(f(a, b)(1, 2))
 
 These forms are relatively rare, but it's good to be able to recognise them when they crop up. 
 
-### Parsing and deparsing {#parsing-and-deparsing}
+### Manual parsing
 
-`rlang::parse_expr()`, `parse_exprs()`
-
-Sometimes code is represented as a string, rather than as an expression. You can convert a string to an expression with `parse()`. `parse()` is the opposite of `deparse()`: it takes a character vector and returns an expression object. The primary use of `parse()` is parsing files of code to disk, so the first argument is a file path. Note that if you have code in a character vector, you need to use the `text` argument: \indexc{parse()}
+Most of the time you type code into the console, and R takes care of the characters you've type into an AST. Sometimes, however, you have code stored in a string, and you want to parse it yourself. You can do so using `rlang::parse_expr()`:
 
 ```{r}
-z <- quote(y <- x * 10)
-deparse(z)
-
-parse(text = deparse(z))
+code <- "y <- x + 10"
+rlang::parse_expr(code)
 ```
 
-With `parse()` and `eval()`, it's possible to write a simple version of `source()`. We read in the file from disk, `parse()` it and then `eval()` each component in a specified environment. This version defaults to a new environment, so it doesn't affect existing objects. `source()` invisibly returns the result of the last expression in the file, so `simple_source()` does the same. \index{source()}
+Alternatively, you can use `base::parse()`. Note that this function is specialised for parsing R code stored in files so you need to use the `text` argument, and it returns a list of expressions, which you'll need to subset:
 
 ```{r}
-simple_source <- function(file, envir = new.env()) {
-  stopifnot(file.exists(file))
-  stopifnot(is.environment(envir))
-
-  lines <- readLines(file, warn = FALSE)
-  exprs <- parse(text = lines)
-
-  n <- length(exprs)
-  if (n == 0L) return(invisible())
-
-  for (i in seq_len(n - 1)) {
-    eval(exprs[i], envir)
-  }
-  invisible(eval(exprs[n], envir))
-}
+parse(text = code)[[1]]
 ```
 
-The real `source()` is considerably more complicated because it can `echo` input and output, and also has many additional settings to control behaviour.
+### Deparsing
 
-`_label()`, `_name()`, `_text()`.
+The opposite of parsing is __deparsing__: you give it an AST, and it produces a string.
+
+```{r}
+z <- expr(y <- x + 10)
+expr_text(z)
+```
+
+Deparsing is not always the precise opposite of parsing because the AST drops information that is not germane. This includes backticks around ordinary names, comments, and whitespace. 
+
+```{r}
+cat(expr_text(expr(`x` <- `x` + 1)))
+cat(expr_text(expr({
+  # This is a comment
+  x <-             x + 1
+})))
+```
+
+In the next chapter, we'll see some other cases where deparsing fails, when we create more esoteric ASTs by hand.
+
+Deparsing is often used to provide default names for data structures, and default labels for messages or other output. rlang provides two helpers for those situations:
+
+```{r}
+expr_name(z)
+expr_label(z)
+```
+
+Be careful when using the base R equivalent, `deparse()`: it returns a character vector, with one element for each line. Whenever you use it, you'll need to make sure to deal with this potential situation.
 
 ### Exercises
+
+1.  What does `!1 + !1` return? Why?
 
 1.  Which arithmetic operation is right associative?
 
@@ -256,29 +271,21 @@ The real `source()` is considerably more complicated because it can `echo` input
 1.  Compare `x + y %+% z` to `x ^ y %+% z`. What does that tell you about 
     the precedence of custom infix functions?
 
-1.  Compare and contrast `source()` and `sys.source()`.
-
-1.  Modify `simple_source()` so it returns the result of _every_ expression,
-    not just the last one.
-
-1.  The code generated by `simple_source()` lacks source references. Read
-    the source code for `sys.source()` and the help for `srcfilecopy()`,
-    then modify `simple_source()` to preserve source references. You can
-    test your code by sourcing a function that contains a comment. If
-    successful, when you look at the function, you'll see the comment and
-    not just the source code.
-
 1.  One important feature of `deparse()` to be aware of when programming is that 
     it can return multiple strings if the input is too long. For example, the 
     following call produces a vector of length two:
 
     ```{r, eval = FALSE}
-    g(a + b + c + d + e + f + g + h + i + j + k + l + m +
-      n + o + p + q + r + s + t + u + v + w + x + y + z)
+    expr <- quote(g(a + b + c + d + e + f + g + h + i + j + k + l + m +
+      n + o + p + q + r + s + t + u + v + w + x + y + z))
+    
+    deparse(expr)
     ```
 
-    Why does this happen? Carefully read the documentation for `?deparse`. Can you write a
-    wrapper around `deparse()` so that it always returns a single string?
+    Why does this happen? Carefully read the documentation for `?deparse`. 
+    
+    Compare and constract `deparse()` with `expr_text()`, `expr_label()`, and
+    `expr_name()`.
 
 ## Data structures
 
