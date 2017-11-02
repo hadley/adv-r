@@ -12,14 +12,14 @@ To compute on the language, we first need to understand its structure. That requ
 y <- x * 10
 ```
 
-It would be nice if we could capture the intent of the code, without executing the code. In other words, how can we separate our description of the action from performing it? One way is to use `base::quote()`: \indexc{quote()}
+It would be nice if we could capture the intent of the code, without executing the code. In other words, how can we separate our description of the action from performing it? One way is to use `rlang::expr()`: \indexc{expr()}
 
 ```{r}
-z <- quote(y <- x * 10)
+z <- expr(y <- x * 10)
 z
 ```
 
-`quote()` returns a quoted __expression__: the R code that captures our intent.
+`expr()` returns a quoted __expression__: the R code that captures our intent.
 
 In this chapter, you'll learn about the structure of those expressions, which will also help you understand how R executes code. Later, we'll learn about `eval()` which allows you to take such an expression and perform, or __evaluate__, it:
 
@@ -59,19 +59,19 @@ lobstr::ast(f(x, "y", 1))
 
 Calls get an orange square, symbols are bold and purple, and strings are surrounded by quote marks. (The formatting is not currently shown in the rendered book, but you can see it if you run the code yourself.)
 
-`ast()` supports "unquoting" with `!!` (pronounced bang-bang). We'll talk about unquoting in detail in the next chapter; for now note that it's useful if you've already used `quote()` to capture the expression.
+`ast()` supports "unquoting" with `!!` (pronounced bang-bang). We'll talk about unquoting in detail in the next chapter; for now note that it's useful if you've already used `expr()` to capture the expression.
 
 ```{r}
-expr <- quote(foo(1, 2))
+x <- expr(f(x, "y", 1))
 
 # not useful!
-lobstr::ast(expr)
+lobstr::ast(x)
 
 # what we want
-lobstr::ast(!!expr)
+lobstr::ast(!!x)
 ```
 
-For more complex code, you can also use RStudio's tree viewer to explore the AST interactively, e.g. `View(quote(y <- x * 10))`.
+For more complex code, you can also use RStudio's tree viewer to explore the AST interactively, e.g. `View(expr(y <- x * 10))`.
 
 ### Infix vs. prefix calls
 
@@ -81,7 +81,7 @@ Every call in R can be written in tree form, even if it doesn't look like it at 
 
 In R, any infix call can be converted to a prefix call if you you escape the function name with backticks. That means that these two lines of code are equivalent:
 
-```{r}
+```{r, eval = FALSE}
 y <- x * 10
 `<-`(y, `*`(x, 10))
 ```
@@ -109,6 +109,37 @@ lobstr::ast(function(x, y) {
   }
 })
 ```
+
+
+### Function factories
+
+The first component of the call is usually a symbol:
+
+```{r}
+lobstr::ast(f(a, 1))
+```
+
+But it might also be a function factory, a function that when called returns another function:
+
+```{r}
+lobstr::ast(f()(a, 1))
+```
+
+(See [Function factories] for more details)
+
+Of course that function might also take arguments:
+
+```{r}
+lobstr::ast(f(a, 1)())
+```
+
+And finally, there might be arguments at multiple levels:
+
+```{r}
+lobstr::ast(f(a, b)(1, 2))
+```
+
+These forms are relatively rare, but it's good to be able to recognise them when they crop up. 
 
 ### Argument names
 
@@ -190,46 +221,19 @@ lobstr::ast(y <- x)
 lobstr::ast(y < -x)
 ```
 
-### Function factories
-
-The first component of the call is usually a symbol:
-
-```{r}
-lobstr::ast(f(a, 1))
-```
-
-But it might also be a function factory, a function that when called returns another function:
-
-```{r}
-lobstr::ast(f()(a, 1))
-```
-
-(See [Function factories] for more details)
-
-Of course that function might also take arguments:
-
-```{r}
-lobstr::ast(f(a, 1)())
-```
-
-And finally, there might be arguments at multiple levels:
-
-```{r}
-lobstr::ast(f(a, b)(1, 2))
-```
-
-These forms are relatively rare, but it's good to be able to recognise them when they crop up. 
-
 ### Manual parsing
 
-Most of the time you type code into the console, and R takes care of the characters you've type into an AST. Sometimes, however, you have code stored in a string, and you want to parse it yourself. You can do so using `rlang::parse_expr()`:
+Most of the time you type code into the console, and R takes care of turning the characters you've typed into an AST. Sometimes, however, you have code stored in a string, and you want to parse it yourself. You can do so using `rlang::parse_expr()`:
 
 ```{r}
-code <- "y <- x + 10"
-rlang::parse_expr(code)
+x1 <- "y <- x + 10"
+lobstr::ast(!!x1)
+
+x2 <- rlang::parse_expr(x1)
+lobstr::ast(!!x2)
 ```
 
-Alternatively, you can use `base::parse()`. Note that this function is specialised for parsing R code stored in files so you need to use the `text` argument, and it returns a list of expressions, which you'll need to subset:
+The base equivalent is `parse()`. This is a little harder to use because it's specialised for parsing R code stored in files. That means you need supply your string to the `text` argument, and you'll get an expression object (more on that shortly) which you'll need to subset.
 
 ```{r}
 parse(text = code)[[1]]
@@ -237,14 +241,14 @@ parse(text = code)[[1]]
 
 ### Deparsing
 
-The opposite of parsing is __deparsing__: you give it an AST, and it produces a string.
+The opposite of parsing is __deparsing__: you have and AST and you want the string that would generate it:
 
 ```{r}
 z <- expr(y <- x + 10)
 expr_text(z)
 ```
 
-Deparsing is not always the precise opposite of parsing because the AST drops information that is not germane. This includes backticks around ordinary names, comments, and whitespace. 
+Deparsing parsed code can not always yield the original input because parsing throws away all information not directly related to the AST. This includes backticks around ordinary names, comments, and whitespace. 
 
 ```{r}
 cat(expr_text(expr(`x` <- `x` + 1)))
@@ -253,8 +257,6 @@ cat(expr_text(expr({
   x <-             x + 1
 })))
 ```
-
-In the next chapter, we'll see some other cases where deparsing fails, when we create more esoteric ASTs by hand.
 
 Deparsing is often used to provide default names for data structures, and default labels for messages or other output. rlang provides two helpers for those situations:
 
@@ -286,7 +288,7 @@ Be careful when using the base R equivalent, `deparse()`: it returns a character
     following call produces a vector of length two:
 
     ```{r, eval = FALSE}
-    expr <- quote(g(a + b + c + d + e + f + g + h + i + j + k + l + m +
+    expr <- expr(g(a + b + c + d + e + f + g + h + i + j + k + l + m +
       n + o + p + q + r + s + t + u + v + w + x + y + z))
     
     deparse(expr)
@@ -298,6 +300,8 @@ Be careful when using the base R equivalent, `deparse()`: it returns a character
     `expr_name()`.
 
 ## Data structures
+
+Now that you have a good feel for ASTs and how R's grammar helps to define them, it's time to look into more detail about the underlying implementation. We'll 
 
 Before we go much further, you need a word of caution about the naming conventions we've used here. Unfortunately, base R does not have a consistent set of conventions that are used throughout functions and documentation, and this book introduces another set of mild variations (which at least we do use consistently).
 
@@ -320,7 +324,7 @@ A call behaves similarly to a list. It has a `length()` and you can extract elem
 Let's explore these ideas with a simple example:
 
 ```{r}
-x <- quote(read.table("important.csv", row = FALSE))
+x <- expr(read.table("important.csv", row = FALSE))
 lobstr::ast(!!x)
 ```
 
@@ -383,7 +387,7 @@ Pairlists are a holdover from R's past. They behave identically to lists, but ha
 By and large it doesn't matter, but you might be surprised if you extract the function list.
 
 ```{r}
-f <- quote(function(x = 10) x + 1)
+f <- expr(function(x = 10) x + 1)
 length(f)
 
 str(f[[1]])
@@ -406,10 +410,10 @@ missing_arg <- formals(f)$x
 is.name(missing_arg)
 ```
 
-To explicitly create it when needed, call `quote()` with a named argument:
+To explicitly create it when needed, call `expr()` with no inputs.
 
 ```{r}
-quote(expr = )
+expr()
 ```
 
 ### Expressions
@@ -480,7 +484,7 @@ logical_abbr <- function(x) {
   if (is.atomic(x)) {
     FALSE
   } else if (is.name(x)) {
-    identical(x, quote(T)) || identical(x, quote(F))
+    identical(x, expr(T)) || identical(x, expr(F))
   } else if (is.call(x) || is.pairlist(x)) {
     for (i in seq_along(x)) {
       if (logical_abbr(x[[i]])) return(TRUE)
@@ -492,10 +496,10 @@ logical_abbr <- function(x) {
   }
 }
 
-logical_abbr(quote(TRUE))
-logical_abbr(quote(T))
-logical_abbr(quote(mean(x, na.rm = T)))
-logical_abbr(quote(function(x, na.rm = T) FALSE))
+logical_abbr(expr(TRUE))
+logical_abbr(expr(T))
+logical_abbr(expr(mean(x, na.rm = T)))
+logical_abbr(expr(function(x, na.rm = T) FALSE))
 ```
 
 ### Finding all variables created by assignment
@@ -515,7 +519,7 @@ find_assign <- function(x) {
   if (is.atomic(x) || is.name(x)) {
     NULL
   } else if (is.call(x)) {
-    if (identical(x[[1]], quote(`<-`))) {
+    if (identical(x[[1]], expr(`<-`))) {
       x[[2]]
     } else {
       lapply(x, find_assign)
@@ -527,8 +531,8 @@ find_assign <- function(x) {
       call. = FALSE)
   }
 }
-find_assign(quote(a <- 1))
-find_assign(quote({
+find_assign(expr(a <- 1))
+find_assign(expr({
   a <- 1
   b <- 2
 }))
@@ -541,7 +545,7 @@ find_assign2 <- function(x) {
   if (is.atomic(x) || is.name(x)) {
     character()
   } else if (is.call(x)) {
-    if (identical(x[[1]], quote(`<-`))) {
+    if (identical(x[[1]], expr(`<-`))) {
       as.character(x[[2]])
     } else {
       unlist(lapply(x, find_assign2))
@@ -554,13 +558,13 @@ find_assign2 <- function(x) {
   }
 }
 
-find_assign2(quote({
+find_assign2(expr({
   a <- 1
   b <- 2
   a <- 3
 }))
 
-find_assign2(quote({
+find_assign2(expr({
   system.time(x <- print(y <- 5))
 }))
 ```
@@ -572,7 +576,7 @@ find_assign3 <- function(x) {
   if (is.atomic(x) || is.name(x)) {
     character()
   } else if (is.call(x)) {
-    if (identical(x[[1]], quote(`<-`))) {
+    if (identical(x[[1]], expr(`<-`))) {
       lhs <- as.character(x[[2]])
     } else {
       lhs <- character()
@@ -587,13 +591,13 @@ find_assign3 <- function(x) {
   }
 }
 
-find_assign3(quote({
+find_assign3(expr({
   a <- 1
   b <- 2
   a <- 3
 }))
 
-find_assign3(quote({
+find_assign3(expr({
   system.time(x <- print(y <- 5))
 }))
 ```
@@ -601,7 +605,7 @@ find_assign3(quote({
 We also need to test subassignment:
 
 ```{r}
-find_assign3(quote({
+find_assign3(expr({
   l <- list()
   l$a <- 5
   names(l) <- "b"
@@ -622,7 +626,7 @@ find_assign4 <- function(x) {
   if (is.atomic(x) || is.name(x)) {
     character()
   } else if (is.call(x)) {
-    if (identical(x[[1]], quote(`<-`)) && is.name(x[[2]])) {
+    if (identical(x[[1]], expr(`<-`)) && is.name(x[[2]])) {
       lhs <- as.character(x[[2]])
     } else {
       lhs <- character()
@@ -637,7 +641,7 @@ find_assign4 <- function(x) {
   }
 }
 
-find_assign4(quote({
+find_assign4(expr({
   l <- list()
   l$a <- 5
   names(l) <- "b"
