@@ -51,6 +51,28 @@ knitr::include_graphics("diagrams/expression-simple.png", dpi = 450)
     borders and square corners. Strings are always surrounded in quotes to
     emphasise their difference to symbols --- more on that later.
 
+Drawing these diagrams by hand takes me some time, and obviously you can't rely on me to draw diagrams for your own code. I'll supplement the hand-drawn trees with trees drawn by `lobstr::ast()`. `ast()` tries to make trees as similar as possible to my hand-drawn trees, while respecting the limitations of the console. Let's use `ast()` to display the tree above:
+
+```{r}
+lobstr::ast(f(x, "y", 1))
+```
+
+Calls get an orange square, symbols are bold and purple, and strings are surrounded by quote marks. (The formatting is not currently shown in the rendered book, but you can see it if you run the code yourself.)
+
+`ast()` supports "unquoting" with `!!` (pronounced bang-bang). We'll talk about unquoting in detail in the next chapter; for now note that it's useful if you've already used `quote()` to capture the expression.
+
+```{r}
+expr <- quote(foo(1, 2))
+
+# not useful!
+lobstr::ast(expr)
+
+# what we want
+lobstr::ast(!!expr)
+```
+
+For more complex code, you can also use RStudio's tree viewer to explore the AST interactively, e.g. `View(quote(y <- x * 10))`.
+
 ### Infix vs. prefix calls
 
 Every call in R can be written in tree form, even if it doesn't look like it at first glance. Take `y <- x * 10` again: what are the functions that are being called? It not as easy to spot as `f(x, 1)` because this expression contains two calls in __infix__ form: `<-` and `*`. Infix functions come **in**between their arguments (so an infix function can only have two arguments), whereas most functions in R are __prefix__ functions where the name of the function comes first [^1]. 
@@ -70,17 +92,13 @@ And they have this AST:
 knitr::include_graphics("diagrams/expression-prefix.png", dpi = 450)
 ```
 
-### `lobstr::ast()`
-
-Drawing these diagrams by hand takes me some time, and obviously you can't rely on me to draw diagrams for your own code. So to supplement the hand-drawn trees, we'll also use some computer-drawn trees made by `lobstr::ast()`. `ast()` tries to make trees as similar as possible to my hand-drawn trees, while respecting the limitations of the console. I don't think they're quite as easy to parse visually, but they're not bad, particularly if you're running in a terminal that can use colour.
-
-Let's use `ast()` to display the tree defined by `y <- x * 10`:
-
 ```{r}
 lobstr::ast(y <- x * 10)
 ```
 
-All language components have this same form, even if they don't look like it. In the following example, note the special forms `function`, `if`, and `{}` just become regular nodes in the tree. (Note that empty arguments are shown as ``` `` ```).
+### Special forms
+
+R has a small number of other syntactical constructs that don't look like either prefix or infix function calls. These are called __special forms__ and include `function`, the control flow operators (`if`, `for`, `while`, `repeat`), and parentheses (`{`, `(`, `[[`, and `[`). These can also be written in prefix form, and hence appear in the same way in the AST:
 
 ```{r}
 lobstr::ast(function(x, y) {
@@ -92,31 +110,15 @@ lobstr::ast(function(x, y) {
 })
 ```
 
-For more complex code, you can also use RStudio's tree viewer to explore the AST interactively. Activate with `View(quote(y <- x * 10))`.
+### Argument names
 
-`ast()` also prints the argument names when they're used. (And note the appearance of another infix function: `$`)
+So far the examples have only used unnamed arguments. Named arguments don't change the parsing rules, but just add some additional metadata:
 
 ```{r}
 lobstr::ast(mean(x = mtcars$cyl, na.rm = TRUE))
 ```
 
-Non-syntactic symbols (names that would otherwise be invalid) are surrounded in backticks: \index{non-syntactic names}.
-
-```{r}
-lobstr::ast(`an unusual name`)
-```
-
-`ast()` supports "unquoting" with `!!` (pronounced bang-bang). We'll talk about unquoting in detail in the next chapter; for now note that it's useful if you've already used `quote()` to capture the expression.
-
-```{r}
-expr <- quote(foo(1, 2))
-
-# not useful!
-lobstr::ast(expr)
-
-# what we want
-lobstr::ast(!!expr)
-```
+(And note the appearance of another infix function: `$`)
 
 ### Exercises
 
@@ -145,32 +147,35 @@ If this is your first reading the metaprogramming chapters, now is a good time t
 
 Infix functions introduce ambiguity in a way that prefix functions do not[^2]. The parser has to resolve two sources of ambiguity when parsing infix operators. First, what does `1 + 2 * 3` yield? Do you get 9 (i.e. `(1 + 2) * 3`), or 7 (i.e. `1 + (2 * 3)`).  Which of the two possible parse trees below does R use?
 
-[^2] These two sources of ambiguity do not exist without infix operators, which is why some people like purely prefix and postfix languages. Postfix languages have an additional advantage in that they don't require as many parenthesis. For example, in LISP you'd write `(+ (+ 1 2) 3))`, while in a postfix language you write `1 2 + 3 +`
+[^2] These two sources of ambiguity do not exist without infix operators, which can be considered an advantage of purely prefix and postfix languages. It's interesting to compare a simple arithmetic operation in Lisp (prefix) and Forth (postfix). In Lisp you'd write `(+ (+ 1 2) 3))`; this avoids ambiguity by requiring parentheses everywhere. In Forth, you'd write `1 2 + 3 +`; this doesn't require any parentheses, at the cost of requiring more thought when reading.
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/expression-ambig-order.png", dpi = 450)
 ```
 
-Programming langauges resolve this using a set of conventions known as __operator precedence__. We can reveal the answer for R using `ast()`: 
+Programming langauges use conventions called __operator precedence__ to resolve this ambiguity using. We can `ast()` to see what R does: 
 
 ```{r}
 lobstr::ast(1 + 2 * 3)
 ```
 
-You're probably familiar with these rules from high-school mathematics. There's one surprised with operator precedence that it's worth pointing out. ``!I think the most common source of confusion is the precedence of `!`. It tends to bind less tightly than you might expect:
+Predicting the precedence of arithmetic operations is usually easy because it's drilled into you in school and is consistent across the vast majority of programming languages. Predicting the precedence of other operators is harder. There's one particularly surprising finding in R: `!` has a much lower precedence (i.e. it binds less tightly) than you might expect. This allows you to write useful operations like:
 
 ```{r}
 lobstr::ast(!x %in% y)
 ```
 
-The second source of ambiguity is the order in which operations are performed with repeated application of the same infix function. For example, is `1 + 2 + 3` parsed as `(1 + 2) + 3` or `1 + (2 + 3)`?  This normally doesn't matter because arithmetic is associative, i.e. `x + y == y + x`. However, some S3 classes define `+` in a non-associative way. For example, addition of ggplot2 layers a non-associative because earlier layers are drawn underneath later layers. In R, most operators are __left-associative__, i.e. the operations on the left are evaluated first:
+Another source of ambiguity is repeated usage of the same infix function. For example, is `1 + 2 + 3` equivalent to `(1 + 2) + 3` or to `1 + (2 + 3)`?  This normally doesn't matter because `x + y == y + x`,  i.e. addition is associative. However, some S3 classes define `+` in a non-associative way. For example, ggplot2 overloads `+` to build up a complex plot from simple pieces; this usage is non-associative because earlier layers are drawn underneath later layers.
+
+In R, most operators are __left-associative__, i.e. the operations on the left are evaluated first:
 
 ```{r}
 lobstr::ast(1 + 2 + 3)
 ```
 
-R has over 30 infix operators divided into 18 precedence groups. While the details are descrbed in `?Syntax`, very few people have memorised the complete ordering. Instead, if there's any confusion, use parentheses to reduce ambiguity.
-These also appear in the AST, because like all other special forms, they can also be expressed as a regular function call:
+R has over 30 infix operators divided into 18 precedence groups. While the details are descrbed in `?Syntax`, very few people have memorised the complete ordering. Indeed, if there's any confusion, use parentheses! 
+
+These also appear in the AST, like all other special forms:
 
 ```{r}
 lobstr::ast(1 + (2 + 3))
@@ -261,6 +266,11 @@ expr_label(z)
 Be careful when using the base R equivalent, `deparse()`: it returns a character vector, with one element for each line. Whenever you use it, you'll need to make sure to deal with this potential situation.
 
 ### Exercises
+
+1.  R uses parentheses in two slightly different ways as illustrated by 
+    this simple call: `f((1))`. Compare and contrast the two uses. 
+    Similarly, `=`, can be used in two ways. Construct a simple example
+    that shows both uses.
 
 1.  What does `!1 + !1` return? Why?
 
