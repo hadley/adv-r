@@ -468,6 +468,8 @@ recurse_call <- function(x) {
 }
 ```
 
+These tools are somewhat similar to Lisp macros, as discussed in [Programmer's Niche: Macros in R](http://www.r-project.org/doc/Rnews/Rnews_2001-3.pdf#page=10) by Thomas Lumley. However, macros are run at compile-time, which doesn't have any meaning in R, and always return expressions. They're also somewhat like Lisp [fexprs](http://en.wikipedia.org/wiki/Fexpr). A fexpr is a function where the arguments are not evaluated by default. The terms macro and fexpr are useful to know when looking for useful techniques from other languages. \index{macros} \index{fexprs}
+
 ### Finding F and T
 
 We'll start simple with a function that determines whether a function uses the logical abbreviations `T` and `F`. Using `T` and `F` is generally considered to be poor coding practice, and is something that `R CMD check` will warn about. Let's first compare the AST for `T` vs. `TRUE`:
@@ -650,65 +652,6 @@ find_assign4(expr({
 
 While the complete version of this function is quite complicated, it's important to remember we wrote it by working our way up by writing simple component parts.
 
-### Modifying the call tree {#modifying-code}
-
-The next step up in complexity is returning a modified call tree, like what you get with `bquote()`. `bquote()` is a slightly more flexible form of quote: it allows you to optionally quote and unquote some parts of an expression (it's similar to the backtick operator in Lisp). Everything is quoted, _unless_ it's encapsulated in `.()` in which case it's evaluated and the result is inserted: \index{bquote()}
-
-```{r}
-a <- 1
-b <- 3
-bquote(a + b)
-bquote(a + .(b))
-bquote(.(a) + .(b))
-bquote(.(a + b))
-```
-
-This provides a fairly easy way to control what gets evaluated and when. How does `bquote()` work? Below, I've rewritten `bquote()` to use the same style as our other functions: it expects input to be quoted already, and makes the base and recursive cases more explicit:
-
-```{r}
-bquote2 <- function (x, where = parent.frame()) {
-  if (is.atomic(x) || is.name(x)) {
-    # Leave unchanged
-    x
-  } else if (is.call(x)) {
-    if (identical(x[[1]], quote(.))) {
-      # Call to .(), so evaluate
-      eval(x[[2]], where)
-    } else {
-      # Otherwise apply recursively, turning result back into call
-      as.call(lapply(x, bquote2, where = where))
-    }
-  } else if (is.pairlist(x)) {
-    as.pairlist(lapply(x, bquote2, where = where))
-  } else {
-    # User supplied incorrect input
-    stop("Don't know how to handle type ", typeof(x), 
-      call. = FALSE)
-  }
-}
-
-x <- 1
-y <- 2
-bquote2(quote(x == .(x)))
-bquote2(quote(function(x = .(x)) {
-  x + .(y)
-}))
-```
-
-The main difference between this and the previous recursive functions is that after we process each element of calls and pairlists, we need to coerce them back to their original types.
-
-Note that functions that modify the source tree are most useful for creating expressions that are used at run-time, rather than those that are saved back to the original source file. This is because all non-code information is lost:
-
-```{r}
-bquote2(quote(function(x = .(x)) {
-  # This is a comment
-  x +  # funky spacing
-    .(y)
-}))
-```
-
-These tools are somewhat similar to Lisp macros, as discussed in [Programmer's Niche: Macros in R](http://www.r-project.org/doc/Rnews/Rnews_2001-3.pdf#page=10) by Thomas Lumley. However, macros are run at compile-time, which doesn't have any meaning in R, and always return expressions. They're also somewhat like Lisp [fexprs](http://en.wikipedia.org/wiki/Fexpr). A fexpr is a function where the arguments are not evaluated by default. The terms macro and fexpr are useful to know when looking for useful techniques from other languages. \index{macros} \index{fexprs}
-
 ### Exercises
 
 1.  Why does `logical_abbr()` use a for loop instead of a functional
@@ -734,20 +677,8 @@ These tools are somewhat similar to Lisp macros, as discussed in [Programmer's N
 1.  Write a function that extracts all calls to a function. Compare your
     function to `pryr::fun_calls()`.
 
-1.  Write a wrapper around `bquote2()` that does non-standard evaluation
-    so that you don't need to explicitly `quote()` the input.
-
-1.  Compare `bquote2()` to `bquote()`. There is a subtle bug in `bquote()`:
-    it won't replace calls to functions with no arguments. Why?
-
-    ```{r}
-    bquote(.(x)(), list(x = quote(f)))
-    bquote(.(x)(1), list(x = quote(f)))
-    ```
-
 1.  Improve the base `recurse_call()` template to also work with lists of
     functions and expressions (e.g., as from `parse(path_to_file))`.
-
 
 ## Exercises that need a home
 
