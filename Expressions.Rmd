@@ -96,6 +96,12 @@ knitr::include_graphics("diagrams/expression-prefix.png", dpi = 450)
 lobstr::ast(y <- x * 10)
 ```
 
+You might remember that code like `names(x) <- y` ends up calling the `names<-` function. That is not reflected in the parse tree because the translation needs to happen later, due to the complexities of nested assignments like `names(x)[2] <- "z"`.
+
+```{r}
+lobstr::ast(names(x) <- y)
+```
+
 ### Special forms
 
 R has a small number of other syntactical constructs that don't look like either prefix or infix function calls. These are called __special forms__ and include `function`, the control flow operators (`if`, `for`, `while`, `repeat`), and parentheses (`{`, `(`, `[[`, and `[`). These can also be written in prefix form, and hence appear in the same way in the AST:
@@ -145,10 +151,6 @@ lobstr::ast(mean(x = mtcars$cyl, na.rm = TRUE))
 (And note the appearance of another infix function: `$`)
 
 ### Exercises
-
-1.  Which two of the six types of atomic vector can't appear in an expression? 
-    Why? Why can't you create an expression that contains an atomic vector of 
-    length greater than one? 
 
 1.  Use `ast()` and experimentation to figure out the three arguments to an
     `if()` call. What would you call them? Which components are required? 
@@ -297,17 +299,21 @@ Be careful when using the base R equivalent, `deparse()`: it returns a character
 
 Now that you have a good feel for ASTs and how R's grammar helps to define them, it's time to look into more detail about the underlying implementation. In this section you'll learn about the data structures that R uses to implement the AST:
 
-* Constants and symbols
-* Calls
-* Pairlists
+* Constants and symbols, the leaves of the tree.
+* Calls, the branches of the tree.
+* Pairlists, a historical data structure now only used for function arguments.
 
-Before we continue, a word of caution about the naming conventions used in this book. Unfortunately, base R does not have a consistent set of conventions, so we've had to make some new one. We use them consistently in the book, but you'll need to learn some translations when reading R documentation.
+Before we continue, a word of caution about the naming conventions used in this book. Unfortunately, base R does not have a consistent set of conventions, so we've had to make our own. We use them consistently in the book and in rlang, but you'll need to remember some translations when reading base R documentation.
 
-We use expression to refer to the set of possible things that can be found in an AST. In base R, "expression" is a special type of object that is basically equivalent to a list. We call these __expression objects__, and will briefly discuss later. Base R does not have an equivalent term for our "expression". The closest is "language object", which includes symbols and calls, but not constants or pairlists. But note that `typeof()` and `str()` use "language" to mean call. Base R uses symbol and name interchangeably; we prefer symbol because "name" has other common meanings (e.g. the name of a variable).
+We use expression to refer to collectively to the data structures that can appear in an AST (constant, symbol, call, pairlist). In base R, "expression" is a special type that is basically equivalent to a list of what we call expressions. To avoid confusion (as much as possible) we'll call these __expression objects__, and we'll discuss in [expression objects]. 
+
+Base R does not have an equivalent term for our "expression". The closest is "language object", which includes symbols and calls, but not constants or pairlists. But note that `typeof()` and `str()` use "language" to mean call. Base R uses symbol and name interchangeably; we prefer symbol because "name" has other common meanings (e.g. the name of a variable).
 
 ### Constants and symbols
 
-Constants and symbols are the leaves of the AST. Constants are "self-quoting", i.e. if the expression used to represent a constant is the constant itself:
+Constants and symbols are the leaves of the AST. Symbols represent variable names, and constant represent literal values.
+
+Constants are "self-quoting" in the sense that the expression used to represent a constant is the constant itself:
 
 ```{r}
 identical(expr("x"), "x")
@@ -324,18 +330,25 @@ sym("x")
 as_string(sym("x"))
 ```
 
-There's one special symbol that needs a little extra discussion: the empty symbol, constructed with `expr()`. It's used to represent missing arguments so has some odd bevahiour. If you do, it triggers an error about missing arguments. It's primarily useful for programmatically creating a function with missing arguments. \index{names|empty}
+There's one special symbol that needs a little extra discussion: the empty symbol, constructed with `expr()`. It's used to represent missing function arguments so has some odd behaviour. You can store an empty symbol in an variable, but once you've done so, if you try and refer to it in any way you'll get an error about missing arguments:
 
 ```{r, error = TRUE}
 x <- rlang::expr()
-missing(x)
-
+x
 y <- x
 ```
 
+The only thing you can do that doesn't trigger an error is to check if it's `missing()`:
+
+```{r}
+missing(x)
+```
+
+You only need to know about the missing symbol if you're programmatically creating functions a function with missing arguments. \index{names|empty}
+
 ### Calls
 
-A call behaves similarly to a list. It has a `length()`; you can extract elements with  `[[`, `[`, and `$`; and calls can contain other calls. The main difference is that the first element of a call is special: it's the function that will get called. \index{calls} Let's explore these ideas with a simple example:
+Calls define the tree in AST. A call behaves similarly to a list. It has a `length()`; you can extract elements with  `[[`, `[`, and `$`; and calls can contain other calls. The main difference is that the first element of a call is special: it's the function that will get called. \index{calls} Let's explore these ideas with a simple example:
 
 ```{r}
 x <- expr(read.table("important.csv", row = FALSE))
@@ -348,7 +361,7 @@ The length of a call minus one gives the number of arguments:
 length(x) - 1
 ```
 
-The names of a call are always empty for the first element and for unnamed arguments. 
+The names of a call are empty, except for unnamed arguments:
 
 ```{r}
 names(x)
@@ -363,20 +376,13 @@ x[[2]]
 x$row
 ```
 
-If you want to extract a specific argument from a function call, it's going to be challenge because it could potentially be in any location, with the full name, with an abreviated name, or with no name. To work around this problem, you can use `rlang::lang_standardise()` which standardises all arguments to use the full name: \indexc{standardise\_call()}
+Extract specific arguments from calls is challenging because of R's flexible rule for argument matching: it could potentially be in any location, with the full name, with an abreviated name, or with no name. To work around this problem, you can use `rlang::lang_standardise()` which standardises all arguments to use the full name: \indexc{standardise\_call()}
 
 ```{r}
 rlang::lang_standardise(x)
 ```
 
 (Note that if the function uses `...` it's not possible to standardise all arguments.)
-
-You can also modify calls by combining the subsetting operators with `<-` in the usual way:
-
-```{r}
-x$header <- TRUE
-x
-```
 
 You can use `[` to extract multiple components, but if you drop the the first element, you're usually going to end up with a weird call:
 
@@ -390,18 +396,27 @@ If you do want to extract multiple elements in this way, it's good practice to c
 as.list(x[2:3])
 ```
 
+Calls can be modified in the same way as lists:
+
+```{r}
+x$header <- TRUE
+x
+```
+
+We'll learn about creating calls from scratch in [construct-calls]; an understanding of quasiquotation makes it much easier.
+
 ### Pairlists
 
-The is one data structure we need to discuss for completeness: the pairlist. Pairlists are a holdover from R's past and have been replaced by lists everywhere except in function arguments. At the R-level behave identically to lists, but at the C-level they have different representation (linked lists rather than vector). \index{pairlists}
+There is one data structure we need to discuss for completeness: the pairlist. \index{pairlists} Pairlists are a remnant of R's past and have been replaced by lists almost everywhere. The only place you are likely to see pairlists in R is when working with function arguments:
 
 ```{r}
 f <- function(x = 10) x + 1
 typeof(formals(f))
 ```
 
-(At the C-level calls are actually implemented using pairlists)
-
-Generally, whenever you encounter a pairlist, you can treat it just like a regular list.
+(If you're working in C, you'll encounter pairlists more often. For example, calls are also implemented using pairlists)
+ 
+Fortuantely, whenever you encounter a pairlist, you can treat it just like a regular list:
 
 ```{r}
 pl <- pairlist(x = 1, y = 2)
@@ -409,10 +424,10 @@ length(pl)
 pl$x
 ```
 
-The main difference is that because pairlists have a different underlying implementation, accessing their elements is much slower.
+However, behind the scenes pairlists are implemented using a different data structure, a linked list instead of a vector. That means that subsetting is slower with pairlists, and gets slower the further along the pairlist you index:
 
 ```{r}
-l1 <- as.list(1:10)
+l1 <- as.list(1:20)
 l2 <- as.pairlist(l1)
 
 microbenchmark::microbenchmark(
@@ -425,19 +440,73 @@ microbenchmark::microbenchmark(
 
 ### Expression objects
 
-Because there might be many top-level calls in a file, `parse()` doesn't return just a single expression. Instead, it returns an expression object, which is essentially a list of expressions: \index{expression object} 
+Finally, we need to discuss the expression object briefly. \index{expression object}  Expression objects are produced by only two base functions: `expression()` and `parse()`:
 
 ```{r}
-exp <- parse(text = c("
-  x <- 4
-  x
-  5
+exp1 <- parse(text = c("
+x <- 4
+x
 "))
+exp2 <- expression(x <- 4, x)
+
+typeof(exp1)
+typeof(exp2)
+
+exp1
+exp2
+```
+
+\indexc{expression()} \indexc{parse()}
+
+Like calls and pairlists, expression objects behave like a list:
+
+```{r}
+length(exp1)
+exp1[[1]]
+```
+
+Conceptually an expression object is just a list of expressions. The only difference is that calling `eval()` on an expression evaluates each individual expression. We don't believe this advantage is worth introducing a new data structure so instead of expression objects we always use regular lists of expressions.
+
+Because there might be many top-level calls in a file, `parse()` doesn't return just a single expression. Instead, it returns an expression object, which is essentially a list of expressions: 
+
+```{r}
 length(exp)
 typeof(exp)
 ```
 
-There is only one difference between expression objects and lists of language objects: `eval()` has special behaviour for expression objects. This is minor, and in the interest of using the fewest possible datatypes, I recommend avoid `expression()`. \indexc{expression()}
+### Exercises
+
+1.  Which two of the six types of atomic vector can't appear in an expression? 
+    Why? Why can't you create an expression that contains an atomic vector of 
+    length greater than one? 
+
+1.  Why does this code not make sense?
+
+    ```{r, eval = FALSE}
+    x <- expr(foo(x = 1))
+    names(x) <- c("x", "")
+    ```
+
+1.  `base::alist()` is useful for creating pairlists to be used for function
+    arguments:
+    
+    ```{r}
+    foo <- function() {}
+    formals(foo) <- alist(x = , y = 1)
+    foo
+    ```
+    
+    What makes `alist()` special compared to `list()`?
+
+1.  Concatenating a call and an expression with `c()` creates a list. Implement
+    `concat()` so that the following code works to combine a call and
+    an additional argument.
+
+    ```{r, eval = FALSE}
+    c(quote(f()), list(a = 1, b = quote(mean(a)))
+    concat(quote(f), a = 1, b = quote(mean(a)))
+    #> f(a = 1, b = mean(a))
+    ```
 
 ## Case study: Walking the AST with recursive functions {#ast-funs}
 
@@ -507,6 +576,10 @@ switch_expr <- function(x, ...) {
   )
 }
 
+flat_map <- function(.x, .f, ...) {
+  unlist(lapply(.x, .f, ...), recursive = FALSE)
+}
+
 
 ```
 
@@ -540,7 +613,6 @@ logical_abbr <- function(x) {
   )
 }
 
-
 logical_abbr(expr(TRUE))
 logical_abbr(expr(T))
 logical_abbr(expr(mean(x, na.rm = T)))
@@ -557,25 +629,31 @@ Again, we start by looking at the AST for assignment:
 ast(x <- 10)
 ```
 
-Assignment is a call where the first element is the name `<-`, the second is the object the name is assigned to, and the third is the value to be assigned. This makes the base cases simple: constants and names don't create assignments, so they return `NULL`. The recursive cases aren't too hard either. We `lapply()` over pairlists and over calls to functions other than `<-`.
+Assignment is a call where the first element is the name `<-`, the second is the object the name is assigned to, and the third is the value to be assigned. This makes the base cases simple: constants and names don't create assignments, so they return `list()`. 
+
+We need to think about the return type of this function: it's going to need to be a list. 
+
+The recursive cases aren't too hard either. We `lapply()` over pairlists and over calls to functions other than `<-`.
 
 ```{r}
 find_assign <- function(x) {
-  if (is.atomic(x) || is.name(x)) {
-    NULL
-  } else if (is.call(x)) {
-    if (identical(x[[1]], expr(`<-`))) {
-      x[[2]]
-    } else {
-      lapply(x, find_assign)
+  switch_expr(x,
+    # Base cases
+    constant = ,
+    symbol = list(),
+    
+    # Recursive cases
+    pairlist = flat_map(x, find_assign),
+    call = {
+      if (identical(x[[1]], expr(`<-`))) {
+        list(x[[2]])
+      } else {
+        flat_map(x, find_assign)
+      }
     }
-  } else if (is.pairlist(x)) {
-    lapply(x, find_assign)
-  } else {
-    stop("Don't know how to handle type ", typeof(x), 
-      call. = FALSE)
-  }
+  )
 }
+
 find_assign(expr(a <- 1))
 find_assign(expr({
   a <- 1
@@ -583,36 +661,22 @@ find_assign(expr({
 }))
 ```
 
-This function works for these simple cases, but the output is rather verbose and includes some extraneous `NULL`s. Instead of returning a list, let's keep it simple and use a character vector. We'll also test it with two slightly more complicated examples:
+We'll also test it with two slightly more complicated examples:
 
 ```{r}
-find_assign2 <- function(x) {
-  if (is.atomic(x) || is.name(x)) {
-    character()
-  } else if (is.call(x)) {
-    if (identical(x[[1]], expr(`<-`))) {
-      as.character(x[[2]])
-    } else {
-      unlist(lapply(x, find_assign2))
-    }
-  } else if (is.pairlist(x)) {
-    unlist(lapply(x, find_assign2))
-  } else {
-    stop("Don't know how to handle type ", typeof(x), 
-      call. = FALSE)
-  }
-}
-
-find_assign2(expr({
+find_assign(expr({
   a <- 1
   b <- 2
   a <- 3
 }))
 
-find_assign2(expr({
+find_assign(expr({
   system.time(x <- print(y <- 5))
 }))
+
 ```
+
+This function works for these simple cases, but the output is rather verbose and includes some extraneous `NULL`s. Instead of returning a list, let's keep it simple and use a character vector. 
 
 This is better, but we have two problems: dealing with repeated names and neglecting assignments inside other assignments. The fix for the first problem is easy. We need to wrap `unique()` around the recursive case to remove duplicate assignments. The fix for the second problem is a bit more tricky. We also need to recurse when the call is to `<-`. `find_assign3()` implements both strategies:
 
@@ -722,30 +786,3 @@ While the complete version of this function is quite complicated, it's important
 
 1.  Improve the base `recurse_call()` template to also work with lists of
     functions and expressions (e.g., as from `parse(path_to_file))`.
-
-## Exercises that need a home
-
-1.  You can use `formals()` to both get and set the arguments of a function.
-    Use `formals()` to modify the following function so that the default value
-    of `x` is missing and `y` is 10.
-
-    ```{r}
-    g <- function(x = 20, y) {
-      x + y
-    }
-    ```
-
-1.  Write an equivalent to `get()` using `as.name()` and `eval()`. Write an
-    equivalent to `assign()` using `as.name()`, `substitute()`, and `eval()`.
-    (Don't worry about the multiple ways of choosing an environment; assume
-    that the user supplies it explicitly.)
-
-1.  Concatenating a call and an expression with `c()` creates a list. Implement
-    `concat()` so that the following code works to combine a call and
-    an additional argument.
-
-    ```{r, eval = FALSE}
-    c(quote(f()), list(a = 1, b = quote(mean(a)))
-    concat(quote(f), a = 1, b = quote(mean(a)))
-    #> f(a = 1, b = mean(a))
-    ```
