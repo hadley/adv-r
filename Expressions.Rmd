@@ -520,69 +520,66 @@ To conclude the chapter we're going to pull together everything that you've lear
   unused local variables, unused parameters, and the use of partial
   argument matching.
 
-These tools are somewhat similar to Lisp macros, as discussed in [Programmer's Niche: Macros in R](http://www.r-project.org/doc/Rnews/Rnews_2001-3.pdf#page=10) by Thomas Lumley. However, macros are run at compile-time, which doesn't have any meaning in R, and always return expressions. They're also somewhat like Lisp [fexprs](http://en.wikipedia.org/wiki/Fexpr). A fexpr is a function where the arguments are not evaluated by default. The terms macro and fexpr are useful to know when looking for useful techniques from other languages. \index{macros} \index{fexprs}
+To write functions like `findGlobals()` and `checkUsage()`, we need recursion, as recursive functions pair naturally with trees. There a two parts to the a recursive function:
 
-To write functions like `findGlobals()` and `checkUsage()`, we need recursion, as recursive function are a natural pairing to tree data structures. There a two parts to the a recursive function:
-
-* The recursive case: you re-call the function on a smaller sub-problem and
-  then combine the results. For expressions, the recursive cases needs to 
-  handle calls and pairlists.
+* The __recursive case__: you divide the problem up in to smaller pieces,
+  re-call the function on each piece, then combine the results back together
+  again. For expressions, the recursive case includes handle calls and 
+  pairlists.
   
-* The base case: to ensure that function eventually terminates, you need to
-  recognise when you have a problem that is easy to solve. For ASTs, this
-  typically means that you've reached the leaves of the tree; the calls
-  and names.
+* The __base case__: to ensure that function eventually terminates, you need to
+  solve the simplest cases directly. When working with ASTs, this typically 
+  means that you've reached the leaves of the tree; the symbols and names.
 
-I recommend to start by implementing the base cases and then checking that you code works. with the base cases and then 
-
-This means that a function for working with expressions will look like:
-
-```{r, eval = FALSE}
-recurse_call <- function(x) {
-  if (is_constant(x)) {
-    # Base case: return a value
-  } else if (is_symbol(x)) {
-    # Base case: return a value
-  } else if (is_lang(x)) {
-    # Recursive case
-    lapply(x, recurse_call)
-  } else if (is_pairlist(x)) {
-    # Recursive case
-    lapply(x, recurse_call)
-  } else {
-    # User supplied incorrect input
-    stop("Don't know how to handle type ", typeof(x), 
-      call. = FALSE)
-  }
-}
-```
+To make this pattern easier to see, we'll use two helper functions. First we define `expr_type()` which will return "constant" for constant, "symbol" for symbols, "call", for calls, pairlist" for pairlists, and the type of anything else that might be in the AST:
 
 ```{r}
 expr_type <- function(x) {
-  if (is_syntactic_literal(x)) {
+  if (rlang::is_syntactic_literal(x)) {
     "constant"
+  } else if (is.symbol(x)) {
+    "symbol"
   } else if (is.call(x)) {
-    # since typeof returns language
     "call"
+  } else if (is.pairlist(x)) {
+    "pairlist"
   } else {
     typeof(x)
   }
 }
 
+expr_type(expr("a"))
+expr_type(expr(f(1, 2)))
+```
+
+We'll couple this with a wrapper around the switch function:
+
+```{r}
 switch_expr <- function(x, ...) {
   switch(expr_type(x), 
     ..., 
     stop("Don't know how to handle type ", typeof(x), call. = FALSE)  
   )
 }
-
-flat_map <- function(.x, .f, ...) {
-  unlist(lapply(.x, .f, ...), recursive = FALSE)
-}
-
-
 ```
 
+With these two functions in hand, the basic form of any function for walking the AST will be:
+
+```{r}
+recurse_call <- function(x) {
+  switch_expr(x, 
+    # Base cases
+    symbol = ,
+    constant = ,
+    
+    # Recursive cases
+    call = ,
+    pairlist = 
+  )
+}
+```
+
+It's usually fairly easy to solve the problem for the base cases. The recursive cases are a little more tricky, but typically it's just a matter of finding the correct purrr function.
 
 ### Finding F and T
 
@@ -593,10 +590,35 @@ ast(TRUE)
 ast(T)
 ```
 
-`TRUE` is parsed as a logical vector of length one, while `T` is parsed as a name. This tells us how to write our base cases for the recursive function: while an atomic vector will never be a logical abbreviation, a name might, so we'll need to test for both `T` and `F`. The recursive cases can be combined because they do the same thing in both cases: they recursively call `logical_abbr()` on each element of the object. \indexc{logical\_abbr}
+`TRUE` is parsed as a logical vector of length one, while `T` is parsed as a name. This tells us how to write our base cases for the recursive function: a constant is never a logical abbreviation, and a symbol is an abbreviation if it's "F" or "T".
+
+```{r}
+logical_abbr_rec <- function(x) {
+  switch_expr(x, 
+    constant = FALSE,
+    symbol = as_string(x) %in% c("F", "T")
+  )
+}
+
+logical_abbr_rec(expr(TRUE))
+logical_abbr_rec(expr(T))
+```
+
+Note that our recursive function works with expressions which means we always need to use it with `expr()`. When writing a recursive function it's common to write a wrapper that provides defaults or makes the function a little easier to use. Here we'll typically make a wrapper that quotes its input (we'll learn more about that shortly), so we don't need to use `expr()` every time.
 
 ```{r}
 logical_abbr <- function(x) {
+  logical_abbr_rec(enexpr(x))
+}
+
+logical_abbr(T)
+logical_abbr(FALSE)
+```
+
+Next we need to implement the recursive cases. Here it's simple because we want to do the same thing for calls and for pairlists: recursively apply the function to each subcomponent, and return `TRUE` is any subcomponent contains a logical abbreviation. We can use `purrr::some()` to implement this pattern.
+
+```{r}
+logical_abbr_rec <- function(x) {
   switch_expr(x,
     # Base cases
     constant = FALSE,
@@ -604,185 +626,151 @@ logical_abbr <- function(x) {
     
     # Recursive cases
     call = ,
-    pairlist = {
-      for (i in seq_along(x)) {
-        if (logical_abbr(x[[i]])) return(TRUE)
-      }
-      FALSE
-    }
+    pairlist = purrr::some(x, logical_abbr_rec)
   )
 }
 
-logical_abbr(expr(TRUE))
-logical_abbr(expr(T))
-logical_abbr(expr(mean(x, na.rm = T)))
-logical_abbr(expr(function(x, na.rm = T) FALSE))
+logical_abbr(mean(x, na.rm = T))
+logical_abbr(function(x, na.rm = T) FALSE)
 ```
 
 ### Finding all variables created by assignment
 
-`logical_abbr()` is very simple: it only returns a single `TRUE` or `FALSE`. The next task, listing all variables created by assignment, is a little more complicated. We'll start simply, and then make the function progressively more rigorous. \indexc{find\_assign()}
-
-Again, we start by looking at the AST for assignment:
+`logical_abbr()` is very simple: it only returns a single `TRUE` or `FALSE`. The next task, listing all variables created by assignment, is a little more complicated. We'll start simply, and then make the function progressively more rigorous. \indexc{find\_assign()} Again, we start by looking at the AST for assignment:
 
 ```{r}
 ast(x <- 10)
 ```
 
-Assignment is a call where the first element is the name `<-`, the second is the object the name is assigned to, and the third is the value to be assigned. This makes the base cases simple: constants and names don't create assignments, so they return `list()`. 
+Assignment is a call where the first element is the name `<-`, the second is the object the name is assigned to, and the third is the value to be assigned. 
 
-We need to think about the return type of this function: it's going to need to be a list. 
-
-The recursive cases aren't too hard either. We `lapply()` over pairlists and over calls to functions other than `<-`.
+Next, we need to decide what data structure we're going to use for the results. Here I think it will be easiest it we return a character vector giving all the variables that were created. With that in hand we can start by implementing the base cases and providing a helpful wrapper around the recursive function. The base cases here are really simple!
 
 ```{r}
-find_assign <- function(x) {
+find_assign_rec <- function(x) {
+  switch_expr(x, 
+    constant = ,
+    symbol = character()
+  )  
+}
+find_assign <- function(x) find_assign_rec(enexpr(x))
+
+find_assign("x")
+find_assign(x)
+```
+
+Next we implement the recursive cases. This is made easier by a function that should exist in purrrr, but currently doesn't:
+
+```{r}
+flat_map_chr <- function(.x, .f, ...) {
+  purrr::flatten_chr(purrr::map(.x, .f, ...))
+}
+```
+
+```{r}
+find_assign_rec <- function(x) {
   switch_expr(x,
     # Base cases
     constant = ,
-    symbol = list(),
+    symbol = character(),
     
     # Recursive cases
-    pairlist = flat_map(x, find_assign),
+    pairlist = flat_map_chr(x, find_assign_rec),
     call = {
       if (identical(x[[1]], expr(`<-`))) {
-        list(x[[2]])
+        as_string(x[[2]])
       } else {
-        flat_map(x, find_assign)
+        flat_map_chr(as.list(x), find_assign_rec)
       }
     }
   )
 }
 
-find_assign(expr(a <- 1))
-find_assign(expr({
+find_assign(a <- 1)
+find_assign({
   a <- 1
-  b <- 2
-}))
-```
-
-We'll also test it with two slightly more complicated examples:
-
-```{r}
-find_assign(expr({
-  a <- 1
-  b <- 2
-  a <- 3
-}))
-
-find_assign(expr({
-  system.time(x <- print(y <- 5))
-}))
-
-```
-
-This function works for these simple cases, but the output is rather verbose and includes some extraneous `NULL`s. Instead of returning a list, let's keep it simple and use a character vector. 
-
-This is better, but we have two problems: dealing with repeated names and neglecting assignments inside other assignments. The fix for the first problem is easy. We need to wrap `unique()` around the recursive case to remove duplicate assignments. The fix for the second problem is a bit more tricky. We also need to recurse when the call is to `<-`. `find_assign3()` implements both strategies:
-
-```{r}
-find_assign3 <- function(x) {
-  if (is.atomic(x) || is.name(x)) {
-    character()
-  } else if (is.call(x)) {
-    if (identical(x[[1]], expr(`<-`))) {
-      lhs <- as.character(x[[2]])
-    } else {
-      lhs <- character()
-    }
-
-    unique(c(lhs, unlist(lapply(x, find_assign3))))
-  } else if (is.pairlist(x)) {
-    unique(unlist(lapply(x, find_assign3)))
-  } else {
-    stop("Don't know how to handle type ", typeof(x), 
-      call. = FALSE)
+  {
+    b <- 2
   }
+})
+```
+
+Now we need to make our function more robust but coming up with examples intended to break it. What happens we assign to the same variable multiple times?
+
+```{r}
+find_assign({
+  a <- 1
+  a <- 2
+})
+```
+
+It's easiest to fix this at the level of the wrapper function:
+
+```{r}
+find_assign <- function(x) unique(find_assign_rec(enexpr(x)))
+
+find_assign({
+  a <- 1
+  a <- 2
+})
+```
+
+What happens if we have multiple calls to assign? Currently we only return the first. That's because when `<-` occurs we immediately terminate recursion. 
+
+```{r}
+find_assign({
+  a <- b <- c <- 1
+})
+```
+
+Instead we need to take a more rigorous approach. I think it's best to keep the recursive function focused on the tree structure, so I'm going to extract out `find_assign_call()` into a separate function.
+
+```{r}
+# Remove after rlang rename
+is_call <- rlang::is_lang
+
+find_assign_call <- function(x) {
+  if (is_call(x, "<-") && is.symbol(x[[2]])) {
+    lhs <- as_string(x[[2]])
+    children <- as.list(x)[-1]
+  } else {
+    lhs <- character()
+    children <- as.list(x)
+  }
+  
+  c(lhs, flat_map_chr(children, find_assign_rec))
 }
 
-find_assign3(expr({
-  a <- 1
-  b <- 2
-  a <- 3
-}))
-
-find_assign3(expr({
-  system.time(x <- print(y <- 5))
-}))
-```
-
-We also need to test subassignment:
-
-```{r}
-find_assign3(expr({
-  l <- list()
-  l$a <- 5
-  names(l) <- "b"
-}))
-```
-
-We only want assignment of the object itself, not assignment that modifies a property of the object. Drawing the tree for the quoted object will help us see what condition to test for. The second element of the call to `<-` should be a name, not another call.
-
-```{r}
-ast(l$a <- 5)
-ast(names(l) <- "b")
-```
-
-Now we have a complete version:
-
-```{r}
-find_assign4 <- function(x) {
-  if (is.atomic(x) || is.name(x)) {
-    character()
-  } else if (is.call(x)) {
-    if (identical(x[[1]], expr(`<-`)) && is.name(x[[2]])) {
-      lhs <- as.character(x[[2]])
-    } else {
-      lhs <- character()
-    }
-
-    unique(c(lhs, unlist(lapply(x, find_assign4))))
-  } else if (is.pairlist(x)) {
-    unique(unlist(lapply(x, find_assign4)))
-  } else {
-    stop("Don't know how to handle type ", typeof(x), 
-      call. = FALSE)
-  }
+find_assign_rec <- function(x) {
+  switch_expr(x,
+    # Base cases
+    constant = ,
+    symbol = character(),
+    
+    # Recursive cases
+    pairlist = flat_map_chr(x, find_assign_rec),
+    call = find_assign_call(x)
+  )
 }
 
-find_assign4(expr({
-  l <- list()
-  l$a <- 5
-  names(l) <- "b"
-}))
+find_assign(a <- b <- c <- 1)
+find_assign(system.time(x <- print(y <- 5)))
+find_assign(names(l) <- "b")
 ```
 
 While the complete version of this function is quite complicated, it's important to remember we wrote it by working our way up by writing simple component parts.
 
 ### Exercises
 
-1.  Why does `logical_abbr()` use a for loop instead of a functional
-    like `lapply()`?
-
-1.  `logical_abbr()` works when given quoted objects, but doesn't work when
-    given an existing function, as in the example below. Why not? How could
-    you modify `logical_abbr()` to work with functions? Think about what
-    components make up a function.
+1.  `logical_abbr()` works with expressions. It currently fails when you give it
+    a function. Why not? How could you modify `logical_abbr()` to make it 
+    work? What components will you need to recurse over?
 
     ```{r, eval = FALSE}
     f <- function(x = TRUE) {
       g(x + T)
     }
-    logical_abbr(f)
+    logical_abbr(!!f)
     ```
 
-1.  Write a function called `ast_type()` that returns either "constant",
-    "name", "call", or "pairlist". Rewrite `logical_abbr()`, `find_assign()`,
-    and `bquote2()` to use this function with `switch()` instead of nested if
-    statements.
-
-1.  Write a function that extracts all calls to a function. Compare your
-    function to `pryr::fun_calls()`.
-
-1.  Improve the base `recurse_call()` template to also work with lists of
-    functions and expressions (e.g., as from `parse(path_to_file))`.
+1.  Write a function that extracts all calls to a function.
