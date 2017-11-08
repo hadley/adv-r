@@ -4,6 +4,9 @@
 source("common.R")
 library(rlang)
 library(lobstr)
+
+# Remove after rlang rename
+is_call <- rlang::is_lang
 ```
 
 To compute on the language, we first need to understand its structure. That requires some new vocabulary, some new tools, and some new ways of thinking about R code. \index{expressions} The first thing you'll need to understand is the distinction between an operation and its result. Take this code, which takes a variable `x` multiplies it by 10 and saves the result to a new variable called `y`. It doesn't work because we haven't defined a variable called `x`:
@@ -520,18 +523,18 @@ To conclude the chapter we're going to pull together everything that you've lear
   unused local variables, unused parameters, and the use of partial
   argument matching.
 
-To write functions like `findGlobals()` and `checkUsage()`, we need recursion, as recursive functions pair naturally with trees. There a two parts to the a recursive function:
+Getting all of the details of this functions correct is fiddly and complex, so we're not going to explore the full expression. Instead we'll focus on the big ideas needed to implement functions that work like them, namely recursion. Recursive functions are a natural fit to tree-like data structures because a recursive function is made up of two parts:
 
-* The __recursive case__: you divide the problem up in to smaller pieces,
-  re-call the function on each piece, then combine the results back together
-  again. For expressions, the recursive case includes handle calls and 
-  pairlists.
+* The __recursive case__ handles the nodes in the tree. Typically, you'll
+  do something to each child of node, usually calling the recursive function
+  again, and then combine the results back together again. For expressions, 
+  you'll need to handle calls and pairlists in the recursive case.
   
-* The __base case__: to ensure that function eventually terminates, you need to
-  solve the simplest cases directly. When working with ASTs, this typically 
-  means that you've reached the leaves of the tree; the symbols and names.
+* The __base case__ handles the leaves of the tree. The base cases ensure
+  that the function eventually terminates, by solving the simplest cases 
+  directly. For expressions, you need to base symbol and names in the base case.
 
-To make this pattern easier to see, we'll use two helper functions. First we define `expr_type()` which will return "constant" for constant, "symbol" for symbols, "call", for calls, pairlist" for pairlists, and the type of anything else that might be in the AST:
+To make this pattern easier to see, we'll use two helper functions. First we define `expr_type()` which will return "constant" for constant, "symbol" for symbols, "call", for calls, "pairlist" for pairlists, and the "type" of anything else:
 
 ```{r}
 expr_type <- function(x) {
@@ -563,7 +566,7 @@ switch_expr <- function(x, ...) {
 }
 ```
 
-With these two functions in hand, the basic form of any function for walking the AST will be:
+With these two functions in hand, the basic template for any function that walks the AST is as follows:
 
 ```{r}
 recurse_call <- function(x) {
@@ -579,18 +582,20 @@ recurse_call <- function(x) {
 }
 ```
 
-It's usually fairly easy to solve the problem for the base cases. The recursive cases are a little more tricky, but typically it's just a matter of finding the correct purrr function.
+Typically, solving the base case will easy so we'll do that first, and check the results. The recursive cases are a little more tricky, but typically you just need to think about the data structure you want in the output and then find the correct purrr function. To that end, make sure you're familiar with [Functionals] before continuing.
 
 ### Finding F and T
 
-We'll start simple with a function that determines whether a function uses the logical abbreviations `T` and `F`. Using `T` and `F` is generally considered to be poor coding practice, and is something that `R CMD check` will warn about. Let's first compare the AST for `T` vs. `TRUE`:
+We'll start simple with a function that determines whether a function uses the logical abbreviations `T` and `F`: it will return `TRUE` if it finds a logical abbreviation, and `FALSE` otherwise. Using `T` and `F` is generally considered to be poor coding practice, and is something that `R CMD check` will warn about. 
+
+Let's first compare the AST for `T` vs. `TRUE`:
 
 ```{r}
 ast(TRUE)
 ast(T)
 ```
 
-`TRUE` is parsed as a logical vector of length one, while `T` is parsed as a name. This tells us how to write our base cases for the recursive function: a constant is never a logical abbreviation, and a symbol is an abbreviation if it's "F" or "T".
+`TRUE` is parsed as a logical vector of length one, while `T` is parsed as a name. This tells us how to write our base cases for the recursive function: a constant is never a logical abbreviation, and a symbol is an abbreviation if it's "F" or "T":
 
 ```{r}
 logical_abbr_rec <- function(x) {
@@ -604,7 +609,7 @@ logical_abbr_rec(expr(TRUE))
 logical_abbr_rec(expr(T))
 ```
 
-Note that our recursive function works with expressions which means we always need to use it with `expr()`. When writing a recursive function it's common to write a wrapper that provides defaults or makes the function a little easier to use. Here we'll typically make a wrapper that quotes its input (we'll learn more about that shortly), so we don't need to use `expr()` every time.
+Our recursive function works with expressions which means we always need to use it with `expr()`. When writing a recursive function it's common to write a wrapper that provides defaults or makes the function a little easier to use. Here we'll typically make a wrapper that quotes its input (we'll learn more about that in the next chapter), so we don't need to use `expr()` every time.
 
 ```{r}
 logical_abbr <- function(x) {
@@ -615,14 +620,14 @@ logical_abbr(T)
 logical_abbr(FALSE)
 ```
 
-Next we need to implement the recursive cases. Here it's simple because we want to do the same thing for calls and for pairlists: recursively apply the function to each subcomponent, and return `TRUE` is any subcomponent contains a logical abbreviation. We can use `purrr::some()` to implement this pattern.
+Next we need to implement the recursive cases. Here it's simple because we want to do the same thing for calls and for pairlists: recursively apply the function to each subcomponent, and return `TRUE` if any subcomponent contains a logical abbreviation. This is made easy by `purrr::some()`, which iterates over a list and returns `TRUE` if the predicate function is true for any element.
 
 ```{r}
 logical_abbr_rec <- function(x) {
   switch_expr(x,
     # Base cases
     constant = FALSE,
-    symbol = identical(x, expr(T)) || identical(x, expr(F)),
+    symbol = as_string(x) %in% c("F", "T"),
     
     # Recursive cases
     call = ,
@@ -636,15 +641,19 @@ logical_abbr(function(x, na.rm = T) FALSE)
 
 ### Finding all variables created by assignment
 
-`logical_abbr()` is very simple: it only returns a single `TRUE` or `FALSE`. The next task, listing all variables created by assignment, is a little more complicated. We'll start simply, and then make the function progressively more rigorous. \indexc{find\_assign()} Again, we start by looking at the AST for assignment:
+`logical_abbr()` is very simple: it only returns a single `TRUE` or `FALSE`. The next task, listing all variables created by assignment, is a little more complicated. We'll start simply, and then make the function progressively more rigorous. \indexc{find\_assign()} 
+
+We start by looking at the AST for assignment:
 
 ```{r}
 ast(x <- 10)
 ```
 
-Assignment is a call where the first element is the name `<-`, the second is the object the name is assigned to, and the third is the value to be assigned. 
+Assignment is a call where the first element is the symbol `<-`, the second is name of variable, and the third is the value to be assigned. 
 
-Next, we need to decide what data structure we're going to use for the results. Here I think it will be easiest it we return a character vector giving all the variables that were created. With that in hand we can start by implementing the base cases and providing a helpful wrapper around the recursive function. The base cases here are really simple!
+Next, we need to decide what data structure we're going to use for the results. Here I think it will be easiest it we return a character vector. If we return symbols, we'll need to use a `list()` and that makes things a little more complicated.
+
+With that in hand we can start by implementing the base cases and providing a helpful wrapper around the recursive function. The base cases here are really simple!
 
 ```{r}
 find_assign_rec <- function(x) {
@@ -667,6 +676,8 @@ flat_map_chr <- function(.x, .f, ...) {
 }
 ```
 
+The recursive case for pairlists is simple: we iterate of every element of the pairlist (i.e. each function argument) and combine the results. The case for calls is a little bit more complex - if this is a call to `<-` then we should return the second element of the call:
+
 ```{r}
 find_assign_rec <- function(x) {
   switch_expr(x,
@@ -675,9 +686,9 @@ find_assign_rec <- function(x) {
     symbol = character(),
     
     # Recursive cases
-    pairlist = flat_map_chr(x, find_assign_rec),
+    pairlist = flat_map_chr(as.list(x), find_assign_rec),
     call = {
-      if (identical(x[[1]], expr(`<-`))) {
+      if (is_call(x, "<-")) {
         as_string(x[[2]])
       } else {
         flat_map_chr(as.list(x), find_assign_rec)
@@ -685,6 +696,10 @@ find_assign_rec <- function(x) {
     }
   )
 }
+
+# find_assign(function(x = 1) {})
+# Need to handle srcrefs
+# Maybe move to new section specifically about functions?
 
 find_assign(a <- 1)
 find_assign({
@@ -726,9 +741,6 @@ find_assign({
 Instead we need to take a more rigorous approach. I think it's best to keep the recursive function focused on the tree structure, so I'm going to extract out `find_assign_call()` into a separate function.
 
 ```{r}
-# Remove after rlang rename
-is_call <- rlang::is_lang
-
 find_assign_call <- function(x) {
   if (is_call(x, "<-") && is.symbol(x[[2]])) {
     lhs <- as_string(x[[2]])
@@ -774,3 +786,6 @@ While the complete version of this function is quite complicated, it's important
     ```
 
 1.  Write a function that extracts all calls to a function.
+
+1.  Instead of writing a wrapper that quotes its input, we could have made 
+    the recursive function itself a quoting function. Why is this suboptimal?
