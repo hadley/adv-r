@@ -8,22 +8,21 @@ library(purrr)
 
 ## Introduction
 
-Now that you understand the tree structure of R code, it's time to come back to one of the fundamental ideas that make `quote()` and `ast()` work: __quasiquotation__.  Quasiquotation is the combination of two ideas:
+Now that you understand the tree structure of R code, it's time to come back to one of the fundamental ideas that make `expr()` and `ast()` work: __quasiquotation__.  Quasiquoting is made up of two parts:
 
-* Quoting, which allows you to capture the AST associated with a function argument 
-  without evaluating it.
+* Quoting, which allows you to capture the AST associated with a function 
+  argument without evaluating it.
   
-* Unquoting, which allows you to selectively evaulate parts of an expression that 
-  would otherwise be quoted.
+* Unquoting, which allows you to selectively evaluate parts of an expression 
+  that would otherwise be quoted.
 
-This combination of two makes it easy to make compose expressions that are mixture of direct and indirect specifications, and simplifies the solution to wide variety of challenging problems. Quasiquotation is not implement in base R, but is instead provided by the rlang package. 
+This combination of these two ideas makes it easy to compose expressions that are mixture of direct and indirect specifications and simplifies the solution to wide variety of challenging problems. Quasiquotation is not implemented in base R, but is instead provided by the rlang package. 
 
-Once you've mastered quasiquotation, we'll circle back around to base R. You'll learn the closest equivalents to rlang's quoting functions, learn about the variety of techniques that base R uses implement unquoting, and see some of the drawbacks.
+Once you've mastered quasiquotation, we'll circle back around to base R. You'll learn the closest equivalents to rlang's quoting functions, learn about the variety of techniques that base R uses implement unquoting.
 
 We'll finish the chapter with a case study: using quasiquotation to construct calls "by hand". This is a useful technique for creating simple function operators with readable source code, and is a handy technique to work around functions (in base R and elsewhere) that don't support unquoting.
 
 These tools are somewhat similar to Lisp macros, as discussed in [Programmer's Niche: Macros in R](http://www.r-project.org/doc/Rnews/Rnews_2001-3.pdf#page=10) by Thomas Lumley. However, macros are run at compile-time, which doesn't have any meaning in R, and always return expressions. They're also somewhat like Lisp [fexprs](http://en.wikipedia.org/wiki/Fexpr). A fexpr is a function where the arguments are not evaluated by default. The terms macro and fexpr are useful to know when looking for useful techniques from other languages. \index{macros} \index{fexprs}
-
 
 ### Motivation
 
@@ -47,7 +46,7 @@ cement(Good, morning, Hadley)
 cement(Good, afternoon, Alice)
 ```
 
-This is useful because we no longer need to type quotes. The problem, however, comes when we want to use variables. It's easy to use variables with `paste()`, because we just don't surround them with double quotes:
+This is useful because we no longer need to type quotes. The problem, however, comes when we want to use variables. It's easy to use variables with `paste()`l we just don't surround them with quote marks:
 
 ```{r}
 name <- "Hadley"
@@ -62,15 +61,15 @@ Obviously this doesn't work with `cement()` because every input is automatically
 cement(Good, time, name)
 ```
 
-Functions that behave this way in R are often called __non-standard evaluation__ (NSE for short) functions. NSE isn't quite the right name here since we're not actually evaluating anything. We'll talk more about evaluation and NSE in the next chapter.
+We need some way to explicit __unquote__ the input, to tell `cement` to use the value stored inside the variable instead of the name of the variable. In this example, we need someway to tell `cement()` that `time` and `name` should be handled differently to `Good`. 
 
-We need some way to explicit __unquote__ the input, to tell `cement` to use the value stored inside the variable instead of the name of the variable. In this example, we need someway to tell `cement()` that `time` and `name` should be handled differently to `Good`. Quasiquotation give us a standard tool to do so: `!!`, prounounced bang-bang.
+Quasiquotation give us a standard tool to do so: `!!`, prounounced bang-bang.
 
 ```{r}
 cement(Good, !!time, !!name)
 ```
 
-It's useful to compare `cement()` and `paste()` directly. `paste()` is a regular function, so we have to add the quote marks ourselves. `cement()` is a quoting function, so we need to tell it when to unquote.
+It's useful to compare `cement()` and `paste()` directly. `paste()` evaluates its arguments, so we need to do the quoting; `cement()` quotes its arguments, so we need to do the unquoting.
 
 ```{r, eval = FALSE}
 paste("Good", name, time)
@@ -79,7 +78,7 @@ cement(Good, !!time, !!name)
 
 ## Quasiquotation
 
-The idea of quasiquotation was first developed by the analytic philsopher Willard van Orman Quine in the early 1940s [^1]. It's helpful in philosophy in order to clearly distinguish between use and mention, or equivalently an object and the words we use to refer to that object. For example, here are three examples from the "[Substitutional Quantifiers](https://johnmacfarlane.net/142/substitutional-quantifiers.pdf)" class taught by John MacFarlane [^2].
+The idea of quasiquotation was first developed by the philsopher Willard van Orman Quine in the early 1940s [^1]. It's helpful in philosophy in order to clearly distinguish between use and mention, or equivalently an object and the words we use to refer to that object. For example, here are three examples from the "[Substitutional Quantifiers](https://johnmacfarlane.net/142/substitutional-quantifiers.pdf)" class taught by John MacFarlane [^2].
 
 *  'net' is part of 'clarinet', but a net is not part of a clarinet.
 
@@ -189,7 +188,7 @@ expr(f(!!!x, y))
 knitr::include_graphics("diagrams/expression-bang-bang-bang.png", dpi = 450)
 ```
 
-There's one final component to quasiquotation: `:=`. One challenge that sometimes crops up is that the LHS of `=` is always quoted. 
+There's one final component to quasiquotation: `:=`, pronounced colon-equals. One challenge that sometimes crops up is that the LHS of `=` is always quoted. 
 
 ```{r}
 name <- "x"
@@ -323,7 +322,7 @@ Now that you understand the basics of quasiquotation it's time to take a look at
 
 ### Unquoting
 
-Since base R doesn't have quasiquotation, different functions that quote their arguments offer different approaches. Three apptend to offer one of three approaches to allow you to unquote: 
+Since base R doesn't have quasiquotation, different functions that quote their arguments offer different approaches. There are three common approaches:
 
 *   A pair of functions: one that quotes, and one that doesn't. For example, 
     take the very commonly used `$`. It quotes it's second argument: `df$x`. 
@@ -354,7 +353,7 @@ Since base R doesn't have quasiquotation, different functions that quote their a
     the `character.only` argument to an argument to switch between quoted
     and value behaviour.
     
-    ```{r}
+    ```{r, message = FALSE}
     library(MASS)
     
     pkg <- "MASS"
