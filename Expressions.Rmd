@@ -1,650 +1,528 @@
-# Expressions {#metaprogramming}
+# Expressions
 
-```{r, echo = FALSE}
-library(pryr)
+```{r setup, include = FALSE}
+source("common.R")
+library(rlang)
+library(lobstr)
+
+# Remove after rlang rename
+is_call <- rlang::is_lang
 ```
 
-In [non-standard evaluation](#nse), you learned the basics of accessing and evaluating the expressions underlying computation in R. In this chapter, you'll learn how to manipulate these expressions with code. You're going to learn how to metaprogram: how to create programs with other programs! \index{metaprogramming} \index{computing on the language|see{metaprogramming}}
+To compute on the language, we first need to understand its structure. That requires some new vocabulary, some new tools, and some new ways of thinking about R code. \index{expressions} The first thing you'll need to understand is the distinction between an operation and its result. Take this code, which takes a variable `x` multiplies it by 10 and saves the result to a new variable called `y`. It doesn't work because we haven't defined a variable called `x`:
 
-##### Outline
-
-* [Structure of expressions](#structure-of-expressions) begins with a deep 
-  dive into the structure of expressions. You'll learn about the four 
-  components of an expression: constants, names, calls, and pairlists. 
-  
-* [Names](#names) goes into further details about names.
-
-* [Calls](#calls) gives more details about calls.
-
-* [Capturing the current call](#capturing-call) takes a minor detour to 
-  discuss some common uses of calls in base R. 
-  
-* [Pairlists](#pairlists) completes the discussion of the four major 
-  components of an expression, and shows how you can create functions from 
-  their component pieces. 
-  
-* [Parsing and deparsing](#parsing-and-deparsing) discusses how to convert
-  back and forth between expressions and text.
-
-* [Walking the call tree with recursive functions](#ast-funs) concludes
-  the chapter, combining everything you've learned about writing functions 
-  that can compute on and modify arbitrary R code.
-
-##### Prerequisites
-
-Throughout this chapter we're going to use tools from the `pryr` package to help see what's going on. If you don't already have it, install it by running `install.packages("pryr")`.
-
-## Structure of expressions {#structure-of-expressions}
-
-To compute on the language, we first need to understand the structure of the language. That will require some new vocabulary, some new tools, and some new ways of thinking about R code. The first thing you'll need to understand is the distinction between an operation and a result: \index{expressions}
-
-```{r}
-x <- 4
+```{r, error = TRUE}
 y <- x * 10
-y
 ```
 
-We want to distinguish the action of multiplying `x` by 10 and assigning that result to `y` from the actual result (40). As we've seen in the previous chapter, we can capture the action with `quote()`:
+It would be nice if we could capture the intent of the code, without executing the code. In other words, how can we separate our description of the action from performing it? One way is to use `rlang::expr()`: \indexc{expr()}
 
 ```{r}
-z <- quote(y <- x * 10)
+z <- expr(y <- x * 10)
 z
 ```
 
-`quote()` returns an __expression__: an object that represents an action that can be performed by R. (Unfortunately `expression()` does not return an expression in this sense. Instead, it returns something more like a list of expressions. See [parsing and deparsing](#parsing-and-deparsing) for more details.) \indexc{quote()}
+`expr()` returns a quoted __expression__: the R code that captures our intent.
 
-An expression is also called an abstract syntax tree (AST) because it represents the hierarchical tree structure of the code. We'll use `pryr::ast()` to see this more clearly: \index{abstract syntax tree} \indexc{ast()}
-
-```{r}
-ast(y <- x * 10)
-```
-
-There are four possible components of an expression: constants, names, calls, and pairlists.
-
-* __constants__ are length one atomic vectors, like `"a"` or `10`.
-  `ast()` displays them as is. \index{constants}
-
-    ```{r}
-    ast("a")
-    ast(1)
-    ast(1L)
-    ast(TRUE)
-    ```
-
-    Quoting a constant returns it unchanged:
-
-    ```{r}
-    identical(1, quote(1))
-    identical("test", quote("test"))
-    ```
-
-* __names__, or symbols, represent the name of an object rather than its value.
-   `ast()` prefixes names with a backtick. \index{names} \index{symbols|see{names}}
-
-    ```{r}
-    ast(x)
-    ast(mean)
-    ast(`an unusual name`)
-    ```
-
-* __calls__ represent the action of calling a function. Like lists, calls are
-  recursive: they can contain constants, names, pairlists, and other calls.
-  `ast()` prints `()` and then lists the children. The first child is the
-  function that is called, and the remaining children are the function's 
-  arguments. \index{calls}
-
-    ```{r}
-    ast(f())
-    ast(f(1, 2))
-    ast(f(a, b))
-    ast(f(g(), h(1, a)))
-    ```
-
-    As mentioned in
-    [every operation is a function call](#all-calls),
-    even things that don't look like function calls still have this
-    hierarchical structure:
-
-    ```{r}
-    ast(a + b)
-    ast(if (x > 1) x else 1/x)
-    ```
-
-* __pairlists__, short for dotted pair lists, are a legacy of R's past.
-  They are only used in one place: the formal arguments of a function.
-  `ast()` prints `[]` at the top-level of a pairlist. Like calls, pairlists
-  are also recursive and can contain constants, names, and calls.
-  \index{pairlists}
-
-    ```{r}
-    ast(function(x = 1, y) x)
-    ast(function(x = 1, y = x * 2) {x / y})
-    ```
-
-Note that `str()` does not follow these naming conventions when describing objects. Instead, it describes names as symbols and calls as language objects:
+In this chapter, you'll learn about the structure of those expressions, which will also help you understand how R executes code. Later, we'll learn about `eval()` which allows you to take such an expression and perform, or __evaluate__, it:
 
 ```{r}
-str(quote(a))
-str(quote(a + b))
+x <- 4
+eval(z)
+y
 ```
 
-Using low-level functions, it is possible to create call trees that contain objects other than constants, names, calls, and pairlists. The following example uses `substitute()` to insert a data frame into a call tree. This is a bad idea, however, because the object does not print correctly: the printed call looks like it should return "list" but when evaluated, it returns "data.frame". \indexc{substitute()}
+## Abstract syntax trees
+
+Quoted expressions are also called abstract syntax trees (AST) because the structure of code is fundamentally hierarchical and can be naturally represented as a tree. To make that more obvious we're going to introduce some graphical conventions, illustrated with the very simple call `f(x, "y", 1)`. \index{abstract syntax tree}
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/expression-simple.png", dpi = 450)
+```
+  
+*   Function __calls__ define the hierarchy of the tree. Calls are shown
+    with an orange square. The first child (`f`) is the function that gets 
+    called. The second and subsequent children (`x`, `"y"`, and `1`) are the 
+    arguments. 
+  
+    __NB__: Unlike many tree diagrams the order of the children is important: 
+    `f(x, 1)` is not the same as `f(1, x)`.
+    
+*   The leaves of the tree are either __symbols__, like `f` and `x`, or 
+    __constants__ like `1` or `"y"`. Symbols have a purple border and rounded 
+    corners. Constants, which are atomic vectors of length one, have black 
+    borders and square corners. Strings are always surrounded in quotes to
+    emphasise their difference to symbols --- more on that later.
+
+Drawing these diagrams by hand takes me some time, and obviously you can't rely on me to draw diagrams for your own code. I'll supplement the hand-drawn trees with trees drawn by `lobstr::ast()`. `ast()` tries to make trees as similar as possible to my hand-drawn trees, while respecting the limitations of the console. Let's use `ast()` to display the tree above:
 
 ```{r}
-class_df <- substitute(class(df), list(df = data.frame(x = 10)))
-class_df
-eval(class_df)
+lobstr::ast(f(x, "y", 1))
 ```
 
-Together these four components define the structure of all R code. They are explained in more detail in the following sections.
+Calls get an orange square, symbols are bold and purple, and strings are surrounded by quote marks. (The formatting is not currently shown in the rendered book, but you can see it if you run the code yourself.)
+
+`ast()` supports "unquoting" with `!!` (pronounced bang-bang). We'll talk about unquoting in detail in the next chapter; for now note that it's useful if you've already used `expr()` to capture the expression.
+
+```{r}
+x <- expr(f(x, "y", 1))
+
+# not useful!
+lobstr::ast(x)
+
+# what we want
+lobstr::ast(!!x)
+```
+
+For more complex code, you can also use RStudio's tree viewer to explore the AST interactively, e.g. `View(expr(y <- x * 10))`.
+
+### Infix vs. prefix calls
+
+Every call in R can be written in tree form, even if it doesn't look like it at first glance. Take `y <- x * 10` again: what are the functions that are being called? It not as easy to spot as `f(x, 1)` because this expression contains two calls in __infix__ form: `<-` and `*`. Infix functions come **in**between their arguments (so an infix function can only have two arguments), whereas most functions in R are __prefix__ functions where the name of the function comes first [^1]. 
+
+[^1]: Some programming languages use __postfix__ calls where the name of the function comes last. If you ever used an old HP calculator, you might have fallen in love with reverse Polish notation, postfix notation for algebra. There is also a family of "stack"-based programming languages descending from Forth which takes this idea as far as it might possibly go.
+
+In R, any infix call can be converted to a prefix call if you escape the function name with backticks. That means that these two lines of code are equivalent:
+
+```{r, eval = FALSE}
+y <- x * 10
+`<-`(y, `*`(x, 10))
+```
+
+And they have this AST:
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/expression-prefix.png", dpi = 450)
+```
+
+```{r}
+lobstr::ast(y <- x * 10)
+```
+
+You might remember that code like `names(x) <- y` ends up calling the `names<-` function. That is not reflected in the parse tree because the translation needs to happen later, due to the complexities of nested assignments like `names(x)[2] <- "z"`.
+
+```{r}
+lobstr::ast(names(x) <- y)
+```
+
+### Special forms
+
+R has a small number of other syntactical constructs that don't look like either prefix or infix function calls. These are called __special forms__ and include `function`, the control flow operators (`if`, `for`, `while`, `repeat`), and parentheses (`{`, `(`, `[[`, and `[`). These can also be written in prefix form, and hence appear in the same way in the AST:
+
+```{r}
+lobstr::ast(function(x, y) {
+  if (x > y) {
+    x
+  } else {
+    y
+  }
+})
+```
+
+### Function factories
+
+Another small detail we need to consider are calls like `f()()`. The first component of the call is usually a symbol:
+
+```{r}
+lobstr::ast(f(a, 1))
+```
+
+But if you are using a function factory, a function that returns another function, the first component might be another call:
+
+```{r}
+lobstr::ast(f()(a, 1))
+```
+
+(See [Function factories] for more details)
+
+Of course that function might also take arguments:
+
+```{r}
+lobstr::ast(f(b, 2)())
+```
+
+These forms are relatively rare, but it's good to be able to recognise them when they crop up. 
+
+### Argument names
+
+So far the examples have only used unnamed arguments. Named arguments don't change the parsing rules, but just add some additional metadata:
+
+```{r}
+lobstr::ast(mean(x = mtcars$cyl, na.rm = TRUE))
+```
+
+(And note the appearance of another infix function: `$`)
 
 ### Exercises
 
-1.  There's no existing base function that checks if an element is
-    a valid component of an expression (i.e., it's a constant, name,
-    call, or pairlist). Implement one by guessing the names of the "is"
-    functions for calls, names, and pairlists.
+1.  Use `ast()` and experimentation to figure out the three arguments to an
+    `if()` call. What would you call them? Which components are required? 
+    
+1.  What are the arguments to the `for()` and `while()` calls? 
 
-1.  `pryr::ast()` uses non-standard evaluation. What's its escape hatch to
-    standard evaluation?
+1.  What does the call tree of an `if` statement with multiple `else if` 
+    conditions look like? Why?
+    
+1.  Two arithmetic operators can be used in both prefix and infix style.
+    What are they?
 
-1.  What does the call tree of an if statement with multiple else conditions
-    look like?
+## R's grammar
 
-1.  Compare `ast(x + y %+% z)` to `ast(x ^ y %+% z)`. What do they
-    tell you about the precedence of custom infix functions?
+The process by which a computer language takes a sequence of tokens (like `x`, `+`, `y`) and constructs a tree is called __parsing__, and it is governed by a set of rules known as a __grammar__. In this section, we'll use `lobstr::ast()` to explore some of the details of R's grammar. 
 
-1.  Why can't an expression contain an atomic vector of length greater than one?
-    Which one of the six types of atomic vector can't appear in an expression?
-    Why?
+If this is your first reading of the metaprogramming chapters, now is a good time to read the first sections of the next two chapters in order to get the big picture. Come back and learn more of the details once you've seen how all the big pieces fit together.
 
-## Names {#names}
+### Operator precedence and associativity
 
-Typically, we use `quote()` to capture names. You can also convert a string to a name with `as.name()`. However, this is most useful only when your function receives strings as input. Otherwise it involves more typing than using `quote()`. (You can use `is.name()` to test if an object is a name.) \index{names} \indexc{as.name()}
+Infix functions introduce ambiguity in a way that prefix functions do not[^2]. The parser has to resolve two sources of ambiguity when parsing infix operators. First, what does `1 + 2 * 3` yield? Do you get 9 (i.e. `(1 + 2) * 3`), or 7 (i.e. `1 + (2 * 3)`).  Which of the two possible parse trees below does R use?
 
-```{r}
-as.name("name")
-identical(quote(name), as.name("name"))
+[^2] These two sources of ambiguity do not exist without infix operators, which can be considered an advantage of purely prefix and postfix languages. It's interesting to compare a simple arithmetic operation in Lisp (prefix) and Forth (postfix). In Lisp you'd write `(+ (+ 1 2) 3))`; this avoids ambiguity by requiring parentheses everywhere. In Forth, you'd write `1 2 + 3 +`; this doesn't require any parentheses, at the cost of requiring more thought when reading.
 
-is.name("name")
-is.name(quote(name))
-is.name(quote(f(name)))
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/expression-ambig-order.png", dpi = 450)
 ```
 
-(Names are also called symbols. `as.symbol()` and `is.symbol()` are identical to `as.name()` and `is.name()`.)
-
-Names that would otherwise be invalid are automatically surrounded by backticks:
-\index{non-syntactic names}
+Programming langauges use conventions called __operator precedence__ to resolve this ambiguity. We can use `ast()` to see what R does: 
 
 ```{r}
-as.name("a b")
-as.name("if")
+lobstr::ast(1 + 2 * 3)
 ```
 
-There's one special name that needs a little extra discussion: the empty name. It is used to represent missing arguments. This object behaves strangely. You can't bind it to a variable. If you do, it triggers an error about missing arguments. It's only useful if you want to programmatically create a function with missing arguments. \index{names|empty}
+Predicting the precedence of arithmetic operations is usually easy because it's drilled into you in school and is consistent across the vast majority of programming languages. Predicting the precedence of other operators is harder. There's one particularly surprising finding in R: `!` has a much lower precedence (i.e. it binds less tightly) than you might expect. This allows you to write useful operations like:
+
+```{r}
+lobstr::ast(!x %in% y)
+```
+
+Another source of ambiguity is repeated usage of the same infix function. For example, is `1 + 2 + 3` equivalent to `(1 + 2) + 3` or to `1 + (2 + 3)`?  This normally doesn't matter because `x + y == y + x`,  i.e. addition is associative. However, some S3 classes define `+` in a non-associative way. For example, ggplot2 overloads `+` to build up a complex plot from simple pieces; this usage is non-associative because earlier layers are drawn underneath later layers.
+
+In R, most operators are __left-associative__, i.e. the operations on the left are evaluated first:
+
+```{r}
+lobstr::ast(1 + 2 + 3)
+```
+
+R has over 30 infix operators divided into 18 precedence groups. While the details are descrbed in `?Syntax`, very few people have memorised the complete ordering. Indeed, if there's any confusion, use parentheses! 
+
+These also appear in the AST, like all other special forms:
+
+```{r}
+lobstr::ast(1 + (2 + 3))
+```
+
+### Whitespace
+
+R, in general, is not sensitive to white space. Most white space is not signficiant and is not recorded in the AST. `x+y` yields exactly the same AST as `x +        y`. This means that you're generally free to add whitespace to enhance the readability of your code. There's one major exception:
+
+```{r}
+lobstr::ast(y <- x)
+lobstr::ast(y < -x)
+```
+
+### Parsing a string
+
+Most of the time you type code into the console, and R takes care of turning the characters you've typed into an AST. But occasionally you have code stored in a string, and you want to parse it yourself. You can do so using `rlang::parse_expr()`:
+
+```{r}
+x1 <- "y <- x + 10"
+lobstr::ast(!!x1)
+
+x2 <- rlang::parse_expr(x1)
+x2
+lobstr::ast(!!x2)
+```
+
+(If you find yourself working with strings containing code very frequently, you should reconsider your work. Read the next chapter and consider if you can more safely generate expressions using quasiquotation.)
+
+The base equivalent to `parse_expr()` is `parse()`. It is a little harder to use because it's specialised for parsing R code stored in files. That means you need supply your string to the `text` argument, and you'll get back an expression object (more on that shortly) that you'll need to subset:
+
+```{r}
+parse(text = x1)[[1]]
+```
+
+### Deparsing
+
+The opposite of parsing is __deparsing__: you have and AST and you want a string that would generate it:
+
+```{r}
+z <- expr(y <- x + 10)
+expr_text(z)
+```
+
+Parsing and deparsing are not perfectly symmetrical because parsing throws away all information not directly related to the AST. This includes backticks around ordinary names, comments, and whitespace:
+
+```{r}
+cat(expr_text(expr({
+  # This is a comment
+  x <-             `x` + 1
+})))
+```
+
+Deparsing is often used to provide default names for data structures (like data frames), and default labels for messages or other output. rlang provides two helpers for those situations:
+
+```{r}
+z <- expr(f(x, y, z))
+
+expr_name(z)
+expr_label(z)
+```
+
+Be careful when using the base R equivalent, `deparse()`: it returns a character vector, and with one element for each line. Whenever you use it, remember that the length of the output might be greater than one, and plan accordingly.
+
+### Exercises
+
+1.  R uses parentheses in two slightly different ways as illustrated by 
+    this simple call: `f((1))`. Compare and contrast the two uses. 
+    
+1.  `=` can also be used in two ways. Construct a simple example that shows 
+    both uses.
+
+1.  What does `!1 + !1` return? Why?
+
+1.  Which arithmetic operation is right associative?
+
+1.  Why does `x1 <- x2 <- x3 <- 0` work? There are two reasons.
+
+1.  Compare `x + y %+% z` to `x ^ y %+% z`. What does that tell you about 
+    the precedence of custom infix functions?
+
+1.  `deparse()` produces vectors when the input is long. For example, the 
+    following call produces a vector of length two:
+
+    ```{r, eval = FALSE}
+    expr <- expr(g(a + b + c + d + e + f + g + h + i + j + k + l + m +
+      n + o + p + q + r + s + t + u + v + w + x + y + z))
+    
+    deparse(expr)
+    ```
+
+    What do `expr_text()`, `expr_name()`, and `expr_label()` do?
+
+## Data structures
+
+Now that you have a good feel for ASTs and how R's grammar helps to define them, it's time to look into more detail about the underlying implementation. In this section you'll learn about the data structures that R uses to implement the AST:
+
+* Constants and symbols, the leaves of the tree.
+* Calls, the branches of the tree.
+* Pairlists, a historical data structure now only used for function arguments.
+
+Before we continue, a word of caution about the naming conventions used in this book. Unfortunately, base R does not have a consistent set of conventions, so we've had to make our own. We use them consistently in the book and in rlang, but you'll need to remember some translations when reading base R documentation.
+
+We use expression to refer collectively to the data structures that can appear in an AST (constant, symbol, call, pairlist). In base R, "expression" is a special type that is basically equivalent to a list of what we call expressions. To avoid confusion (as much as possible) we'll call these __expression objects__, and we'll discuss in [expression objects]. 
+
+Base R does not have an equivalent term for our "expression". The closest is "language object", which includes symbols and calls, but not constants or pairlists. But note that `typeof()` and `str()` use "language" to mean call. Base R uses symbol and name interchangeably; we prefer symbol because "name" has other common meanings (e.g. the name of a variable).
+
+### Constants and symbols
+
+Constants and symbols are the leaves of the AST. Symbols represent variable names, and constants represent literal values.
+
+Constants are "self-quoting" in the sense that the expression used to represent a constant is the constant itself:
+
+```{r}
+identical(expr("x"), "x")
+identical(expr(TRUE), TRUE)
+identical(expr(1), 1)
+identical(expr(2), 2)
+```
+
+Symbols are used to represent variables. You can convert back and forth between symbols and the strings that represent them with `sym()` and `as_string()`:
+
+```{r}
+"x"
+sym("x")
+as_string(sym("x"))
+```
+
+There's one special symbol that needs a little extra discussion: the empty symbol, constructed with `expr()`. It's used to represent missing function arguments so has some odd behaviour. You can store an empty symbol in a variable, but once you've done so, if you try and refer to it in any way, you'll get an error about missing arguments:
 
 ```{r, error = TRUE}
-f <- function(x) 10
-formals(f)$x
-is.name(formals(f)$x)
-as.character(formals(f)$x)
-
-missing_arg <- formals(f)$x
-# Doesn't work!
-is.name(missing_arg)
+x <- rlang::expr()
+x
+y <- x
 ```
 
-To explicitly create it when needed, call `quote()` with a named argument:
+The only thing you can do that doesn't trigger an error is to check if it's `missing()`:
 
 ```{r}
-quote(expr =)
+missing(x)
 ```
 
-### Exercises
+You only need to know about the missing symbol if you're programmatically creating functions with missing arguments. \index{names|empty}
 
-1.  You can use `formals()` to both get and set the arguments of a function.
-    Use `formals()` to modify the following function so that the default value
-    of `x` is missing and `y` is 10.
+### Calls
 
-    ```{r}
-    g <- function(x = 20, y) {
-      x + y
-    }
-    ```
-
-1.  Write an equivalent to `get()` using `as.name()` and `eval()`. Write an
-    equivalent to `assign()` using `as.name()`, `substitute()`, and `eval()`.
-    (Don't worry about the multiple ways of choosing an environment; assume
-    that the user supplies it explicitly.)
-
-## Calls {#calls}
-
-A call is very similar to a list. It has `length`, `[[` and `[` methods, and is recursive because calls can contain other calls. The first element of the call is the function that gets called. It's usually the _name_ of a function: \index{calls}
+Calls define the tree in AST. A call behaves similarly to a list. It has a `length()`; you can extract elements with  `[[`, `[`, and `$`; and calls can contain other calls. The main difference is that the first element of a call is special: it's the function that will get called. \index{calls} Let's explore these ideas with a simple example:
 
 ```{r}
-x <- quote(read.csv("important.csv", row.names = FALSE))
-x[[1]]
-is.name(x[[1]])
+x <- expr(read.table("important.csv", row = FALSE))
+lobstr::ast(!!x)
 ```
 
-But it can also be another call:
-
-```{r}
-y <- quote(add(10)(20))
-y[[1]]
-is.call(y[[1]])
-```
-
-The remaining elements are the arguments. They can be extracted by name or by position.
-
-```{r}
-x <- quote(read.csv("important.csv", row.names = FALSE))
-x[[2]]
-x$row.names
-names(x)
-```
-
-The length of a call minus 1 gives the number of arguments:
+The length of a call minus one gives the number of arguments:
 
 ```{r}
 length(x) - 1
 ```
 
-### Modifying a call
-
-You can add, modify, and delete elements of the call with the standard replacement operators, `$<-` and `[[<-`: \index{calls|modifying}
+The names of a call are empty, except for unnamed arguments:
 
 ```{r}
-y <- quote(read.csv("important.csv", row.names = FALSE))
-y$row.names <- TRUE
-y$col.names <- FALSE
-y
-
-y[[2]] <- quote(paste0(filename, ".csv"))
-y[[4]] <- NULL
-y
-
-y$sep <- ","
-y
+names(x)
 ```
 
-Calls also support the `[` method. But use it with care. Removing the first element is unlikely to create a useful call.
+You can extract the leaves of the call by position and by name using `[[` and `$` in the usual way:
 
 ```{r}
-x[-3] # remove the second argument
-x[-1] # remove the function name - but it's still a call!
+x[[1]]
+x[[2]]
+
+x$row
+```
+
+Extracting specific arguments from calls is challenging because of R's flexible rules for argument matching: it could potentially be in any location, with the full name, with an abreviated name, or with no name. To work around this problem, you can use `rlang::lang_standardise()` which standardises all arguments to use the full name: \indexc{standardise\_call()}
+
+```{r}
+rlang::lang_standardise(x)
+```
+
+(Note that if the function uses `...` it's not possible to standardise all arguments.)
+
+You can use `[` to extract multiple components, but if you drop the the first element, you're usually going to end up with a weird call:
+
+```{r}
+x[2:3]
+```
+
+If you do want to extract multiple elements in this way, it's good practice to coerce the results to a list:
+
+```{r}
+as.list(x[2:3])
+```
+
+Calls can be modified in the same way as lists:
+
+```{r}
+x$header <- TRUE
 x
 ```
 
-If you want a list of the unevaluated arguments (expressions), use explicit coercion:
+We'll learn about creating calls from scratch in [construct-calls]; an understanding of quasiquotation makes it much easier.
+
+### Pairlists
+
+There is one data structure we need to discuss for completeness: the pairlist. \index{pairlists} Pairlists are a remnant of R's past and have been replaced by lists almost everywhere. The only place you are likely to see pairlists in R is when working with function arguments:
 
 ```{r}
-# A list of the unevaluated arguments
-as.list(x[-1])
+f <- function(x = 10) x + 1
+typeof(formals(f))
 ```
 
-Generally speaking, because R's function calling semantics are so flexible, getting or setting arguments by position is dangerous. For example, even though the values at each position are different, the following three calls all have the same effect:
+(If you're working in C, you'll encounter pairlists more often. For example, calls are also implemented using pairlists)
+ 
+Fortunately, whenever you encounter a pairlist, you can treat it just like a regular list:
 
 ```{r}
-m1 <- quote(read.delim("data.txt", sep = "|"))
-m2 <- quote(read.delim(s = "|", "data.txt"))
-m3 <- quote(read.delim(file = "data.txt", , "|"))
+pl <- pairlist(x = 1, y = 2)
+length(pl)
+pl$x
 ```
 
-To work around this problem, pryr provides `standardise_call()`. It uses the base `match.call()` function to convert all positional arguments to named arguments: \indexc{standardise\_call()} \indexc{match.call()}
+However, behind the scenes pairlists are implemented using a different data structure, a linked list instead of a vector. That means that subsetting is slower with pairlists, and gets slower the further along the pairlist you index:
 
 ```{r}
-standardise_call(m1)
-standardise_call(m2)
-standardise_call(m3)
+l1 <- as.list(1:20)
+l2 <- as.pairlist(l1)
+
+microbenchmark::microbenchmark(
+  l1[[1]],
+  l1[[10]],
+  l2[[1]],
+  l2[[10]]
+)
 ```
 
-### Creating a call from its components
+### Expression objects
 
-To create a new call from its components, you can use `call()` or `as.call()`. The first argument to `call()` is a string which gives a function name. The other arguments are expressions that represent the arguments of the call. \indexc{call()} \indexc{as.call()}
+Finally, we need to discuss the expression object briefly. \index{expression object}  Expression objects are produced by only two base functions: `expression()` and `parse()`:
 
 ```{r}
-call(":", 1, 10)
-call("mean", quote(1:10), na.rm = TRUE)
+exp1 <- parse(text = c("
+x <- 4
+x
+"))
+exp2 <- expression(x <- 4, x)
+
+typeof(exp1)
+typeof(exp2)
+
+exp1
+exp2
 ```
 
-`as.call()` is a minor variant of `call()` that takes a single list as input. The first element is a name or call. The subsequent elements are the arguments.
+\indexc{expression()} \indexc{parse()}
+
+Like calls and pairlists, expression objects behave like a list:
 
 ```{r}
-as.call(list(quote(mean), quote(1:10)))
-as.call(list(quote(adder(10)), 20))
+length(exp1)
+exp1[[1]]
+```
+
+Conceptually an expression object is just a list of expressions. The only difference is that calling `eval()` on an expression evaluates each individual expression. We don't believe this advantage merits introducing a new data structure, so instead of expression objects we always use regular lists of expressions.
+
+Because there might be many top-level calls in a file, `parse()` doesn't return just a single expression. Instead, it returns an expression object, which is essentially a list of expressions: 
+
+```{r}
+length(exp)
+typeof(exp)
 ```
 
 ### Exercises
 
-1.  The following two calls look the same, but are actually different:
+1.  Which two of the six types of atomic vector can't appear in an expression? 
+    Why? Why can't you create an expression that contains an atomic vector of 
+    length greater than one? 
+
+1.  `standardise_call()` doesn't work so well for the following calls.
+    Why?
 
     ```{r}
-    (a <- call("mean", 1:10))
-    (b <- call("mean", quote(1:10)))
-    identical(a, b)
+    lang_standardise(quote(mean(1:10, na.rm = TRUE)))
+    lang_standardise(quote(mean(n = T, 1:10)))
+    lang_standardise(quote(mean(x = 1:10, , TRUE)))
     ```
 
-    What's the difference? Which one should you prefer?
+1.  Why does this code not make sense?
 
-1.  Implement a pure R version of `do.call()`.
+    ```{r, eval = FALSE}
+    x <- expr(foo(x = 1))
+    names(x) <- c("x", "")
+    ```
+
+1.  `base::alist()` is useful for creating pairlists to be used for function
+    arguments:
+    
+    ```{r}
+    foo <- function() {}
+    formals(foo) <- alist(x = , y = 1)
+    foo
+    ```
+    
+    What makes `alist()` special compared to `list()`?
 
 1.  Concatenating a call and an expression with `c()` creates a list. Implement
     `concat()` so that the following code works to combine a call and
     an additional argument.
 
     ```{r, eval = FALSE}
+    c(quote(f()), list(a = 1, b = quote(mean(a)))
     concat(quote(f), a = 1, b = quote(mean(a)))
     #> f(a = 1, b = mean(a))
     ```
 
-1.  Since `list()`s don't belong in expressions, we could create a more
-    convenient call constructor that automatically combines lists into the
-    arguments. Implement `make_call()` so that the following code works.
+## Case study: Walking the AST with recursive functions {#ast-funs}
 
-    ```{r, eval = FALSE}
-    make_call(quote(mean), list(quote(x), na.rm = TRUE))
-    #> mean(x, na.rm = TRUE)
-    make_call(quote(mean), quote(x), na.rm = TRUE)
-    #> mean(x, na.rm = TRUE)
-    ```
-
-1.  How does `mode<-` work? How does it use `call()`?
-
-1.  Read the source for `pryr::standardise_call()`. How does it work?
-    Why is `is.primitive()` needed?
-
-1.  `standardise_call()` doesn't work so well for the following calls.
-    Why?
-
-    ```{r}
-    standardise_call(quote(mean(1:10, na.rm = TRUE)))
-    standardise_call(quote(mean(n = T, 1:10)))
-    standardise_call(quote(mean(x = 1:10, , TRUE)))
-    ```
-
-1.  Read the documentation for `pryr::modify_call()`. How do you think
-    it works? Read the source code.
-
-1.  Use `ast()` and experimentation to figure out the three arguments in an
-    `if()` call. Which components are required? What are the arguments to
-    the `for()` and `while()` calls?
-
-## Capturing the current call {#capturing-call}
-
-```{r, eval = FALSE, echo = FALSE}
-std <- c("package:base", "package:utils", "package:stats")
-names(find_uses(std, "sys.call"))
-names(find_uses(std, "match.call"))
-```
-
-Many base R functions use the current call: the expression that caused the current function to be run. There are two ways to capture a current call: \indexc{calls|capturing current}
-
-* `sys.call()` captures exactly what the user typed. \indexc{sys.call()}
-
-* `match.call()` makes a call that only uses named arguments. It's like
-  automatically calling `pryr::standardise_call()` on the result of
-  `sys.call()` \indexc{match.call()}
-
-The following example illustrates the difference between the two:
-
-```{r}
-f <- function(abc = 1, def = 2, ghi = 3) {
-  list(sys = sys.call(), match = match.call())
-}
-f(d = 2, 2)
-```
-
-Modelling functions often use `match.call()` to capture the call used to create the model. This makes it possible to `update()` a model, re-fitting the model after modifying some of original arguments. Here's an example of `update()` in action: \indexc{update()}
-
-```{r}
-mod <- lm(mpg ~ wt, data = mtcars)
-update(mod, formula = . ~ . + cyl)
-```
-
-How does `update()` work? We can rewrite it using some tools from pryr to focus on the essence of the algorithm.
-
-```{r}
-update_call <- function (object, formula., ...) {
-  call <- object$call
-
-  # Use update.formula to deal with formulas like . ~ .
-  if (!missing(formula.)) {
-    call$formula <- update.formula(formula(object), formula.)
-  }
-
-  modify_call(call, dots(...))
-}
-update_model <- function(object, formula., ...) {
-  call <- update_call(object, formula., ...)
-  eval(call, parent.frame())
-}
-update_model(mod, formula = . ~ . + cyl)
-```
-
-The original `update()` has an `evaluate` argument that controls whether the function returns the call or the result. But I think it's better, on principle, that a function returns only one type of object, rather than different types depending on the function's arguments.
-
-This rewrite also allows us to fix a small bug in `update()`: it re-evaluates the call in the global environment, when what we really want is to re-evaluate it in the environment where the model was originally fit --- in the formula.
-
-```{r, error = TRUE}
-f <- function() {
-  n <- 3
-  lm(mpg ~ poly(wt, n), data = mtcars)
-}
-mod <- f()
-update(mod, data = mtcars)
-
-update_model <- function(object, formula., ...) {
-  call <- update_call(object, formula., ...)
-  eval(call, environment(formula(object)))
-}
-update_model(mod, data = mtcars)
-```
-
-This is an important principle to remember: if you want to re-run code captured with `match.call()`, you also need to capture the environment in which it was evaluated, usually the `parent.frame()`. The downside to this is that capturing the environment also means capturing any large objects which happen to be in that environment, which prevents their memory from being released. This topic is explored in more detail in [garbage collection](#gc). \index{environments|capturing}
-
-Some base R functions use `match.call()` where it's not necessary. For example,  `write.csv()` captures the call to `write.csv()` and mangles it to call `write.table()` instead:
-
-```{r}
-write.csv <- function(...) {
-  Call <- match.call(expand.dots = TRUE)
-  for (arg in c("append", "col.names", "sep", "dec", "qmethod")) {
-    if (!is.null(Call[[arg]])) {
-      warning(gettextf("attempt to set '%s' ignored", arg))
-    }
-  }
-  rn <- eval.parent(Call$row.names)
-  Call$append <- NULL
-  Call$col.names <- if (is.logical(rn) && !rn) TRUE else NA
-  Call$sep <- ","
-  Call$dec <- "."
-  Call$qmethod <- "double"
-  Call[[1L]] <- as.name("write.table")
-  eval.parent(Call)
-}
-```
-
-To fix this, we could implement `write.csv()` using regular function call semantics:
-
-```{r}
-write.csv <- function(x, file = "", sep = ",", qmethod = "double", 
-                      ...) {
-  write.table(x = x, file = file, sep = sep, qmethod = qmethod, 
-    ...)
-}
-```
-
-This is much easier to understand: it's just calling `write.table()` with different defaults. This also fixes a subtle bug in the original `write.csv()`: `write.csv(mtcars, row = FALSE)` raises an error, but `write.csv(mtcars, row.names = FALSE)` does not. The lesson here is that it's always better to solve a problem with the simplest tool possible.
-
-### Exercises
-
-1.  Compare and contrast `update_model()` with `update.default()`.
-
-1.  Why doesn't `write.csv(mtcars, "mtcars.csv", row = FALSE)` work?
-    What property of argument matching has the original author forgotten?
-
-1.  Rewrite `update.formula()` to use R code instead of C code.
-
-1.  Sometimes it's necessary to uncover the function that called the
-    function that called the current function (i.e., the grandparent, not
-    the parent). How can you use `sys.call()` or `match.call()` to find
-    this function?
-
-## Pairlists {#pairlists}
-
-Pairlists are a holdover from R's past. They behave identically to lists, but have a different internal representation (as a linked list rather than a vector). Pairlists have been replaced by lists everywhere except in function arguments. \index{pairlists}
-
-The only place you need to care about the difference between a list and a pairlist is if you're going to construct functions by hand. For example, the following function allows you to construct a function from its component pieces: a list of formal arguments, a body, and an environment. The function uses `as.pairlist()` to ensure that the `function()` has the pairlist of `args` it needs. \indexc{as.pairlist()} \indexc{make\_function()} \index{functions!creating with code}
-
-```{r, eval = FALSE}
-make_function <- function(args, body, env = parent.frame()) {
-  args <- as.pairlist(args)
-
-  eval(call("function", args, body), env)
-}
-```
-
-This function is also available in pryr, where it does a little extra checking of arguments. `make_function()` is best used in conjunction with `alist()`, the **a**rgument list function. `alist()` doesn't evaluate its arguments so that `alist(x = a)` is shorthand for `list(x = quote(a))`.
-
-```{r}
-add <- make_function(alist(a = 1, b = 2), quote(a + b))
-add(1)
-add(1, 2)
-
-# To have an argument with no default, you need an explicit =
-make_function(alist(a = , b = a), quote(a + b))
-# To take `...` as an argument put it on the LHS of =
-make_function(alist(a = , b = , ... =), quote(a + b))
-```
-
-`make_function()` has one advantage over using closures to construct functions: with it, you can easily read the source code. For example:
-
-```{r}
-adder <- function(x) {
-  make_function(alist(y =), substitute({x + y}), parent.frame())
-}
-adder(10)
-```
-
-One useful application of `make_function()` is in functions like `curve()`. `curve()` allows you to plot a mathematical function without creating an explicit R function:
-
-```{r curve-demo, fig.width = 3.5, fig.height = 2.5, small_mar = TRUE}
-curve(sin(exp(4 * x)), n = 1000)
-```
-
-Here `x` is a pronoun. `x` doesn't represent a single concrete value, but is instead a placeholder that varies over the range of the plot. One way to implement `curve()` would be with `make_function()`:
-
-```{r curve2}
-curve2 <- function(expr, xlim = c(0, 1), n = 100, 
-                   env = parent.frame()) {
-  f <- make_function(alist(x = ), substitute(expr), env)
-
-  x <- seq(xlim[1], xlim[2], length = n)
-  y <- f(x)
-
-  plot(x, y, type = "l", ylab = deparse(substitute(expr)))
-}
-```
-
-Functions that use a pronoun are called [anaphoric](http://en.wikipedia.org/wiki/Anaphora_(linguistics)) functions. They are used in [Arc](http://www.arcfn.com/doc/anaphoric.html) (a lisp like language), [Perl](http://www.perlmonks.org/index.pl?node_id=666047), and [Clojure](http://amalloy.hubpages.com/hub/Unhygenic-anaphoric-Clojure-macros-for-fun-and-profit). \index{anaphoric functions} \index{functions!anaphoric}
-
-### Exercises
-
-1.  How are `alist(a)` and `alist(a = )` different? Think about both the
-    input and the output.
-
-1.  Read the documentation and source code for `pryr::partial()`. What does it
-    do? How does it work? Read the documentation and source code for
-    `pryr::unenclose()`. What does it do and how does it work?
-
-1.  The actual implementation of `curve()` looks more like
-
-    ```{r curve3}
-    curve3 <- function(expr, xlim = c(0, 1), n = 100,
-                       env = parent.frame()) {
-      env2 <- new.env(parent = env)
-      env2$x <- seq(xlim[1], xlim[2], length = n)
-
-      y <- eval(substitute(expr), env2)
-      plot(env2$x, y, type = "l", 
-        ylab = deparse(substitute(expr)))
-    }
-    ```
-
-    How does this approach differ from `curve2()` defined above?
-
-## Parsing and deparsing {#parsing-and-deparsing}
-
-Sometimes code is represented as a string, rather than as an expression. You can convert a string to an expression with `parse()`. `parse()` is the opposite of `deparse()`: it takes a character vector and returns an expression object. The primary use of `parse()` is parsing files of code to disk, so the first argument is a file path. Note that if you have code in a character vector, you need to use the `text` argument: \indexc{parse()}
-
-```{r}
-z <- quote(y <- x * 10)
-deparse(z)
-
-parse(text = deparse(z))
-```
-
-Because there might be many top-level calls in a file, `parse()` doesn't return just a single expression. Instead, it returns an expression object, which is essentially a list of expressions: \index{expression object} 
-
-```{r}
-exp <- parse(text = c("
-  x <- 4
-  x
-  5
-"))
-length(exp)
-typeof(exp)
-
-exp[[1]]
-exp[[2]]
-```
-
-You can create expression objects by hand with `expression()`, but I wouldn't recommend it. There's no need to learn about this esoteric data structure if you already know how to use expressions. \indexc{expression()}
-
-With `parse()` and `eval()`, it's possible to write a simple version of `source()`. We read in the file from disk, `parse()` it and then `eval()` each component in a specified environment. This version defaults to a new environment, so it doesn't affect existing objects. `source()` invisibly returns the result of the last expression in the file, so `simple_source()` does the same. \index{source()}
-
-```{r}
-simple_source <- function(file, envir = new.env()) {
-  stopifnot(file.exists(file))
-  stopifnot(is.environment(envir))
-
-  lines <- readLines(file, warn = FALSE)
-  exprs <- parse(text = lines)
-
-  n <- length(exprs)
-  if (n == 0L) return(invisible())
-
-  for (i in seq_len(n - 1)) {
-    eval(exprs[i], envir)
-  }
-  invisible(eval(exprs[n], envir))
-}
-```
-
-The real `source()` is considerably more complicated because it can `echo` input and output, and also has many additional settings to control behaviour.
-
-### Exercises
-
-1.  What are the differences between `quote()` and `expression()`?
-
-1.  Read the help for `deparse()` and construct a call that `deparse()`
-    and `parse()` do not operate symmetrically on.
-
-1.  Compare and contrast `source()` and `sys.source()`.
-
-1.  Modify `simple_source()` so it returns the result of _every_ expression,
-    not just the last one.
-
-1.  The code generated by `simple_source()` lacks source references. Read
-    the source code for `sys.source()` and the help for `srcfilecopy()`,
-    then modify `simple_source()` to preserve source references. You can
-    test your code by sourcing a function that contains a comment. If
-    successful, when you look at the function, you'll see the comment and
-    not just the source code.
-
-## Walking the AST with recursive functions {#ast-funs}
-
-It's easy to modify a single call with `substitute()` or `pryr::modify_call()`. For more complicated tasks we need to work directly with the AST. The base `codetools` package provides some useful motivating examples of how we can do this: \index{recursion!over ASTs}
+To conclude the chapter we're going to pull together everything that you've learned about ASTs to write solve more complicated tasks. Some inspiration comes from the base codetools package, which provides two interesting functions: \index{recursion!over ASTs}
 
 * `findGlobals()` locates all global variables used by a function. This
   can be useful if you want to check that your function doesn't inadvertently
@@ -654,302 +532,269 @@ It's easy to modify a single call with `substitute()` or `pryr::modify_call()`. 
   unused local variables, unused parameters, and the use of partial
   argument matching.
 
-To write functions like `findGlobals()` and `checkUsage()`, we'll need a new tool. Because expressions have a tree structure, using a recursive function would be the natural choice. The key to doing that is getting the recursion right. This means making sure that you know what the base case is and figuring out how to combine the results from the recursive case. For calls, there are two base cases (atomic vectors and names) and two recursive cases (calls and pairlists). This means that a function for working with expressions will look like:
+Getting all of the details of this functions correct is fiddly and complex, so we're not going to explore the full expression. Instead we'll focus on the big ideas needed to implement functions that work like them, namely recursion. Recursive functions are a natural fit to tree-like data structures because a recursive function is made up of two parts:
 
-```{r, eval = FALSE}
-recurse_call <- function(x) {
-  if (is.atomic(x)) {
-    # Return a value
-  } else if (is.name(x)) {
-    # Return a value
+* The __recursive case__ handles the nodes in the tree. Typically, you'll
+  do something to each child of node, usually calling the recursive function
+  again, and then combine the results back together again. For expressions, 
+  you'll need to handle calls and pairlists in the recursive case.
+  
+* The __base case__ handles the leaves of the tree. The base cases ensure
+  that the function eventually terminates, by solving the simplest cases 
+  directly. For expressions, you need to base symbol and names in the base case.
+
+To make this pattern easier to see, we'll use two helper functions. First we define `expr_type()` which will return "constant" for constant, "symbol" for symbols, "call", for calls, "pairlist" for pairlists, and the "type" of anything else:
+
+```{r}
+expr_type <- function(x) {
+  if (rlang::is_syntactic_literal(x)) {
+    "constant"
+  } else if (is.symbol(x)) {
+    "symbol"
   } else if (is.call(x)) {
-    # Call recurse_call recursively
+    "call"
   } else if (is.pairlist(x)) {
-    # Call recurse_call recursively
+    "pairlist"
   } else {
-    # User supplied incorrect input
-    stop("Don't know how to handle type ", typeof(x), 
-      call. = FALSE)
+    typeof(x)
   }
+}
+
+expr_type(expr("a"))
+expr_type(expr(f(1, 2)))
+```
+
+We'll couple this with a wrapper around the switch function:
+
+```{r}
+switch_expr <- function(x, ...) {
+  switch(expr_type(x), 
+    ..., 
+    stop("Don't know how to handle type ", typeof(x), call. = FALSE)  
+  )
 }
 ```
 
+With these two functions in hand, the basic template for any function that walks the AST is as follows:
+
+```{r}
+recurse_call <- function(x) {
+  switch_expr(x, 
+    # Base cases
+    symbol = ,
+    constant = ,
+    
+    # Recursive cases
+    call = ,
+    pairlist = 
+  )
+}
+```
+
+Typically, solving the base case will easy so we'll do that first, and check the results. The recursive cases are a little more tricky, but typically you just need to think about the data structure you want in the output and then find the correct purrr function. To that end, make sure you're familiar with [Functionals] before continuing.
+
 ### Finding F and T
 
-We'll start simple with a function that determines whether a function uses the logical abbreviations `T` and `F`. Using `T` and `F` is generally considered to be poor coding practice, and is something that `R CMD check` will warn about. Let's first compare the AST for `T` vs. `TRUE`:
+We'll start simple with a function that determines whether a function uses the logical abbreviations `T` and `F`: it will return `TRUE` if it finds a logical abbreviation, and `FALSE` otherwise. Using `T` and `F` is generally considered to be poor coding practice, and is something that `R CMD check` will warn about. 
+
+Let's first compare the AST for `T` vs. `TRUE`:
 
 ```{r}
 ast(TRUE)
 ast(T)
 ```
 
-`TRUE` is parsed as a logical vector of length one, while `T` is parsed as a name. This tells us how to write our base cases for the recursive function: while an atomic vector will never be a logical abbreviation, a name might, so we'll need to test for both `T` and `F`. The recursive cases can be combined because they do the same thing in both cases: they recursively call `logical_abbr()` on each element of the object. \indexc{logical\_abbr}
+`TRUE` is parsed as a logical vector of length one, while `T` is parsed as a name. This tells us how to write our base cases for the recursive function: a constant is never a logical abbreviation, and a symbol is an abbreviation if it's "F" or "T":
+
+```{r}
+logical_abbr_rec <- function(x) {
+  switch_expr(x, 
+    constant = FALSE,
+    symbol = as_string(x) %in% c("F", "T")
+  )
+}
+
+logical_abbr_rec(expr(TRUE))
+logical_abbr_rec(expr(T))
+```
+
+Our recursive function works with expressions which means we always need to use it with `expr()`. When writing a recursive function it's common to write a wrapper that provides defaults or makes the function a little easier to use. Here we'll typically make a wrapper that quotes its input (we'll learn more about that in the next chapter), so we don't need to use `expr()` every time.
 
 ```{r}
 logical_abbr <- function(x) {
-  if (is.atomic(x)) {
-    FALSE
-  } else if (is.name(x)) {
-    identical(x, quote(T)) || identical(x, quote(F))
-  } else if (is.call(x) || is.pairlist(x)) {
-    for (i in seq_along(x)) {
-      if (logical_abbr(x[[i]])) return(TRUE)
-    }
-    FALSE
-  } else {
-    stop("Don't know how to handle type ", typeof(x), 
-      call. = FALSE)
-  }
+  logical_abbr_rec(enexpr(x))
 }
 
-logical_abbr(quote(TRUE))
-logical_abbr(quote(T))
-logical_abbr(quote(mean(x, na.rm = T)))
-logical_abbr(quote(function(x, na.rm = T) FALSE))
+logical_abbr(T)
+logical_abbr(FALSE)
+```
+
+Next we need to implement the recursive cases. Here it's simple because we want to do the same thing for calls and for pairlists: recursively apply the function to each subcomponent, and return `TRUE` if any subcomponent contains a logical abbreviation. This is made easy by `purrr::some()`, which iterates over a list and returns `TRUE` if the predicate function is true for any element.
+
+```{r}
+logical_abbr_rec <- function(x) {
+  switch_expr(x,
+    # Base cases
+    constant = FALSE,
+    symbol = as_string(x) %in% c("F", "T"),
+    
+    # Recursive cases
+    call = ,
+    pairlist = purrr::some(x, logical_abbr_rec)
+  )
+}
+
+logical_abbr(mean(x, na.rm = T))
+logical_abbr(function(x, na.rm = T) FALSE)
 ```
 
 ### Finding all variables created by assignment
 
-`logical_abbr()` is very simple: it only returns a single `TRUE` or `FALSE`. The next task, listing all variables created by assignment, is a little more complicated. We'll start simply, and then make the function progressively more rigorous. \indexc{find\_assign()}
+`logical_abbr()` is very simple: it only returns a single `TRUE` or `FALSE`. The next task, listing all variables created by assignment, is a little more complicated. We'll start simply, and then make the function progressively more rigorous. \indexc{find\_assign()} 
 
-Again, we start by looking at the AST for assignment:
+We start by looking at the AST for assignment:
 
 ```{r}
 ast(x <- 10)
 ```
 
-Assignment is a call where the first element is the name `<-`, the second is the object the name is assigned to, and the third is the value to be assigned. This makes the base cases simple: constants and names don't create assignments, so they return `NULL`. The recursive cases aren't too hard either. We `lapply()` over pairlists and over calls to functions other than `<-`.
+Assignment is a call where the first element is the symbol `<-`, the second is name of variable, and the third is the value to be assigned. 
+
+Next, we need to decide what data structure we're going to use for the results. Here I think it will be easiest it we return a character vector. If we return symbols, we'll need to use a `list()` and that makes things a little more complicated.
+
+With that in hand we can start by implementing the base cases and providing a helpful wrapper around the recursive function. The base cases here are really simple!
 
 ```{r}
-find_assign <- function(x) {
-  if (is.atomic(x) || is.name(x)) {
-    NULL
-  } else if (is.call(x)) {
-    if (identical(x[[1]], quote(`<-`))) {
-      x[[2]]
-    } else {
-      lapply(x, find_assign)
-    }
-  } else if (is.pairlist(x)) {
-    lapply(x, find_assign)
-  } else {
-    stop("Don't know how to handle type ", typeof(x), 
-      call. = FALSE)
-  }
+find_assign_rec <- function(x) {
+  switch_expr(x, 
+    constant = ,
+    symbol = character()
+  )  
 }
-find_assign(quote(a <- 1))
-find_assign(quote({
+find_assign <- function(x) find_assign_rec(enexpr(x))
+
+find_assign("x")
+find_assign(x)
+```
+
+Next we implement the recursive cases. This is made easier by a function that should exist in purrrr, but currently doesn't:
+
+```{r}
+flat_map_chr <- function(.x, .f, ...) {
+  purrr::flatten_chr(purrr::map(.x, .f, ...))
+}
+```
+
+The recursive case for pairlists is simple: we iterate of every element of the pairlist (i.e. each function argument) and combine the results. The case for calls is a little bit more complex - if this is a call to `<-` then we should return the second element of the call:
+
+```{r}
+find_assign_rec <- function(x) {
+  switch_expr(x,
+    # Base cases
+    constant = ,
+    symbol = character(),
+    
+    # Recursive cases
+    pairlist = flat_map_chr(as.list(x), find_assign_rec),
+    call = {
+      if (is_call(x, "<-")) {
+        as_string(x[[2]])
+      } else {
+        flat_map_chr(as.list(x), find_assign_rec)
+      }
+    }
+  )
+}
+
+# find_assign(function(x = 1) {})
+# Need to handle srcrefs
+# Maybe move to new section specifically about functions?
+
+find_assign(a <- 1)
+find_assign({
   a <- 1
-  b <- 2
-}))
+  {
+    b <- 2
+  }
+})
 ```
 
-This function works for these simple cases, but the output is rather verbose and includes some extraneous `NULL`s. Instead of returning a list, let's keep it simple and use a character vector. We'll also test it with two slightly more complicated examples:
+Now we need to make our function more robust but coming up with examples intended to break it. What happens we assign to the same variable multiple times?
 
 ```{r}
-find_assign2 <- function(x) {
-  if (is.atomic(x) || is.name(x)) {
-    character()
-  } else if (is.call(x)) {
-    if (identical(x[[1]], quote(`<-`))) {
-      as.character(x[[2]])
-    } else {
-      unlist(lapply(x, find_assign2))
-    }
-  } else if (is.pairlist(x)) {
-    unlist(lapply(x, find_assign2))
-  } else {
-    stop("Don't know how to handle type ", typeof(x), 
-      call. = FALSE)
-  }
-}
-
-find_assign2(quote({
+find_assign({
   a <- 1
-  b <- 2
-  a <- 3
-}))
-
-find_assign2(quote({
-  system.time(x <- print(y <- 5))
-}))
+  a <- 2
+})
 ```
 
-This is better, but we have two problems: dealing with repeated names and neglecting assignments inside other assignments. The fix for the first problem is easy. We need to wrap `unique()` around the recursive case to remove duplicate assignments. The fix for the second problem is a bit more tricky. We also need to recurse when the call is to `<-`. `find_assign3()` implements both strategies:
+It's easiest to fix this at the level of the wrapper function:
 
 ```{r}
-find_assign3 <- function(x) {
-  if (is.atomic(x) || is.name(x)) {
-    character()
-  } else if (is.call(x)) {
-    if (identical(x[[1]], quote(`<-`))) {
-      lhs <- as.character(x[[2]])
-    } else {
-      lhs <- character()
-    }
+find_assign <- function(x) unique(find_assign_rec(enexpr(x)))
 
-    unique(c(lhs, unlist(lapply(x, find_assign3))))
-  } else if (is.pairlist(x)) {
-    unique(unlist(lapply(x, find_assign3)))
-  } else {
-    stop("Don't know how to handle type ", typeof(x), 
-      call. = FALSE)
-  }
-}
-
-find_assign3(quote({
+find_assign({
   a <- 1
-  b <- 2
-  a <- 3
-}))
-
-find_assign3(quote({
-  system.time(x <- print(y <- 5))
-}))
+  a <- 2
+})
 ```
 
-We also need to test subassignment:
+What happens if we have multiple calls to assign? Currently we only return the first. That's because when `<-` occurs we immediately terminate recursion. 
 
 ```{r}
-find_assign3(quote({
-  l <- list()
-  l$a <- 5
-  names(l) <- "b"
-}))
+find_assign({
+  a <- b <- c <- 1
+})
 ```
 
-We only want assignment of the object itself, not assignment that modifies a property of the object. Drawing the tree for the quoted object will help us see what condition to test for. The second element of the call to `<-` should be a name, not another call.
+Instead we need to take a more rigorous approach. I think it's best to keep the recursive function focused on the tree structure, so I'm going to extract out `find_assign_call()` into a separate function.
 
 ```{r}
-ast(l$a <- 5)
-ast(names(l) <- "b")
-```
-
-Now we have a complete version:
-
-```{r}
-find_assign4 <- function(x) {
-  if (is.atomic(x) || is.name(x)) {
-    character()
-  } else if (is.call(x)) {
-    if (identical(x[[1]], quote(`<-`)) && is.name(x[[2]])) {
-      lhs <- as.character(x[[2]])
-    } else {
-      lhs <- character()
-    }
-
-    unique(c(lhs, unlist(lapply(x, find_assign4))))
-  } else if (is.pairlist(x)) {
-    unique(unlist(lapply(x, find_assign4)))
+find_assign_call <- function(x) {
+  if (is_call(x, "<-") && is.symbol(x[[2]])) {
+    lhs <- as_string(x[[2]])
+    children <- as.list(x)[-1]
   } else {
-    stop("Don't know how to handle type ", typeof(x), 
-      call. = FALSE)
+    lhs <- character()
+    children <- as.list(x)
   }
+  
+  c(lhs, flat_map_chr(children, find_assign_rec))
 }
 
-find_assign4(quote({
-  l <- list()
-  l$a <- 5
-  names(l) <- "b"
-}))
+find_assign_rec <- function(x) {
+  switch_expr(x,
+    # Base cases
+    constant = ,
+    symbol = character(),
+    
+    # Recursive cases
+    pairlist = flat_map_chr(x, find_assign_rec),
+    call = find_assign_call(x)
+  )
+}
+
+find_assign(a <- b <- c <- 1)
+find_assign(system.time(x <- print(y <- 5)))
+find_assign(names(l) <- "b")
 ```
 
 While the complete version of this function is quite complicated, it's important to remember we wrote it by working our way up by writing simple component parts.
 
-### Modifying the call tree {#modifying-code}
-
-The next step up in complexity is returning a modified call tree, like what you get with `bquote()`. `bquote()` is a slightly more flexible form of quote: it allows you to optionally quote and unquote some parts of an expression (it's similar to the backtick operator in Lisp). Everything is quoted, _unless_ it's encapsulated in `.()` in which case it's evaluated and the result is inserted: \index{bquote()}
-
-```{r}
-a <- 1
-b <- 3
-bquote(a + b)
-bquote(a + .(b))
-bquote(.(a) + .(b))
-bquote(.(a + b))
-```
-
-This provides a fairly easy way to control what gets evaluated and when. How does `bquote()` work? Below, I've rewritten `bquote()` to use the same style as our other functions: it expects input to be quoted already, and makes the base and recursive cases more explicit:
-
-```{r}
-bquote2 <- function (x, where = parent.frame()) {
-  if (is.atomic(x) || is.name(x)) {
-    # Leave unchanged
-    x
-  } else if (is.call(x)) {
-    if (identical(x[[1]], quote(.))) {
-      # Call to .(), so evaluate
-      eval(x[[2]], where)
-    } else {
-      # Otherwise apply recursively, turning result back into call
-      as.call(lapply(x, bquote2, where = where))
-    }
-  } else if (is.pairlist(x)) {
-    as.pairlist(lapply(x, bquote2, where = where))
-  } else {
-    # User supplied incorrect input
-    stop("Don't know how to handle type ", typeof(x), 
-      call. = FALSE)
-  }
-}
-
-x <- 1
-y <- 2
-bquote2(quote(x == .(x)))
-bquote2(quote(function(x = .(x)) {
-  x + .(y)
-}))
-```
-
-The main difference between this and the previous recursive functions is that after we process each element of calls and pairlists, we need to coerce them back to their original types.
-
-Note that functions that modify the source tree are most useful for creating expressions that are used at run-time, rather than those that are saved back to the original source file. This is because all non-code information is lost:
-
-```{r}
-bquote2(quote(function(x = .(x)) {
-  # This is a comment
-  x +  # funky spacing
-    .(y)
-}))
-```
-
-These tools are somewhat similar to Lisp macros, as discussed in [Programmer's Niche: Macros in R](http://www.r-project.org/doc/Rnews/Rnews_2001-3.pdf#page=10) by Thomas Lumley. However, macros are run at compile-time, which doesn't have any meaning in R, and always return expressions. They're also somewhat like Lisp [fexprs](http://en.wikipedia.org/wiki/Fexpr). A fexpr is a function where the arguments are not evaluated by default. The terms macro and fexpr are useful to know when looking for useful techniques from other languages. \index{macros} \index{fexprs}
-
 ### Exercises
 
-1.  Why does `logical_abbr()` use a for loop instead of a functional
-    like `lapply()`?
-
-1.  `logical_abbr()` works when given quoted objects, but doesn't work when
-    given an existing function, as in the example below. Why not? How could
-    you modify `logical_abbr()` to work with functions? Think about what
-    components make up a function.
+1.  `logical_abbr()` works with expressions. It currently fails when you give it
+    a function. Why not? How could you modify `logical_abbr()` to make it 
+    work? What components will you need to recurse over?
 
     ```{r, eval = FALSE}
     f <- function(x = TRUE) {
       g(x + T)
     }
-    logical_abbr(f)
+    logical_abbr(!!f)
     ```
 
-1.  Write a function called `ast_type()` that returns either "constant",
-    "name", "call", or "pairlist". Rewrite `logical_abbr()`, `find_assign()`,
-    and `bquote2()` to use this function with `switch()` instead of nested if
-    statements.
+1.  Write a function that extracts all calls to a function.
 
-1.  Write a function that extracts all calls to a function. Compare your
-    function to `pryr::fun_calls()`.
-
-1.  Write a wrapper around `bquote2()` that does non-standard evaluation
-    so that you don't need to explicitly `quote()` the input.
-
-1.  Compare `bquote2()` to `bquote()`. There is a subtle bug in `bquote()`:
-    it won't replace calls to functions with no arguments. Why?
-
-    ```{r}
-    bquote(.(x)(), list(x = quote(f)))
-    bquote(.(x)(1), list(x = quote(f)))
-    ```
-
-1.  Improve the base `recurse_call()` template to also work with lists of
-    functions and expressions (e.g., as from `parse(path_to_file))`.
+1.  Instead of writing a wrapper that quotes its input, we could have made 
+    the recursive function itself a quoting function. Why is this suboptimal?

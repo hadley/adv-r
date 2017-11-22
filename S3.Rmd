@@ -1,12 +1,17 @@
 # S3 {#s3}
 
+```{r setup, include = FALSE}
+source("common.R")
+library(sloop)
+```
+
 S3 is R's first and simplest OO system. S3 is informal and ad hoc, but it has a certain elegance in its minimalism: you can't take away any part of it and still have a useful OO system. Because of these reasons, S3 should be your default choice for OO programming: you should use it unless you have a compelling reason otherwise. S3 is the only OO system used in the base and stats packages, and it's the most commonly used system in CRAN packages. \index{S3} \index{objects!S3|see{S3}} 
 
 S3 is a very flexible system: it allows you to do a lot of things that are quite ill-advised. If you're coming from a strict environment like Java, this will seem pretty frightening (and it is!) but it does give R programmers a tremendous amount of freedom. While it's very difficult to prevent someone from doing something you don't want them to do, your users will never be held back because there is something you haven't implemented yet. Since S3 has few built-in constraints, the key to its successful use is applying the constraints yourself. This chapter will teach you the conventions you should (almost) always adhere to in order to use S3 safely.
 
 We'll use the sloop package to fill in some missing pieces when it comes to S3. 
 
-```{r setup, messages = FALSE}
+```{r, messages = FALSE}
 # install_github("hadley/sloop")
 library(sloop)
 ```
@@ -150,10 +155,10 @@ S3 doesn't provide a formal definition of a class, so it has no built-in way to 
 There are three rules that a constructor should follow. It should:
 
 1.  Be called `new_class_name()`.
-1.  Have one argument for the base object, and one for each attribute.
+1.  Have one argument for the base object, and one for each attribute. (More if the class can be subclassed, see [inheritance].)
 1.  Check the types of the base object and each attribute.
 
-Base R generally does not provide constructors (three exceptions are the internal `.difftime()`, `.POSIXct()`, and `.POSIXlt()`) so we'll demonstrate constructors by filling in some missing pieces in base. (If you want to use these constructors in your own code, you can use the versions exported by the S3 package, which complete a few details that we skip here in order to focus on the core issues.)
+Base R generally does not provide constructors (three exceptions are the internal `.difftime()`, `.POSIXct()`, and `.POSIXlt()`) so we'll demonstrate constructors by filling in some missing pieces in base. (If you want to use these constructors in your own code, you can use the versions exported by the sloop package, which complete a few details that we skip here in order to focus on the core issues.)
 
 We'll start with one of the simplest S3 classes in base R: Date, which is just a double with a class attribute. The constructor rules lead to the slightly awkward name `new_Date()`, because the existing base class uses a capital letter. I recommend using lower case class names to avoid this problem. 
 
@@ -166,11 +171,11 @@ new_Date <- function(x) {
 new_Date(c(-1, 0, 1))
 ```
 
-You can use the `new_s3_*()` helpers provided by the S3 package to make this even simpler. They are wrappers around structure that require a class argument, and check the base type of `x`.
+You can use the `new_s3_*()` helpers provided by the sloop to make this even simpler. They are wrappers around structure that require a class argument, and check the base type of `x`.
 
 ```{r}
 new_Date <- function(x) {
-  S3::new_s3_dbl(x, class = "Date")
+  sloop::new_s3_dbl(x, class = "Date")
 }
 ```
 
@@ -467,7 +472,7 @@ as_factor(1)
 
 Methods should always have the same arguments as their generics. This is not usually enforced, but it is good practice because it will avoid confusing behaviour. If you do eventually turn your code into a package, R CMD check will enforce it, so it's good to get into the habit now.
 
-There is one exception to this rule: if the generic has `...`, the method must still have all the same arguments (including `...`), but can also have its own additional arguments. This allows methods to take additional arguments, which is important because you don't know what additional arguments that a method for someone else's class might need. The downside of using `...`, however, is that any mispelled arguments will be silently swallowed.
+There is one exception to this rule: if the generic has `...`, the method must still have all the same arguments (including `...`), but can also have its own additional arguments. This allows methods to take additional arguments, which is important because you don't know what additional arguments that a method for someone else's class might need. The downside of using `...`, however, is that any misspelled arguments will be silently swallowed.
 
 ### Exercises
 
@@ -503,7 +508,7 @@ At a high-level, S3 method dispatch is simple, and revolves around two functions
 
 ### `UseMethod()`
 
-The purpose of `UseMethod()` is to find the appropriate method to call given a generic and a class. It does this by creating a vector of function names, `paste0("generic", ".", c(class(x), "default"))`, and looking for each method in turn. As soon as it finds a matching method, it calls it. If no matching method is found, it throws an error. To explore dispatch, we'll use `S3::s3_dispatch()`. You give it a call to an S3 generic, and it lists all the possible methods, noting which ones exist. For example, what happens when you try and print a `POSIXct` object?
+The purpose of `UseMethod()` is to find the appropriate method to call given a generic and a class. It does this by creating a vector of function names, `paste0("generic", ".", c(class(x), "default"))`, and looking for each method in turn. As soon as it finds a matching method, it calls it. If no matching method is found, it throws an error. To explore dispatch, we'll use `sloop::s3_dispatch()`. You give it a call to an S3 generic, and it lists all the possible methods, noting which ones exist. For example, what happens when you try and print a `POSIXct` object?
 
 ```{r}
 x <- Sys.time()
@@ -695,7 +700,7 @@ mutate.provenance <- function(.data, ...) {
 }
 ```
 
-To do this for all the dplyr generics would require a lot of copying and pasting. Let's reduce some of that duplication by taking advantage of `S3::reconstruct()`. `reconstruct()` is a generic function designed to reconstruct a subclass from an instance of the parent class, typically created by `NextMethod()`, and the original subclass. In other words, the job of a reconstructor is to take an object from a parent class, and copy over attributes from the subclass. (Note that `reconstruct()` is unusual in that it dispatches on the second argument. This allows a more natural specification.)
+To do this for all the dplyr generics would require a lot of copying and pasting. Let's reduce some of that duplication by taking advantage of `sloop::reconstruct()`. `reconstruct()` is a generic function designed to reconstruct a subclass from an instance of the parent class, typically created by `NextMethod()`, and the original subclass. In other words, the job of a reconstructor is to take an object from a parent class, and copy over attributes from the subclass. (Note that `reconstruct()` is unusual in that it dispatches on the second argument. This allows a more natural specification.)
 
 ```{r}
 reconstruct.provenance  <- function(new, old) {
@@ -759,7 +764,7 @@ The precise rules for where a generic looks for the methods are a little complic
 
 These details are not usually important, but are necessary in order for S3 generics to find the correct method when the generic and method are in different packages.
 
-### Base types
+### S3 and base types
 
 What happens when you call an S3 generic with a non-S3 object, i.e. an object that doesn't have the class attribute set? You might think it would dispatch on what `class()` returns:
 
@@ -878,7 +883,7 @@ If `+` dispatched only on the first argument, it would return different values f
 
 * One method is internal, in which case R calls the other method.
 
-For the example above, we can look at the possible methods for each argument, taking advantage of the fact the we can call `+` with a single argument.  In this case, the second argument would dispatch to the internal `+` function, so R will call `+.Date`.
+For the example above, we can look at the possible methods for each argument, taking advantage of the fact that we can call `+` with a single argument.  In this case, the second argument would dispatch to the internal `+` function, so R will call `+.Date`.
 
 ```{r}
 s3_dispatch(+date)
@@ -895,7 +900,7 @@ date + factor
 factor + date
 ```
 
-Finally, what happens if we try to substract a POSIXct from a POSIXlt? A commmon `-.POSIXt` method is found and called.
+Finally, what happens if we try to substract a POSIXct from a POSIXlt? A common `-.POSIXt` method is found and called.
 
 ```{r}
 dt1 <- as.POSIXct(date)
