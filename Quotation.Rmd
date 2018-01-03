@@ -22,6 +22,12 @@ In this chapter, we'll start by using rlang to dive into the details of quasiquo
 
 Quoting functions have deep connections to Lisp __macros__. However, macros are run at compile-time, which doesn't have any meaning in R, and always return expressions. They're also somewhat like Lisp [__fexprs__](http://en.wikipedia.org/wiki/Fexpr), functions where all arguments are quoted by default. These terms are useful to know when looking for related techniques in other programming languages. To learn more about macros in R, read @lumley-2001. \index{macros} \index{fexprs}
 
+```{r}
+if (packageVersion("rlang") < "0.1.6.9000") {
+  cat("Chapter currently relies on development version of rlang")
+}
+```
+
 ### Motivation
 
 We'll start with a simple and concrete example that helps motivate the need for unquoting, and hence quasiquotation. Imagine you're creating a lot of strings by joining together words:
@@ -184,7 +190,7 @@ Here we first use a map to produce the individual components of the sum: (the fo
 ```{r}
 coef_sym <- map(names(coefs), sym)
 
-summands <- map2(coef_sym, coefs, function(name, coef) expr(((!!coef) * (!!name))))
+summands <- map2(coef_sym, coefs, function(name, coef) expr((!!coef * !!name)))
 summands
 ```
 
@@ -198,7 +204,7 @@ summands
 Next we need to __reduce__ into a single expression by combining the pieces together:
 
 ```{r}
-eq <- reduce(summands, function(l, r) expr((!!l) + (!!r)))
+eq <- reduce(summands, function(l, r) expr(!!l + !!r))
 eq
 ```
 
@@ -230,18 +236,20 @@ arrange_desc <- function(df, ...) {
 
 Working with `...` involves some other considerations which are discussed further below.
 
-### Exercises
+### Operator precedence
 
-1.  It's challenging to see the AST of code like `!!x + !!y` because  
-    `ast()` does unquoting. We can work around this by using the base
-    equivalent of `expr()` that doesn't do unquoting: `quote()`. Why does
-    this work? What does it tell you about unquoting?
+It's challenging to see the AST of code like `!!x + !!y` because  `ast()` does unquoting. We can work around this by using the base equivalent of `expr()` that doesn't do unquoting: `quote()`. 
     
-    ```{r}
-    expr <- quote(!!x + !!y)
-    lobstr::ast(!!expr)
-    ```
+```{r}
+expr <- quote(!!x + !!y)
+lobstr::ast(!!expr)
+```
 
+Unfortunately while this is R's operator precedence, it is not convenient unquoting - in the above expression you want to unquote `x` and `y`, but R's default rules interpret this as unquoting `x + y`, i.e. `!!(x + y)`. This is unlikely to be useful so rlang bends R's usual operator precedence rules to work the way you might expect. 
+
+The root cause of this problem is that the operator precedence for `!` is suprisingly low: unlike it unary `+` and `-`, it has lower precedence that than of the binary algebraic and logical operators. Most of the time this doesn't matter: expressions that mix `!` and binary operators, like `!x + y` or !x > y`, are unusual. For this reason, we thought it ok to bend the usual rules here.
+
+The other downside of quasiquotation is that you can no longer double negate a value, `!!x`. In the unusual case you both need this and want to do quasiquotation, just add a pair of parentheses `!(!x)`.
 
 ## Evaluation
 
