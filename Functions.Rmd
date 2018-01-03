@@ -546,7 +546,11 @@ f <- function(x) {
 f(stop("This is an error!"))
 ```
 
-This is important when creating closures with `lapply()` or a loop:
+The `apply` functions underwent this same change in [R 3.2.0](https://stat.ethz.ch/pipermail/r-announce/2015/000583.html): 
+
+> Higher order functions such as the apply functions and Reduce() now force arguments to the functions they apply in order to eliminate undesirable interactions between lazy evaluation and variable capture in closures.
+
+So, as of R 3.2.0 (but not older versions), you can safely do:
 
 ```{r}
 add <- function(x) {
@@ -557,19 +561,40 @@ adders[[1]](10)
 adders[[10]](10)
 ```
 
-`x` is lazily evaluated the first time that you call one of the adder functions. At this point, the loop is complete and the final value of `x` is 10.  Therefore all of the adder functions will add 10 on to their input, probably not what you wanted!  Manually forcing evaluation fixes the problem:
+Fortunately, all good! The lesson here is that you need to keep lazy evaluation in mind when creating closures with a loop or any other construct (unless you know that these, like the `apply` family, `force` their functions' arguments). For example, here's a naive implementation that wants to achieve the same result as above, using a `for` loop instead of `lapply`:
+
+```{r}
+add <- function(x) {
+  function(y) x + y
+}
+
+adders <- list()
+for (i in 1:10) {
+  adders[[i]] <- add(i)
+}
+
+adders[[1]](10)
+adders[[10]](10)
+```
+
+`x` is lazily evaluated the first time that you call one of the adder functions. At this point, the loop is complete and the final value of `x` is 10.  Therefore all of the adder functions will add 10 on to their input, probably not what you wanted! Manually forcing evaluation inside `add()` fixes the problem:
 
 ```{r}
 add <- function(x) {
   force(x)
   function(y) x + y
 }
-adders2 <- lapply(1:10, add)
-adders2[[1]](10)
-adders2[[10]](10)
+
+adders <- list()
+for (i in 1:10) {
+  adders[[i]] <- add(i)
+}
+
+adders[[1]](10)
+adders[[10]](10)
 ```
 
-This code is exactly equivalent to
+The `add` function is exactly equivalent to
 
 ```{r}
 add <- function(x) {
