@@ -234,7 +234,7 @@ arrange_desc <- function(df, ...) {
 }
 ```
 
-Working with `...` involves some other considerations which are discussed further below.
+We'll come back to this case study in more detail in the next chapter. To be 100% correct, we need to use `quo()` rathrer than `expr()` for reasons we'll come back to shortly.
 
 ### Operator precedence
 
@@ -272,120 +272,129 @@ eval(ru5)
 eval(ru5)
 ```
 
-
 ## Dot dot dot
 
-### Define operator
+There are three common uses of `...`, two of which you've already seen:
 
-There's one final component to quasiquotation: `:=`, called define, and pronounced colon-equals. This is needed because the LHS of `=` is always quoted in function arguments:
+* To forward extra arguments to another function, [fun-dot-dot-dot].
+
+* To allow S3 methods to have additional arguments that the generic does not,
+  [s3-arguments]
+
+* To create new data structures with named components. We've seen three
+  examples: `structure()`, `list()`, `data.frame()`. Also similar to
+  `base::transform()`, and `dplyr::mutute()` and friends, which allow you to
+  create arbitrarily named new arguments.
+
+For this type of function it's useful to support quasiquotation, not because you're trying to build up a complex AST, but because you're trying to build up a complex data structure.  
+
+### Multiple arguments vs. multiple components
+
+Useful to be able to flexibly pass either multiple arguments, or multiple elements in list. 
+
+For example, take `base::rbind()`. This allows you to join together multiple data frames into one.
 
 ```{r}
-name <- "x"
-value <- 10
-
-exprs(name = value)
+df1 <- data.frame(x = 1, y = 2)
+df2 <- data.frame(x = 3, y = 4)
+rbind(df1, df2)
 ```
 
-You can't use `!!` on here because R's grammar only allows a symbol. This makes any attempt to unquote a syntax error:
+But what if you have those two data frames in a list?
+
+```{r}
+dfs <- list(df1, df2)
+rbind(dfs)
+```
+
+Ideally you'd like to be able to do `rbind(!!!dfs)`, but because base R doesn't support quasiquotation you have to use `do.call`:
+
+```{r}
+do.call(rbind, dfs)
+```
+
+If you have some data frames as objects, and some in lists, this gets complicat really fast.
+
+To help overcome this problem in packages, rlang provides `dots_list()`, which makes it easy to turn `...` into a list supporting quasiqutation with `!!` and `!!!`, and adding one new feature: `:=`.
+
+```{r}
+dplyr::bind_rows(!!!dfs)
+```
+
+This operation is called splatting in many languages (e.g. ruby). Python calls this star-args, or star-star-args. `*args` and `kwargs`.
+
+Note that `bind_rows()` doesn't support quasiquotation (i.e. `!!`) - but it does support `!!!`. We call functions like this "tidy dots".
+
+### Names as arguments
+
+Another common problem is that you want to name one of the components with a variable. For example, say you:
+
+```{r}
+name <- "variable"
+value <- 1:4
+```
+
+And you want to create:
+
+```{r}
+data.frame(variable = value)
+```
+
+There's no way to do this directly with base R. You either have to use `do.call()` or `setNames()` afterwards:
+
+```{r}
+setNames(data.frame(value), name)
+do.call(data.frame, setNames(list(value), name))
+```
+
+This problem is easier to solve with functions that use `dots_list()`, like `tibble::tibble()`:
+
+```{r}
+tibble::tibble(!!name := value)
+```
+
+We need a new operator, `:=`, because R's grammar only allows a symbol on the LHS of `=`. This makes any attempt to unquote a syntax error:
 
 ```{r, eval = FALSE}
-exprs(!!name = !!value)
-#> Error: unexpected '=' in "exprs(!!name ="
-```
-
-To work around this issue, rlang supports `:=`. 
-
-```{r}
-exprs(!!name := !!value)
+tibble::tibble(!!name = value)
+#> Error: unexpected '=' in "tibble::tibble(!!name ="
 ```
 
 `:=` is like a vestigal organ: it's recognised by the parser, but it doesn't have any code associated with it. It looks like an `=` but allows any expression on the LHS, providing a flexible alternative to `=`. If you've used data.table, you might've also seen it used there for similar reasons.
 
-### What do use `...` for?
-
-Take the `grouped_mean` function we defined above - there are 3 possible ways we could use `...`:
-
-* Pass `...` onto the `mean()` function. That would make it easy to set 
-  `na.rm = TRUE`. This is easiest to implement.
-  
-* Allow the user to select multiple groups
-
-* Allow the user to select multiple variables to summarise.
-
-```{r}
-grouped_mean <- function(df, group_by, summarise, ...) {}
-grouped_mean <- function(df, group_by, ...) {}
-grouped_mean <- function(df, ..., summarise) {}
-```
-
-What if we want to use many of these?
-
-```{r}
-grouped_mean <- function(df, groups, vars, args) {
-
-  var_means <- map(vars, function(var) expr(mean(!!var, !!!args)))
-  names(var_means) <- map_chr(vars, expr_name)
-  
-  df %>%
-    dplyr::group_by(!!!groups) %>%
-    dplyr::summarise(!!!var_means)
-}
-
-grouped_mean(mtcars, exprs(vs, am), exprs(hp, drat, wt), list(na.rm = TRUE))
-```
-
-This function needs more work in order to give useful error messages.
-
-This is very similar to the scoped verbs in dplyr (e.g. `summarise_if()`, `mutate_at()`), and dplyr provides a wrapper to make the expression look a little more natural.
-
-```{r}
-library(dplyr)
-grouped_mean <- function(df, groups, vars, ...) {
-
-  var_means <- map(vars, function(var) expr(mean(!!var, ...)))
-  names(var_means) <- map_chr(vars, quo_name)
-  
-  df %>%
-    dplyr::group_by(!!!groups) %>%
-    dplyr::summarise(!!!var_means)
-}
-
-grouped_mean(mtcars, vars(vs, am), vars(hp, drat, wt), na.rm = TRUE)
-```
-
-### Explicit splicing
-
-Because this behaviour is so useful when taking arbitrary arguments, rlang also provides `dots_list()` which makes supports some of the same tools as quasiquotation, namely unquote-splicing and unquoting on the LHS of `:=`. This provides a flexible interface that allows you to supply arbitrary additional arguments either directly as name-value pairs, provide names indirectly, or use objects stored in existing lists.
-
-```{r}
-foo <- function(...) {
-  dots_list(...)
-}
-
-var <- "x"
-foo(!!var := "y")
-
-
-x1 <- list(a = 1)
-x2 <- list(b = 2, c = 3)
-dots_list(!!!x1, !!!x2, d = 4)
-```
-
 ### Invoke
 
-This can be particularly useful in conjunction with `invoke()` because you can easily combine prespecified arguments with .
+One useful application of `dots_list()` is `invoke()`
 
-Example of providing defaults.
-Example of two function calls each which need `...` (evaluated and unevaluated)
+(Neither `purrr::invoke()` nor `rlang::invoke()` currently use this definition)
+
+```{r}
+invoke <- function(.f, ...) {
+  do.call(.f, dots_list(...))
+}
+
+invoke(mean, x = 1:10, na.rm = TRUE)
+x <- list(x = 1:10, na.rm = TRUE)
+
+invoke(mean, !!!x)
+
+arg_name <- "na.rm"
+arg_val <- TRUE
+invoke(mean, 1:10, !!arg_name := arg_val)
+```
+
+This is useful for calling functions with a list of fixed (provided by function author) and varying (provided by function) arguments. 
 
 ```{r}
 glm_pred <- function(data, formula, glm_args = list(), predict_args = list()) {
-  glm_call <- expr(glm(data = data, formula = formula, !!!glm_args))
-  mod <- eval_tidy(glm_call, env = parent.frame())
-  
+  mod <- invoke(glm, data = data, formula = formula, !!!glm_args)
   invoke(predict, object = mod, !!!predict_args)
 }
 ```
+
+In this case, it's good practice to use full name for all arguments supplied by you (the function author).
+
+(This is not quite adequate for `glm()` because it uses standard-NSE. We'll talk about that in more detail later.)
 
 
 ## Base R
@@ -640,9 +649,11 @@ To construct more complex calls, two new quasiquotation calls come in handy:
 
 `~` doesn't provide any way to unquote.
 
+Standard NSE for modelling functions. How can you capture the `subset` or `weight` argument in a function? Need to use `expr()`. 
+
 ```{r}
 make_model <- function(resp, preds) {
-  pred_sum <- purrr::reduce(preds, function(x, y) expr(UQ(x) + UQ(y)))
+  pred_sum <- purrr::reduce(preds, function(x, y) expr(!!x + !!y))
   eval_tidy(expr(!!resp ~ !!pred_sum))
 }
 make_model(expr(y), exprs(a, b, c))
@@ -655,7 +666,7 @@ binary_expr_reducer <- function(op) {
   op <- enexpr(op)
   
   function(x, y) {
-    expr(UQ(op)(UQ(x), UQ(y)))
+    expr((!!op)(!!x, !!y))
   }
 }
 
