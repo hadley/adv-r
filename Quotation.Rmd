@@ -539,61 +539,59 @@ eq
 
 Very many code generation problems can be solved in a similar way, combining quasiquotation with map functions.
 
-## Dots and `do.call`
+## Dot-dot-dot (`...`)
 
-Finally, we need to talk about a topic related to quasiquotation related to funtions that take `...`. There are three common uses of `...`, two of which you've already seen:
+Quasiquotation ensures that every quoted argument has an escape hatch that allows the user to unquote, or evaluated, selected components, if needed. A similar and related needs arises with functions that take arbitrary additional arguments with `...`. Take the following two motivation problems:
 
-* To forward extra arguments to another function, [fun-dot-dot-dot].
-
-* To allow S3 methods to have additional arguments that the generic does not,
-  [s3-arguments]
-
-* To create new data structures with named components. We've seen three
-  examples: `structure()`, `list()`, `data.frame()`. Also similar to
-  `base::transform()`, and `dplyr::mutute()` and friends, which allow you to
-  create arbitrarily named new arguments.
-
-Here we're going to focus on the final use case: these ideas do crop up for the other cases but less commonly. 
-
-### Motivation
-
-There are two main problems that often crop up with function that use `...`:
-
-*   The elements you want to put in `...` are already stored in a list.
-    For example, you have a list of data frames and you want to `rbind()`
-    them together:
+*   What do you do if the elements you want to put in `...` are already stored 
+    in a list? For example, imagine you have a list of data frames that 
+    you want to `rbind()` together:
     
     ```{r}
     dfs <- list(
       a = data.frame(x = 1, y = 2),
-      b = data.frame(x = 1, y = 2)
+      b = data.frame(x = 3, y = 4)
     )
     ```
     
-    For this simple case, you could do `rbind(dfs$a, df$b)` but how do you 
-    generalise that approach for arbitrarily many data frames?
+    You could solve this specific case with `rbind(dfs$a, df$b)`, but how
+    do you generalise that solution to a list of arbitrary length?
 
-*   You want names the variable on the LHS of `=` with a variable. For example,
-    you want to create a single column data frame where where the name of the 
-    column is specified by a variable:
+*   What do you do if you want to supply the argument name indirectly? For 
+    example, imagine you want to create a single column data frame where 
+    the name of the column is specified in a variable:
     
     ```{r}
     var <- "x"
     val <- c(4, 3, 9)
     ```
     
-    In this case, you could create a data frame and then change names after the
-    fact, but that will not work in general. How can we do better?
+    In this case, you could create a data frame and then change names
+    (ie. `setNames(data.frame(val), var)`), but this feels inelegant.
+    How can we do better?
 
-To solve these problems in base R, you use `do.call()`:
+### `do.call()`
+
+Base R provides a swiss-army knife to solve these problems: `do.call()`. `do.call()` has two main arguments. The first argument, `what`, gives a funtion to call. The second argument, `args`, is a list of arguments to pass to that function, and so `do.call("f", list(x, y, z))` is equivalent to `f(x, y, z)`.
+
+`do.call()` gives a straightforward solution to `rbind()`ing together many data frames:
 
 ```{r}
 do.call("rbind", dfs)
-
-do.call("data.frame", setNames(list(val), var))
 ```
 
-Functions in the tidyverse provide an alternative approach that don't require a helper function:
+With a little more work, we can use `do.call()` to solve the second problem. We first create a list of argumetns, then name that, then use `do.call()`:
+
+```{r}
+args <- list(val)
+names(args) <- var
+
+do.call("data.frame", args)
+```
+
+### The tidyverse approach
+
+An alternative way to solve this problems hinges on the recognition that we can reframe these problems as a need for splicing and unquoting argument names. For example, the tidyverse equivalents of `rbind()` and `data.frame()`, `dplyr::bind_rows()` and `tibble::tibble()`, do not require an additional helper, instead using the same syntax as unquoting:
 
 ```{r}
 dplyr::bind_rows(!!!dfs)
@@ -601,35 +599,65 @@ dplyr::bind_rows(!!!dfs)
 tibble::tibble(!!var := val)
 ```
 
-Functions like `bind_rows()` and `tibble()` understand `!!` and `!!!`, but are not technically quoting functions because all their arguments are evaluated in the regular way. That means that while closely related, these feature are not technically quasiquotation. Instead, for want of a better name, we call these features tidy dots. All function functions are powered by `rlang::dots_list(...)` which understands `!!!` and how to unquote on the LHS of `:=`.
-
-When used in this context, the behaviour of `!!!` is sometimes called spatting. It is closed related to star-args (`*args`) and star-star-kwargs (`**kwarg`) in Python.
-
-### `:=`
-
-We need a new operator, `:=`, because R's grammar only allows a symbol on the LHS of `=`. This makes any attempt to unquote a syntax error:
+Note the use of `:=` (pronounced colon-equals) rather than `=`. Unforunately we need this new operation because R's grammar does not allow expressions as argument names:
 
 ```{r, eval = FALSE}
 tibble::tibble(!!var = value)
 #> Error: unexpected '=' in "tibble::tibble(!!var ="
 ```
 
-`:=` is like a vestigal organ: it's recognised by the parser, but it doesn't have any code associated with it. It looks like an `=` but allows any expression on the LHS, providing a flexible alternative to `=`. If you've used data.table, you might've also seen it used there for similar reasons.
+`:=` is like a vestigal organ: it's recognised by R's parser, but it doesn't have any code associated with it. It looks like an `=` but allows expressions on either side, making it a more flexible alternative to `=`. It is used in data.table for similar reasons.
+
+When used in this context, the behaviour of `!!!` is sometimes called spatting. It is closed related to star-args (`*args`) and star-star-kwargs (`**kwarg`) in Python.
 
 ### `dots_list()`
 
-(Often can do the same thing with `modifyList()` and `do.call()`)
+Both `dplyr::bind_rows()` and `tibble::tibble()` are powered by `rlang::dots_list(...)`. This function is very similar to `list(...)`, but it interprets `!!!` and `!!` specially. If you want to take advantage of this behaviour in your own function, all you need to do is use `dots_list()` in your own code.
+
+For example, imagine you want to make a version of `structure()` that understands `!!!` and `!!`. We'll call it `set_attr()`:
 
 ```{r}
-dots_list(x = 1, y = 2, z = 3)
-dots_list(!!!list(x = 1, y = 2, z = 3))
-dots_list(!!!list(x = 1, y = 2), z = 3)
-dots_list(!!!list(x = 1, y = 2), !!!list(z = 3))
+set_attr <- function(.x, ...) {
+  attr <- rlang::dots_list(...)
+  attributes(.x) <- attr
+  .x
+}
+
+attrs <- list(x = 1, y = 2)
+attr_name <- "z"
+
+1:10 %>%
+  set_attr(w = 0, !!!attrs, !!attr_name := 3) %>% 
+  str()
 ```
 
-### Invoke and lang
+(rlang also provides a `set_attr()` function with a few extra conveniences, but the essence is the same.)
 
-One useful application of `dots_list()` is `invoke()`: 
+Note that we call the first argument `.x`: whenever you use `...` to take arbitrary data, it's good practice to give the other argument names a `.` prefix. This eliminates any ambiguity about argument names.
+
+`dots_list()` provides one other handy feature: by default it will ignore any empty argument at the end. This is useful in functions like `tibble::tibble()` because it means that you can easily change the order of variables without worrying about the final comma:
+
+```{r, results = FALSE}
+# Can easily move x to first entry:
+tibble::tibble(
+  y = 1:5,
+  z = 3:-1,
+  x = 5:1,
+)
+
+# Need to remove comma from z and add column to x
+data.frame(
+  y = 1:5,
+  z = 3:-1,
+  x = 5:1
+)
+```
+
+Use the `.ignore_empty()` argument to change this behaviour.
+
+### `invoke()` and `lang()`
+
+One useful application of `dots_list()` is `invoke()`:
 
 ```{r}
 invoke <- function(.f, ...) {
@@ -637,11 +665,11 @@ invoke <- function(.f, ...) {
 }
 ```
 
-(Neither `purrr::invoke()` nor `rlang::invoke()` currently use this definition, but that should change.)
+(At time of writing, `purrr::invoke()` and `rlang::invoke()` had somewhat different definitions because they were written before we understood how quasiquotation syntax and `...` intersected.)
 
 As a wrapper around `do.call()`, `invoke()` gives powerful ways to call functions with arguments supplied directly (in ...) or indirectly (in a list):
 
-```{r}
+```{r, results = FALSE}
 invoke("mean", x = 1:10, na.rm = TRUE)
 
 # Equivalent to
@@ -649,39 +677,25 @@ x <- list(x = 1:10, na.rm = TRUE)
 invoke("mean", !!!x)
 ```
 
-This also allows us to specify argument names indirectly:
+It also allows us to specify argument names indirectly:
 
-```{r}
+```{r, results = FALSE}
 arg_name <- "na.rm"
 arg_val <- TRUE
 invoke("mean", 1:10, !!arg_name := arg_val)
 ```
 
-Closely related to `invoke()` is `lang()`. `lang()` generates an expression and is often equivalent to `expr()`. But `expr()` has no general way to refer to argument names indirectly (due to the semantics of `:=`):
+Closely related to `invoke()` is `lang()`:
 
 ```{r}
 lang("mean", 1:10, !!arg_name := arg_val)
 ```
 
+ `lang()` generates an expression and is often equivalent to `expr()`. The advantage of `lang()` is that you can use `:=`: you can't use it with `expr()` because it does not take `...`.
+ 
+### Other approaches
 
-
-This is useful for calling functions with a list of fixed (provided by function author) and varying (provided by function) arguments. 
-
-```{r}
-# NEED SIMPLER EXAMPLE.
-glm_pred <- function(data, formula, glm_args = list(), predict_args = list()) {
-  mod <- invoke(glm, data = data, formula = formula, !!!glm_args)
-  invoke(predict, object = mod, !!!predict_args)
-}
-```
-
-In this case, it's good practice to use full name for all arguments supplied by you (the function author).
-
-### Other approaches in base R
-
-Apart from `rlang::dots_list()` there are several other techniques used to overcome the difficulties described above.
-
-One technique is is to take `...` but also accept a single unnamed argument that is a list, making `f(list(x, y, z))` equivalent to `f(x, y, z)`. The implementation looks something like:
+Apart from `rlang::dots_list()` there are several other techniques used to overcome the difficulties described above. One technique is is to take `...` but also accept a single unnamed argument that is a list, making `f(list(x, y, z))` equivalent to `f(x, y, z)`. The implementation looks something like:
 
 ```{r}
 f <- function(...) {
@@ -695,23 +709,25 @@ f <- function(...) {
 }
 ```
 
-Base functions that use this technique include `interaction()`, `expand.grid()`, `options()`, and `par()`.
+Base functions that use this technique include `interaction()`, `expand.grid()`, `options()`, and `par()`. Since these functions take either a list, or a `...`, but not both, they are slightly less flexible than functions powered by `dots_list()`.
 
-```{r}
-x <- letters[1:2]
-y <- 2:1
-interaction(x, y)
+Another related technique is used the `RCurl::getURL()` function written by Duncan Temple Lang. `getURL()` take both `...` and `.opts` which are concatenated together.  This is useful when writing functions to call web APIs because you often have some options that need to be passed to request. You put these in a common list and pass to `.opts`, saving `...` for the options unique for a given call. 
 
-# Equivalent to previos call
-interaction(list(x, y))
-```
-
-These functions either a take a list or a `...`, so are slightly less flexible than tidy dots.
-
-Another related technique is used by `RCurl::getURL()` by Duncan Temple Lang. `getURL()` take both `...` and `.opts` which are  This is useful for combining fixed and varying options.   I found this technique particular compelling so you can see it used throughout the tidyverse. Now, however, tidy dots solves more problems using the same key ideas of tidy eval so we are slowly migrating to that style.
+I found this technique particular compelling so you can see it used throughout the tidyverse. Now, however, `rlang::dots_list()` dots solves more problems, more elegantly, by using the ideas from tidy eval so the tidyverse is slowly migrating to fsthat style.
 
 ### Exercises
 
 1.  Carefully read the source code for `interaction()`, `expand.grid()`, and 
     `par()`.  Compare and constract the techniques they use for switching 
     between dots and list behaviour.
+
+1.  Explain the problem with this defintion of `set_attr()`
+    
+    ```{r, error = TRUE}
+    set_attr <- function(x, ...) {
+      attr <- rlang::dots_list(...)
+      attributes(x) <- attr
+      x
+    }
+    set_attr(1:10, x = 10)
+    ```
