@@ -315,7 +315,7 @@ So far we have acted as if `!!` and `!!!` are regular prefix operators like `+` 
 
 `!!` and `!!!` have special behaviour inside all quoting functions powered by rlang, and the unquoting operators are given precedence similar to `+` and `-`, not `!`. We do this because the operator precedence for `!` is suprisingly low: it has lower precedence that than of the binary algebraic and logical operators. Most of the time this doesn't matter as it is unusual to mix `!` and binary operators (e.g. you typically would not write `!x + y` or !x > y`). However, expressions like `!!x + !!y` are not uncommon when unquoting, and requring explicit parentheses, `(!!x) + (!!y)`, feels onerous. For this reason, rlang manipulates the AST to give the unquoting operators a higher, and more natural, precedence.
 
-You might wonder why rlang does not use a regular function call. Indeed, early versions of rlang provided `UQ()` and `UQS()` as alternatives to `!!` and `!!!`. However, these looked like regular function calls, rather than special syntactic operators, and gave people a misleading mental model, which made them harder to use correctly. We adopted `!!` and `!!!` as the best compromise: they're are strong visual symbols, don't look like existing syntax, and take over a rarely used piece of syntax. (And if for some reason you do need to doubly negate a value in a quasiquoting function, you can just add parentheses `!(!x)`.)
+You might wonder why rlang does not use a regular function call. Indeed, early versions of rlang provided `UQ()` and `UQS()` as alternatives to `!!` and `!!!`. However, these looked like regular function calls, rather than special syntactic operators, and gave people a misleading mental model, which made them harder to use correctly. In particular, function calls only happen (lazily) at evaluation time; unquoting always happens at quotation time. We adopted `!!` and `!!!` as the best compromise: they're are strong visual symbols, don't look like existing syntax, and take over a rarely used piece of syntax. (And if for some reason you do need to doubly negate a value in a quasiquoting function, you can just add parentheses `!(!x)`.)
 
 ### With base R {#unquote-base}
 
@@ -485,11 +485,15 @@ In general, if you're ever confused about what is actually in an AST, display th
 
 Before we continue to the final section of this chapter, the techniques of quasiquotation translated to `...`, we have XYZ case studies showing quasiquotation can be used in practice to solve real problems. We'll also see a couple of examples combining quasiquotation with purrr to generate complex expressions programmatically.
 
+```{r}
+library(purrr)
+library(dplyr)
+```
+
+
 ### Calling quoting functions
 
-One downside of quoting functions is that they are not __referentially transparent__. A function is referentially transparent if you can replace its arguments with their values and its behaviour doesn't change. For example, if a function, `f()`, is referentially transparent and both `x` and `y` are 10, then `f(x)`, `f(y)`, and `f(10)` will all return the same result. This is a really important property because it's what allows you to reduce duplication in code by extracting a repeated pattern into a function.
-
-For example, if you see the following code:
+One downside of quoting functions is that when you call a lot of them, it is harder to wrap them in another function in order to reduce duplication. For example, if you see the following code:
 
 ```{r, eval = FALSE}
 (x - min(x)) / (max(x) - min(x))
@@ -506,9 +510,9 @@ rescale01(y)
 rescale01(x + y)
 ```
 
-(And reducing the duplication is a good idea because when you realise that your rescaling technique doesn't handle missing values gracefully, you only have one place to fix it)
+Reducing the duplication here is a very good idea, because when you realise that your rescaling technique doesn't handle missing values gracefully, you only have one place to fix it. It is easy to create `rescale01()` because `min()`, `max()`, and `-` , are regular functions: they don't quote any of their argumetns.
 
-This works because `rescale01()` is referrentially transparent: only the values of the inputs matter, not how they are computed. Quoting functions are not referentially transparent. For example, if you notice take this repeated code:
+It's harder to reduce duplication when a function quotes one or more arguments. For example, if you notice this repeated code:
 
 ```{r, eval = FALSE}
 ggplot(df, aes(x, y)) + geom_point()
@@ -519,10 +523,12 @@ ggplot(df, aes(y, z)) + geom_point()
 This naive function will not work:
 
 ```{r}
-scatterplot <- function(df, x, y) ggplot(df, aes(x, y)) + geom_point()
+scatterplot <- function(df, x, y) {
+  ggplot(df, aes(x, y)) + geom_point()
+}
 ```
 
-Because regardless of how you call it, it `aes()` will always try to plot `x` vs `y`. However, quasiquotation gives us a standard way to wrap these functions: you quote and then unquote:
+Because regardless of how you call it, it `aes(x, y)` will always try to plot `x` vs `y`. However, because (as of very recently) ggplot2 support quasiquotation, there's a standard way to wrap these functions: you quote and then unquote:
 
 ```{r}
 scatterplot <- function(df, x, y) {
@@ -531,39 +537,11 @@ scatterplot <- function(df, x, y) {
   
   ggplot(df, aes(!!x, !!y)) + geom_point()
 }
+
+# scatterplot(mtcars, cyl, vs)
 ```
 
-(NOTE: This requires the very latest development version of ggplot2)
-
-This is a powerful pattern that allows you to wrap functions that quoting one or more arguments, providing a standard way to work around the referentical integrity absent in quoting functions.
-
-### Reducing duplication in dplyr
-
-We can use these ideas to generate out own wrappers around dplyr functions. For example, imagine we want to group by one variable and compute the mean of another. We use `enexpr()` to capture the expression, and then unquoting to selectively evaluation.
-
-```{r}
-grouped_mean <- function(df, group_by, summarise) {
-  group_by <- enexpr(group_by)
-  summarise <- enexpr(summarise)
-  
-  df %>%
-    group_by(!!group_by) %>%
-    summarise(mean(!!summarise))
-}
-```
-
-We can combine this idea with the previous by creating a wrapper around `desc()` that arranges all components in descrending order. We capture the dots with `exprs()`, wrap each in `desc()` by combining `map()` and `expr()`, and the use `!!!` to insert all expressions into `arrange()`.
-
-```{r}
-arrange_desc <- function(df, ...) {
-  dots <- exprs(...)
-  dots_desc <- map(dots, function(var) expr(desc(!!var)))
-  
-  dplyr::arrange(df, !!!dots_desc)
-}
-```
-
-We'll come back to this case study in more detail in the next chapter. To be 100% correct, we need to use `quo()` rathrer than `expr()` for reasons we'll come back to shortly.
+This is a powerful pattern that allows you to wrap functions that quote one or more arguments.
 
 ### Generating code
 
@@ -602,24 +580,107 @@ eq <- reduce(summands, ~ expr(!!.x + !!.y))
 eq
 ```
 
+```{r}
+eq <- reduce(summands, ~ lang("+", .x, .y))
+eq
+```
+
 Very many code generation problems can be solved in a similar way, combining quasiquotation with map functions.
 
 ### Partition
 
-Inspired by <https://stackoverflow.com/questions/46828296/>.
+A little `map()` is often usefully combined with `enexprs(...)`. For example, imagine that you want to extend `dplyr::select()` to return two data frames: one with the variables you selected, and one with the variables that remain. (This problem was inspired by <https://stackoverflow.com/questions/46828296/>.) There are a plenty of ways to attack this problem, but one way is to use quasiquotation, then invert each selection call by negating it. 
+
+We practice interactively with a list of variables created with `exprs()`:
 
 ```{r}
-make_minus <- function(x) expr(-!!x)
+vars <- exprs(x, y, c(a, b), starts_with("x"))
+vars %>% map(~ expr(-!!.))
+```
 
-partition <- function(x, ...) {
-  vars <- enquos(...)
-  excluded_vars <- map(vars, make_minus)
+Then turn into a function:
 
-  included <- select(x, ...)
-  excluded <- select(x, !!!excluded_vars)
-  list(included, excluded)
+```{r}
+partition <- function(.data, ...) {
+  included <- enexprs(...)
+  excluded <- map(included, ~ expr(!!.x))
+
+  list(
+    incl = select(.data, !!!included),
+    excl = select(.data, !!!excluded)
+  )
 }
 ```
+
+Note the name of the first argument: `.data`. This is a standard convention through the tidyverse because you don't need to explicitly name this argument (because it's always used), and it avoids potential clashes with argument names in `...`.
+
+### What to use `...` for?
+
+You can use this idea to generate your wrappers around dplyr functions. For example, imagine we want to group by one variable and compute the mean of another. We use `enexpr()` to capture the expression, and then unquoting to selectively evaluate in the dplyr call:
+
+```{r}
+grouped_mean <- function(df, group_by, summarise) {
+  group_by <- enexpr(group_by)
+  summarise <- enexpr(summarise)
+  
+  df %>%
+    group_by(!!group_by) %>%
+    summarise(mean(!!summarise))
+}
+```
+
+We'll come back to this case study in more detail in the next chapter. 
+
+But for now, imagine that we want to extend this function to use `...`. There are three possible ways we could use `...` it:
+
+* Pass `...` onto the `mean()` function. That would make it easy to set 
+  `na.rm = TRUE`. This is easiest to implement.
+  
+* Allow the user to select multiple groups
+
+* Allow the user to select multiple variables to summarise.
+
+Implementing each one of these is relatively straightforward, but what if we want to be able to group by multiple variables, summarise multiple variables, and pass extra args on to `mean()`. T
+
+```{r}
+grouped_mean <- function(df, groups, vars, args) {
+
+  var_means <- map(vars, function(var) expr(mean(!!var, !!!args)))
+  names(var_means) <- map_chr(vars, expr_name)
+  
+  df %>%
+    dplyr::group_by(!!!groups) %>%
+    dplyr::summarise(!!!var_means)
+}
+
+grouped_mean(mtcars, exprs(vs, am), exprs(hp, drat, wt), list(na.rm = TRUE))
+```
+
+This is very similar to the scoped verbs in dplyr (e.g. `summarise_if()`, `mutate_at()`), and dplyr provides a wrapper to make the expression look a little more natural.
+
+```{r, eval = FALSE}
+grouped_mean(mtcars, vars(vs, am), vars(hp, drat, wt), list(na.rm = TRUE))
+```
+
+### Exercises
+
+1.  Implement `filter_or()`, a variant of `dplyr::filter()` that combines 
+    multiple arguments using `|` instead of `&`.
+    
+1.  Implement `arrange_desc()`, a variant of `dplyr::arrange()` that sorts
+    in descending order by default.
+
+1.  Implement the three variants of `grouped_mean()` described above:
+
+    ```{r}
+    # ... passed on to mean
+    grouped_mean <- function(df, group_by, summarise, ...) {}
+    # ... selects variables to summarise
+    grouped_mean <- function(df, group_by, ...) {}
+    # ... selects variables to group by
+    grouped_mean <- function(df, ..., summarise) {}
+    ```
+
 
 ## Dot-dot-dot (`...`)
 
@@ -774,7 +835,8 @@ lang("mean", 1:10, !!arg_name := arg_val)
 ```
 
  `lang()` generates an expression and is often equivalent to `expr()`. The advantage of `lang()` is that you can use `:=`: you can't use it with `expr()` because it does not take `...`.
- 
+
+
 ### Other approaches
 
 Apart from `rlang::dots_list()` there are several other techniques used to overcome the difficulties described above. One technique is is to take `...` but also accept a single unnamed argument that is a list, making `f(list(x, y, z))` equivalent to `f(x, y, z)`. The implementation looks something like:
