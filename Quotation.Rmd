@@ -485,67 +485,16 @@ In general, if you're ever confused about what is actually in an AST, display th
 
 Before we continue to the final section of this chapter, the techniques of quasiquotation translated to `...`, we have XYZ case studies showing quasiquotation can be used in practice to solve real problems. We'll also see a couple of examples combining quasiquotation with purrr to generate complex expressions programmatically.
 
+These case studies will use purrr to iterate over lists of expressions to transform them in various ways, and dplyr to motivate some of the problems. We'll come back to the base quoting functions in the next chapter. Because they don't support quasiquotation, we'll need to use techniques of evaluation as well.
+
 ```{r}
 library(purrr)
 library(dplyr)
 ```
 
+### Map-reduce to generate code
 
-### Calling quoting functions
-
-One downside of quoting functions is that when you call a lot of them, it is harder to wrap them in another function in order to reduce duplication. For example, if you see the following code:
-
-```{r, eval = FALSE}
-(x - min(x)) / (max(x) - min(x))
-(y - min(y)) / (max(y) - min(y))
-((x + y) - min(x + y)) / (max(x + y) - min(x + y))
-```
-
-You can eliminate the reptition with a `rescale01` function:
-
-```{r, eval = FALSE}
-rescale01 <- function(x) (x - min(x)) / (max(x) - min(x))
-rescale01(x)
-rescale01(y)
-rescale01(x + y)
-```
-
-Reducing the duplication here is a very good idea, because when you realise that your rescaling technique doesn't handle missing values gracefully, you only have one place to fix it. It is easy to create `rescale01()` because `min()`, `max()`, and `-` , are regular functions: they don't quote any of their argumetns.
-
-It's harder to reduce duplication when a function quotes one or more arguments. For example, if you notice this repeated code:
-
-```{r, eval = FALSE}
-ggplot(df, aes(x, y)) + geom_point()
-ggplot(df, aes(x, z)) + geom_point()
-ggplot(df, aes(y, z)) + geom_point()
-```
-
-This naive function will not work:
-
-```{r}
-scatterplot <- function(df, x, y) {
-  ggplot(df, aes(x, y)) + geom_point()
-}
-```
-
-Because regardless of how you call it, it `aes(x, y)` will always try to plot `x` vs `y`. However, because (as of very recently) ggplot2 support quasiquotation, there's a standard way to wrap these functions: you quote and then unquote:
-
-```{r}
-scatterplot <- function(df, x, y) {
-  x <- enexpr(x)
-  y <- enexpr(y)
-  
-  ggplot(df, aes(!!x, !!y)) + geom_point()
-}
-
-# scatterplot(mtcars, cyl, vs)
-```
-
-This is a powerful pattern that allows you to wrap functions that quote one or more arguments.
-
-### Generating code
-
-Quoting and unquoting give us powerful tools for generating code, particularly when combined with `purrr::map()` and `purr::reduce()`. For example, assume you have a linear model specified by the following coefficients:
+Quasiquotation gives us powerful tools for generating code, particularly when combined with `purrr::map()` and `purr::reduce()`. For example, assume you have a linear model specified by the following coefficients:
 
 ```{r}
 intercept <- 10
@@ -580,16 +529,81 @@ eq <- reduce(summands, ~ expr(!!.x + !!.y))
 eq
 ```
 
+As you'll learn in the next chapter, we than easily evaluate this with any data:
+
 ```{r}
-eq <- reduce(summands, ~ lang("+", .x, .y))
-eq
+df <- data.frame(x1 = runif(5), x2 = runif(5))
+eval(eq, df)
+```
+
+Or alternatively we could turn it into a function:
+
+```{r}
+args <- map(coefs, ~ missing_arg())
+new_function(args, expr({!!eq}))
 ```
 
 Very many code generation problems can be solved in a similar way, combining quasiquotation with map functions.
 
+### Calling quoting functions
+
+One downside of quoting functions is that when you call a lot of them, it is harder to wrap them in another function in order to reduce duplication. For example, if you see the following code:
+
+```{r, eval = FALSE}
+(x - min(x)) / (max(x) - min(x))
+(y - min(y)) / (max(y) - min(y))
+((x + y) - min(x + y)) / (max(x + y) - min(x + y))
+```
+
+You can eliminate the reptition with a `rescale01` function:
+
+```{r, eval = FALSE}
+rescale01 <- function(x) (x - min(x)) / (max(x) - min(x))
+rescale01(x)
+rescale01(y)
+rescale01(x + y)
+```
+
+Reducing the duplication here is a very good idea, because when you realise that your rescaling technique doesn't handle missing values gracefully, you only have one place to fix it. It is easy to create `rescale01()` because `min()`, `max()`, and `-` , are regular functions: they don't quote any of their argumetns.
+
+It's harder to reduce duplication when a function quotes one or more arguments. For example, if you notice this repeated code:
+
+```{r, eval = FALSE}
+df %>% group_by(x1) %>% summmarise(mean = mean(y1))
+df %>% group_by(x2) %>% summmarise(mean = mean(y2))
+df %>% group_by(x3) %>% summmarise(mean = mean(y3))
+```
+
+This naive function will not work:
+
+```{r}
+grouped_mean <- function(df, x, y) {
+  df %>% group_by(x) %>% summmarise(mean = mean(y))
+}
+```
+
+Because regardless of the input, `grouped_mean()` will always group by `x` and compute the mean of `y`. However, because `group_by()` and `summarise()` (like all quoting functions in the tidyverse) use quasiquotation, there's a standard way to wrap these functions: you quote and then unquote:
+
+```{r}
+grouped_mean <- function(df, x, y) {
+  x <- enexpr(x)
+  y <- enexpr(y)
+  
+  df %>% 
+    group_by(!!x) %>% 
+    summarise(mean = mean(!!y))
+}
+
+mtcars %>% grouped_mean(cyl, mpg)
+```
+
+(In the next chapter, we'll learn why `enexpr()` is not quite general enough and how and why to use `quo()`, `enquo()`, and `enquos()` instead.)
+
+This is a powerful pattern that allows you reduce duplication in your code when it uses quasiquoting functions.
+
 ### Partition
 
-A little `map()` is often usefully combined with `enexprs(...)`. For example, imagine that you want to extend `dplyr::select()` to return two data frames: one with the variables you selected, and one with the variables that remain. (This problem was inspired by <https://stackoverflow.com/questions/46828296/>.) There are a plenty of ways to attack this problem, but one way is to use quasiquotation, then invert each selection call by negating it. 
+It's often useful to combine these two ideas: quoting input arguments and then mildly manipulating them with purrr. For example, imagine that you want to extend `dplyr::select()` to return two data frames: one with the variables you selected, and one with the variables that remain. (This problem was inspired by <https://stackoverflow.com/questions/46828296/>.) There are plenty of ways to attack this problem, but one way is to take advantage of `selects()` ability to negate column selection expression in order to remove those columns. We can capture the inputs with quasiquotation, then invert each selection call by negating it. 
 
 We practice interactively with a list of variables created with `exprs()`:
 
@@ -598,40 +612,28 @@ vars <- exprs(x, y, c(a, b), starts_with("x"))
 vars %>% map(~ expr(-!!.))
 ```
 
-Then turn into a function:
+Then turn it into a function:
 
 ```{r}
 partition <- function(.data, ...) {
   included <- enexprs(...)
-  excluded <- map(included, ~ expr(!!.x))
+  excluded <- map(included, ~ expr(-!!.x))
 
   list(
     incl = select(.data, !!!included),
     excl = select(.data, !!!excluded)
   )
 }
+
+df <- data.frame(x1 = 1, x2 = 3, y = "a", z = "b")
+partition(df, starts_with("x"))
 ```
 
 Note the name of the first argument: `.data`. This is a standard convention through the tidyverse because you don't need to explicitly name this argument (because it's always used), and it avoids potential clashes with argument names in `...`.
 
-### What to use `...` for?
+### Tangling with dots
 
-You can use this idea to generate your wrappers around dplyr functions. For example, imagine we want to group by one variable and compute the mean of another. We use `enexpr()` to capture the expression, and then unquoting to selectively evaluate in the dplyr call:
-
-```{r}
-grouped_mean <- function(df, group_by, summarise) {
-  group_by <- enexpr(group_by)
-  summarise <- enexpr(summarise)
-  
-  df %>%
-    group_by(!!group_by) %>%
-    summarise(mean(!!summarise))
-}
-```
-
-We'll come back to this case study in more detail in the next chapter. 
-
-But for now, imagine that we want to extend this function to use `...`. There are three possible ways we could use `...` it:
+In our `grouped_mean()` example above, we allow the user to select one grouping variable, and one summary variable. What if we wanted to allow the user to select more than one? One option would be to use `...`. There are three possible ways we could use `...` it:
 
 * Pass `...` onto the `mean()` function. That would make it easy to set 
   `na.rm = TRUE`. This is easiest to implement.
@@ -640,7 +642,7 @@ But for now, imagine that we want to extend this function to use `...`. There ar
 
 * Allow the user to select multiple variables to summarise.
 
-Implementing each one of these is relatively straightforward, but what if we want to be able to group by multiple variables, summarise multiple variables, and pass extra args on to `mean()`. T
+Implementing each one of these is relatively straightforward, but what if we want to be able to group by multiple variables, summarise multiple variables, and pass extra args on to `mean()`. Generally, I think its better to avoid this sort of API (instead relying on multiple function that each do one thing) but sometimes it is the lesser of the two evils, so it is useful to have a technique in your backpocket to handle it.
 
 ```{r}
 grouped_mean <- function(df, groups, vars, args) {
@@ -656,7 +658,7 @@ grouped_mean <- function(df, groups, vars, args) {
 grouped_mean(mtcars, exprs(vs, am), exprs(hp, drat, wt), list(na.rm = TRUE))
 ```
 
-This is very similar to the scoped verbs in dplyr (e.g. `summarise_if()`, `mutate_at()`), and dplyr provides a wrapper to make the expression look a little more natural.
+If you use this design a lot, you may also want to provide an alias to `exprs()` with a better name. For example, dplyr provides the `vars()` wrapper to support the scoped verbs (e.g. `summarise_if()`, `mutate_at()`). `aes()` in ggplot2 is similar, although it does a little more: requires all arguments be named, naming the the first arguments (`x` and `y`) by default, and automatically renames so you can use the base names for aesthetics (e.g. `pch` vs `shape`). 
 
 ```{r, eval = FALSE}
 grouped_mean(mtcars, vars(vs, am), vars(hp, drat, wt), list(na.rm = TRUE))
@@ -680,7 +682,6 @@ grouped_mean(mtcars, vars(vs, am), vars(hp, drat, wt), list(na.rm = TRUE))
     # ... selects variables to group by
     grouped_mean <- function(df, ..., summarise) {}
     ```
-
 
 ## Dot-dot-dot (`...`)
 
