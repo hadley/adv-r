@@ -62,29 +62,85 @@ subset(sample_df, b == c)
 # sample_df[sample_df$b == sample_df$c, ]
 ```
 
+`subset.data.frame()`
+
+```{r}
+subset2 <- function(data, subset) {
+  subset <- enexpr(subset)
+  rows <- eval_tidy(subset, data)
+  
+  data[rows, , drop = FALSE]
+}
+
+subset(sample_df, b == c)
+```
+
+
 Compared to `base::subset()` this will support quasiquotation (thanks to `enquos()`)
 
 ### Ambiguity and pronouns
 
 ```{r, eval = FALSE}
 x <- 10
-subset(df, x == x)
+subset2(df, x == x)
+
+subset2(df, .data$x == .env$x)
 ```
+
+`.env` pronoun vs. unquoting. Generally, difference isn't important.  
 
 ### Case study: calling base NSE functions
 
-Focus on models, since since standard NSE doesn't provide unquoting tool. Can use the same ideas with base graphics and `transform()`, `subset()` and friends.
+Focus on models, since since standard NSE doesn't provide unquoting tool. But can use the same ideas with base graphics and `transform()`, `subset()` and friends.
+
+First let's show how you could generate a formula. Tricky thing about formulas is that the look same evaluated or not
 
 ```{r}
-make_model <- function(resp, preds) {
-  pred_sum <- purrr::reduce(preds, ~ expr(!!.x + !!.y))
-  eval_tidy(expr(!!resp ~ !!pred_sum))
-}
-make_model(expr(y), exprs(a, b, c))
+y ~ x
+expr(y ~ x)
 ```
+
+But they're not - you need to evaluate the call to get an actual formula:
+
+```{r}
+class(y ~ x)
+class(expr(y ~ x))
+```
+
+Here's a simple example of generating a formula in a different way:
+
+```{r}
+build_formula <- function(resp, ..., env = caller_env()) {
+  resp <- enexpr(resp)
+  preds <- enexprs(...)
+  
+  pred_sum <- purrr::reduce(preds, ~ expr(!!.x + !!.y))
+  eval_bare(expr(!!resp ~ !!pred_sum), env = env)
+}
+make_model(y, a, b, c)
+```
+
+Can use the techniques described in the previous chapter to allow you to choose the interface to this function.
 
 Standard NSE for modelling functions. How can you capture the `subset` or `weight` argument in a function? Need to use `expr()`. 
 
+```{r}
+my_lm <- function(..., weight, inverse_weight, env = caller_env()) {
+  if (!missing(inverse_weight)) {
+    inverse_weight <- enexpr(inverse_weight)
+    weight <- expr(1 / !!inverse_weight)
+  } else {
+    weight <- enexpr(weight)
+  }
+  
+  args <- enexprs(...)
+  call <- expr(lm(!!!args, weight = !!maybe_missing(weight)))
+  eval_bare(call, env = env)
+}
+coef(my_lm(mpg ~ disp, data = mtcars))
+coef(my_lm(mpg ~ disp, data = mtcars, weight = cyl))
+coef(my_lm(mpg ~ disp, data = mtcars, inverse_weight = cyl))
+```
 
 ### Exercises
 
@@ -96,20 +152,15 @@ Standard NSE for modelling functions. How can you capture the `subset` or `weigh
     quote(eval(quote(eval(quote(eval(quote(2 + 2)))))))
     ```
 
-1.  `subset2()` has a bug if you use it with a single column data frame.
-    What should the following code return? How can you modify `subset2()`
-    so it returns the correct type of object?
+1.  Improve `subset2()` to make it more like real subset function 
+    (`subset.data.frame()`):
+    
+    * All drop rows where `subset` evaluates to `NA`
+    * Give a clear error message if `subset` doesn't evalute to a logical vector
+    * What happens if `subset` doesn't yield a logical vector with length
+      equal to the number of rows in `data`? What do you think should happen?
 
-    ```{r}
-    sample_df2 <- data.frame(x = 1:10)
-    subset2(sample_df2, x > 8)
-    ```
-
-1.  The real subset function (`subset.data.frame()`) removes missing
-    values in the condition. Modify `subset2()` to do the same: drop the 
-    offending rows.
-
-1.  What happens if you use `quote()` instead of `substitute()` inside of
+1.  What happens if you use `expr()` instead of `enexpr()` inside of
     `subset2()`?
 
 1.  The third argument in `subset()` allows you to select variables. It
@@ -121,21 +172,20 @@ Standard NSE for modelling functions. How can you capture the `subset` or `weigh
 
     ```{r, eval = FALSE}
     select <- function(df, vars) {
-      vars <- substitute(vars)
-      var_pos <- setNames(as.list(seq_along(df)), names(df))
-      pos <- eval(vars, var_pos)
-      df[, pos, drop = FALSE]
+      vars <- enexpr(vars)
+      var_pos <- set_names(as.list(seq_along(df)), names(df))
+      
+      cols <- eval_tidy(vars, var_pos)
+      df[, cols, drop = FALSE]
     }
     select(mtcars, -cyl)
     ```
 
-1.  What does `evalq()` do? Use it to reduce the amount of typing for the
-    examples above that use both `eval()` and `quote()`.
-
-1.  Write an equivalent to `get()` using `as.name()` and `eval()`. Write an
-    equivalent to `assign()` using `as.name()`, `substitute()`, and `eval()`.
-    (Don't worry about the multiple ways of choosing an environment; assume
-    that the user supplies it explicitly.)
+1.  Write an equivalent to `get()` using `sym()` and `eval()`. Write an
+    equivalent to `assign()` using `sym()`, `expr()`, and `eval()`.
+    (Don't worry about the multiple ways of choosing an environment that
+    `get()` and `assign()` support; assume that the user supplies it 
+    explicitly.)
 
 1.  Compare and contrast `source()` and `sys.source()`.
 
