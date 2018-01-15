@@ -6,49 +6,288 @@ source("common.R")
 
 ## Introduction
 
-The user-facing opposite of quotation is unquotation: it gives the user the ability to selectively evaluate parts of an otherwise quoted argument. The developer-facing complement of quotation is evaluation: this is the tool that allows you to take quoted expressions and evaluate them in special ways to create domain specific languages for data analysis like ggplot2 and dplyr.
+The user-facing opposite of quotation is unquotation: it gives the _user_ the ability to selectively evaluate parts of an otherwise quoted argument. The developer-facing complement of quotation is evaluation: this gives the _developer_ of the function the ability to evaluated quoted expressionsin special ways to create domain specific languages for data analysis like ggplot2 and dplyr.
 
 ```{r}
 library(rlang)
 ```
+
+Environments play a big role in evaluation, so make sure you're familiar with [Environments] before continuing.
 
 Topics:
 
 * Evaluation basics, including data masks
 * Quosures
 
-## Evaluation
+## Evaluation basics
 
-* `base::eval()`
-* `rlang::eval_tidy()`
-
-### Case study: `source()`
-
-With `parse()` and `eval()`, it's possible to write a simple version of `source()`. We read in the file from disk, `parse()` it and then `eval()` each component in a specified environment. This version defaults to a new environment, so it doesn't affect existing objects. `source()` invisibly returns the result of the last expression in the file, so `simple_source()` does the same. \index{source()}
+In the previous chapter, we briefly mentioned `eval()`. Here, rather than starting with `eval()`, we're going to start with `rlang::eval_bare()` which is the purest evocation of the idea of evaluation. The first argument, `expr` is an expression to evaluate. This will usually be either a symbol or expression:
 
 ```{r}
-simple_source <- function(file, envir = new.env()) {
-  stopifnot(file.exists(file))
-  stopifnot(is.environment(envir))
+x <- 10
+eval_bare(expr(x))
 
+y <- 2
+
+eval_bare(expr(x + y))
+```
+
+The second argument, `env`, gives the environment in which the expression should be evaluated, i.e. where should the values of `x`, `y`, and `+` be looked for?
+
+```{r}
+env <- env(x = 1000)
+eval_bare(expr(x + y), env)
+```
+
+As well as symbols and expressions, `eval_bare()` (like all the evaluation functions), also takes any other R object. This makes `eval_bare()` very general, but it can lead to confusing results if you forget to `quote()` the input:
+
+```{r}
+eval_bare(x + y)
+eval_bare(x + y, env = env)
+```
+
+Now that you've seen the basics, let's explore some applications. We'll focus primarily on base R functions that you might have used before but not fully understood. Extracting out their essence and rewriting to use the helper functions in rlang should help illustrate the underlying principles.
+
+### Application: `source()`
+
+With `expr_text()` and `eval_tidy()`, it's possible to write a simple version of `source()`. We read in the file from disk, `parse_expr()` it, and then `tidy_eval()` each component in the specified environment. This version evaluates in the caller environment, and invisibly returns the result of the last expression in the file (like `source()`). \index{source()}
+
+```{r}
+source2 <- function(file, env = caller_env()) {
   lines <- readLines(file, warn = FALSE)
-  exprs <- parse(text = lines)
+  code <- paste(lines, collapse = "\n")
+  exprs <- parse_exprs(code)
 
-  n <- length(exprs)
-  if (n == 0L) return(invisible())
-
-  for (i in seq_len(n - 1)) {
-    eval(exprs[i], envir)
+  res <- NULL
+  for (i in seq_along(exprs)) {
+    res <- eval_bare(exprs[[i]], env)
   }
-  invisible(eval(exprs[n], envir))
+  
+  invisible(res)
 }
 ```
 
 The real `source()` is considerably more complicated because it can `echo` input and output, and also has many additional settings to control behaviour.
 
-### Data masks
+### Application: `local()`
 
-### Case study: `subset()`
+Sometimes you want to perform a chunk of calculation that uses a bunch of intermediate variables. The intermediate variables have no long term use, so you'd rather not keep them around. One approach is to use `rm()` to clean up after yourself. Another approach is to use `local()`:
+
+```{r, error = TRUE}
+foo <- local({
+  x <- 10
+  y <- 200
+  x + y
+})
+
+foo
+x
+y
+```
+
+The essence of `local()` is quite simple. We capture the expression, and create an new environment in which to evaluate it, which inherits from the caller environment.
+
+```{r}
+local2 <- function(expr, env = child_env(caller_env())) {
+  eval_bare(enexpr(expr), env)
+}
+```
+
+It's a bit harder to understand `base::local()`, as it takes advantage of sophisticated `substitute()` features. 
+
+### Exercises
+
+1.  Carefully read the documentation for `source()`. What environment does it
+    use by default? What if you supply `local = TRUE`? How do you provide 
+    a custom argument?
+
+1.  Predict the results of the following lines of code:
+
+    ```{r, eval = FALSE}
+    eval(quote(eval(quote(eval(quote(2 + 2))))))
+    eval(eval(quote(eval(quote(eval(quote(2 + 2)))))))
+    quote(eval(quote(eval(quote(eval(quote(2 + 2)))))))
+    ```
+
+1.  Write an equivalent to `get()` using `sym()` and `eval()`. Write an
+    equivalent to `assign()` using `sym()`, `expr()`, and `eval()`.
+    (Don't worry about the multiple ways of choosing an environment that
+    `get()` and `assign()` support; assume that the user supplies it 
+    explicitly.)
+
+1.  Compare and contrast `source()` and `sys.source()`.
+
+1.  Modify `simple_source()` so it returns the result of _every_ expression,
+    not just the last one.
+
+1.  The code generated by `simple_source()` lacks source references. Read
+    the source code for `sys.source()` and the help for `srcfilecopy()`,
+    then modify `simple_source()` to preserve source references. You can
+    test your code by sourcing a function that contains a comment. If
+    successful, when you look at the function, you'll see the comment and
+    not just the source code.
+
+## Case study: calling base NSE functions
+
+(Might be better later on, since tidy eval simplifies these problems.)
+
+We can combine `expr()` with `eval_bare()` to create wrappers around base NSE functions that don't provide an escape hatch for quoting. Here we'll focus on models, since since standard NSE doesn't provide unquoting tool. But can use the same ideas with base graphics and any other function.
+
+### Basics
+
+`lm()` is particularly challenging because it captures and prints the actual call.  Ideally we want this to be useful.
+
+```{r}
+lm2 <- function(data, formula, subset = NULL) {
+  data <- enexpr(data)
+  subset <- enexpr(subset)
+  
+  lm_call <- expr(lm(!!formula, data = !!data, subset = !!subset))
+  eval_bare(lm_call, caller_env())
+}
+coef(lm2(mtcars, mpg ~ disp))
+coef(lm2(mtcars, mpg ~ disp, subset = cyl == 4))
+```
+
+### What environment to use
+
+### Missing vs NULL
+
+I think it's good practice to only leave missing the arguments that the user must supply. Instead, use `NULL` - has nice property that `expr(NULL)` is `NULL`. Then can use `%||%` and `missing_arg()` to replace, if needed. One final wrinkle is that unquoting a missing argument will yield an error about the missing argument; wrap in `maybe_missing()` to suppress
+
+```{r}
+lm3 <- function(data, formula, subset = NULL) {
+  data <- enexpr(data)
+  subset <- enexpr(subset) %||% missing_arg()
+  
+  lm_call <- expr(lm(!!formula, data = !!data, subset = !!maybe_missing(subset)))
+  eval_bare(lm_call, caller_env())
+}
+lm2(mtcars, mpg ~ disp)$call
+lm3(mtcars, mpg ~ disp)$call
+```
+
+### Making formulas
+
+First let's show how you could generate a formula. Tricky thing about formulas is that the look same evaluated or not
+
+```{r}
+y ~ x
+expr(y ~ x)
+```
+
+But they're not - you need to evaluate the call to get an actual formula:
+
+```{r}
+class(y ~ x)
+class(expr(y ~ x))
+```
+
+Here's a simple example of generating a formula in a different way:
+
+```{r}
+build_formula <- function(resp, ..., env = caller_env()) {
+  resp <- enexpr(resp)
+  preds <- enexprs(...)
+  
+  pred_sum <- purrr::reduce(preds, ~ expr(!!.x + !!.y))
+  eval_bare(expr(!!resp ~ !!pred_sum), env = env)
+}
+build_formula(y, a, b, c)
+```
+
+Can use the techniques described in the previous chapter to allow you to choose the interface to this function.
+
+### Exercises
+
+
+## Quosures
+
+### Why are quosures needed?
+
+`match.call()` and why it's dangerous.
+
+Failure modes when using expressions.
+
+```{r}
+grouped_mean <- function(df, x, y) {
+  x <- enexpr(x)
+  y <- enexpr(y)
+  
+  df %>% 
+    group_by(!!x) %>% 
+    summarise(mean = mean(!!y))
+}
+
+mtcars %>% grouped_mean(cyl, mpg)
+```
+
+### Compared to expressions
+
+
+### Compared to promises
+
+These functions work because internally R represents function arguments with a special type of object called a __promise__. A promise captures the expression needed to compute the value and the environment in which to compute it. You're not normally aware of promises because the first time you access a promise its code is evaluated in its environment, yielding a value. \index{promises}
+
+Promises are hard to work with because they are quantum - attempting to look at them in R changes their behaviour.
+
+### Compared to formulas
+
+
+
+### Exercises
+
+1.  What does `transform()` do? Read the documentation. How does it work?
+    Read the source code for `transform.data.frame()`. What does
+    `substitute(list(...))` do?
+
+1.  What does `with()` do? How does it work? Read the source code for
+    `with.default()`. What does `within()` do? How does it work? Read the
+    source code for `within.data.frame()`. Why is the code so much more
+    complex than `with()`?
+
+## Tidy evaluation
+
+
+
+### `eval_tidy()`
+
+
+There are two basic tools for evaluating expressions. In the previous chapter, we briefly showed you `base::eval()`. In this chapter we're going to focus on `rlang::eval_tidy()`. `eval_tidy()` works very similarly to `base::eval()` but has a couple of nice features that will make our life easier as we go along.
+
+`eval_tidy()`, like `base::eval()` has three arguments. The first argument, `expr`, is the expression to evaluate. This will generally be a name or an expression: 
+
+```{r}
+x <- 10
+eval_tidy(expr(x))
+
+y <- 20
+eval_tidy(expr(x + y))
+```
+
+The third argument, `env`, is an environment in which to evaluate the expression. By default, it's the environment you're calling `eval_tidy()` from. You might wonder why this isn't the second expression - it's because usually you'll use a quosure for the first argument, which bundles an expression and an environment. We'll see later that in most cases you won't ever set this argument.
+
+```{r}
+env <- child_env(globalenv(), x = 1, y = 2)
+eval_tidy(expr(x + y), env = env)
+```
+
+For anything else, `eval_tidy()` acts like an identity operator. This can make `eval_tidy()` confusing to work with because it also obeys the usual function rules: in the following example technically `eval_tidy()` does not evaluate the `x + y` it is evaluated lazily in the argument. It's easiest to see this if we also vary the environment. The first argument is evaluated in the regular way. 
+
+```{r}
+eval_tidy(x + y)
+eval_tidy(x + y, env = env)
+```
+
+Finally, the second argument, `data`, allows you to set up a __data mask__. This allows you to mask some variables (that would usually be looked up from the environment) with variables in a list or data frame. This is the key idea that powers helpful base R functions like `with()`, `subset()` and `transform()`.
+
+```{r}
+eval_tidy(expr(x + y), list(x = 100))
+```
+
+Unlike environments, list and data frames don't have parent-child relationships. When you use the `data` argument (of the `enclos` argument in `base::eval()`) you're effectively create a new environment that contains the values of `data` and has a parent of `env`.
+
+### Application: `subset()`
 
 ```{r}
 sample_df <- data.frame(a = 1:5, b = 5:1, c = c(5, 3, 1, 4, 1))
@@ -89,68 +328,9 @@ subset2(df, .data$x == .env$x)
 
 `.env` pronoun vs. unquoting. Generally, difference isn't important.  
 
-### Case study: calling base NSE functions
 
-Focus on models, since since standard NSE doesn't provide unquoting tool. But can use the same ideas with base graphics and `transform()`, `subset()` and friends.
-
-First let's show how you could generate a formula. Tricky thing about formulas is that the look same evaluated or not
-
-```{r}
-y ~ x
-expr(y ~ x)
-```
-
-But they're not - you need to evaluate the call to get an actual formula:
-
-```{r}
-class(y ~ x)
-class(expr(y ~ x))
-```
-
-Here's a simple example of generating a formula in a different way:
-
-```{r}
-build_formula <- function(resp, ..., env = caller_env()) {
-  resp <- enexpr(resp)
-  preds <- enexprs(...)
-  
-  pred_sum <- purrr::reduce(preds, ~ expr(!!.x + !!.y))
-  eval_bare(expr(!!resp ~ !!pred_sum), env = env)
-}
-make_model(y, a, b, c)
-```
-
-Can use the techniques described in the previous chapter to allow you to choose the interface to this function.
-
-Standard NSE for modelling functions. How can you capture the `subset` or `weight` argument in a function? Need to use `expr()`. 
-
-```{r}
-my_lm <- function(..., weight, inverse_weight, env = caller_env()) {
-  if (!missing(inverse_weight)) {
-    inverse_weight <- enexpr(inverse_weight)
-    weight <- expr(1 / !!inverse_weight)
-  } else {
-    weight <- enexpr(weight)
-  }
-  
-  args <- enexprs(...)
-  call <- expr(lm(!!!args, weight = !!maybe_missing(weight)))
-  eval_bare(call, env = env)
-}
-coef(my_lm(mpg ~ disp, data = mtcars))
-coef(my_lm(mpg ~ disp, data = mtcars, weight = cyl))
-coef(my_lm(mpg ~ disp, data = mtcars, inverse_weight = cyl))
-```
 
 ### Exercises
-
-1.  Predict the results of the following lines of code:
-
-    ```{r, eval = FALSE}
-    eval(quote(eval(quote(eval(quote(2 + 2))))))
-    eval(eval(quote(eval(quote(eval(quote(2 + 2)))))))
-    quote(eval(quote(eval(quote(eval(quote(2 + 2)))))))
-    ```
 
 1.  Improve `subset2()` to make it more like real subset function 
     (`subset.data.frame()`):
@@ -180,68 +360,12 @@ coef(my_lm(mpg ~ disp, data = mtcars, inverse_weight = cyl))
     }
     select(mtcars, -cyl)
     ```
+    
+1.  Implement `with()`.
 
-1.  Write an equivalent to `get()` using `sym()` and `eval()`. Write an
-    equivalent to `assign()` using `sym()`, `expr()`, and `eval()`.
-    (Don't worry about the multiple ways of choosing an environment that
-    `get()` and `assign()` support; assume that the user supplies it 
-    explicitly.)
+1.  Implement `transform()` `transform.data.frame()`.  Extend it so that a
+    variable can refer to the variables just defined.
 
-1.  Compare and contrast `source()` and `sys.source()`.
-
-1.  Modify `simple_source()` so it returns the result of _every_ expression,
-    not just the last one.
-
-1.  The code generated by `simple_source()` lacks source references. Read
-    the source code for `sys.source()` and the help for `srcfilecopy()`,
-    then modify `simple_source()` to preserve source references. You can
-    test your code by sourcing a function that contains a comment. If
-    successful, when you look at the function, you'll see the comment and
-    not just the source code.
-
-## Quosures
-
-### Compared to expressions
-
-### Why are quosures needed?
-
-`match.call()` and why it's dangerous.
-
-Failure modes when using expressions.
-
-```{r}
-grouped_mean <- function(df, x, y) {
-  x <- enexpr(x)
-  y <- enexpr(y)
-  
-  df %>% 
-    group_by(!!x) %>% 
-    summarise(mean = mean(!!y))
-}
-
-mtcars %>% grouped_mean(cyl, mpg)
-```
-
-
-### Compared to promises
-
-These functions work because internally R represents function arguments with a special type of object called a __promise__. A promise captures the expression needed to compute the value and the environment in which to compute it. You're not normally aware of promises because the first time you access a promise its code is evaluated in its environment, yielding a value. \index{promises}
-
-Promises are hard to work with because they are quantum - attempting to look at them in R changes their behaviour.
-
-### Compared to formulas
-
-
-### Exercises
-
-1.  What does `transform()` do? Read the documentation. How does it work?
-    Read the source code for `transform.data.frame()`. What does
-    `substitute(list(...))` do?
-
-1.  What does `with()` do? How does it work? Read the source code for
-    `with.default()`. What does `within()` do? How does it work? Read the
-    source code for `within.data.frame()`. Why is the code so much more
-    complex than `with()`?
 
 ## Capturing the current call {#capturing-call}
 
