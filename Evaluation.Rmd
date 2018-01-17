@@ -1,6 +1,6 @@
 # Evaluation
 
-```{r setup, include = FALSE}
+```{r, include = FALSE}
 source("common.R")
 ```
 
@@ -8,7 +8,7 @@ source("common.R")
 
 The user-facing opposite of quotation is unquotation: it gives the _user_ the ability to selectively evaluate parts of an otherwise quoted argument. The developer-facing complement of quotation is evaluation: this gives the _developer_ of the function the ability to evaluated quoted expressionsin special ways to create domain specific languages for data analysis like ggplot2 and dplyr.
 
-```{r}
+```{r setup}
 library(rlang)
 ```
 
@@ -27,31 +27,40 @@ x <- 10
 eval_bare(expr(x))
 
 y <- 2
-
 eval_bare(expr(x + y))
 ```
 
-The second argument, `env`, gives the environment in which the expression should be evaluated, i.e. where should the values of `x`, `y`, and `+` be looked for?
+The second argument, `env`, gives the environment in which the expression should be evaluated, i.e. where should the values of `x`, `y`, and `+` be looked for? By default, this is the current environment, i.e. the calling environment of `eval_bare()`, but you can override it if you want:
 
 ```{r}
-env <- env(x = 1000)
-eval_bare(expr(x + y), env)
+eval_bare(expr(x + y), env(x = 1000))
 ```
 
-As well as symbols and expressions, `eval_bare()` (like all the evaluation functions), also takes any other R object. This makes `eval_bare()` very general, but it can lead to confusing results if you forget to `quote()` the input:
+Because R looks up functions in the same way as variables, we can also override the meaning of functions. This is a key technique for generating DSLs, as discussed in the next chapter.
+
+```{r}
+eval_bare(expr(x + y), env(`+` = function(x, y) paste0(x, " + ", y)))
+```
+
+If passed an object other than a symbol or expression, the evaluation functions will simply return the input as is (because it's already evaluated). This can lead to confusing results if you forget to `quote()` the input: `eval_bare()` doesn't quote `expr` so it is passed by value.
 
 ```{r}
 eval_bare(x + y)
 eval_bare(x + y, env = env)
 ```
 
-Now that you've seen the basics, let's explore some applications. We'll focus primarily on base R functions that you might have used before but not fully understood. Extracting out their essence and rewriting to use the helper functions in rlang should help illustrate the underlying principles.
+Now that you've seen the basics, let's explore some applications. We'll focus primarily on base R functions that you might have used before; now you can learn how they work. To focus on the underlying principles, we'll extracting their essence and rewrite to use functions from rlang. We'll then circle back and talk about the base R functions most important for evaluation.
 
 ### Application: `local()`
 
-Sometimes you want to perform a chunk of calculation that uses a bunch of intermediate variables. The intermediate variables have no long term use, so you'd rather not keep them around. One approach is to use `rm()` to clean up after yourself. Or you could create an anonymous function and then call it. A more elegant approach is to use `local()`:
+Sometimes you want to perform a chunk of calculation that creates a bunch of intermediate variables. The intermediate variables have no long term use and could be quite large, so you'd rather not keep them around. One approach is to clean up after yourself using `rm()`. Another approach is to wrap the code in a function, and just call it once.
+
+A more elegant approach is to use `local()`:
 
 ```{r, error = TRUE}
+# Clean up variables created earlier
+rm(x, y)
+
 foo <- local({
   x <- 10
   y <- 200
@@ -63,19 +72,27 @@ x
 y
 ```
 
-The essence of `local()` is quite simple. We capture the expression, and create an new environment in which to evaluate it, which inherits from the caller environment.
+The essence of `local()` is quite simple. We capture the expression, and create an new environment in which to evaluate it. This environment inherits from the caller environment so it can access the current lexical scope.
 
-```{r}
+```{r, error = TRUE}
 local2 <- function(expr, env = child_env(caller_env())) {
   eval_bare(enexpr(expr), env)
 }
+
+foo <- local2({
+  x <- 10
+  y <- 200
+  x + y
+})
+
+env_has(nms = c("x", "y"))
 ```
 
-It's a bit harder to understand how `base::local()`, as it takes uses `eval()` and `substitute()` together in rather complicated ways.
+It's a bit harder to understand how `base::local()` works, as it takes uses `eval()` and `substitute()` together in rather complicated ways. Figuring out exactly what's going on is good practice if you really want to understand the subtleties of `substitute()` and the base `eval()` funtions.
 
 ### Application: `source()`
 
-With `expr_text()` and `eval_tidy()`, it's possible to write a simple version of `source()`. We read in the file from disk, `parse_expr()` it, and then `tidy_eval()` each component in the specified environment. This version evaluates in the caller environment, and invisibly returns the result of the last expression in the file (like `source()`). \index{source()}
+We can create a simple version of `source()` by combining `expr_text()` and `eval_tidy()`. We read in the file from disk, use `parse_expr()` to parse the string into an list of expressions, and then use `eval_bare()` to evaluate each component. This version evaluates the code in the caller environment, and invisibly returns the result of the last expression in the file (like `source()`). \index{source()}
 
 ```{r}
 source2 <- function(file, env = caller_env()) {
@@ -92,15 +109,29 @@ source2 <- function(file, env = caller_env()) {
 }
 ```
 
-The real `source()` is considerably more complicated because it can `echo` input and output, and also has many additional settings to control behaviour. Note that `base::eval()` can take an expression _object_, in which case it evaluates each component in turn. `eval_bare()` does not support expressions.
+The real `source()` is considerably more complicated because it can `echo` input and output, and also has many additional settings to control behaviour. 
 
 ### Base R
 
-* `eval()`
+The base function closest to `eval_bare()` is the two-argument form of `eval()`: `eval(expr, envir)`. The third argument provides support for data masks, which we'll learn about shortly.
+`eval()` is paired with two helper functions: 
 
-* `evalq(x, env)` shortcut for `eval(quote(x), env)`
+* `evalq(x, env)` quotes its first argument, and is hence a shortcut for 
+  `eval(quote(x), env)`.
 
-* `eval.parent(expr, n)`, shortcut for `eval(x, env = parent.frame(n))`
+* `eval.parent(expr, n)` is shortcut for `eval(x, env = parent.frame(n))`
+
+`base::eval()` has special behaviour for expression __objects__, evaluating each component in turn. Combined with `base::parse()` returning expression objects, this gives a very compact implementation of `source2()`:
+
+```{r}
+source3 <- function(file, env = parent.frame()) {
+  lines <- parse(file)
+  res <- eval(lines, envir = env)
+  invisible(res)
+}
+```
+
+While `source3()` is considerably more concise than `source2()`, this one use case is the strongest argument for expression objects, and overall we don't believe the benefit is worth it compared to the cost of introducing another data structure to learn about.
 
 ### Exercises
 
@@ -155,14 +186,36 @@ The real `source()` is considerably more complicated because it can `echo` input
     }
     select(mtcars, -cyl)
     ```
+
+1   We can make `base::local()` slightly easier to understand by rewriting to
+    reduce some of the concision:
+
+    ```{r}
+    local3 <- function(expr, envir = new.env()) {
+      call <- substitute(eval(quote(expr), envir))
+      eval(call, envir = parent.frame())
+    }
+    ```
+    
+    Explain how `local()` works in words. (Hint: you might want to `print(call)`
+    to help understand what `substitute()` is doing, and read the documentation
+    to remind yourself what environment `new.env()` will inherit from.)
     
 ## Quosures
 
-The simplest form of evaluation couples an expression and an environment. This coupling is sufficiently important that we need a data structure that captures both pieces. We call this data structure a __quosure__, a portmanteau of quoting and closing.
+The simplest form of evaluation combines an expression and an environment. This coupling is sufficiently important that we need a data structure that captures both pieces. We call this data structure a __quosure__, a portmanteau of quoting and closure.
 
 ### Motivation
 
-Quosures are particularly important when capturing arguments to a function. Take this simple example:
+Quosures are needed when expressions to be evaluate mix variables from a data frame and variables in the environment. For example, the following `mutate()` call creates a new variable called `log` with a calculation that involves a varible in the dataset `x`, and a variable in the environment, `base`:
+
+```{r}
+df <- data.frame(z = runif(5))
+x <- 10
+dplyr::mutate(df, log = log(z, base = x))
+```
+
+particularly important when capturing arguments to a function. Take this simple example:
 
 ```{r}
 compute_mean <- function(df, x) {
@@ -170,14 +223,14 @@ compute_mean <- function(df, x) {
   dplyr::summarise(df, mean = mean(!!x))
 }
 
-compute_mean(mtcars, mpg)
+compute_mean(df, z)
 ```
 
 It contains a subtle bug, which we can illustrate with this slightly forced example:
 
 ```{r, error = TRUE}
 x <- 10
-compute_mean(mtcars, log(mpg, base = x))
+compute_mean(df, log(z, base = x))
 ```
 
 We get this error because inside the function `x` an AST. We don't want arguments supplied to the function to look up variables inside the function. We want arguments to look up values of symbols in the place they are supposed to: the environment associated with that argument.
@@ -192,6 +245,18 @@ compute_mean <- function(df, x) {
 
 compute_mean(mtcars, log(mpg, base = x))
 ```
+
+### Creating
+
+As well as `enquo()`, the equivalent to `enexpr()` 
+
+* `expr()` -> `quo()`, `exprs()` -> `quos()`: for experimenting interactively
+  and for generating fixed expressions inside a function
+  
+* `enexpr()` -> `enquo()`, `enexprs()` -> `enquos()`: for capturing what the
+  user supplied to an argument.
+
+You almost always want to capture a quosure rather than an expression because it gives you uniformly more information. Once we've discussed the primary use case of tidy evaluation, we'll come back to the few cases where you should prefer expressions.
 
 ### Manipulating
 
@@ -216,13 +281,6 @@ quo_text(x)
 
 #### Expressions
 
-* `expr()` -> `quo()`, `exprs()` -> `quos()`: for experimenting interactively
-  and for generating fixed expressions inside a function
-  
-* `enexpr()` -> `enquo()`, `enexprs()` -> `enquos()`: for capturing what the
-  user supplied to an argument.
-
-Almost always want to use `enquo()` instead of `enexpr()`. The primary exception is when you're working with a function that does not use tidy evaluation
 
 #### Promises
 
