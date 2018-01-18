@@ -8,6 +8,8 @@ source("common.R")
 
 The user-facing opposite of quotation is unquotation: it gives the _user_ the ability to selectively evaluate parts of an otherwise quoted argument. The developer-facing complement of quotation is evaluation: this gives the _developer_ of the function the ability to evaluated quoted expressionsin special ways to create domain specific languages for data analysis like ggplot2 and dplyr.
 
+Mention tidy evaluation because it's one of the principles underlying the tidyverse. Why do I teach here when it's not base R? Because it gives us the following good things.
+
 ```{r setup}
 library(rlang)
 ```
@@ -113,15 +115,22 @@ The real `source()` is considerably more complicated because it can `echo` input
 
 ### Base R
 
-The base function closest to `eval_bare()` is the two-argument form of `eval()`: `eval(expr, envir)`. The third argument provides support for data masks, which we'll learn about shortly.
+The base function equivalent to `eval_bare()` is the two-argument form of `eval()`: `eval(expr, envir)`: 
+
+```{r}
+eval(expr(x + y), env(x = 1000, y = 1))
+```
+
+The final argument, `enclos` provides support for data masks, which you'll learn about in [tidy evaluation]. 
+
 `eval()` is paired with two helper functions: 
 
 * `evalq(x, env)` quotes its first argument, and is hence a shortcut for 
   `eval(quote(x), env)`.
 
-* `eval.parent(expr, n)` is shortcut for `eval(x, env = parent.frame(n))`
+* `eval.parent(expr, n)` is shortcut for `eval(x, env = parent.frame(n))`.
 
-`base::eval()` has special behaviour for expression __objects__, evaluating each component in turn. Combined with `base::parse()` returning expression objects, this gives a very compact implementation of `source2()`:
+`base::eval()` has special behaviour for expression __objects__, evaluating each component in turn. This makes for a very compact implementation of `source2()` because `base::parse()` also returns an expression object:
 
 ```{r}
 source3 <- function(file, env = parent.frame()) {
@@ -131,7 +140,7 @@ source3 <- function(file, env = parent.frame()) {
 }
 ```
 
-While `source3()` is considerably more concise than `source2()`, this one use case is the strongest argument for expression objects, and overall we don't believe the benefit is worth it compared to the cost of introducing another data structure to learn about.
+While `source3()` is considerably more concise than `source2()`, this one use case is the strongest argument for expression objects, and overall we don't believe this one benefit outweighs the cost of introducing a new data structure.
 
 ### Exercises
 
@@ -187,8 +196,8 @@ While `source3()` is considerably more concise than `source2()`, this one use ca
     select(mtcars, -cyl)
     ```
 
-1   We can make `base::local()` slightly easier to understand by rewriting to
-    reduce some of the concision:
+1   We can make `base::local()` slightly easier to understand by spreading
+    out over multiple lines:
 
     ```{r}
     local3 <- function(expr, envir = new.env()) {
@@ -215,14 +224,20 @@ x <- 10
 dplyr::mutate(df, log = log(z, base = x))
 ```
 
-particularly important when capturing arguments to a function. Take this simple example:
+Also remember that `log()` itself is found in the global environment, but there's no confusion about where functions come from because (without gymnastics) you can't put a function in a data frame.
+
+Worrying about the execution environment of an argument is important when you write quoting functions. Take this simple example:
 
 ```{r}
 compute_mean <- function(df, x) {
   x <- enexpr(x)
   dplyr::summarise(df, mean = mean(!!x))
 }
+```
 
+It works correctly for simple inputs:
+
+```{r}
 compute_mean(df, z)
 ```
 
@@ -233,9 +248,9 @@ x <- 10
 compute_mean(df, log(z, base = x))
 ```
 
-We get this error because inside the function `x` an AST. We don't want arguments supplied to the function to look up variables inside the function. We want arguments to look up values of symbols in the place they are supposed to: the environment associated with that argument.
+We get this error because we have lost the evaluation environment associated with `log(z, base = x)` so it is evaluated inside `compute_mean()` where is `x` an AST. This type of bug is pernicious because it will happen rarely and the error message will be inscrutable.
 
-We can fix the bug by not just capturing the expression, but also capturing where it should be evaluated. That's the job of `enquo()`, which otherwise works identically to `enexpr()`.
+We can avoid the bug by the expression along with its evaluation evniroment. That's the job of `enquo()`, which otherwise works identically to `enexpr()`:
 
 ```{r}
 compute_mean <- function(df, x) {
@@ -246,84 +261,141 @@ compute_mean <- function(df, x) {
 compute_mean(mtcars, log(mpg, base = x))
 ```
 
-### Creating
+### Creating and manipulating
 
-As well as `enquo()`, the equivalent to `enexpr()` 
+To create a quosure you will typically use one of the equivalents of the `expr()` functions that you learned about in the previous chapter:
 
-* `expr()` -> `quo()`, `exprs()` -> `quos()`: for experimenting interactively
-  and for generating fixed expressions inside a function
+* Use `quo()` and `quos()` for experimenting interactively and for 
+  unquoting with fixed expressions inside a function.
   
-* `enexpr()` -> `enquo()`, `enexprs()` -> `enquos()`: for capturing what the
-  user supplied to an argument.
+* Use `enquo()` and `enquos()` to capture user-supplied arguments to a function.
 
-You almost always want to capture a quosure rather than an expression because it gives you uniformly more information. Once we've discussed the primary use case of tidy evaluation, we'll come back to the few cases where you should prefer expressions.
-
-### Manipulating
+Alternatively, you can use `new_quosure()` to create a quosure from its components: an expression and an environment.
 
 ```{r}
-x <- quo(x + 1)
+x <- new_quosure(expr(x + y), env(x = 1, y = 10))
+x
+```
+
+Note how quosures are printed. If you unquote a quosure inside another quosure, each quosusre starts with `^` and if you're in console that supports it, each quosure gets a differnt colour to help remind you that it has a different environment attached to it.
+
+```{r}
+q2 <- quo(x + !!x)
+q2
+```
+
+You can evaluated a quosure with `eval_tidy()`, which we'll study in depth in the next chapter:
+
+```{r}
+eval_tidy(x)
+```
+
+You can the extract components with `quo_` helpers:
+
+```{r}
 quo_get_env(x)
 quo_get_expr(x)
 ```
 
-Can create from expression + environment with `new_quosure()` (but rarely needed).
-
-For labelling:
+And if you need to turn a quosure into text for output to the console you can use `quo_name()`, `quo_label()`, or `quo_text()`. `quo_name()` and `quo_label()` are garanteed to be short; `quo_expr()` may span multiple lines.
 
 ```{r}
-quo_name(x)
-quo_label(x)
-quo_text(x)
+# https://github.com/tidyverse/rlang/issues/367
+y <- quo(long_function_name(
+  argument_1 = long_argument_value,
+  argument_2 = long_argument_value,
+  argument_3 = long_argument_value,
+  argument_4 = long_argument_value
+))
+quo_name(y)   # e.g. for data frames
+quo_label(y)  # e.g. for error messages
+quo_text(y)   # for longer messages
 ```
 
+### Implementation
 
-### Compared to
+Quosures are possible because internally R represents function arguments with a special type of object called a __promise__. A promise captures the expression needed to compute the value and the environment in which to compute it. You're not normally aware of promises because the first time you access a promise its code is evaluated in its environment, yielding a value. This is what powers lazy evaluation. \index{promises}
 
-#### Expressions
+However, you cannot manipulate promises with R code: they're sort of quantum; if you attempt to manipulate with R code, they are immediately evaluated, and the promise nature goes away. To work around this, rlang manipulates the promise in C, reifying it into an R object that you can work with.
 
+There is one big difference between promises and quosures. An argument is evaluated implicitly when you access it for the first time. Every time you access it subsequently it will return the same value. A quosure must be evaluated explicitly, and each evaluation is independent of the previous evaluations.
 
-#### Promises
+```{r}
+# The argument x is evaluated once, then reuses
+foo <- function(x_arg) {
+  list(x1 = x_arg, x2 = x_arg)
+}
+foo(runif(3))
 
-These functions work because internally R represents function arguments with a special type of object called a __promise__. A promise captures the expression needed to compute the value and the environment in which to compute it. You're not normally aware of promises because the first time you access a promise its code is evaluated in its environment, yielding a value. \index{promises}
+# The quosure x is evaluated afresh each time
+x_quo <- quo(runif(3))
+eval_tidy(x_quo)
+eval_tidy(x_quo)
+```
 
-Promises are hard to work with because they are quantum - attempting to look at them in R changes their behaviour. 
+Quosures are inspired by the the formula operator, `~`, which also captures both the expression and its environment, and is used extremely heavily in R's modelling functions:
 
-Promise can only be evaluated once. At C level, promise objects stores expression, environment, and value (if evaluated).
+```{r}
+f <- ~runif(3)
+f
 
-A quosure captures a promise into a concrete form that requires explicit evaluation.
+str(f)
+```
 
-#### Formulas
-
-The main inspiration for the quosure was the formula operator, `~`, which also captures both the expression and its environment, and is used extremely heavily in R's modelling functions.
-
-`~` is most similar to `quo()`, the main differences being:
-
-* `~` is not paired with an unquoting operator
-* `~` has two sides
-
-(There's no equivalent to `enquo()` or `quos()` etc.)
-
+Initial versions of rlang used formulas as quosures: an attractive feature of `~` is that is provides quoting with just a single keystroke. Unfortunately, however, there is no way to add quasiquotation to `~`, so we decided to use a new function, `quo()`, instead.
 
 ### Exercises
 
-1.  What does `transform()` do? Read the documentation. How does it work?
-    Read the source code for `transform.data.frame()`. What does
-    `substitute(list(...))` do?
+1.  Predict what evaluating each of the following quosures will return.
 
-1.  What does `with()` do? How does it work? Read the source code for
-    `with.default()`. What does `within()` do? How does it work? Read the
-    source code for `within.data.frame()`. Why is the code so much more
-    complex than `with()`?
+    ```{r}
+    q1 <- new_quosure(expr(x), env(x = 1))
+    q2 <- new_quosure(expr(x + !!q1), env(x = 10))
+    q3 <- new_quosure(expr(x + !!q2), env(x = 100))
+    ```
+
+1.  Run this code in your head and predict what it will print. Confirm or 
+    refute your prediction by running the code in R.
+
+    ```{r, results = FALSE}
+    f <- function(...) {
+      x <- "f"
+      g(f = x, ...)
+    }
+    g <- function(...) {
+      x <- "g"
+      h(g = x, ...)
+    }
+    h <- function(...) {
+      enquos(...)
+    }
+    x <- "top"
+    
+    out <- f(top = x)
+    out
+    purrr::map_chr(out, eval_tidy)
+    ```
 
 ## Tidy evaluation
 
-Tidy evaluation is the combination of three big ideas:
+In the previous section, you saw why quosures are important when calling other functions that use tidy evaluation. In this section, 
 
-* Quasiquotation to give the user control
-* Quosures to capture arguments expressions and their evaluation environment
-* A data mask + pronouns to reduce ambiguity
+Tidy evaluation is the combination of four big ideas:
 
-You've learned about quaisquotation and quosures, now time to learn about the data mask and how it why it's important.
+* Quasiquotation to give the user control of quoting.
+
+* Quosures to capture arguments expressions and their evaluation environment.
+
+* Data masks to enable expressions to mingle variables from an environment
+  and from a data source.
+
+* Pronouns to eliminate ambiguity between environment and data source when
+  needed.
+
+You've learned about quaisquotation and quosures, now time to learn about the data mask, pronouns and why they're important. Along the way, you'll also learn how to create your own functions that use tidy evaluation.
+
+You almost always want to capture a quosure rather than an expression because it gives you uniformly more information. Once we've discussed the primary use case of tidy evaluation, we'll come back to the few cases where you should prefer expressions.
+
 
 ### `eval_tidy()`
 
@@ -344,10 +416,6 @@ eval_tidy(quo(cyl + x), mtcars)
 Unlike environments, list and data frames don't have parent-child relationships. When you use the `data` argument (of the `enclos` argument in `base::eval()`) you're effectively create a new environment that contains the values of `data` and has a parent of `env`.
 
 Performance overhead?
-
-### Base R
-
-`enclos` argument.
 
 ### Application: `subset()`
 
@@ -476,6 +544,56 @@ There's no way to ensure that `expr` is only evaluated in the `data`, and indeed
 
 This particular function is now not very useful because it's so general - you might as well just use `subset2()` directly.
 
+
+### Base R
+
+`enclos` argument.
+
+The documentation of `subset()` includes the following warning:
+
+> This is a convenience function intended for use interactively. For 
+> programming it is better to use the standard subsetting functions like `[`, 
+> and in particular the non-standard evaluation of argument `subset` can have 
+> unanticipated consequences.
+
+Why?
+
+No unquoting so wrapping hard
+
+```{r, error = TRUE}
+f1 <- function(df, expr) {
+  subset(df, expr)
+}
+df <- data.frame(x = c(1, 10))
+f1(df, x == 1)
+
+f2 <- function(df, expr) {
+  eval(substitute(subset(df, expr)), parent.frame())
+}
+f2(df, x == 1)
+```
+
+Always evaluates arguments in parent frame:
+
+```{r}
+f <- function(df, ...) {
+  xval <- 10
+  subset(df, ...)
+}
+
+xval <- 1
+f(df, x == xval)
+```
+
+No pronouns, so no way to safely write the equivalent of `threshold_x()`.
+
+Why is using `[` not adequate?  Because although it is simple, `subset()` provides two useful behaviours:
+
+* It sets `drop = FALSE` by default, so it's garuanteed to return a data frame
+* It drops rows where the conditional evaluates to `NA`.
+
+That means `subset(df, x == y)` is not equivalent to `df[x == y,]` but is equivalent to `df[x == y & !is.na(x == y), , drop = FALSE]`.
+
 ### Application: `arrange()`
 
 * Capture dots
@@ -595,6 +713,15 @@ expr(log(x, base = !!base))
     
     (Hint:  The `descreasing` argument to `order()` will not help you. Instead,
     look at the definition of `dplyr::desc()`, and read the help for `xtfrm()`.)
+
+1.  What does `transform()` do? Read the documentation. How does it work?
+    Read the source code for `transform.data.frame()`. What does
+    `substitute(list(...))` do?
+
+1.  What does `with()` do? How does it work? Read the source code for
+    `with.default()`. What does `within()` do? How does it work? Read the
+    source code for `within.data.frame()`. Why is the code so much more
+    complex than `with()`?
 
 1.  Implement `with()` (code in `with.default()`).
 
