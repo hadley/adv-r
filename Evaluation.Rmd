@@ -10,6 +10,18 @@ The user-facing opposite of quotation is unquotation: it gives the _user_ the ab
 
 Mention tidy evaluation because it's one of the principles underlying the tidyverse. Why do I teach here when it's not base R? Because it gives us the following good things.
 
+Tidy evaluation is the combination of four big ideas:
+
+* Quasiquotation to give the user control of quoting.
+
+* Quosures to capture arguments expressions and their evaluation environment.
+
+* Data masks to enable expressions to mingle variables from an environment
+  and from a data source.
+
+* Pronouns to eliminate ambiguity between environment and data source when
+  needed.
+
 ```{r setup}
 library(rlang)
 ```
@@ -380,63 +392,69 @@ Initial versions of rlang used formulas as quosures: an attractive feature of `~
 
 In the previous section, you saw why quosures are important when calling other functions that use tidy evaluation. In this section, 
 
-Tidy evaluation is the combination of four big ideas:
-
-* Quasiquotation to give the user control of quoting.
-
-* Quosures to capture arguments expressions and their evaluation environment.
-
-* Data masks to enable expressions to mingle variables from an environment
-  and from a data source.
-
-* Pronouns to eliminate ambiguity between environment and data source when
-  needed.
+Learned about quasiquotation to give the user control of quoting, and quosures to capture arguments expressions and their evaluation environment. Next we'll learn about data masks and pronouns. These make it easy to evaluate an expression in the context of a data frame.
 
 You've learned about quaisquotation and quosures, now time to learn about the data mask, pronouns and why they're important. Along the way, you'll also learn how to create your own functions that use tidy evaluation.
 
 You almost always want to capture a quosure rather than an expression because it gives you uniformly more information. Once we've discussed the primary use case of tidy evaluation, we'll come back to the few cases where you should prefer expressions.
 
-
 ### `eval_tidy()`
 
-Once you have a quosure, you will need to use `eval_tidy()` instead of `eval_bare()`.
+Once you have a quosure, you will need to use `eval_tidy()` instead of `eval_bare()`:
 
 ```{r}
 x <- 10
+
+# These two calls are equivalent
 eval_bare(expr(x), globalenv())
 eval_tidy(quo(x))
 ```
 
-While like `eval_bare()`, `eval_tidy()` has a `env` argument, you will typically not use it, because the environment is contained in the first arugment. Instead the second argument is `data`, which allows you to set up a __data mask__. This allows you to mask some variables (that would usually be looked up from the environment) with variables in a list or data frame. This is the key idea that powers helpful base R functions like `with()`, `subset()` and `transform()`.
+Like `eval_bare()`, `eval_tidy()` has a `env` argument, but generally you will not use it, because the environment is captured by the quosure. Instead, you will typically use the second argument, `data`. This lets you set up a __data mask__, where variables in the environment are potentially masked by variables in data frame. This allows you to mingle variables from the environment and variables from a data frame: 
 
 ```{r}
 eval_tidy(quo(cyl + x), mtcars)
 ```
 
+This is the key idea that powers base R functions like `with()`, `subset()` and `transform()`, and that is used through tidyverse packages like dplyr.
+
+### Data masks
+
 Unlike environments, list and data frames don't have parent-child relationships. When you use the `data` argument (of the `enclos` argument in `base::eval()`) you're effectively create a new environment that contains the values of `data` and has a parent of `env`.
 
-Performance overhead?
+INSERT DIAGRAM HERE
+
+```{r}
+q1 <- quo(cyl + x)
+# eval_tidy(q1, mtcars) is equivalent to:
+
+q2 <- quo_set_env(q1, as_env(mtcars, quo_get_env(q1)))
+eval_tidy(q2)
+```
 
 ### Application: `subset()`
+
+To see why the data mask is so important, lets implement our own version of `subset()`. Later we'll come back to the base `subset()` function, and discuss how it works, and why it's documentation contains such a strong caution not to use it.
+
+If you haven't used it before `subset()` (like `dplyr::filter()`), provides a convenient way of selecting rows of a data frame based using an expression that is evaluated in the context of the data frame. It allows you to subset a data frame without repeatedly doing `df$`.
 
 ```{r}
 sample_df <- data.frame(a = 1:5, b = 5:1, c = c(5, 3, 1, 4, 1))
 
-subset(sample_df, a >= 4)
-# equivalent to:
 # sample_df[sample_df$a >= 4, ]
+subset(sample_df, a >= 4)
 
-subset(sample_df, b == c)
-# equivalent to:
 # sample_df[sample_df$b == sample_df$c, ]
+subset(sample_df, b == c)
 ```
 
-`subset.data.frame()`
+The core of is quite simple: we capture the `subset` expression, evaluate it in with a data mask, and use the results to subset the data frame. I've included a very simple check to ensure the result is a logical vector; real code should do more work to deliver an informative error to the user.
 
 ```{r}
 subset2 <- function(data, subset) {
   subset <- enquo(subset)
   rows <- eval_tidy(subset, data)
+  stopifnot(is.logical(rows))
   
   data[rows, , drop = FALSE]
 }
@@ -444,16 +462,20 @@ subset2 <- function(data, subset) {
 subset(sample_df, b == c)
 ```
 
-Compared to `base::subset()` this will support quasiquotation (thanks to `enquos()`):
+Because we've use `enquo()`, this function will support quasiquotation:
 
 ```{r}
 var <- expr(b)
 val <- 5
 
-subset2(sample_df, !!var == c)
+subset2(sample_df, !!var == val)
 ```
 
 ### Lexical scoping, ambiguity, and pronouns
+
+One of the downsides of the data mask is that it introduces ambiguity in the expression: when you say `x` do you mean the variable or the column? This ambiguity is usually fine when doing interactive data analysis because you are familiar with the variables, and because you are looking at the data frequently you will tend to spot problems quickly. The downside of ambiguity is worth it for terser code.
+
+However, ambiguity can start to be a problem if you wrap tidy evaluation functions inside another function. For example, take this simple wrapper:
 
 ```{r}
 threshold_x <- function(df, val) {
@@ -472,7 +494,7 @@ How can this function fail? There are two main ways:
     threshold_x(no_x, 2)
     ```
    
-   Or throw an error:
+    Or throw an error:
   
     ```{r, error = TRUE}
     rm(x)
@@ -487,13 +509,15 @@ How can this function fail? There are two main ways:
     threshold_x(has_val, 2)
     ```
 
-These failure modes arise because tidy evaluation is ambiguous: for each variable look up, it looks first in the data and then in the environment. But in this case, we always want to look up `x` in the data and `val` in the environment. To avoid this problem we can use pronouns:
+These failure modes arise because tidy evaluation is ambiguous: for each variable look up, it looks first in the data and then in the environment. But in this case, we always want to look up `x` in the data and `val` in the environment. To avoid this problem we can use the `.data` and `.env` pronouns:
 
 ```{r}
 threshold_x <- function(df, val) {
   subset2(df, .data$x >= .env$val)
 }
 ```
+
+(Note that unlike indexing an ordinary list or environment with `$`, if the variable is not found then these pronouns will throw an error)
 
 ```{r, error = TRUE}
 x <- 10
@@ -509,7 +533,7 @@ threshold_x <- function(df, val) {
 }
 ```
 
-There are subtle differences in when `val` is evaluated. If you unquote, it is evaluated at quotation time; if you use a pronoun, it is evaluated at evaluation time. These differences usually don't matter, so pick the form that looks most natural.
+There are subtle differences in when `val` is evaluated. If you unquote, it is evaluated by the quoting function (e.g `enquo()`); if you use a pronoun, it is evaluated by `eval_tidy()`. These differences are usually unimportant, so pick the form that looks most natural.
 
 What if we generalise `threshold_x()` slightly so that the user can pick the variable used for thresholding. There are two basic approaches:
 
@@ -531,19 +555,19 @@ threshold <- function(df, var, val) {
 * `df$!!var` is not valid R syntax; we have to use prefix form.
   Alternatively we can use `[[` and supply a string instead.
 
-What if we generalise further to allow thresholding based on any expression. You could write:
+
+Note that it is not always the responsibility of the function author to avoid ambiguity. Imagine we generalise further to allow thresholding based on any expression. You could write:
 
 ```{r}
 threshold <- function(df, expr, val) {
-  expr <- enquo(var)
+  expr <- enquo(expr)
   subset2(df, !!expr >= !!val)
 }
 ```
 
 There's no way to ensure that `expr` is only evaluated in the `data`, and indeed that might not even be desirable because the user may use an expression that includes variables from the data and from the local environments. In this case, it is now the users responsibility to avoid ambiguity. 
 
-This particular function is now not very useful because it's so general - you might as well just use `subset2()` directly.
-
+(But this specific function is now not very useful because it's so general - you might as well just use `subset2()` directly.)
 
 ### Base R
 
@@ -674,6 +698,39 @@ thirty <- expr(!!make_x(0) + !!make_x(10) + !!make_x(20))
 thirty
 eval_tidy(thirty)
 ```
+
+
+### Performance
+
+Note that there is a performance overhead to `eval_tidy()
+
+```{r}
+n <- 1000
+x1 <- expr(runif(n))
+e1 <- globalenv()
+q1 <- quo(runif(n))
+
+microbenchmark::microbenchmark(
+  runif(n),
+  eval_bare(x1, e1),
+  eval_tidy(q1),
+  eval_tidy(q1, mtcars)
+)
+```
+
+However, most of that extra overhead is due to setting up the data mask so if you need to evaluate code repeatedly, it's worthwhile to do the coercion to data mask once, and then reuse. This substantially reduces the overhead.
+
+```{r}
+d_mtcars <- as_data_mask(mtcars)
+
+microbenchmark::microbenchmark(
+  as_data_mask(mtcars), 
+  eval_bare(x1, e1),
+  eval_tidy(q1, d_mtcars)
+)
+```
+
+(The amount of savings is surprising: https://github.com/tidyverse/rlang/issues/372)
 
 ### When not to use quosures
 
