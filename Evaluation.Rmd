@@ -844,41 +844,50 @@ microbenchmark::microbenchmark(
 
 ## Case study: calling base NSE functions
 
-To finish up this chapter we're going to show how to create functions that use tidy evaluation (and all the advantages it brings) to wrap around base NSE functions. Here we'll focus on models, since since standard NSE doesn't provide unquoting tool. But you can use the same ideas with base graphics and any other function.
+To finish up this chapter we're going to show how to create functions wrap around base NSE functions. Here we'll focus on models, since since standard NSE doesn't provide unquoting tool. But you can use the same ideas with base graphics and any other function. Because of the semantics of base R functions, it's not possible to generate a 100% correct solution. So I wouldn't recommend including these in a package. But generally, your own code is unlikely to execute every issue that tidy eval protects you from so these are often enough to reduce duplication in your own data analysis code. These wrappers are end points, not composable - you can't rewrap easily.
 
 ### Basics
 
-Let's start with a simple wrapper around `lm()`. `lm()` is particularly challenging because it captures and prints the actual call. Ideally we want this to be useful.
-
-(I'm going to change the order of the arguments to bring data first because I can't help but make the interface easier to pipe with.)
+Let's start with a very simple wrapper around `lm()`:
 
 ```{r}
-lm2 <- function(data, formula) {
-  lm(formula, data = data)
+lm2 <- function(formula, data) {
+  lm(formula, data)
 }
-lm2(mtcars, mpg ~ disp)
 ```
-This works but yields an unappealing model call.
 
-We can avoid that:
+This wrapper is not useful but it reveals a challenge of working with `lm()`: it captures and prints the actual call:
 
 ```{r}
-lm3 <- function(data, formula) {
+lm2(mpg ~ disp, mtcars)$call
+```
+
+Ideally we want the call to be useful, i.e. we don't want our wrapper to be worse than `lm()` in some way. To overcome this problem, we need to capture the arguments, create the call to `lm()` using unquoting, then evaluate that call:
+
+```{r}
+lm3 <- function(formula, data) {
   data <- enexpr(data)
   formula <- enexpr(formula)
   
   lm_call <- expr(lm(!!formula, data = !!data))
   eval_bare(lm_call, caller_env())
 }
-lm3(mtcars, mpg ~ disp)
+lm3(mpg ~ disp, mtcars)$call
 ```
 
-Note that we have to capture expressions here rather than quosures, because `lm()` does not use tidy evaluation.
+Note that we need to manually supply an evaluation environment, `caller_env()`. We'll discuss that in more detail shortly.
 
-This technique works even with arguments that have non-standard evaluation, like `subset()`:
+This function has one small advantage over `lm()`: we can use quasiquotation.
 
 ```{r}
-lm4 <- function(data, formula, subset = NULL) {
+resp <- expr(mpg)
+lm3(!!resp ~ disp, mtcars)
+```
+
+Note that this technique works for all the arguments in works even with arguments that have non-standard evaluation, like `subset()`:
+
+```{r}
+lm4 <- function(formula, data, subset = NULL) {
   data <- enexpr(data)
   formula <- enexpr(formula)
   subset <- enexpr(subset)
@@ -886,41 +895,121 @@ lm4 <- function(data, formula, subset = NULL) {
   lm_call <- expr(lm(!!formula, data = !!data, subset = !!subset))
   eval_bare(lm_call, caller_env())
 }
-coef(lm4(mtcars, mpg ~ disp))
-coef(lm4(mtcars, mpg ~ disp, subset = cyl == 4))
+coef(lm4(mpg ~ disp, mtcars))
+coef(lm4(mpg ~ disp, mtcars, subset = cyl == 4))
 ```
 
-### What environment to use
+Note that I've supplied a default argument to `subset`. I think this is good practice because it clearly indicates that `subset` is optional: arguments with no default are ususally required. `NULL` has two nice properties here: 
 
-`caller_env()` / `parent.frame()` usually best option. If user supplies model formula, might want to use that.
+1. `lm()` already knows how to handle `subset = NULL`: it treats it the 
+   same way as a missing `subset`.
+   
+1. `expr(NULL)` is `NULL`; which makes it easier to detect progammatically.
 
-Note that you'll need to unquote any objects that you create in the function. 
+However, the current approach has one small downside: `subset = NULL` is shown in the call.
 
 ```{r}
-lm5 <- function(data, formula, subset = NULL) {
-  subset <- enexpr(subset)
-  lm_call <- expr(lm(formula, data = data, subset = !!subset))
-
-  env <- child_env(caller_env(), data = data, formula = formula)
-  eval_bare(lm_call, env)
-}
+lm4(mpg ~ disp, mtcars)$call
 ```
 
-### Missing vs NULL
+It's possible, if a little more work, to generate a call where `subset` is simply absent. There are two tricks needed to do this: 
 
-I think it's good practice to only leave missing the arguments that the user must supply. Instead, use `NULL` - has nice property that `expr(NULL)` is `NULL`. Then can use `%||%` and `missing_arg()` to replace, if needed. One final wrinkle is that unquoting a missing argument will yield an error about the missing argument; wrap in `maybe_missing()` to suppress
+1. We use the `%||%` helper to replace a `NULL` subset with `missing_arg()`
+
+1. We use `maybe_missing()` in `expr()`: if we don't do that the 
+   weirdness of the missing argument crops up and generates an error
+   about a missing argument.
 
 ```{r}
-lm6 <- function(data, formula, subset = NULL) {
+lm5 <- function(formula, data, subset = NULL) {
   data <- enexpr(data)
   subset <- enexpr(subset) %||% missing_arg()
   
   lm_call <- expr(lm(!!formula, data = !!data, subset = !!maybe_missing(subset)))
   eval_bare(lm_call, caller_env())
 }
-lm4(mtcars, mpg ~ disp)$call
-lm6(mtcars, mpg ~ disp)$call
+lm5(mpg ~ disp, mtcars)$call
 ```
+
+### What environment to use
+
+Note that we need to manually supply the evaluation environment. We can't use quosures because base R functions don't understand them. This means that there's no easy way to wrap `lm3()` inside another function. 
+
+You could make one small improvement:
+
+```{r}
+lm3a <- function(data, formula, .env = caller_env()) {
+  data <- enexpr(data)
+  formula <- enexpr(formula)
+  
+  lm_call <- expr(lm(!!formula, data = !!data))
+  eval_bare(lm_call, .env)
+}
+```
+
+Another option for modelling functions is to use the environment captured by the formula:
+
+```{r}
+lm3b <- function(data, formula) {
+  data <- enexpr(data)
+  formula <- enexpr(formula)
+  
+  lm_call <- expr(lm(!!formula, data = !!data))
+  eval_bare(lm_call, f_env(formula))
+}
+```
+
+It's not clear whether it's worth doing either of these options. The model is fundamentally wrong because it assumes all arguments need the same environment which is not true in general. Probably best to not even try to make these functions callable anything other than interactively.
+
+### Mixing user supplied and function created arguments
+
+What if you want to mingle object supplied by the user with objects that you create in the function?  For example, imagine you want to make an auto-boostrapping version of `lm()`. You might write it like this:
+
+```{r, error = TRUE}
+boot_lm0 <- function(formula, data) {
+  formula <- enexpr(formula)
+  boot_data <- data[sample(nrow(data), replace = TRUE), , drop = FALSE]
+  
+  lm_call <- expr(lm(!!formula, data = boot_data))
+  eval_bare(lm_call, caller_env())
+}
+
+df <- data.frame(x = 1:10, y = 5 + 3 * (1:10) + rnorm(10))
+boot_lm0(y ~ x, data = df)
+```
+
+Why doesn't this code work? We're evaluating the call in caller environment, where `boot_data` does not exist. In this case we get a clear error, but if `boot_data` also existed it might silently succeed. There are two basic way to overcome this challenge:
+
+1.  Unquote the data frame into the call. This means that no look up has
+    to occur, but has all the problems of inlining expressions. In particular
+    this isn't great for any function that captures the call:
+
+    ```{r}
+    boot_lm1 <- function(formula, data) {
+      formula <- enexpr(formula)
+      boot_data <- data[sample(nrow(data), replace = TRUE), , drop = FALSE]
+      
+      lm_call <- expr(lm(!!formula, data = !!boot_data))
+      eval_bare(lm_call, caller_env())
+    }
+    boot_lm1(y ~ x, data = df)
+    ```
+    
+1.  Alternatively you can create a new environment that inherits from the 
+    caller, and you can bind variables that you've created inside the 
+    function to that environment.
+    
+    ```{r}
+    boot_lm2 <- function(formula, data) {
+      formula <- enexpr(formula)
+      boot_data <- data[sample(nrow(data), replace = TRUE), , drop = FALSE]
+      
+      lm_env <- child_env(caller_env(), boot_data = boot_data)
+      lm_call <- expr(lm(!!formula, data = boot_data))
+      eval_bare(lm_call, lm_env)
+    }
+    boot_lm2(y ~ x, data = df)
+    ```
 
 ### Making formulas
 
@@ -1001,6 +1090,9 @@ update_model(mod, data = mtcars)
 
 ### Exercises
 
+1.  Another way to way to write `boot_lm()` would be to include the
+    boostrapping expression (`data[sample(nrow(data), replace = TRUE), , drop = FALSE]`) in to the data argument. Implement that approach.!
+
 1.  We could capture quosures, and then extract the environment from them.
     There are multiple environments associated with a quosore, but `eval_bare()`
     can only use one. Write a function that takes a list of quosures and returns
@@ -1009,4 +1101,3 @@ update_model(mod, data = mtcars)
 1.  Compare and contrast `update_model()` with `update.default()`.
 
 1.  Rewrite `update.formula()` to use R code instead of C code.
-
