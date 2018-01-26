@@ -24,6 +24,10 @@ This chapter will develop two simple, but useful DSLs: one to generate HTML, and
 
 This chapter together pulls together many techniques discussed elsewhere in the book. In particular, you'll need to understand environments, functionals, non-standard evaluation, and metaprogramming.
 
+```{r}
+library(rlang)
+```
+
 ## HTML {#html}
 
 HTML (hypertext markup language) is the language that underlies the majority of the web. It's a special case of SGML (standard generalised markup language), and it's similar but not identical to XML (extensible markup language). HTML looks like this: \index{HTML}
@@ -187,22 +191,24 @@ With this definition of `p()`, it's pretty easy to see how we can apply this app
 
 ```{r}
 tag <- function(tag) {
-  force(tag)
-  function(...) {
-    args <- list(...)
-    attribs <- html_attributes(named(args))
-    children <- unlist(escape(unnamed(args)))
-
-    html(paste0(
-      "<", tag, attribs, ">",
-      paste(children, collapse = ""),
-      "</", tag, ">"
-    ))
-  }
+  new_function(
+    exprs(... = ),
+    expr({
+      args <- list(...)
+      attribs <- html_attributes(named(args))
+      children <- unlist(escape(unnamed(args)))
+  
+      html(paste0(
+        !!paste0("<", tag), attribs, ">",
+        paste(children, collapse = ""),
+        !!paste0("</", tag, ">")
+      ))
+    }),
+    caller_env()
+  )
 }
+tag("b")
 ```
-
-(We're forcing the evaluation of `tag` with the expectation that we'll be calling this function from a loop. This will help to avoid potential bugs caused by lazy evaluation.)
 
 Now we can run our earlier example:
 
@@ -218,16 +224,19 @@ Before we continue writing functions for every possible HTML tag, we need to cre
 
 ```{r}
 void_tag <- function(tag) {
-  force(tag)
-  function(...) {
-    args <- list(...)
-    if (length(unnamed(args)) > 0) {
-      stop("Tag ", tag, " can not have children", call. = FALSE)
-    }
-    attribs <- html_attributes(named(args))
-
-    html(paste0("<", tag, attribs, " />"))
-  }
+  new_function(
+    exprs(... = ), 
+    expr({
+      args <- list(...)
+      if (length(unnamed(args)) > 0) {
+        stop(!!paste0("<", tag, "> must not have unnamed arguments"), call. = FALSE)
+      }
+      attribs <- html_attributes(named(args))
+  
+      html(paste0(!!paste0("<", tag), attribs, " />"))
+    }),
+    caller_env()
+  )
 }
 
 img <- void_tag("img")
