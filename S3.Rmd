@@ -728,6 +728,57 @@ This duplicated code could be avoided completely if `arrange.data.frame()`, prov
 
 When designing a class that can be subclassed, you need to carefully think through these issues. Generally, whenever you implement a method that returns the same type of object as the primary input, you should call `reconstruct()` to ensure that it also works for subclasses. That way implementors of a subclass will only need to provide methods when the computation is actually different.
 
+### Subclass or Attributes?
+
+It can sometimes be hard to figure out whether to use an additional subclass, or add another attribute to a parent class instead.
+
+For example, consider representing survey items in S3, covering both text and image versions.
+
+On the one hand, you might implement these *two* kinds of items using inheritence, where any `myItems` parent class always has either a `myItemsText` or `myItemsImage` subclass. Somewhere in your constructor functions, you would set:
+
+```{r}
+items <- structure("Rownames are evil.", class = c("myItemsText", "myItems"))
+```
+
+or
+
+```{r}
+items <- structure("rownames.png", class = c("myItemsImage", "myItems"))
+```
+
+You would then add methods with code specific to the subclasses, such as different `print()` methods.
+
+On the other hand, you might accomplish the same thing by simply adding an additional *attribute* to the `myItems` parent class, specifying whether the items are text or images.
+Your constuctor function might then include:
+
+```{r}
+items <- structure("rownames.png", class = "myItems", type = "image")
+```
+
+Parent methods, might, as necessary, behave differently depending on the type using some control structure:
+
+```{r}
+some_generic.myItems <- function(x, ...) {
+  # do general work
+  switch(
+    EXPR = attr(items, which = "type"),
+    image = {
+      # do specific work for image items
+    },
+    text = {
+      # do specific work for text items
+    }
+  )
+  # do general work
+}
+```
+
+There is no hard and fast rule which of the two approaches is better.
+Heuristically, if the attribute-approach requires complicated control structures in parent methods conditioned on the attribute value (such as the above `switch()`), you should use a subclass instead, because such structures are frequent sources of errors and hard to debug.
+If some attribute value requires *additional* arguments not otherwise used, such as a `language` argument for `type = "text"`, but not for `type = "image"` items, you should also use subclasses, because *each* of the subclasses helpers can then expose only the applicable arguments, making them easier to use.
+
+Conversely, if your subclass methods do not do much by themselves, or if a parent class *without* any subclass does not make much sense, consider using attributes instead.
+
 ### Exercises
 
 1.  The `ordered` class is a subclass of `factor`, but it's implemented in
