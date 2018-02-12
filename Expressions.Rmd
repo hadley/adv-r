@@ -9,7 +9,9 @@ library(lobstr)
 is_call <- rlang::is_lang
 ```
 
-To compute on the language, we first need to understand its structure. That requires some new vocabulary, some new tools, and some new ways of thinking about R code. \index{expressions} The first thing you'll need to understand is the distinction between an operation and its result. Take this code, which takes a variable `x` multiplies it by 10 and saves the result to a new variable called `y`. It doesn't work because we haven't defined a variable called `x`:
+## Introduction
+
+To compute on the language, we first need to understand its structure. That requires some new vocabulary, some new tools, and some new ways of thinking about R code. The first thing you'll need to understand is the distinction between an operation and its result. Take this code, which takes a variable `x` multiplies it by 10 and saves the result to a new variable called `y`. It doesn't work because we haven't defined a variable called `x`:
 
 ```{r, error = TRUE}
 y <- x * 10
@@ -32,9 +34,20 @@ eval(z)
 y
 ```
 
+### Outline
+
+### Prequisites
+
+Make sure you've installed rlang and lobstr from GitHub:
+
+```{r, eval = FALSE}
+devtools::install_github("r-lib/rlang")
+devtools::install_github("hadley/lobstr")
+```
+
 ## Abstract syntax trees
 
-Quoted expressions are also called abstract syntax trees (AST) because the structure of code is fundamentally hierarchical and can be naturally represented as a tree. To make that more obvious we're going to introduce some graphical conventions, illustrated with the very simple call `f(x, "y", 1)`. \index{abstract syntax tree}
+Quoted expressions are also called abstract syntax trees (AST) because the structure of code is hierarchical and can be naturally represented as a tree. To make that more obvious we're going to introduce some graphical conventions, illustrated with the very simple call `f(x, "y", 1)`. \index{abstract syntax tree}
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/expression-simple.png", dpi = 450)
@@ -42,7 +55,7 @@ knitr::include_graphics("diagrams/expression-simple.png", dpi = 450)
   
 *   Function __calls__ define the hierarchy of the tree. Calls are shown
     with an orange square. The first child (`f`) is the function that gets 
-    called. The second and subsequent children (`x`, `"y"`, and `1`) are the 
+    called; the second and subsequent children (`x`, `"y"`, and `1`) are the 
     arguments. 
   
     __NB__: Unlike many tree diagrams the order of the children is important: 
@@ -52,7 +65,7 @@ knitr::include_graphics("diagrams/expression-simple.png", dpi = 450)
     __constants__ like `1` or `"y"`. Symbols have a purple border and rounded 
     corners. Constants, which are atomic vectors of length one, have black 
     borders and square corners. Strings are always surrounded in quotes to
-    emphasise their difference to symbols --- more on that later.
+    emphasise their difference from symbols --- more on that later.
 
 Drawing these diagrams by hand takes me some time, and obviously you can't rely on me to draw diagrams for your own code. I'll supplement the hand-drawn trees with trees drawn by `lobstr::ast()`. `ast()` tries to make trees as similar as possible to my hand-drawn trees, while respecting the limitations of the console. Let's use `ast()` to display the tree above:
 
@@ -60,7 +73,7 @@ Drawing these diagrams by hand takes me some time, and obviously you can't rely 
 lobstr::ast(f(x, "y", 1))
 ```
 
-Calls get an orange square, symbols are bold and purple, and strings are surrounded by quote marks. (The formatting is not currently shown in the rendered book, but you can see it if you run the code yourself.)
+Calls get an orange square, symbols are bold and purple, and strings are surrounded by quote marks. (The formatting is not currently shown in the book, but you can see it if you run the code yourself.)
 
 `ast()` supports "unquoting" with `!!` (pronounced bang-bang). We'll talk about unquoting in detail in the next chapter; for now note that it's useful if you've already used `expr()` to capture the expression.
 
@@ -119,6 +132,8 @@ lobstr::ast(function(x, y) {
 })
 ```
 
+Note that functions include a node `<inline srcref>`, this contains the source reference for the function, as mentioned in [function components](#function-components).
+
 ### Function factories
 
 Another small detail we need to consider are calls like `f()()`. The first component of the call is usually a symbol:
@@ -127,18 +142,16 @@ Another small detail we need to consider are calls like `f()()`. The first compo
 lobstr::ast(f(a, 1))
 ```
 
-But if you are using a function factory, a function that returns another function, the first component might be another call:
+But if you are using a function factory (as described in [function factories]), a function that returns another function, the first component might be another call:
 
 ```{r}
 lobstr::ast(f()(a, 1))
 ```
 
-(See [Function factories] for more details)
-
-Of course that function might also take arguments:
+And of course that function might also take arguments:
 
 ```{r}
-lobstr::ast(f(b, 2)())
+lobstr::ast(f(b, 2)(a, 1))
 ```
 
 These forms are relatively rare, but it's good to be able to recognise them when they crop up. 
@@ -151,18 +164,19 @@ So far the examples have only used unnamed arguments. Named arguments don't chan
 lobstr::ast(mean(x = mtcars$cyl, na.rm = TRUE))
 ```
 
-(And note the appearance of another infix function: `$`)
+(Note the appearance of another infix function: `$`)
 
 ### Exercises
 
-1.  Use `ast()` and experimentation to figure out the three arguments to an
-    `if()` call. What would you call them? Which components are required? 
-    
-1.  What are the arguments to the `for()` and `while()` calls? 
+1.  Use `ast()` and experimentation to figure out the three arguments to `if()`. 
+    What would you call them? Which arguments are required and which are 
+    optional? 
 
 1.  What does the call tree of an `if` statement with multiple `else if` 
     conditions look like? Why?
     
+1.  What are the arguments to the `for()` and `while()` calls? 
+
 1.  Two arithmetic operators can be used in both prefix and infix style.
     What are they?
 
@@ -172,11 +186,11 @@ The process by which a computer language takes a sequence of tokens (like `x`, `
 
 If this is your first reading of the metaprogramming chapters, now is a good time to read the first sections of the next two chapters in order to get the big picture. Come back and learn more of the details once you've seen how all the big pieces fit together.
 
-### Operator precedence and associativity
+### Operator precedence
 
-Infix functions introduce ambiguity in a way that prefix functions do not[^2]. The parser has to resolve two sources of ambiguity when parsing infix operators. First, what does `1 + 2 * 3` yield? Do you get 9 (i.e. `(1 + 2) * 3`), or 7 (i.e. `1 + (2 * 3)`).  Which of the two possible parse trees below does R use?
+Infix functions introduce ambiguity in a way that prefix functions do not. The parser has to resolve two sources of ambiguity when parsing infix operators[^2]. First, what does `1 + 2 * 3` yield? Do you get 9 (i.e. `(1 + 2) * 3`), or 7 (i.e. `1 + (2 * 3)`).  Which of the two possible parse trees below does R use?
 
-[^2]: These two sources of ambiguity do not exist without infix operators, which can be considered an advantage of purely prefix and postfix languages. It's interesting to compare a simple arithmetic operation in Lisp (prefix) and Forth (postfix). In Lisp you'd write `(+ (+ 1 2) 3))`; this avoids ambiguity by requiring parentheses everywhere. In Forth, you'd write `1 2 + 3 +`; this doesn't require any parentheses, at the cost of requiring more thought when reading.
+[^2]: These two sources of ambiguity do not exist without infix operators, which can be considered an advantage of purely prefix and postfix languages. It's interesting to compare a simple arithmetic operation in Lisp (prefix) and Forth (postfix). In Lisp you'd write `(+ (+ 1 2) 3))`; this avoids ambiguity by requiring parentheses everywhere. In Forth, you'd write `1 2 + 3 +`; this doesn't require any parentheses, but does require more thought when reading.
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/expression-ambig-order.png", dpi = 450)
@@ -188,13 +202,21 @@ Programming langauges use conventions called __operator precedence__ to resolve 
 lobstr::ast(1 + 2 * 3)
 ```
 
-Predicting the precedence of arithmetic operations is usually easy because it's drilled into you in school and is consistent across the vast majority of programming languages. Predicting the precedence of other operators is harder. There's one particularly surprising finding in R: `!` has a much lower precedence (i.e. it binds less tightly) than you might expect. This allows you to write useful operations like:
+Predicting the precedence of arithmetic operations is usually easy because it's drilled into you in school and is consistent across the vast majority of programming languages. Predicting the precedence of other operators is harder. There's one particularly surprising case in R: `!` has a much lower precedence (i.e. it binds less tightly) than you might expect. This allows you to write useful operations like:
 
 ```{r}
 lobstr::ast(!x %in% y)
 ```
 
-Another source of ambiguity is repeated usage of the same infix function. For example, is `1 + 2 + 3` equivalent to `(1 + 2) + 3` or to `1 + (2 + 3)`?  This normally doesn't matter because `x + y == y + x`,  i.e. addition is associative. However, some S3 classes define `+` in a non-associative way. For example, ggplot2 overloads `+` to build up a complex plot from simple pieces; this usage is non-associative because earlier layers are drawn underneath later layers.
+R has over 30 infix operators divided into 18 precedence groups. While the details are descrbed in `?Syntax`, very few people have memorised the complete ordering. Indeed, if there's any confusion, use parentheses! These also appear in the AST, like all other special forms:
+
+```{r}
+lobstr::ast(1 + (2 + 3))
+```
+
+### Associativity
+
+Another source of ambiguity is introduced by repeated usage of the same infix function. For example, is `1 + 2 + 3` equivalent to `(1 + 2) + 3` or to `1 + (2 + 3)`?  This normally doesn't matter because `x + y == y + x`, i.e. addition is associative, but is needed because some S3 classes define `+` in a non-associative way. For example, ggplot2 overloads `+` to build up a complex plot from simple pieces; this usage is non-associative because earlier layers are drawn underneath later layers.
 
 In R, most operators are __left-associative__, i.e. the operations on the left are evaluated first:
 
@@ -202,22 +224,38 @@ In R, most operators are __left-associative__, i.e. the operations on the left a
 lobstr::ast(1 + 2 + 3)
 ```
 
-R has over 30 infix operators divided into 18 precedence groups. While the details are descrbed in `?Syntax`, very few people have memorised the complete ordering. Indeed, if there's any confusion, use parentheses! 
-
-These also appear in the AST, like all other special forms:
+There are two exceptions: exponentiation and assignment.
 
 ```{r}
-lobstr::ast(1 + (2 + 3))
+lobstr::ast(2 ^ 2 ^ 3)
+lobstr::ast(x <- y <- z)
 ```
 
 ### Whitespace
 
-R, in general, is not sensitive to white space. Most white space is not signficiant and is not recorded in the AST. `x+y` yields exactly the same AST as `x +        y`. This means that you're generally free to add whitespace to enhance the readability of your code. There's one major exception:
+R, in general, is not sensitive to white space. Most white space is not signficiant and is not recorded in the AST: `x+y` yields exactly the same AST as `x +        y`. This means that you're generally free to add whitespace to enhance the readability of your code. There's one major exception:
 
 ```{r}
 lobstr::ast(y <- x)
 lobstr::ast(y < -x)
 ```
+
+### Exercises
+
+1.  R uses parentheses in two slightly different ways as illustrated by 
+    this simple call: `f((1))`. Compare and contrast the two uses. 
+    
+1.  `=` can also be used in two ways. Construct a simple example that shows 
+    both uses.
+
+1.  What does `!1 + !1` return? Why?
+
+1.  Why does `x1 <- x2 <- x3 <- 0` work? There are two reasons.
+
+1.  Compare `x + y %+% z` to `x ^ y %+% z`. What does that tell you about 
+    the precedence of custom infix functions?
+
+## Parsing and deparsing 
 
 ### Parsing a string
 
@@ -270,21 +308,6 @@ expr_label(z)
 Be careful when using the base R equivalent, `deparse()`: it returns a character vector, and with one element for each line. Whenever you use it, remember that the length of the output might be greater than one, and plan accordingly.
 
 ### Exercises
-
-1.  R uses parentheses in two slightly different ways as illustrated by 
-    this simple call: `f((1))`. Compare and contrast the two uses. 
-    
-1.  `=` can also be used in two ways. Construct a simple example that shows 
-    both uses.
-
-1.  What does `!1 + !1` return? Why?
-
-1.  Which arithmetic operation is right associative?
-
-1.  Why does `x1 <- x2 <- x3 <- 0` work? There are two reasons.
-
-1.  Compare `x + y %+% z` to `x ^ y %+% z`. What does that tell you about 
-    the precedence of custom infix functions?
 
 1.  `deparse()` produces vectors when the input is long. For example, the 
     following call produces a vector of length two:
