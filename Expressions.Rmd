@@ -505,7 +505,6 @@ Conceptually, an expression object is just a list of expressions. The only diffe
 1.  Construct the expression `if(x > 1) "a" else "b"` using multiple calls to 
     `lang()`. How does the structure code reflect the structure of the AST?
 
-
 ## Parsing and deparsing 
 
 Most of the time you type code into the console, and R takes care of turning the characters you've typed into an AST. But occasionally you have code stored in a string, and you want to parse it yourself. You can do so using `rlang::parse_expr()`:
@@ -534,20 +533,26 @@ The base equivalent to `parse_exprs()` is `parse()`. It is a little harder to us
 parse(text = x1)[[1]]
 ```
 
-The opposite of parsing is __deparsing__: you have an AST and you want a string that would generate it:
+The opposite of parsing is __deparsing__: you have an AST and you want a string that would generate it when parsed:
 
 ```{r}
 z <- expr(y <- x + 10)
 expr_text(z)
 ```
 
-Parsing and deparsing are not perfectly symmetrical because parsing throws away all information not directly related to the AST. This includes backticks around ordinary names, comments, and whitespace:
+Parsing and deparsing are not perfectly symmetric because parsing throws away all information not directly related to the AST. This includes backticks around ordinary names, comments, and whitespace:
 
 ```{r}
 cat(expr_text(expr({
   # This is a comment
   x <-             `x` + 1
 })))
+```
+
+There are few other cases where parsing and deparsing is not symetric. We'll encounter one in the next chapter:
+
+```{r}
+expr_text(parse_expr("!!x"))
 ```
 
 Deparsing is often used to provide default names for data structures (like data frames), and default labels for messages or other output. rlang provides two helpers for those situations:
@@ -559,7 +564,7 @@ expr_name(z)
 expr_label(z)
 ```
 
-Be careful when using the base R equivalent, `deparse()`: it returns a character vector, and with one element for each line. Whenever you use it, remember that the length of the output might be greater than one, and plan accordingly.
+Be careful when using the base R equivalent, `deparse()`: it returns a character vector with one element for each line. Whenever you use it, remember that the length of the output might be greater than one, and plan accordingly.
 
 ### Exercises
 
@@ -578,76 +583,10 @@ Be careful when using the base R equivalent, `deparse()`: it returns a character
 
     What do `expr_text()`, `expr_name()`, and `expr_label()` do with this input?
 
-## Case study: anaphoric functions
-
-One useful application of `make_function()` is in functions like `curve()`. `curve()` allows you to plot a mathematical function without creating an explicit R function:
-
-```{r curve-demo, fig.width = 3.5, fig.height = 2.5, small_mar = TRUE}
-curve(sin(exp(4 * x)), n = 1000)
-```
-
-Here `x` is a pronoun. `x` doesn't represent a single concrete value, but is instead a placeholder that varies over the range of the plot. One way to implement `curve()` would be with `make_function()`:
-
-```{r curve2}
-curve4 <- function(expr, xlim = c(0, 1), n = 100) {
-  expr <- enquo(expr)
-  f <- new_function(alist(x = ), get_expr(expr), get_env(env))
-
-  x <- seq(xlim[1], xlim[2], length = n)
-  y <- f(x)
-
-  plot(x, y, type = "l", ylab = deparse(substitute(expr)))
-}
-curve4(sin(exp(4 * x)), n = 1000)
-
-
-curve3 <- function(expr, xlim = c(0, 1), n = 100) {
-  expr <- enquo(expr)
-  e <- rlang::expr({
-    function(x) !!get_expr(expr)
-  })
-  f <- eval_tidy(e, env = get_env(expr))
-
-  x <- seq(xlim[1], xlim[2], length = n)
-  y <- f(x)
-
-  plot(x, y, type = "l", ylab = deparse(substitute(expr)))
-}
-
-curve3(sin(exp(4 * x)), n = 1000)
-```
-
-Functions that use a pronoun are called [anaphoric](http://en.wikipedia.org/wiki/Anaphora_(linguistics)) functions. They are used in [Arc](http://www.arcfn.com/doc/anaphoric.html) (a lisp like language), [Perl](http://www.perlmonks.org/index.pl?node_id=666047), and [Clojure](http://amalloy.hubpages.com/hub/Unhygenic-anaphoric-Clojure-macros-for-fun-and-profit). \index{anaphoric functions} \index{functions!anaphoric}
-
-### Exercises
-
-1.  How are `alist(a)` and `alist(a = )` different? Think about both the
-    input and the output.
-
-1.  Read the documentation and source code for `pryr::partial()`. What does it
-    do? How does it work? Read the documentation and source code for
-    `pryr::unenclose()`. What does it do and how does it work?
-
-1.  The actual implementation of `curve()` looks more like
-
-    ```{r curve3}
-    curve3 <- function(expr, xlim = c(0, 1), n = 100,
-                       env = parent.frame()) {
-      env2 <- new.env(parent = env)
-      env2$x <- seq(xlim[1], xlim[2], length = n)
-
-      y <- eval(substitute(expr), env2)
-      plot(env2$x, y, type = "l", 
-        ylab = deparse(substitute(expr)))
-    }
-    ```
-
-    How does this approach differ from `curve2()` defined above?
-
-
 ## Case study: Walking the AST with recursive functions {#ast-funs}
+\index{recursion!over ASTs}
 
-To conclude the chapter we're going to pull together everything that you've learned about ASTs to write solve more complicated tasks. Some inspiration comes from the base codetools package, which provides two interesting functions: \index{recursion!over ASTs}
+To conclude the chapter I'm going to pull together everything that you've learned about ASTs and use that knowledge to solve more complicated problems. The inspiration comes from the base codetools package, which provides two interesting functions: 
 
 * `findGlobals()` locates all global variables used by a function. This
   can be useful if you want to check that your function doesn't inadvertently
@@ -657,18 +596,19 @@ To conclude the chapter we're going to pull together everything that you've lear
   unused local variables, unused parameters, and the use of partial
   argument matching.
 
-Getting all of the details of this functions correct is fiddly and complex, so we're not going to explore the full expression. Instead we'll focus on the big ideas needed to implement functions that work like them, namely recursion. Recursive functions are a natural fit to tree-like data structures because a recursive function is made up of two parts:
+Getting all of the details of these functions correct is fiddly, so we won't explore their full expression. Instead we'll focus on the big underlying idea: recursion on the AST. Recursive functions are a natural fit to tree-like data structures because a recursive function is made up of two parts that correspond to the two parts of the tree:
 
 * The __recursive case__ handles the nodes in the tree. Typically, you'll
   do something to each child of node, usually calling the recursive function
   again, and then combine the results back together again. For expressions, 
-  you'll need to handle calls and pairlists in the recursive case.
+  you'll need to handle calls and pairlists (function arguments).
   
 * The __base case__ handles the leaves of the tree. The base cases ensure
   that the function eventually terminates, by solving the simplest cases 
-  directly. For expressions, you need to base symbol and names in the base case.
+  directly. For expressions, you need to handle symbols and constants in the 
+  base case.
 
-To make this pattern easier to see, we'll use two helper functions. First we define `expr_type()` which will return "constant" for constant, "symbol" for symbols, "call", for calls, "pairlist" for pairlists, and the "type" of anything else:
+To make this pattern easier to see, we'll need two helper functions. First we define `expr_type()` which will return "constant" for constant, "symbol" for symbols, "call", for calls, "pairlist" for pairlists, and the "type" of anything else:
 
 ```{r}
 expr_type <- function(x) {
@@ -716,7 +656,7 @@ recurse_call <- function(x) {
 }
 ```
 
-Typically, solving the base case will easy so we'll do that first, and check the results. The recursive cases are a little more tricky, but typically you just need to think about the data structure you want in the output and then find the correct purrr function. To that end, make sure you're familiar with [Functionals] before continuing.
+Typically, solving the base case will easy, so we'll do that first, then check the results. The recursive cases are a little more tricky. Typically you'll think about the structure of final output and then find the correct purrr function to produce it. To that end, make sure you're familiar with [Functionals] before continuing.
 
 ### Finding F and T
 
@@ -743,7 +683,7 @@ logical_abbr_rec(expr(TRUE))
 logical_abbr_rec(expr(T))
 ```
 
-Our recursive function works with expressions which means we always need to use it with `expr()`. When writing a recursive function it's common to write a wrapper that provides defaults or makes the function a little easier to use. Here we'll typically make a wrapper that quotes its input (we'll learn more about that in the next chapter), so we don't need to use `expr()` every time.
+I've written `logical_abbr_rec()` function assuming that the input will be an expression as this will make the recursive operation simpler. However, when writing a recursive function it's common to write a wrapper that provides defaults or makes the function a little easier to use. Here we'll typically make a wrapper that quotes its input (we'll learn more about that in the next chapter), so we don't need to use `expr()` every time.
 
 ```{r}
 logical_abbr <- function(x) {
@@ -783,7 +723,7 @@ We start by looking at the AST for assignment:
 ast(x <- 10)
 ```
 
-Assignment is a call where the first element is the symbol `<-`, the second is name of variable, and the third is the value to be assigned. 
+Assignment is a call where the first element is the symbol `<-`, the second is name of variable, and the third is the value to be assigned.
 
 Next, we need to decide what data structure we're going to use for the results. Here I think it will be easiest it we return a character vector. If we return symbols, we'll need to use a `list()` and that makes things a little more complicated.
 
@@ -802,15 +742,17 @@ find_assign("x")
 find_assign(x)
 ```
 
-Next we implement the recursive cases. This is made easier by a function that should exist in purrrr, but currently doesn't:
+Next we implement the recursive cases. This is made easier by a function that should exist in purrrr, but currently doesn't. `flat_map_chr()` expects `.f` to return a character vector of arbitrary length, and flattens all results into a single character vector.
 
 ```{r}
 flat_map_chr <- function(.x, .f, ...) {
   purrr::flatten_chr(purrr::map(.x, .f, ...))
 }
+
+flat_map_chr(letters[1:3], ~ rep(., sample(3, 1)))
 ```
 
-The recursive case for pairlists is simple: we iterate of every element of the pairlist (i.e. each function argument) and combine the results. The case for calls is a little bit more complex - if this is a call to `<-` then we should return the second element of the call:
+The recursive case for pairlists is simple: we iterate over every element of the pairlist (i.e. each function argument) and combine the results. The case for calls is a little bit more complex - if this is a call to `<-` then we should return the second element of the call:
 
 ```{r}
 find_assign_rec <- function(x) {
@@ -831,10 +773,6 @@ find_assign_rec <- function(x) {
   )
 }
 
-# find_assign(function(x = 1) {})
-# Need to handle srcrefs
-# Maybe move to new section specifically about functions?
-
 find_assign(a <- 1)
 find_assign({
   a <- 1
@@ -844,7 +782,7 @@ find_assign({
 })
 ```
 
-Now we need to make our function more robust but coming up with examples intended to break it. What happens we assign to the same variable multiple times?
+Now we need to make our function more robust by coming up with examples intended to break it. What happens we assign to the same variable multiple times?
 
 ```{r}
 find_assign({
@@ -864,7 +802,7 @@ find_assign({
 })
 ```
 
-What happens if we have multiple calls to assign? Currently we only return the first. That's because when `<-` occurs we immediately terminate recursion. 
+What happens if we have nested calls to `<-`  Currently we only return the first. That's because when `<-` occurs we immediately terminate recursion. 
 
 ```{r}
 find_assign({
@@ -876,7 +814,7 @@ Instead we need to take a more rigorous approach. I think it's best to keep the 
 
 ```{r}
 find_assign_call <- function(x) {
-  if (is_call(x, "<-") && is.symbol(x[[2]])) {
+  if (is_call(x, "<-") && is_symbol(x[[2]])) {
     lhs <- as_string(x[[2]])
     children <- as.list(x)[-1]
   } else {
@@ -901,16 +839,18 @@ find_assign_rec <- function(x) {
 
 find_assign(a <- b <- c <- 1)
 find_assign(system.time(x <- print(y <- 5)))
-find_assign(names(l) <- "b")
 ```
 
 While the complete version of this function is quite complicated, it's important to remember we wrote it by working our way up by writing simple component parts.
 
 ### Exercises
 
+1.  `logical_abbr()` returns `TRUE` for `T(1, 2, 3)`. How could you modify
+    `logical_abbr_rec()` so that it ignores function calls that use `T` or `F`?
+
 1.  `logical_abbr()` works with expressions. It currently fails when you give it
     a function. Why not? How could you modify `logical_abbr()` to make it 
-    work? What components will you need to recurse over?
+    work? What components of a function will you need to recurse over?
 
     ```{r, eval = FALSE}
     f <- function(x = TRUE) {
@@ -919,7 +859,7 @@ While the complete version of this function is quite complicated, it's important
     logical_abbr(!!f)
     ```
 
-1.  Write a function that extracts all calls to a function.
-
-1.  Instead of writing a wrapper that quotes its input, we could have made 
-    the recursive function itself a quoting function. Why is this suboptimal?
+1.  Modify find assignment to also detect assignment using replacement 
+    functions, i.e. `names(x) <- y`.
+  
+1.  Write a function that extracts all calls to a specified function.
