@@ -453,6 +453,8 @@ quo(log(x, base = base))
 expr(log(x, base = !!base))
 ```
 
+
+
 ### Exercises
 
 1.  Predict what evaluating each of the following quosures will return.
@@ -484,6 +486,111 @@ expr(log(x, base = !!base))
     out
     purrr::map_chr(out, eval_tidy)
     ```
+
+## Wrapping quoting functions
+
+One downside of quoting functions is that when you call a lot of them, it is harder to wrap them in another function in order to reduce duplication. For example, if you see the following code:
+
+```{r, eval = FALSE}
+(x - min(x)) / (max(x) - min(x))
+(y - min(y)) / (max(y) - min(y))
+((x + y) - min(x + y)) / (max(x + y) - min(x + y))
+```
+
+You can eliminate the reptition with a `rescale01` function:
+
+```{r, eval = FALSE}
+rescale01 <- function(x) (x - min(x)) / (max(x) - min(x))
+rescale01(x)
+rescale01(y)
+rescale01(x + y)
+```
+
+Reducing the duplication here is a very good idea, because when you realise that your rescaling technique doesn't handle missing values gracefully, you only have one place to fix it. It is easy to create `rescale01()` because `min()`, `max()`, and `-` , are regular functions: they don't quote any of their arguments.
+
+It's harder to reduce duplication when a function quotes one or more arguments. For example, if you notice this repeated code:
+
+```{r, eval = FALSE}
+df %>% group_by(x1) %>% summmarise(mean = mean(y1))
+df %>% group_by(x2) %>% summmarise(mean = mean(y2))
+df %>% group_by(x3) %>% summmarise(mean = mean(y3))
+```
+
+This naive function will not work:
+
+```{r}
+grouped_mean <- function(df, x, y) {
+  df %>% group_by(x) %>% summmarise(mean = mean(y))
+}
+```
+
+Because regardless of the input, `grouped_mean()` will always group by `x` and compute the mean of `y`. However, because `group_by()` and `summarise()` (like all quoting functions in the tidyverse) use quasiquotation, there's a standard way to wrap these functions: you quote and then unquote:
+
+```{r}
+grouped_mean <- function(df, x, y) {
+  x <- enexpr(x)
+  y <- enexpr(y)
+  
+  df %>% 
+    group_by(!!x) %>% 
+    summarise(mean = mean(!!y))
+}
+
+mtcars %>% grouped_mean(cyl, mpg)
+```
+
+(In the next chapter, we'll learn why `enexpr()` is not quite general enough and how and why to use `quo()`, `enquo()`, and `enquos()` instead.)
+
+This is a powerful pattern that allows you reduce duplication in your code when it uses quasiquoting functions.
+
+
+### Tangling with dots
+
+In our `grouped_mean()` example above, we allow the user to select one grouping variable, and one summary variable. What if we wanted to allow the user to select more than one? One option would be to use `...`. There are three possible ways we could use `...` it:
+
+* Pass `...` onto the `mean()` function. That would make it easy to set 
+  `na.rm = TRUE`. This is easiest to implement.
+  
+* Allow the user to select multiple groups
+
+* Allow the user to select multiple variables to summarise.
+
+Implementing each one of these is relatively straightforward, but what if we want to be able to group by multiple variables, summarise multiple variables, and pass extra args on to `mean()`. Generally, I think it is better to avoid this sort of API (instead relying on multiple function that each do one thing) but sometimes it is the lesser of the two evils, so it is useful to have a technique in your backpocket to handle it.
+
+```{r}
+grouped_mean <- function(df, groups, vars, args) {
+
+  var_means <- map(vars, function(var) expr(mean(!!var, !!!args)))
+  names(var_means) <- map_chr(vars, expr_name)
+  
+  df %>%
+    dplyr::group_by(!!!groups) %>%
+    dplyr::summarise(!!!var_means)
+}
+
+grouped_mean(mtcars, exprs(vs, am), exprs(hp, drat, wt), list(na.rm = TRUE))
+```
+
+If you use this design a lot, you may also want to provide an alias to `exprs()` with a better name. For example, dplyr provides the `vars()` wrapper to support the scoped verbs (e.g. `summarise_if()`, `mutate_at()`). `aes()` in ggplot2 is similar, although it does a little more: requires all arguments be named, naming the the first arguments (`x` and `y`) by default, and automatically renames so you can use the base names for aesthetics (e.g. `pch` vs `shape`). 
+
+```{r, eval = FALSE}
+grouped_mean(mtcars, vars(vs, am), vars(hp, drat, wt), list(na.rm = TRUE))
+```
+
+### Exercises
+
+    
+1.  Implement the three variants of `grouped_mean()` described above:
+
+    ```{r}
+    # ... passed on to mean
+    grouped_mean <- function(df, group_by, summarise, ...) {}
+    # ... selects variables to summarise
+    grouped_mean <- function(df, group_by, ...) {}
+    # ... selects variables to group by
+    grouped_mean <- function(df, ..., summarise) {}
+    ```
+
 
 ## Tidy evaluation
 
