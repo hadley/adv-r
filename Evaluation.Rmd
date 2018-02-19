@@ -6,31 +6,30 @@ source("common.R")
 
 ## Introduction
 
-The user-facing opposite of quotation is unquotation: it gives the _user_ the ability to selectively evaluate parts of an otherwise quoted argument. The developer-facing complement of quotation is evaluation: this gives the _developer_ of the function the ability to evaluate quoted expressions in special ways to create domain specific languages for data analysis like ggplot2 and dplyr.
+The user-facing opposite of quotation is unquotation: it gives the _user_ the ability to selectively evaluate parts of an otherwise quoted argument. The developer-facing complement of quotation is evaluation: this gives the _developer_ the ability to evaluate quoted expressions in custom environments to achieve specific goals.
 
-Mention tidy evaluation because it's one of the principles underlying the tidyverse. Why do I teach here when it's not base R? Because it gives us the following good things.
+This chapter will briefly discuss evaluation using base R. You've already seen the essence of it: you call `eval()` with an expression and environment. The meat of the chapter, however, will focus on extensions implemented in rlang. There are are two big new ideas:
 
-Tidy evaluation is the combination of four big ideas:
+*   We need a new data strucuture that captures both the expression __and__ then
+    environment associated with each function argument. We call this data 
+    structure a __quosure__.
+    
+*   `base::eval()` supports evaluating an expression in the context of a data 
+    frame and an environment. We formalise this idea by calling it __data mask__
+    and to resolve the ambiguity it creates, introduce the idea of data
+    pronouns.
 
-* Quasiquotation to give the user control of quoting.
-
-* Quosures to capture arguments expressions and their evaluation environment.
-
-* Data masks to enable expressions to mingle variables from an environment
-  and from a data source.
-
-* Pronouns to eliminate ambiguity between environment and data source when
-  needed.
-
-```{r setup}
-library(rlang)
-```
+Together, quasiquotation, quosures, data masks, and pronouns form what we call __tidy evaluation__, or tidy eval for short. Tidy eval provides a principled approach to NSE that makes it possible to use such functions both interactively and embedded with other functions. We'll finish off the chapter showing the basic pattern by which you can do so, and how you can use the tools of tidy eval to wrap base R NSE functions.
 
 ### Outline {-}
 
 ### Prerequisites {-}
 
-Environments play a big role in evaluation, so make sure you're familiar with [Environments] before continuing.
+Environments play a very important big role in evaluation, so make sure you're familiar with the basics in [Environments].
+
+```{r setup}
+library(rlang)
+```
 
 ## Evaluation basics
 
@@ -44,7 +43,11 @@ y <- 2
 eval_bare(expr(x + y))
 ```
 
-(As well as be self-quoting, constants are also self-evaluating)
+Everything else yields itself when evaluated:
+
+```{r}
+eval_bare(10)
+```
 
 The second argument, `env`, gives the environment in which the expression should be evaluated, i.e. where should the values of `x`, `y`, and `+` be looked for? By default, this is the current environment, i.e. the calling environment of `eval_bare()`, but you can override it if you want:
 
@@ -52,26 +55,24 @@ The second argument, `env`, gives the environment in which the expression should
 eval_bare(expr(x + y), env(x = 1000))
 ```
 
-Because R looks up functions in the same way as variables, we can also override the meaning of functions. This is a key technique for generating DSLs, as discussed in the next chapter.
+Because R looks up functions in the same way as variables, we can also override the meaning of functions. This is a very useful technique if you want to translate R code into something else, as you'll learn about in the next chapter.
 
 ```{r}
 eval_bare(expr(x + y), env(`+` = function(x, y) paste0(x, " + ", y)))
 ```
 
-If passed an object other than a symbol or expression, the evaluation functions will simply return the input as is (because it's already evaluated). This can lead to confusing results if you forget to `quote()` the input: `eval_bare()` doesn't quote `expr` so it is passed by value.
+The first argument to `eval_bare()` (and to `base::eval()`) is evaluated, not quoted. This can lead to confusing results if you forget to quote the input: 
 
 ```{r}
 eval_bare(x + y)
 eval_bare(x + y, env = env)
 ```
 
-Now that you've seen the basics, let's explore some applications. We'll focus primarily on base R functions that you might have used before; now you can learn how they work. To focus on the underlying principles, we'll extracting their essence and rewrite to use functions from rlang. We'll then circle back and talk about the base R functions most important for evaluation.
+Now that you've seen the basics, let's explore some applications. We'll focus primarily on base R functions that you might have used before; now you can learn how they work. To focus on the underlying principles, we'll extract out their essence, rewriting to use functions from rlang. We'll then circle back and talk about the base R functions most important for evaluation.
 
 ### Application: `local()`
 
-Sometimes you want to perform a chunk of calculation that creates a bunch of intermediate variables. The intermediate variables have no long term use and could be quite large, so you'd rather not keep them around. One approach is to clean up after yourself using `rm()`. Another approach is to wrap the code in a function, and just call it once.
-
-A more elegant approach is to use `local()`:
+Sometimes you want to perform a chunk of calculation that creates a bunch of intermediate variables. The intermediate variables have no long term use and could be quite large, so you'd rather not keep them around. One approach is to clean up after yourself using `rm()`; another approach is to wrap the code in a function, and just call it once. A more elegant approach is to use `local()`:
 
 ```{r, error = TRUE}
 # Clean up variables created earlier
@@ -88,10 +89,11 @@ x
 y
 ```
 
-The essence of `local()` is quite simple. We capture the expression, and create an new environment in which to evaluate it. This environment inherits from the caller environment so it can access the current lexical scope.
+The essence of `local()` is quite simple. We capture the input expression, and create an new environment in which to evaluate it. This environment inherits from the caller environment so it can access the current lexical scope.
 
 ```{r, error = TRUE}
-local2 <- function(expr, env = child_env(caller_env())) {
+local2 <- function(expr) {
+  env <- child_env(caller_env())
   eval_bare(enexpr(expr), env)
 }
 
@@ -101,10 +103,12 @@ foo <- local2({
   x + y
 })
 
-env_has(nms = c("x", "y"))
+foo
+x
+y
 ```
 
-It's a bit harder to understand how `base::local()` works, as it takes uses `eval()` and `substitute()` together in rather complicated ways. Figuring out exactly what's going on is good practice if you really want to understand the subtleties of `substitute()` and the base `eval()` funtions.
+Understand how `base::local()` works is harder, as it uses `eval()` and `substitute()` together in rather complicated ways. Figuring out exactly what's going on is good practice if you really want to understand the subtleties of `substitute()` and the base `eval()` funtions, so is included in the exercises below.
 
 ### Application: `source()`
 
@@ -129,6 +133,8 @@ The real `source()` is considerably more complicated because it can `echo` input
 
 ### Gotcha: `function()`
 
+There's one small gotcha that you should be aware of if you're using `eval_bare()` and `expr()` to generate functions:
+
 ```{r}
 x <- 10
 y <- 20
@@ -142,15 +148,11 @@ But it works!
 f()
 ```
 
-What is going on? `srcrefs`!  
-
-Two options: remove srcrefs by setting srcref attr to `NULL`. Alternatively, use `new_function()`.
+This is because, if available, functions print their `srcref` whose capture ignores  unquotation. To work around this problem, I recommend using `new_function()` as shown in the previous chapter. Alternatively, you can remove the `srcref` attribute:
 
 ```{r}
-new_function(
-  exprs(x = , y = ),
-  expr({!!x + !!y})
-)
+attr(f, "srcref") <- NULL
+f
 ```
 
 ### Base R
