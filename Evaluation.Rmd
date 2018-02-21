@@ -351,7 +351,23 @@ q2
 
 (Note that because quosures capture the complete environment you need to be a little careful if your function returns quosures. If you have large temporary objects they will not get gc'd until the quosure has been gc'd.)
 
-You can evaluated a quosure with `eval_tidy()`, which we'll study in depth in the next section:
+If you need to turn a quosure into text for output to the console you can use `quo_name()`, `quo_label()`, or `quo_text()`. `quo_name()` and `quo_label()` are garanteed to be short; `quo_expr()` may span multiple lines.
+
+```{r}
+y <- quo(long_function_name(
+  argument_1 = long_argument_value,
+  argument_2 = long_argument_value,
+  argument_3 = long_argument_value,
+  argument_4 = long_argument_value
+))
+quo_name(y)   # e.g. for data frames
+quo_label(y)  # e.g. for error messages
+quo_text(y)   # for longer messages
+```
+
+### Evaluating
+
+You can evaluate a quosure with `eval_tidy()`:
 
 ```{r}
 eval_tidy(x)
@@ -364,18 +380,10 @@ quo_get_env(x)
 quo_get_expr(x)
 ```
 
-And if you need to turn a quosure into text for output to the console you can use `quo_name()`, `quo_label()`, or `quo_text()`. `quo_name()` and `quo_label()` are garanteed to be short; `quo_expr()` may span multiple lines.
+For this simple case, `eval_tidy()` is basically a wrapper around `eval_bare()`. In the next section, you'll see more of the power of `eval_tidy()`.
 
 ```{r}
-y <- quo(long_function_name(
-  argument_1 = long_argument_value,
-  argument_2 = long_argument_value,
-  argument_3 = long_argument_value,
-  argument_4 = long_argument_value
-))
-quo_name(y)   # e.g. for data frames
-quo_label(y)  # e.g. for error messages
-quo_text(y)   # for longer messages
+eval_bare(quo_get_expr(x), quo_get_env(x))
 ```
 
 ### Implementation
@@ -473,112 +481,9 @@ Almost all quoting functions should capture quosures rather than expressions, an
     purrr::map_chr(out, eval_tidy)
     ```
 
-## Wrapping quoting functions
-
-One downside of quoting functions is that when you call a lot of them, it is harder to wrap them in another function in order to reduce duplication. For example, if you see the following code:
-
-```{r, eval = FALSE}
-(x - min(x)) / (max(x) - min(x))
-(y - min(y)) / (max(y) - min(y))
-((x + y) - min(x + y)) / (max(x + y) - min(x + y))
-```
-
-You can eliminate the reptition with a `rescale01` function:
-
-```{r, eval = FALSE}
-rescale01 <- function(x) (x - min(x)) / (max(x) - min(x))
-rescale01(x)
-rescale01(y)
-rescale01(x + y)
-```
-
-Reducing the duplication here is a very good idea, because when you realise that your rescaling technique doesn't handle missing values gracefully, you only have one place to fix it. It is easy to create `rescale01()` because `min()`, `max()`, and `-` , are regular functions: they don't quote any of their arguments.
-
-It's harder to reduce duplication when a function quotes one or more arguments. For example, if you notice this repeated code:
-
-```{r, eval = FALSE}
-df %>% group_by(x1) %>% summmarise(mean = mean(y1))
-df %>% group_by(x2) %>% summmarise(mean = mean(y2))
-df %>% group_by(x3) %>% summmarise(mean = mean(y3))
-```
-
-This naive function will not work:
-
-```{r}
-grouped_mean <- function(df, x, y) {
-  df %>% group_by(x) %>% summmarise(mean = mean(y))
-}
-```
-
-Because regardless of the input, `grouped_mean()` will always group by `x` and compute the mean of `y`. However, because `group_by()` and `summarise()` (like all quoting functions in the tidyverse) use quasiquotation, there's a standard way to wrap these functions: you quote and then unquote:
-
-```{r}
-grouped_mean <- function(df, x, y) {
-  x <- enexpr(x)
-  y <- enexpr(y)
-  
-  df %>% 
-    group_by(!!x) %>% 
-    summarise(mean = mean(!!y))
-}
-
-mtcars %>% grouped_mean(cyl, mpg)
-```
-
-This is a powerful pattern that allows you reduce duplication in your code when it uses quasiquoting functions.
-
-
-### Tangling with dots
-
-In our `grouped_mean()` example above, we allow the user to select one grouping variable, and one summary variable. What if we wanted to allow the user to select more than one? One option would be to use `...`. There are three possible ways we could use `...` it:
-
-* Pass `...` onto the `mean()` function. That would make it easy to set 
-  `na.rm = TRUE`. This is easiest to implement.
-  
-* Allow the user to select multiple groups
-
-* Allow the user to select multiple variables to summarise.
-
-Implementing each one of these is relatively straightforward, but what if we want to be able to group by multiple variables, summarise multiple variables, and pass extra args on to `mean()`. Generally, I think it is better to avoid this sort of API (instead relying on multiple function that each do one thing) but sometimes it is the lesser of the two evils, so it is useful to have a technique in your backpocket to handle it.
-
-```{r}
-grouped_mean <- function(df, groups, vars, args) {
-
-  var_means <- map(vars, function(var) expr(mean(!!var, !!!args)))
-  names(var_means) <- map_chr(vars, expr_name)
-  
-  df %>%
-    dplyr::group_by(!!!groups) %>%
-    dplyr::summarise(!!!var_means)
-}
-
-grouped_mean(mtcars, exprs(vs, am), exprs(hp, drat, wt), list(na.rm = TRUE))
-```
-
-If you use this design a lot, you may also want to provide an alias to `exprs()` with a better name. For example, dplyr provides the `vars()` wrapper to support the scoped verbs (e.g. `summarise_if()`, `mutate_at()`). `aes()` in ggplot2 is similar, although it does a little more: requires all arguments be named, naming the the first arguments (`x` and `y`) by default, and automatically renames so you can use the base names for aesthetics (e.g. `pch` vs `shape`). 
-
-```{r, eval = FALSE}
-grouped_mean(mtcars, vars(vs, am), vars(hp, drat, wt), list(na.rm = TRUE))
-```
-
-### Exercises
-
-    
-1.  Implement the three variants of `grouped_mean()` described above:
-
-    ```{r}
-    # ... passed on to mean
-    grouped_mean <- function(df, group_by, summarise, ...) {}
-    # ... selects variables to summarise
-    grouped_mean <- function(df, group_by, ...) {}
-    # ... selects variables to group by
-    grouped_mean <- function(df, ..., summarise) {}
-    ```
-
-
 ## Tidy evaluation
 
-In the previous section, you learn how to capture quosures and why they are important when calling existing functions that use tidy evaluation. In this section, you'll learn how to create your own functions that use tidy evaluations. There are two big new concepts both related to evaluating code in the context of a data frame:
+In the previous section, you learned how to capture quosures, why they are important, and the basics of `eval_tidy()`. In this section, we'll go deep in `eval_tidy()` and talk more generally about __tidy evaluation__. There are two big new concepts:
 
 * A __data mask__ is a data frame where the evaluated code will look first for 
   variable definitions.
@@ -588,38 +493,25 @@ In the previous section, you learn how to capture quosures and why they are impo
 
 We'll explore tidy evaluation in the context of `base::subset()`, because it's a simple yet powerful function that encapsulates one of the central ideas that makes R so elegant for data analysis. Once we've seen the tidy implementation, we'll return to the base R implementation, learn how it works, and explore the downsides which make `subset()` suitable only for interactive usage.
 
-### `eval_tidy()`
-
-Once you have a quosure, you will need to use `eval_tidy()` instead of `eval_bare()`:
-
-```{r}
-x <- 2
-
-# These two calls are equivalent
-eval_bare(expr(x), globalenv())
-eval_tidy(quo(x))
-```
-
-Like `eval_bare()`, `eval_tidy()` has a `env` argument, but generally you will not use it, because the environment is captured by the quosure. Instead, you will typically use the second argument, `data`. This lets you set up a __data mask__, where variables in the environment are potentially masked by variables in data frame. This allows you to mingle variables from the environment and variables from a data frame: 
-
-```{r}
-df <- data.frame(y = 1:10)
-
-eval_tidy(quo(x * y), df)
-```
-
-This is the key idea that powers base R functions like `with()`, `subset()` and `transform()`, and that is used through tidyverse packages like dplyr.
-
 ### Data masks
 
-Unlike environments, data frames don't have parents. This is what allows data masks to work: `eval_tidy()` effectively creates a new environment that contains the values of `data` and has a parent of `env`:
+In the previous section, you learned that when evaluating a quosure `eval_tidy()` is basically a simple wrapper around `eval_bare()`. The real power of `eval_tidy()` comes with the second argument: `data` [^env]. This lets you set up a __data mask__, where variables in the environment are potentially masked by variables in data frame. This allows you to mingle variables from the environment and variables from a data frame: 
+
+[^env]: `eval_tidy()` has a `env` argument, but you only need this if you pass an expression to the first arugment.
 
 ```{r}
+x <- 10
 df <- data.frame(y = 1:10)
-x <- 2
 q1 <- quo(x * y)
 
-# eval_tidy(q1, mtcars) is equivalent to:
+eval_tidy(q1, df)
+```
+
+The data mask is the key idea that powers base functions like `with()`, `subset()` and `transform()`, and that is used throughout tidyverse, in packages like dplyr.
+
+Unlike environments, data frames don't have parents. This is what allows data masks to work: `eval_tidy()` effectively creates a new environment that contains the values of `data` and has a parent of `env`. The above code is basically equivalent to:
+
+```{r}
 df_env <- as_env(df, parent = quo_get_env(q1))
 q2 <- quo_set_env(q1, df_env)
 
@@ -646,13 +538,13 @@ subset(sample_df, a >= 4)
 subset(sample_df, b == c)
 ```
 
-The core of `subset2()` is quite simple. It takes two arguments: a data frame, `data`, and a quoted expression, `rows`. We evaluate `subset` in using `data` as a data mask, then use the results to subset the data frame with `[`. I've included a very simple check to ensure the result is a logical vector; real code should do more work to create an informative error.
+The core of our version of `subset()`, `subset2()`, is quite simple. It takes two arguments: a data frame, `df`, and an expression, `rows`. We evaluate `rows` using `df` as a data mask, then use the results to subset the data frame with `[`. I've included a very simple check to ensure the result is a logical vector; real code should do more work to create an informative error.
 
 ```{r}
-subset2 <- function(data, rows) {
+subset2 <- function(df, rows) {
   rows <- enquo(rows)
   
-  rows_val <- eval_tidy(rows, data)
+  rows_val <- eval_tidy(rows, df)
   stopifnot(is.logical(rows_val))
   
   data[rows_val, , drop = FALSE]
@@ -663,7 +555,7 @@ subset(sample_df, b == c)
 
 ### Application: `arrange()`
 
-A slightly more complicated exercise is to implement a basic version of `dplyr::arrange()`. The goal of `arrange()` is to allow you to sort a data frame by multiple variables, each evaluated in the context of the data frame.
+A slightly more complicated exercise is to implement a basic version of `dplyr::arrange()`. The goal of `arrange()` is to allow you to sort a data frame by multiple variables, each evaluated in the context of the data frame. This is more challenging than `subset()` because we want to arrange by multiple variables captured in `...`.
 
 ```{r}
 arrange2 <- function(data, ..., na.last = TRUE) {
@@ -686,11 +578,11 @@ arrange2(df, x)
 arrange2(df, -y)
 ```
 
-Next we'll talk a problem introduced by the data mask and how to fix it. Then we'll come back to `base::subset()` and discuss why it's documentation strongly advises against putting it in a function, and show how tidy evaluation overcomes each challenge.
+Next we'll talk about problem introduced by the data mask and how to fix it. Then we'll come back to `base::subset()` and discuss why its documentation strongly advises against using it inside a function, showing how each issue is resolved by tidy evaluation.
 
 ### Ambiguity and pronouns
 
-One of the downsides of the data mask is that it introduces ambiguity: when you say `x`, are you refering to a variable in the data or in the environment? This ambiguity is ok when doing interactive data analysis because you are familiar with the variables, and if there are problems, you spot them quickly because you are looking at the data frequently. However, ambiguity becomes a problem when you start programming with functions that use tidy evaluation. For example, take this simple wrapper:
+One of the downsides of the data mask is that it introduces ambiguity: when you say `x`, are you refering to a variable in the data or in the environment? This ambiguity is ok when doing interactive data analysis because you are familiar with the data, and if there are problems, you'll spot them quickly because you are looking at the data frequently. However, ambiguity becomes a problem when you start programming with functions that use tidy evaluation. For example, take this simple wrapper:
 
 ```{r}
 threshold_x <- function(df, val) {
@@ -978,6 +870,111 @@ microbenchmark::microbenchmark(
 1.  Implement a version of `within.data.frame()` that uses tidy evaluation.
     Read the documentation and make sure that you understand what `within()`
     does, then read the source code.
+
+
+## Wrapping quoting functions
+
+One downside of quoting functions is that when you call a lot of them, it is harder to wrap them in another function in order to reduce duplication. For example, if you see the following code:
+
+```{r, eval = FALSE}
+(x - min(x)) / (max(x) - min(x))
+(y - min(y)) / (max(y) - min(y))
+((x + y) - min(x + y)) / (max(x + y) - min(x + y))
+```
+
+You can eliminate the reptition with a `rescale01` function:
+
+```{r, eval = FALSE}
+rescale01 <- function(x) (x - min(x)) / (max(x) - min(x))
+rescale01(x)
+rescale01(y)
+rescale01(x + y)
+```
+
+Reducing the duplication here is a very good idea, because when you realise that your rescaling technique doesn't handle missing values gracefully, you only have one place to fix it. It is easy to create `rescale01()` because `min()`, `max()`, and `-` , are regular functions: they don't quote any of their arguments.
+
+It's harder to reduce duplication when a function quotes one or more arguments. For example, if you notice this repeated code:
+
+```{r, eval = FALSE}
+df %>% group_by(x1) %>% summmarise(mean = mean(y1))
+df %>% group_by(x2) %>% summmarise(mean = mean(y2))
+df %>% group_by(x3) %>% summmarise(mean = mean(y3))
+```
+
+This naive function will not work:
+
+```{r}
+grouped_mean <- function(df, x, y) {
+  df %>% group_by(x) %>% summmarise(mean = mean(y))
+}
+```
+
+Because regardless of the input, `grouped_mean()` will always group by `x` and compute the mean of `y`. However, because `group_by()` and `summarise()` (like all quoting functions in the tidyverse) use quasiquotation, there's a standard way to wrap these functions: you quote and then unquote:
+
+```{r}
+grouped_mean <- function(df, x, y) {
+  x <- enexpr(x)
+  y <- enexpr(y)
+  
+  df %>% 
+    group_by(!!x) %>% 
+    summarise(mean = mean(!!y))
+}
+
+mtcars %>% grouped_mean(cyl, mpg)
+```
+
+This is a powerful pattern that allows you reduce duplication in your code when it uses quasiquoting functions.
+
+
+### Tangling with dots
+
+In our `grouped_mean()` example above, we allow the user to select one grouping variable, and one summary variable. What if we wanted to allow the user to select more than one? One option would be to use `...`. There are three possible ways we could use `...` it:
+
+* Pass `...` onto the `mean()` function. That would make it easy to set 
+  `na.rm = TRUE`. This is easiest to implement.
+  
+* Allow the user to select multiple groups
+
+* Allow the user to select multiple variables to summarise.
+
+Implementing each one of these is relatively straightforward, but what if we want to be able to group by multiple variables, summarise multiple variables, and pass extra args on to `mean()`. Generally, I think it is better to avoid this sort of API (instead relying on multiple function that each do one thing) but sometimes it is the lesser of the two evils, so it is useful to have a technique in your backpocket to handle it.
+
+```{r}
+grouped_mean <- function(df, groups, vars, args) {
+
+  var_means <- map(vars, function(var) expr(mean(!!var, !!!args)))
+  names(var_means) <- map_chr(vars, expr_name)
+  
+  df %>%
+    dplyr::group_by(!!!groups) %>%
+    dplyr::summarise(!!!var_means)
+}
+
+grouped_mean(mtcars, exprs(vs, am), exprs(hp, drat, wt), list(na.rm = TRUE))
+```
+
+If you use this design a lot, you may also want to provide an alias to `exprs()` with a better name. For example, dplyr provides the `vars()` wrapper to support the scoped verbs (e.g. `summarise_if()`, `mutate_at()`). `aes()` in ggplot2 is similar, although it does a little more: requires all arguments be named, naming the the first arguments (`x` and `y`) by default, and automatically renames so you can use the base names for aesthetics (e.g. `pch` vs `shape`). 
+
+```{r, eval = FALSE}
+grouped_mean(mtcars, vars(vs, am), vars(hp, drat, wt), list(na.rm = TRUE))
+```
+
+### Exercises
+
+    
+1.  Implement the three variants of `grouped_mean()` described above:
+
+    ```{r}
+    # ... passed on to mean
+    grouped_mean <- function(df, group_by, summarise, ...) {}
+    # ... selects variables to summarise
+    grouped_mean <- function(df, group_by, ...) {}
+    # ... selects variables to group by
+    grouped_mean <- function(df, ..., summarise) {}
+    ```
+
+
 
 ## Case study: calling base NSE functions
 
