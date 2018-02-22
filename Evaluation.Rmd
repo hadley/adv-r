@@ -240,7 +240,7 @@ While `source3()` is considerably more concise than `source2()`, this one use ca
     
 ## Quosures
 
-The simplest form of evaluation combines an expression and an environment. This coupling is so important that we need a data structure that captures both pieces. We call this data structure a __quosure__, a portmanteau of quoting and closure. You almost always want to capture a quosure rather than an expression because it gives you more information. There are only a few excetions, which we'll come back to at the end of the section.
+The simplest form of evaluation combines an expression and an environment. This coupling is so important that we need a data structure that can hold both pieces: we need a __quosure__, a portmanteau of quoting and closure. In this section, you'll learn about why quosures are important, how to create and manipulate them, and a little about how they are implemented. We'll finish off by discussing the few cases where you should work with expressions rather than quosures.
 
 ### Motivation
 
@@ -283,7 +283,7 @@ y <- 10
 foo2(y * 2)
 ```
 
-Manually setting the environment works for this simple case, but does not generalise well. Take this more complicated example that uses `...`. Each argument to `f()` needs to be evaluated in a different environment:
+That works for this simple case, but does not generalise well. Take this more complicated example that uses `...`. Each argument to `f()` needs to be evaluated in a different environment:
 
 ```{r}
 f <- function(...) {
@@ -317,9 +317,11 @@ x <- 0
 f(x = x)
 ```
 
+This ensures that each expression is evaluated in the correct environment.
+
 ### Creating and manipulating
 
-Each of `expr()` functions that you learned about in the previous chapter has an equivalent `quo()` function that creates a quosure:
+Each of the `expr()` functions that you learned about in the previous chapter has an equivalent `quo()` function that creates a quosure:
 
 *   Use `quo()` and `quos()` to capture your expressions.
 
@@ -335,13 +337,6 @@ Each of `expr()` functions that you learned about in the previous chapter has an
     foo(a + b)
     ```
 
-Alternatively, you can use `new_quosure()` to create a quosure from its components: an expression and an environment.
-
-```{r}
-x <- new_quosure(expr(x + y), env(x = 1, y = 10))
-x
-```
-
 Note how quosures are printed: each quosure starts with `^`. This is a signal that you're looking at something special, and is useful if you unquote a quosure inside another quosure. In the console, each quosure gets a differnt colour to help remind you that it has a different environment attached to it.
 
 ```{r}
@@ -349,7 +344,13 @@ q2 <- quo(x + !!x)
 q2
 ```
 
-(Note that because quosures capture the complete environment you need to be a little careful if your function returns quosures. If you have large temporary objects they will not get gc'd until the quosure has been gc'd.)
+Finally, you can use `new_quosure()` to create a quosure from its components: an expression and an environment.
+
+```{r}
+x <- new_quosure(expr(x + y), env(x = 1, y = 10))
+x
+```
+
 
 If you need to turn a quosure into text for output to the console you can use `quo_name()`, `quo_label()`, or `quo_text()`. `quo_name()` and `quo_label()` are garanteed to be short; `quo_expr()` may span multiple lines.
 
@@ -370,17 +371,18 @@ quo_text(y)   # for longer messages
 You can evaluate a quosure with `eval_tidy()`:
 
 ```{r}
+x <- new_quosure(expr(x + y), env(x = 1, y = 10))
 eval_tidy(x)
 ```
 
-And you can its extract components with `quo_` helpers:
+And you can extract its components with the `quo_get_` helpers:
 
 ```{r}
 quo_get_env(x)
 quo_get_expr(x)
 ```
 
-For this simple case, `eval_tidy()` is basically a wrapper around `eval_bare()`. In the next section, you'll see more of the power of `eval_tidy()`.
+For this simple case, `eval_tidy()` is basically a wrapper around `eval_bare()`. In the next section, you'll learn about the `data` argument which makes `eval_tidy()` particularly powerful.
 
 ```{r}
 eval_bare(quo_get_expr(x), quo_get_env(x))
@@ -389,9 +391,7 @@ eval_bare(quo_get_expr(x), quo_get_env(x))
 ### Implementation
 \index{promises}
 
-Quosures rely on R's internal representation of function arguments as a special type of object called a __promise__. A promise captures the expression needed to compute the value and the environment in which to compute it. You're not normally aware of promises because the first time you access a promise its code is evaluated in its environment, yielding a value. This is what powers lazy evaluation. 
-
-However, you cannot manipulate promises with R code: they're sort of quantum; any attempt to inspect them with R code will force an immediate evaluation, making the promise disappear. To work around this, rlang manipulates promises with C code, reifying them into an R object that you can work with.
+Quosures rely on R's internal representation of function arguments as a special type of object called a __promise__. A promise captures the expression needed to compute the value and the environment in which to compute it. You're not normally aware of promises because the first time you access a promise its code is evaluated in its environment, yielding a value. This is what powers lazy evaluation. You cannot manipulate promises with R code. Promises are like a quantum state: any attempt to inspect them with R code will force an immediate evaluation, making the promise disappear. To work around this, rlang manipulates promises with C code, reifying them into an R object that you can work with.
 
 There is one big difference between promises and quosures. An promise is evaluated once, when you access it for the first time. Every time you access it subsequently it will return the same value. A quosure must be evaluated explicitly, and each evaluation is independent of the previous evaluations.
 
@@ -408,7 +408,7 @@ eval_tidy(x_quo)
 eval_tidy(x_quo)
 ```
 
-Quosures are inspired by the the formula operator, `~`, which also captures both the expression and its environment, and is used extremely heavily in R's modelling functions:
+Quosures are inspired by R's formulas, `~`, which, like quosures, capture both the expression and its environment:
 
 ```{r}
 f <- ~runif(3)
@@ -417,13 +417,13 @@ f
 str(f)
 ```
 
-Initial versions of rlang used formulas as quosures: an attractive feature of `~` is that it provides quoting with a single keystroke. Unfortunately, however, there is no way to add quasiquotation to `~`, so we decided to use a new function, `quo()`, instead.
+Initial versions of rlang used formulas instead of quosures, as an attractive feature of `~` is that it provides quoting with a single keystroke. Unfortunately, however, there is no way to add quasiquotation to `~`, so we decided to use a new function, `quo()`, instead.
 
 ### When not to use quosures
 
-Almost all quoting functions should capture quosures rather than expressions, and when you write a new quoting function you should start with them. You should only use expressions if you have a explicit decided that the argument environment is not important. This tends to happen in three main cases:
+Almost all quoting functions should capture quosures rather than expressions, and you should default to using `enquo()` and `enquos()` to capture arguments from the user. You should only use expressions if you have a explicitly decided that the environment is not important. This tends to happen in three main cases:
 
-*   In code generation, such as in [Slicing an array].
+*   In code generation, such as you saw in [Slicing an array].
 
 *   When you are wrapping a NSE function that doesn't use quosures.
     We'll disucss this in detail in the case study at the end of the chapter.
@@ -459,31 +459,12 @@ Almost all quoting functions should capture quosures rather than expressions, an
     q3
     ```
 
-1.  Run this code in your head and predict what it will print. Confirm or 
-    refute your prediction by running the code in R.
-
-    ```{r, results = FALSE}
-    f <- function(...) {
-      x <- "f"
-      g(f = x, ...)
-    }
-    g <- function(...) {
-      x <- "g"
-      h(g = x, ...)
-    }
-    h <- function(...) {
-      enquos(...)
-    }
-    x <- "top"
+1.  Write a function `enenv()` that captures the environment associated
+    with an argument.
     
-    out <- f(top = x)
-    out
-    purrr::map_chr(out, eval_tidy)
-    ```
-
 ## Tidy evaluation
 
-In the previous section, you learned how to capture quosures, why they are important, and the basics of `eval_tidy()`. In this section, we'll go deep in `eval_tidy()` and talk more generally about __tidy evaluation__. There are two big new concepts:
+In the previous section, you learned how to capture quosures, why they are important, and the basics of `eval_tidy()`. In this section, we'll go deep on `eval_tidy()` and talk more generally about the ideas of __tidy evaluation__. There are two big new concepts:
 
 * A __data mask__ is a data frame where the evaluated code will look first for 
   variable definitions.
@@ -491,11 +472,11 @@ In the previous section, you learned how to capture quosures, why they are impor
 * A data mask introduces ambiguity, so to remove that ambiguity when necessary
   we introduce __pronouns__.
 
-We'll explore tidy evaluation in the context of `base::subset()`, because it's a simple yet powerful function that encapsulates one of the central ideas that makes R so elegant for data analysis. Once we've seen the tidy implementation, we'll return to the base R implementation, learn how it works, and explore the downsides which make `subset()` suitable only for interactive usage.
+We'll explore tidy evaluation in the context of `base::subset()`, because it's a simple yet powerful function that encapsulates one of the central ideas that makes R so elegant for data analysis. Once we've seen the tidy implementation, we'll return to the base R implementation, learn how it works, and explore the limitations that make `subset()` suitable only for interactive usage.
 
 ### Data masks
 
-In the previous section, you learned that when evaluating a quosure `eval_tidy()` is basically a simple wrapper around `eval_bare()`. The real power of `eval_tidy()` comes with the second argument: `data` [^env]. This lets you set up a __data mask__, where variables in the environment are potentially masked by variables in data frame. This allows you to mingle variables from the environment and variables from a data frame: 
+In the previous section, you learned that `eval_tidy()` is basically a wrapper around `eval_bare()` when evaluating a quosure. The real power of `eval_tidy()` comes with the second argument: `data` [^env]. This lets you set up a __data mask__, where variables in the environment are potentially masked by variables in data frame. This allows you to mingle variables from the environment and variables from a data frame: 
 
 [^env]: `eval_tidy()` has a `env` argument, but you only need this if you pass an expression to the first arugment.
 
@@ -509,7 +490,7 @@ eval_tidy(q1, df)
 
 The data mask is the key idea that powers base functions like `with()`, `subset()` and `transform()`, and that is used throughout tidyverse, in packages like dplyr.
 
-Unlike environments, data frames don't have parents. This is what allows data masks to work: `eval_tidy()` effectively creates a new environment that contains the values of `data` and has a parent of `env`. The above code is basically equivalent to:
+How does this work? Unlike environments, data frames don't have parents, so we can effectively turn it into an environment using the environment of the quosure as its parent. The above code is basically equivalent to:
 
 ```{r}
 df_env <- as_env(df, parent = quo_get_env(q1))
@@ -526,7 +507,7 @@ eval(quo_get_expr(q1), df, quo_get_env(q1))
 
 ### Application: `subset()`
 
-To see why the data mask is so important, lets implement our own version of `subset()`. If you haven't used it before, `subset()` (like `dplyr::filter()`), provides a convenient way of selecting rows of a data frame using an expression that is evaluated in the context of the data frame. It allows you to subset without repeatedly referring to the name of the data frame:
+To see why the data mask is so useful, lets implement our own version of `subset()`. If you haven't used it before, `subset()` (like `dplyr::filter()`), provides a convenient way of selecting rows of a data frame using an expression that is evaluated in the context of the data frame. It allows you to subset without repeatedly referring to the name of the data frame:
 
 ```{r}
 sample_df <- data.frame(a = 1:5, b = 5:1, c = c(5, 3, 1, 4, 1))
@@ -547,7 +528,7 @@ subset2 <- function(df, rows) {
   rows_val <- eval_tidy(rows, df)
   stopifnot(is.logical(rows_val))
   
-  data[rows_val, , drop = FALSE]
+  df[rows_val, , drop = FALSE]
 }
 
 subset(sample_df, b == c)
@@ -555,21 +536,21 @@ subset(sample_df, b == c)
 
 ### Application: `arrange()`
 
-A slightly more complicated exercise is to implement a basic version of `dplyr::arrange()`. The goal of `arrange()` is to allow you to sort a data frame by multiple variables, each evaluated in the context of the data frame. This is more challenging than `subset()` because we want to arrange by multiple variables captured in `...`.
+A slightly more complicated exercise is to implement the heart of `dplyr::arrange()`. The goal of `arrange()` is to allow you to sort a data frame by multiple variables, each evaluated in the context of the data frame. This is more challenging than `subset()` because we want to arrange by multiple variables captured in `...`.
 
 ```{r}
-arrange2 <- function(data, ..., na.last = TRUE) {
+arrange2 <- function(.df, ..., .na.last = TRUE) {
   # Capture all dots
   args <- enquos(...)
   
   # Create a call to order, using `!!!` to splice in the 
-  # individual expressions, and `!!` to splice in .na.last
-  order_call <- quo(order(!!!args, na.last = !!na.last))
+  # individual expressions, and `!!` to splice in na.last
+  order_call <- quo(order(!!!args, na.last = !!.na.last))
   
   # Evaluate the call to order with 
-  ord <- eval_tidy(order_call, data)
+  ord <- eval_tidy(order_call, .df)
   
-  data[ord, , drop = FALSE]
+  .df[ord, , drop = FALSE]
 }
 
 df <- data.frame(x = c(2, 3, 1), y = runif(3))
@@ -577,8 +558,6 @@ df <- data.frame(x = c(2, 3, 1), y = runif(3))
 arrange2(df, x)
 arrange2(df, -y)
 ```
-
-Next we'll talk about problem introduced by the data mask and how to fix it. Then we'll come back to `base::subset()` and discuss why its documentation strongly advises against using it inside a function, showing how each issue is resolved by tidy evaluation.
 
 ### Ambiguity and pronouns
 
@@ -590,10 +569,11 @@ threshold_x <- function(df, val) {
 }
 ```
 
-This function silently return an incorrect result in two ways:
+This function can silently return an incorrect result in two situations:
 
-*   If `df` does not contain a variable called `x`, `threshold_x()` will 
-    silently return an incorrect result if `x` exists in the calling environment:
+*   If `df` does not contain a variable called `x` and `x` exists in the 
+    calling environment, `threshold_x()` will silently return an incorrect 
+    result:
 
     ```{r}
     x <- 10
@@ -621,7 +601,7 @@ threshold_x(no_x, 2)
 threshold_x(has_val, 2)
 ```
 
-(NB: unlike indexing an ordinary list or environment with `$`, if the variable is not found then these pronouns will throw an error)
+(NB: unlike indexing an ordinary list or environment with `$`, these pronouns will throw an error if the variable is not found)
 
 Generally, whenever you use the `.env` pronoun, you can use unquoting instead:
 
@@ -647,7 +627,7 @@ threshold_var2 <- function(df, var, val) {
 }
 ```
 
-In `threshold_var1` we need to use the prefix form of `$`, because `df$!!var` is not valid syntax. Alternatively, we can convert the symbol to a string, and use `[[`.
+In `threshold_var1` we need to use the prefix form of `$`, because `df$!!var` is not valid R syntax. Alternatively, we can convert the symbol to a string, and use `[[`.
 
 Note that it is not always the responsibility of the function author to avoid ambiguity. Imagine we generalise further to allow thresholding based on any expression:
 
@@ -658,7 +638,9 @@ threshold_expr <- function(df, expr, val) {
 }
 ```
 
-There's no way to ensure that `expr` is only evaluated in the `data`, and indeed that would not be desirable because `data` will not include any functions (like `+` or `<`). In this case, it is now the users responsibility to avoid ambiguity. As a function author it's your responsibility to avoid ambiguity with an expressions that you create; it's the users responsibility to avoid ambiguity in expressions that they create.
+There's no way to ensure that `expr` is only evaluated in the data, and even if you could, you wouldn't want to because the data does not include any functions. For this function, it's the user's responsibility to avoid ambiguity. As a function author it's your responsibility to avoid ambiguity with any expressions that you create; it's the users responsibility to avoid ambiguity in expressions that they create.
+
+Now that you've seen data masks and pronouns in action, we'll return to `base::subset()` to learn about its limitations.
 
 ### Base `subset()`
 
@@ -669,7 +651,7 @@ The documentation of `subset()` includes the following warning:
 > and in particular the non-standard evaluation of argument `subset` can have 
 > unanticipated consequences.
 
-Why is `subset()` dangerous for programming and how does tidy evaluation help us avoid those dangers? First, lets implement the key parts of `subset()` following the same structure as `subset2()`. We convert `enquo()` to `substitute()` and `eval_tidy()` to `eval()`. We also need to supply a backup environment to `eval()`. There's no way to access the environment associated with an argument in base R, so we take the best approximation: the caller environment (aka parent frame):
+Why is `subset()` dangerous for programming and how does tidy evaluation help us avoid those dangers? First, lets implement the key parts of `subset()` using base R, following the same structure as `subset2()`. We convert `enquo()` to `substitute()` and `eval_tidy()` to `eval()`. We also need to supply a backup environment to `eval()`. There's no way to access the environment associated with an argument in base R, so we take the best approximation: the caller environment (aka parent frame).
 
 ```{r}
 subset_base <- function(data, rows) {
@@ -691,13 +673,14 @@ There are three problems with this implementation:
 
     ```{r}
     f1a <- function(df, expr) {
-      eval(substitute(subset(df, expr)), caller_env())
+      call <- substitute(subset(df, expr))
+      eval(call, caller_env())
     }
     
     df <- data.frame(x = 1:3, y = 3:1)
     f1a(df, x == 1)
     ```
-    
+
     I think the tidy evaluation equivalent is easier to understand because the
     quoting and unquoting is explicit:
         
@@ -708,7 +691,7 @@ There are three problems with this implementation:
     }
     f1b(df, x == 1)
     ```
-    
+
     
 *   `base::subset()` always evaluates `rows` in the parent frame, but if `...` 
     has been used, then the expression might need to be evaluated elsewhere:
@@ -736,15 +719,15 @@ There are three problems with this implementation:
     f(df, x == xval)
     ```
 
-*   Finally, `subset()` doesn't have any pronouns so there's no way to write
+*   Finally, `eval()` doesn't provide any pronouns so there's no way to write
     a safe version of `threshold_x()`.
 
-You might wonder if all this rigamorale is worth it when you can just use `[`. Firstly, it seems unappealing to have functions that can only be used safely in an interactive context. Then every interactive function needs to be paired with a programming function which behaves slightly differently. Secondly, even the simple `subset()` function, provides two useful features:
+You might wonder if all this rigamorale is worth it when you can just use `[`. Firstly, it seems unappealing to have functions that can only be used safely in an interactive context. That would mean that every interactive function needs to be paired with function suitable for programing. Secondly, even the simple `subset()` function provides two useful features compared to `[`:
 
-* It sets `drop = FALSE` by default, so it's garuanteed to return a data frame
-* It drops rows where the conditional evaluates to `NA`.
+* It sets `drop = FALSE` by default, so it's guaranteed to return a data frame
+* It drops rows where the condition evaluates to `NA`.
 
-That means `subset(df, x == y)` is not equivalent to `df[x == y,]` as you might naively expect. Instead, it is equivalent to `df[x == y & !is.na(x == y), , drop = FALSE]`: that's a lot more typing!
+That means `subset(df, x == y)` is not equivalent to `df[x == y,]` as you might expect. Instead, it is equivalent to `df[x == y & !is.na(x == y), , drop = FALSE]`: that's a lot more typing!
 
 ### Performance {#tidy-eval-performance}
 
@@ -764,7 +747,7 @@ microbenchmark::microbenchmark(
 )
 ```
 
-However, most of the overhead is due to setting up the data mask so if you need to evaluate code repeatedly, it's a good idea to the data mask once then reuse it:
+However, most of the overhead is due to setting up the data mask so if you need to evaluate code repeatedly, it's a good idea to define the data mask once then reuse it:
 
 ```{r}
 d_mtcars <- as_data_mask(mtcars)
@@ -776,7 +759,7 @@ microbenchmark::microbenchmark(
 )
 ```
 
-(The amount of savings is surprising because `eval_tidy()` also calls `data_mask_clean()`. Currently discussing if that should be the default at https://github.com/tidyverse/rlang/issues/372)
+This considerably reduces the overhead.
 
 ### Exercises
 
@@ -784,8 +767,8 @@ microbenchmark::microbenchmark(
 
     * Drop rows where `subset` evaluates to `NA`.
     * Give a clear error message if `subset` doesn't yield a logical vector.
-    * What happens if `subset` doesn't yield a logical vector with length
-      equal to the number of rows in `data`? What do you think should happen?
+    * What happens if `subset` yields a vector that's not the same as the 
+      number rows in `data`? What do you think should happen?
 
 1.  The third argument in `base::subset()` allows you to select variables. It
     treats variable names as if they were positions. This allows you to do 
@@ -847,7 +830,8 @@ microbenchmark::microbenchmark(
     (Hint: The `descreasing` argument to `order()` will not help you. Instead,
     look at the definition of `dplyr::desc()`, and read the help for `xtfrm()`.)
 
-1.  Why do you not need to worry about ambiguity in `arrange()`?
+1.  Why do you not need to worry about ambiguous argument names with `...` in
+    `arrange()`? Why is is a good idea to use `.` prefixes anyway?
 
 1.  What does `transform()` do? Read the documentation. How does it work?
     Read the source code for `transform.data.frame()`. What does
@@ -871,118 +855,49 @@ microbenchmark::microbenchmark(
     Read the documentation and make sure that you understand what `within()`
     does, then read the source code.
 
-
 ## Wrapping quoting functions
 
-One downside of quoting functions is that when you call a lot of them, it is harder to wrap them in another function in order to reduce duplication. For example, if you see the following code:
+Now we have all the tools need to wrap a quoting function inside another function, regardless of the whether the quoting function uses tidy evaluation or base R. This is important because it allows you to reduce duplication by turning repeated code into functions. It's straightforward to do this for evaluated argument; now you'll learn the techniques that allow you to wrap quoted arguments.
+
+### Tidy evaluation
+
+Once you have identified the repeated code, you need to figure out what the argument you argument will be, and which of them are quoted.
+
+Take this code:
 
 ```{r, eval = FALSE}
-(x - min(x)) / (max(x) - min(x))
-(y - min(y)) / (max(y) - min(y))
-((x + y) - min(x + y)) / (max(x + y) - min(x + y))
+df %>% group_by(x1) %>% summarise(mean = mean(y1))
+df %>% group_by(x2) %>% summarise(mean = mean(y2))
+df %>% group_by(x3) %>% summarise(mean = mean(y3))
 ```
 
-You can eliminate the reptition with a `rescale01` function:
-
-```{r, eval = FALSE}
-rescale01 <- function(x) (x - min(x)) / (max(x) - min(x))
-rescale01(x)
-rescale01(y)
-rescale01(x + y)
-```
-
-Reducing the duplication here is a very good idea, because when you realise that your rescaling technique doesn't handle missing values gracefully, you only have one place to fix it. It is easy to create `rescale01()` because `min()`, `max()`, and `-` , are regular functions: they don't quote any of their arguments.
-
-It's harder to reduce duplication when a function quotes one or more arguments. For example, if you notice this repeated code:
-
-```{r, eval = FALSE}
-df %>% group_by(x1) %>% summmarise(mean = mean(y1))
-df %>% group_by(x2) %>% summmarise(mean = mean(y2))
-df %>% group_by(x3) %>% summmarise(mean = mean(y3))
-```
-
-This naive function will not work:
+We'll need three argument: a data frame (`df`), a grouping variable (`group_var`), and the variable to summarise (`summary_var`). Both the grouping and summary variable are quoted. Quoting is infectious, so in your function you'll also need to quote `group_var` and `summary_var`. This gives the following basic skeleton:
 
 ```{r}
-grouped_mean <- function(df, x, y) {
-  df %>% group_by(x) %>% summmarise(mean = mean(y))
+grouped_mean <- function(df, group_var, summar_vary) {
+  group_var <- enquo(group_var)
+  summary_var <- enquo(summary_var)
 }
 ```
 
-Because regardless of the input, `grouped_mean()` will always group by `x` and compute the mean of `y`. However, because `group_by()` and `summarise()` (like all quoting functions in the tidyverse) use quasiquotation, there's a standard way to wrap these functions: you quote and then unquote:
+Next, we need to provide the implementation, unquoting the quoted variables in the correct places:
 
 ```{r}
-grouped_mean <- function(df, x, y) {
-  x <- enexpr(x)
-  y <- enexpr(y)
+grouped_mean <- function(df, group_var, summar_vary) {
+  group_var <- enquo(group_var)
+  summary_var <- enquo(summary_var)
   
   df %>% 
-    group_by(!!x) %>% 
-    summarise(mean = mean(!!y))
+    group_by(!!group_var) %>% 
+    summarise(mean = mean(!!summary_var))
 }
-
-mtcars %>% grouped_mean(cyl, mpg)
 ```
 
-This is a powerful pattern that allows you reduce duplication in your code when it uses quasiquoting functions.
+### Base R 
 
-
-### Tangling with dots
-
-In our `grouped_mean()` example above, we allow the user to select one grouping variable, and one summary variable. What if we wanted to allow the user to select more than one? One option would be to use `...`. There are three possible ways we could use `...` it:
-
-* Pass `...` onto the `mean()` function. That would make it easy to set 
-  `na.rm = TRUE`. This is easiest to implement.
-  
-* Allow the user to select multiple groups
-
-* Allow the user to select multiple variables to summarise.
-
-Implementing each one of these is relatively straightforward, but what if we want to be able to group by multiple variables, summarise multiple variables, and pass extra args on to `mean()`. Generally, I think it is better to avoid this sort of API (instead relying on multiple function that each do one thing) but sometimes it is the lesser of the two evils, so it is useful to have a technique in your backpocket to handle it.
-
-```{r}
-grouped_mean <- function(df, groups, vars, args) {
-
-  var_means <- map(vars, function(var) expr(mean(!!var, !!!args)))
-  names(var_means) <- map_chr(vars, expr_name)
-  
-  df %>%
-    dplyr::group_by(!!!groups) %>%
-    dplyr::summarise(!!!var_means)
-}
-
-grouped_mean(mtcars, exprs(vs, am), exprs(hp, drat, wt), list(na.rm = TRUE))
-```
-
-If you use this design a lot, you may also want to provide an alias to `exprs()` with a better name. For example, dplyr provides the `vars()` wrapper to support the scoped verbs (e.g. `summarise_if()`, `mutate_at()`). `aes()` in ggplot2 is similar, although it does a little more: requires all arguments be named, naming the the first arguments (`x` and `y`) by default, and automatically renames so you can use the base names for aesthetics (e.g. `pch` vs `shape`). 
-
-```{r, eval = FALSE}
-grouped_mean(mtcars, vars(vs, am), vars(hp, drat, wt), list(na.rm = TRUE))
-```
-
-### Exercises
-
-    
-1.  Implement the three variants of `grouped_mean()` described above:
-
-    ```{r}
-    # ... passed on to mean
-    grouped_mean <- function(df, group_by, summarise, ...) {}
-    # ... selects variables to summarise
-    grouped_mean <- function(df, group_by, ...) {}
-    # ... selects variables to group by
-    grouped_mean <- function(df, ..., summarise) {}
-    ```
-
-
-
-## Case study: calling base NSE functions
-
-To finish up this chapter we're going to show how to wrap base NSE functions. We'll focus on wrapping models because this is a common need, and illustrates the spectrum of challenges you'll need to overcome for another base funtion.
+We'll focus on wrapping models because this is a common need, and illustrates the spectrum of challenges you'll need to overcome for any other base funtion.
 
 Unfortunately it's not possible to use tidy evaluation in our wrappers, because the semantics of NSE functions are not quite rich enough. This means that the wrappers we will create can not in turn be easily wrapped. This makes them useful for reducing duplication in your analysis code, but not suitable for inclusion in a package.
-
-### Basics
 
 Let's start with a very simple wrapper around `lm()`:
 
