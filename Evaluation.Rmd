@@ -589,7 +589,7 @@ This function can silently return an incorrect result in two situations:
     threshold_x(has_val, 2)
     ```
 
-These failure modes arise because tidy evaluation is ambiguous: each variable can be found in __either__ the data mask __or__ the environment. To make this function work we need to remove that ambiguity and ensure that `x` is always found in the data and `val` in the environment. To make this possible `eval_tidy()` provides the `.data` and `.env` pronouns:
+These failure modes arise because tidy evaluation is ambiguous: each variable can be found in __either__ the data mask __or__ the environment. To make this function work we need to remove that ambiguity and ensure that `x` is always found in the data and `val` in the environment. To make this possible `eval_tidy()` provides `.data` and `.env` pronouns:
 
 ```{r, error = TRUE}
 threshold_x <- function(df, val) {
@@ -747,7 +747,7 @@ microbenchmark::microbenchmark(
 )
 ```
 
-However, most of the overhead is due to setting up the data mask so if you need to evaluate code repeatedly, it's a good idea to define the data mask once then reuse it:
+However, most of the overhead is due to setting up the data mask so if you need to evaluate code repeatedly, it's a good idea to define the data mask once then reuse it. This considerably reduces the overhead, with a small change in behaviour: if the code being evaluated creates object in the "current" environment, those objects will persist across calls.
 
 ```{r}
 d_mtcars <- as_data_mask(mtcars)
@@ -758,8 +758,6 @@ microbenchmark::microbenchmark(
   eval_tidy(q1, d_mtcars)
 )
 ```
-
-This considerably reduces the overhead.
 
 ### Exercises
 
@@ -817,8 +815,8 @@ This considerably reduces the overhead.
     }
     ```
     
-    Rewrite the function to improve clarity then explain how this approach
-    differs to the approach in the text.
+    Use intermediate variables to make the function easier to understand, then
+    explain how this approach differs to the approach in the text.
 
 1.  Implement a form of `arrange()` where you can request a variable to 
     sorted in descending order using named arguments:
@@ -831,7 +829,7 @@ This considerably reduces the overhead.
     look at the definition of `dplyr::desc()`, and read the help for `xtfrm()`.)
 
 1.  Why do you not need to worry about ambiguous argument names with `...` in
-    `arrange()`? Why is is a good idea to use `.` prefixes anyway?
+    `arrange()`? Why is is a good idea to use the `.` prefix anyway?
 
 1.  What does `transform()` do? Read the documentation. How does it work?
     Read the source code for `transform.data.frame()`. What does
@@ -861,9 +859,7 @@ Now we have all the tools need to wrap a quoting function inside another functio
 
 ### Tidy evaluation
 
-Once you have identified the repeated code, you need to figure out what the argument you argument will be, and which of them are quoted.
-
-Take this code:
+If you need to wrap a function that quasi-quotes one of its arguments, it's simple to wrap. You just need to quote and unquote. Take this repeat code:
 
 ```{r, eval = FALSE}
 df %>% group_by(x1) %>% summarise(mean = mean(y1))
@@ -871,16 +867,17 @@ df %>% group_by(x2) %>% summarise(mean = mean(y2))
 df %>% group_by(x3) %>% summarise(mean = mean(y3))
 ```
 
-We'll need three argument: a data frame (`df`), a grouping variable (`group_var`), and the variable to summarise (`summary_var`). Both the grouping and summary variable are quoted. Quoting is infectious, so in your function you'll also need to quote `group_var` and `summary_var`. This gives the following basic skeleton:
+If no arguments were quoted, we could remove the duplication with:
 
 ```{r}
 grouped_mean <- function(df, group_var, summar_vary) {
-  group_var <- enquo(group_var)
-  summary_var <- enquo(summary_var)
+  df %>% 
+    group_by(group_var) %>% 
+    summarise(mean = mean(summary_var))
 }
 ```
 
-Next, we need to provide the implementation, unquoting the quoted variables in the correct places:
+However, both `group_by()` and `summarise()` quote their second and subsequent arguments. That means we need to quote `group_var` and `summary_var` and then unquote when we call `group_by()` and `summarise()`:
 
 ```{r}
 grouped_mean <- function(df, group_var, summar_vary) {
@@ -893,13 +890,13 @@ grouped_mean <- function(df, group_var, summar_vary) {
 }
 ```
 
+Just remember that quoting is infectious, so whenever you call a quoting function you need to quote and then unquote.
+
 ### Base R 
 
-We'll focus on wrapping models because this is a common need, and illustrates the spectrum of challenges you'll need to overcome for any other base funtion.
+Unfortunately, things are bit more complex if you want to wrap a base R function that quotes an argument. We can no longer rely on tidy evaluation everywher, because the semantics of NSE functions are not quite rich enough, but we can use it to generate a mostly correct solution. The wrappers that we create can be used interactively, but can not in turn be easily wrapped. This makes them useful for reducing duplication in your analysis code, but not suitable for inclusion in a package.
 
-Unfortunately it's not possible to use tidy evaluation in our wrappers, because the semantics of NSE functions are not quite rich enough. This means that the wrappers we will create can not in turn be easily wrapped. This makes them useful for reducing duplication in your analysis code, but not suitable for inclusion in a package.
-
-Let's start with a very simple wrapper around `lm()`:
+We'll focus on wrapping models because this is a common need, and illustrates the spectrum of challenges you'll need to overcome for any other base funtion. Let's start with a very simple wrapper around `lm()`:
 
 ```{r}
 lm2 <- function(formula, data) {
@@ -1020,7 +1017,7 @@ There are two basic way to overcome this challenge:
       lm_call <- expr(lm(!!formula, data = !!boot_data))
       eval_bare(lm_call, caller_env())
     }
-    boot_lm1(y ~ x, data = df)
+    boot_lm1(y ~ x, data = df)$call
     ```
     
 1.  Alternatively you can create a new environment that inherits from the 
@@ -1087,13 +1084,16 @@ build_formula(y, a, b, c)
     ```
     
 1.  Another way to way to write `boot_lm()` would be to include the
-    boostrapping expression (`data[sample(nrow(data), replace = TRUE), , drop = FALSE]`) in to the data argument. Implement that approach. What are 
-    the advantages? What are the disadvantages?
+    boostrapping expression (`data[sample(nrow(data), replace = TRUE), , drop = FALSE]`) 
+    in the data argument. Implement that approach. What are the advantages? 
+    What are the disadvantages?
 
-1.  We could capture quosures, and then extract the environment from them.
-    There are multiple environments associated with a quosore, but `eval_bare()`
-    can only use one. Write a function that takes a list of quosures and returns
-    the common environment, if they have one, or otherwise throws an error.
+1.  To make these functions some what more robust, instead of always using 
+    the `caller_env()` we could capture a quosure, and then use its environment.
+    However, if there are multiple arguments, they might be associated with
+    different environments. Write a function that takes a list of quosures,
+    and returns the common environment, if they have one, or otherwise throws 
+    an error.
 
 1.  Write a function that takes a data frame and a list of formulas, 
     fitting a linear model with each formula, generating a useful model call.
