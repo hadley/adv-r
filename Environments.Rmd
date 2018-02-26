@@ -1,6 +1,6 @@
 # Environments {#environments}
 
-```{r setup, include = FALSE}
+```{r, include = FALSE}
 source("common.R")
 ```
 
@@ -50,6 +50,13 @@ If you can answer the following questions correctly, you already know the most i
 ### Prerequisites {-}
 
 This chapter uses many functions from the `pryr` package to pry open R and look inside at the messy details. You can install `pryr` by running `install.packages("pryr")`
+
+Each section will begin by illustrating code for working with environments from rlang, because it allows you to focus on the essence of environments, rather than the 
+
+```{r setup}
+library(pryr)
+library(rlang)
+```
 
 ## Environment basics {#env-basics}
 
@@ -128,6 +135,8 @@ There are four special environments:
 
 * The `environment()` is the current environment.
 
+### Package environments
+
 `search()` lists all parents of the global environment. This is called the search path because objects in these environments can be found from the top-level interactive workspace. It contains one environment for each attached package and any other objects that you've `attach()`ed. It also contains a special environment called `Autoloads` which is used to save memory by only loading package objects (like big datasets) when needed. \indexc{search()}
 
 You can access any environment on the search list using `as.environment()`.
@@ -148,39 +157,66 @@ as.environment("package:stats")
 knitr::include_graphics("diagrams/environments.png/search-path.png")
 ```
 
-To create an environment manually, use `new.env()`. You can list the bindings in the environment's frame with `ls()` and see its parent with `parent.env()`. \index{environments!creating}
+TODO: something about namespaces
+
+### Creating and inspecting
+
+\index{environments!creating}
 
 ```{r}
-e <- new.env()
-# the default parent provided by new.env() is the environment from 
-# which it is called - in this case that's the global environment.
-parent.env(e)
-ls(e)
+# TODO: move into rlang
+env <- function(.parent = caller_env(), ...) {
+  rlang::child_env(.parent, ...)
+}
 ```
 
-The easiest way to modify the bindings in an environment is to treat it like a list:
+To create an environment manually, use `rlang::env()`. 
+
+```{r}
+e <- env(a = 1, b = 2)
+e
+```
+
+The default print method is not very useful, so you can call `env_names()` to get the names of the contents, or `env_parent()` to find out the parent environment.
+
+```{r}
+env_names(e)
+
+# The default environmnet in `env()` is the environment from which
+# the function is called, i.e. the global environment.
+env_parent(e)
+```
+
+### Modifying
+
+```{r, error = TRUE}
+e$xxx
+env_get(e, "xxx")
+```
+
+You can create an environment like a list:
 
 ```{r}
 e$a <- 1
-e$b <- 2
-ls(e)
-e$a
+e[["b"]] <- 2
 ```
 
-By default, `ls()` only shows names that don't begin with `.`. Use `all.names = TRUE` to show all bindings in an environment: \indexc{ls()}
+You can create an 
 
 ```{r}
-e$.a <- 2
-ls(e)
-ls(e, all.names = TRUE)
+env_poke(e, "a", 10)
+env_bind(e, a = 10)
+env_get(e, "a")
 ```
-
-Another useful way to view an environment is `ls.str()`. It is more useful than `str()` because it shows each object in the environment. Like `ls()`, it also has an `all.names` argument.
 
 ```{r}
-str(e)
-ls.str(e)
+env_has(e, "a")
+env_unbind(e, "a")
+env_has(e, "a")
+
+env_has(e, "a", inherit = TRUE)
 ```
+
 
 Given a name, you can extract the value to which it is bound with `$`, `[[`, or `get()`:
 
@@ -225,6 +261,30 @@ identical(globalenv(), environment())
 globalenv() == environment()
 ```
 
+### Reference semantics
+
+This implies that you can create 
+
+```{r}
+loop <- env()
+loop$loop <- loop
+
+loop$a <- 10
+loop$loop$a
+```
+
+TODO: add diagram.
+
+### Base equivalents
+
+* `new.env()` equivalent to `env()`; but you have to assign values separately.
+
+* `names()` equivalent to `env_names()`. You can also use `ls()` (which was
+  recommended previously), but note by default `all.names = FALSE` so you
+  don't see any bindings that start with `.`.
+  
+* `parent.env()` is equivalent to `env_parent()`.
+
 ### Exercises
 
 1.  List three ways in which an environment differs from a list.
@@ -240,31 +300,25 @@ globalenv() == environment()
 
 Environments form a tree, so it's often convenient to write a recursive function. This section shows you how by applying your new knowledge of environments to understand the helpful `pryr::where()`. Given a name, `where()` finds the environment _where_ that name is defined, using R's regular scoping rules: \index{recursion!over environments}
 
+The definition of `where()` is straightforward. It has two arguments: the name to look for (as a string), and the environment in which to start the search. (We'll learn later why `caller_env()` is a good default in [calling environments](#calling-environments).)
+
 ```{r}
-library(pryr)
-x <- 5
-where("x")
-where("mean")
-```
-
-The definition of `where()` is straightforward. It has two arguments: the name to look for (as a string), and the environment in which to start the search. (We'll learn later why `parent.frame()` is a good default in [calling environments](#calling-environments).)
-
-```{r, eval = FALSE}
-where <- function(name, env = parent.frame()) {
+where <- function(name, env = caller_env()) {
   if (identical(env, emptyenv())) {
     # Base case
     stop("Can't find ", name, call. = FALSE)
-    
-  } else if (exists(name, envir = env, inherits = FALSE)) {
+  } else if (env_has(env, name)) {
     # Success case
     env
-    
   } else {
     # Recursive case
-    where(name, parent.env(env))
-    
+    where(name, env_parent(env))
   }
 }
+
+x <- 5
+where("x")
+where("mean")
 ```
 
 There are three cases:
@@ -296,14 +350,14 @@ knitr::include_graphics("diagrams/environments.png/where-ex.png")
 It's natural to work with environments recursively, so `where()` provides a useful template. Removing the specifics of `where()` shows the structure more clearly:
 
 ```{r}
-f <- function(..., env = parent.frame()) {
-  if (identical(env, emptyenv())) {
+f <- function(..., env = caller_env()) {
+  if (identical(env, empty_env())) {
     # base case
   } else if (success) {
     # success case
   } else {
     # recursive case
-    f(..., env = parent.env(env))
+    f(..., env = env_parent(env))
   }
 }
 ```
@@ -315,15 +369,14 @@ begin_sidebar("Iteration vs. recursion")
 It's possible to use a loop instead of recursion. This might run slightly faster (because we eliminate some function calls), but I think it's harder to understand. I include it because you might find it easier to see what's happening if you're less familiar with recursive functions.
 
 ```{r}
-is_empty <- function(x) identical(x, emptyenv())
-
-f2 <- function(..., env = parent.frame()) {
-  while (!is_empty(env)) {
+f2 <- function(..., env = caller_env()) {
+  while (!identical(env, empty_env())) {
     if (success) {
       # success case
+      return()
     }
     # inspect parent
-    env <- parent.env(env)
+    env <- env_parent(env)
   }
 
   # base case
