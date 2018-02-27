@@ -2,6 +2,11 @@
 
 ```{r, include = FALSE}
 source("common.R")
+
+# TODO: move into rlang
+env <- function(.parent = caller_env(), ...) {
+  rlang::child_env(.parent, ...)
+}
 ```
 
 ## Introduction
@@ -69,11 +74,12 @@ knitr::include_graphics("diagrams/environments/bag-of-names.png", dpi = 300)
 Each name points to an object stored elsewhere in memory:
 
 ```{r}
-e <- new.env()
-e$a <- FALSE
-e$b <- "a"
-e$c <- 2.3
-e$d <- 1:3
+e <- env(
+  a = FALSE,
+  b = "a",
+  c = 2.3,
+  d = 1:3,
+)
 ```
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/environments/bindings.png", dpi = 300)
@@ -88,6 +94,8 @@ e$a <- e$d
 knitr::include_graphics("diagrams/environments/multiple-names.png", dpi = 300)
 ```
 
+(But remember as soon as you modify one of those objects they will no longer point to the same place.)
+
 Confusingly, they can also point to different objects that have the same value:
 
 ```{r}
@@ -97,15 +105,15 @@ e$a <- 1:3
 knitr::include_graphics("diagrams/environments/copies.png", dpi = 300)
 ```
 
-If an object has no names pointing to it, it gets automatically deleted by the garbage collector. This process is described in more detail in [gc](#gc).
+If an object has no names pointing to it, it gets automatically deleted by the garbage collector. This process is described in more detail in [GC](#gc).
 
-Every environment has a parent, another environment. In diagrams, I'll represent the pointer to parent with a small black circle. The parent is used to implement lexical scoping: if a name is not found in an environment, then R will look in its parent (and so on). Only one environment doesn't have a parent: the __empty__ environment. \index{environments!empty}
+Every environment has a __parent__, another environment. In diagrams, I'll represent the pointer to parent with a small black circle. The parent is used to implement lexical scoping: if a name is not found in an environment, then R will look in its parent (and so on). Only one environment doesn't have a parent: the __empty__ environment. \index{environments!empty}
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/environments/parents.png", dpi = 300)
 ```
 
-We use the metaphor of a family to refer to environments. The grandparent of an environment is the parent's parent, and the ancestors include all parent environments up to the empty environment. It's rare to talk about the children of an environment because there are no back links: given an environment we have no way to find its children.
+We use the metaphor of a family to name environments relative to one another. The grandparent of an environment is the parent's parent, and the ancestors include all parent environments up to the empty environment. It's rare to talk about the children of an environment because there are no back links: given an environment we have no way to find its children.
 
 Generally, an environment is similar to a list, with four important exceptions:
 
@@ -122,16 +130,16 @@ More technically, an environment is made up of two components, the __frame__, wh
 
 There are four special environments:
 
-* The `globalenv()`, or global environment, is the interactive workspace. 
+* The `global_env()`, or global environment, is the interactive workspace. 
   This is the environment in which you normally work. The parent of the 
   global environment is the last package that you attached with `library()`
   or `require()`.
 
-* The `baseenv()`, or base environment, is the environment of the base package.
+* The `base_env()`, or base environment, is the environment of the base package.
   Its parent is the empty environment.
 
-* The `emptyenv()`, or empty environment, is the ultimate ancestor of all
-  environments, and the only  environment without a parent.
+* The `empty_env()`, or empty environment, is the ultimate ancestor of all
+  environments, and the only environment without a parent.
 
 * The `environment()` is the current environment.
 
@@ -147,11 +155,11 @@ search()
 #> [4] "package:grDevices" "package:utils"     "package:datasets" 
 #> [7] "package:methods"   "Autoloads"         "package:base"     
 
-as.environment("package:stats")
+pkg_env("stats")
 #> <environment: package:stats>
 ```
 
-`globalenv()`, `baseenv()`, the environments on the search path, and `emptyenv()` are connected as shown below. Each time you load a new package with `library()` it is inserted between the global environment and the package that was previously at the top of the search path.
+The `global_env()`, the `base_env()`, the search-path environments, and the `emptyenv()` are connected as shown below. Each time you load a new package with `library()` it is inserted between the global environment and the package that was previously at the top of the search path.
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/environments/search-path.png", dpi = 300)
@@ -159,16 +167,37 @@ knitr::include_graphics("diagrams/environments/search-path.png", dpi = 300)
 
 TODO: something about namespaces
 
-### Creating and inspecting
+### Reference semantics
 
-\index{environments!creating}
+Environments have reference semantics: unlike most R objects, when you modify them, you modify in place, and don't create a copy. We'll explore the fuller implications in [Explicit environments], but here I wanted to show one important implication: environments can contain themselves.
+
+This means that environments go one step further in their level of recursion than lists. An enviroment can any object, including itself!
 
 ```{r}
-# TODO: move into rlang
-env <- function(.parent = caller_env(), ...) {
-  rlang::child_env(.parent, ...)
-}
+loop <- env()
+loop$loop <- loop
 ```
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/environments/recursive-1.png", dpi = 300)
+```
+
+Or you can create a mutually recursive pair of environments:
+
+```{r}
+loop <- env()
+loop$dedoop <- env()
+loop$dedoop$loop <- loop
+```
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/environments/recursive-2.png", dpi = 300)
+```
+
+Generally, you should avoid creating complicated graphs (that way lies madness!) but it is sometimes useful.
+
+### Creating and inspecting
+\index{environments!creating}
 
 To create an environment manually, use `rlang::env()`. 
 
@@ -186,6 +215,19 @@ env_names(e)
 # the function is called, i.e. the global environment.
 env_parent(e)
 ```
+
+::: base
+
+* `new.env()` equivalent to `env()`; but you have to assign values separately.
+
+* `names()` equivalent to `env_names()`. You can also use `ls()` (which was
+  recommended previously), but note by default `all.names = FALSE` so you
+  don't see any bindings that start with `.`.
+  
+* `parent.env()` is equivalent to `env_parent()`.
+
+:::
+
 
 ### Modifying
 
@@ -222,11 +264,20 @@ env_has(e, "a")
 env_has(e, "a", inherit = TRUE)
 ```
 
-
 Given a name, you can extract the value to which it is bound with `$`, `[[`, or `get()`:
 
 * `$` and `[[` look only in one environment and return `NULL` if there is no 
   binding associated with the name. \indexc{\$} \indexc{[[}
+
+To compare environments, you must use `identical()` not `==`:
+
+```{r, error = TRUE}
+identical(globalenv(), environment())
+globalenv() == environment()
+```
+
+### Base equivalents
+
 
 * `get()` uses the regular scoping rules and throws an error if the binding is 
   not found. \indexc{get()}
@@ -259,37 +310,6 @@ exists("x", envir = e)
 exists("x", envir = e, inherits = FALSE)
 ```
 
-To compare environments, you must use `identical()` not `==`:
-
-```{r, error = TRUE}
-identical(globalenv(), environment())
-globalenv() == environment()
-```
-
-### Reference semantics
-
-This implies that you can create 
-
-```{r}
-loop <- env()
-loop$loop <- loop
-
-loop$a <- 10
-loop$loop$a
-```
-
-TODO: add diagram.
-
-### Base equivalents
-
-* `new.env()` equivalent to `env()`; but you have to assign values separately.
-
-* `names()` equivalent to `env_names()`. You can also use `ls()` (which was
-  recommended previously), but note by default `all.names = FALSE` so you
-  don't see any bindings that start with `.`.
-  
-* `parent.env()` is equivalent to `env_parent()`.
-
 ### Exercises
 
 1.  List three ways in which an environment differs from a list.
@@ -302,8 +322,9 @@ TODO: add diagram.
     same basic idea to implement your own version of `search()`.
 
 ## Recursing over environments {#env-recursion}
+\index{recursion!over environments}
 
-Environments form a tree, so it's often convenient to write a recursive function. This section shows you how by applying your new knowledge of environments to understand the helpful `pryr::where()`. Given a name, `where()` finds the environment _where_ that name is defined, using R's regular scoping rules: \index{recursion!over environments}
+Environments form a tree, so it's often convenient to write a recursive function. This section shows you how by applying your new knowledge of environments to write a helpful function that given a name, finds the environment `where()` that name is defined, using R's regular scoping rules.
 
 The definition of `where()` is straightforward. It has two arguments: the name to look for (as a string), and the environment in which to start the search. (We'll learn later why `caller_env()` is a good default in [calling environments](#calling-environments).)
 
