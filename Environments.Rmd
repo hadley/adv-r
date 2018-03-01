@@ -686,6 +686,30 @@ knitr::include_graphics("diagrams/environments/namespace.png", dpi = 300)
 
 When we type `var` into the console, it's found first in the global environment. When `sd()` looks for `var()` it finds it first in its namespace environment so never looks in the `globalenv()`.
 
+### Exercises
+
+1.  Draw a diagram that shows the enclosing environments of this function:
+    
+    ```{r, eval = FALSE}
+    f1 <- function(x1) {
+      f2 <- function(x2) {
+        f3 <- function(x3) {
+          x1 + x2 + x3
+        }
+        f3(3)
+      }
+      f2(2)
+    }
+    f1(1)
+    ```
+    
+1.  Expand your previous diagram to show function bindings.
+
+1.  Write an enhanced version of `str()` that provides more information 
+    about functions. Show where the function was found and what environment 
+    it was defined in.
+
+
 ## Frames and the call stack
 
 The frame, aka evaluation context. 
@@ -736,7 +760,7 @@ x <- 20
 str(g2())
 ```
 
-In more complicated scenarios, there's not just one parent call, but a sequence of calls which lead all the way back to the initiating function, called from the top-level.  The following code generates a call stack three levels deep. The open-ended arrows represent the calling environment of each execution environment. 
+In more complicated scenarios, there's not just one parent call, but a sequence of calls which lead all the way back to the initiating function, called from the top-level. The following code generates a call stack three levels deep. The open-ended arrows represent the calling environment of each execution environment. 
 
 ```{r}
 x <- 0
@@ -760,122 +784,43 @@ f()
 knitr::include_graphics("diagrams/environments/calling.png", dpi = 300)
 ```
 
-<!-- Jenny: Should an arrow connecting an execution environment to its calling environment point the other way, i.e. arrow points from execution *to* the parent? I worked a version of the example where I actually print all these environments. Arrow pointing from execution env and to calling better reflects how you can actually determine these relationships. Shouldn't `f()` also have a calling environment = global environment?
+## As data structures {#explicit-envs}
 
-To get the most out of this example, I also assigned different values to `y` inside `f()` and `g()`. The fact that `h()` will use its own value of `x` seems pretty obvious. What's more interesting is that `h()` will look to its enclosing environment (global env) for `y` and not its direct or indirect calling environments. It's really easy to think the wrong way about that, since most of the time people play with examples where enclosing and calling are both global env.
+As well as powering scoping, environments are also useful data structures in their own right because they have reference semantics.  There are three common problems that they can help solve:
 
-Other than triggering execution, what "good" is the calling environment to the callee? Or, rather, what effect does it have on the callee? Under regular scoping, it doesn't feel like there is anything? When I finished this chapter, I realized I still couldn't say much about the role of calling env.-->
+*   __Avoiding copies of large data__. Since environments have reference semantics, 
+    you'll never accidentally create a copy. This makes it a useful vessel for 
+    large objects. Bare environments are not that pleasant to work with;
+    I recommend using R6 objects instead. Learn more in [R6].
+  
+*   __Managing state within a package__. Explicit environments are useful in 
+    packages because they allow you to maintain state across function calls. 
+    Normally, objects in a package are locked, so you can't modify them 
+    directly. Instead, you can do something like this:
 
-
-### Exercises
-
-1.  List the four environments associated with a function. What does each one
-    do? Why is the distinction between enclosing and binding environments
-    particularly important?
+    ```{r}
+    my_env <- new.env(parent = emptyenv())
+    my_env$a <- 1
     
-1.  Draw a diagram that shows the enclosing environments of this function:
-    
-    ```{r, eval = FALSE}
-    f1 <- function(x1) {
-      f2 <- function(x2) {
-        f3 <- function(x3) {
-          x1 + x2 + x3
-        }
-        f3(3)
-      }
-      f2(2)
+    get_a <- function() {
+      my_env$a
     }
-    f1(1)
+    set_a <- function(value) {
+      old <- my_env$a
+      my_env$a <- value
+      invisible(old)
+    }
     ```
-    
-1.  Expand your previous diagram to show function bindings.
 
-1.  Expand it again to show the execution and calling environments.
+    Returning the old value from setter functions is a good pattern because 
+    it makes it easier to reset the previous value in conjunction with 
+    `on.exit()` (see more in [on exit](#on-exit)).
 
-1.  Write an enhanced version of `str()` that provides more information 
-    about functions. Show where the function was found and what environment 
-    it was defined in.
-
-<!-- Jenny: I don't see how to do the "draw a diagram" exercise in 3 separate steps: [1] enclosing, then [2] binding, then [3] execution & calling environments. Because 2 of the 3 enclosing environments *are* execution environments.-->
-
-
-## Explicit environments {#explicit-envs}
-
-As well as powering scoping, environments are also useful data structures in their own right because they have __reference semantics__.  Unlike most objects in R, when you modify an environment, it does not make a copy. For example, look at this `modify()` function. \index{copy-on-modify!exceptions} \index{reference semantics}
-
-```{r}
-modify <- function(x) {
-  x$a <- 2
-  invisible()
-}
-```
-
-If you apply it to a list, the original list is not changed because modifying a list actually creates and modifies a copy.
-
-```{r}
-x_l <- list()
-x_l$a <- 1
-modify(x_l)
-x_l$a
-```
-
-However, if you apply it to an environment, the original environment _is_ modified:
-
-```{r}
-x_e <- new.env()
-x_e$a <- 1
-modify(x_e)
-x_e$a
-```
-
-Just as you can use a list to pass data between functions, you can also use an environment. When creating your own environment, note that you should set its parent environment to be the empty environment. This ensures you don't accidentally inherit objects from somewhere else:
-
-```{r, error = TRUE}
-x <- 1
-e1 <- new.env()
-get("x", envir = e1)
-
-e2 <- new.env(parent = emptyenv())
-get("x", envir = e2)
-```
-
-Environments are data structures useful for solving three common problems:
-
-* Avoiding copies of large data.
-* Managing state within a package.
-* Efficiently looking up values from names.
-
-These are described in turn below.
-
-### Avoiding copies
-
-Since environments have reference semantics, you'll never accidentally create a copy. This makes it a useful vessel for large objects. It's a common technique for bioconductor packages which often have to manage large genomic objects. Changes to R 3.1.0 have made this use substantially less important because modifying a list no longer makes a deep copy. Previously, modifying a single element of a list would cause every element to be copied, an expensive operation if some elements are large. Now, modifying a list efficiently reuses existing vectors, saving much time.
-
-R6
-
-### Package state
-
-Explicit environments are useful in packages because they allow you to maintain state across function calls. Normally, objects in a package are locked, so you can't modify them directly. Instead, you can do something like this:
-
-```{r}
-my_env <- new.env(parent = emptyenv())
-my_env$a <- 1
-
-get_a <- function() {
-  my_env$a
-}
-set_a <- function(value) {
-  old <- my_env$a
-  my_env$a <- value
-  invisible(old)
-}
-```
-
-Returning the old value from setter functions is a good pattern because it makes it easier to reset the previous value in conjunction with `on.exit()` (see more in [on exit](#on-exit)).
-
-### As a hashmap
-
-A hashmap is a data structure that takes constant, O(1), time to find an object based on its name. Environments provide this behaviour by default, so can be used to simulate a hashmap. See the CRAN package `hash` for a complete development of this idea. \index{hashmaps} \index{dictionaries}
+*   __As a hashmap__. A hashmap is a data structure that takes constant, O(1), 
+    time to find an object based on its name. Environments provide this 
+    behaviour by default, so can be used to simulate a hashmap. See the 
+    CRAN package hash for a complete development of this idea. 
+    \index{hashmaps} \index{dictionaries}
 
 ## Quiz answers {#env-answers}
 
