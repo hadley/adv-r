@@ -36,14 +36,6 @@ If you can answer the following questions correctly, you already know the most i
   for computing with environments, illustrating the idea with a useful
   function.
   
-* [Function environments](#function-envs) revises R's scoping rules in more 
-  depth, showing how they correspond to four types of environment associated 
-  with each function.
-  
-* [Binding names to values](#binding) describes the rules that names must
-  follow (and how to bend them), and shows some variations on binding a 
-  name to a value.
-
 * [Explicit environments](#explicit-envs) discusses three problems where
   environments are useful data structures in their own right, independent
   of the role they play in scoping.
@@ -60,14 +52,6 @@ env <- function(.parent = caller_env(), ...) {
   rlang::child_env(.parent, ...)
 }
 current_env <- environment
-
-parent_env <- function(x, ...) {
-  if (is.function(x)) {
-    get_env(x)
-  } else {
-    rlang::env_parent(x, ...)
-  }
-}
 ```
 
 ## Environment basics {#env-basics}
@@ -111,8 +95,6 @@ The job of an environment is to associate, or __bind__, a set of names to a set 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/environments/bag-of-names.png", dpi = 300)
 ```
-
-[Compare colours to evaluation chapter]{.todo}
 
 There is no implied order to these names (i.e. it doesn't make sense to ask which is the first element in an environment), but each name must be unique.
 
@@ -173,13 +155,19 @@ e1$d <- e1
 knitr::include_graphics("diagrams/environments/loop.png", dpi = 300)
 ```
 
+You can list all bindings with `env_names()`:
+
+```{r}
+env_names(e1)
+```
+
+::: base
+`names()` is to equivalent to `env_names()` (from R 3.2 on). You can also use  `ls()` (which was recommended in the first edition of the book, and works in all versions of R), but note that the default value of `all.names` is `FALSE` so you don't see any bindings that start with `.`.
+:::
+
 ### Parents
 
-Every environment has a __parent__, another environment. In diagrams, I'll represent the parent with a small black circle and arrow. The parent is used to implement lexical scoping: if a name is not found in an environment, then R will look in its parent (and so on). Only one environment doesn't have a parent: the __empty__ environment. \index{environments!empty}
-
-[Need some convention for not showing vs. empty env]{.todo}
-
-You can set the parent environment by supplying the first argument to `env()`. If you don't supply it, it defaults to the current environment.
+Every environment has a __parent__, another environment. In diagrams, I'll represent the parent with a small black circle and arrow. The parent is used to implement lexical scoping: if a name is not found in an environment, then R will look in its parent (and so on). You can set the parent environment by supplying the first argument to `env()`. If you don't supply it, it defaults to the current environment.
 
 ```{r}
 e2a <- env(d = 4, e = 5)
@@ -189,19 +177,46 @@ e2b <- env(e2a, a = 1, b = 2, c = 3)
 knitr::include_graphics("diagrams/environments/parents.png", dpi = 300)
 ```
 
-We use the metaphor of a family to name environments relative to one another. The grandparent of an environment is the parent's parent, and the ancestors include all parent environments up to the empty environment. It's rare to talk about the children of an environment because there are no back links: given an environment we have no way to find its children.
+We use the metaphor of a family to name environments relative to one another. The grandparent of an environment is the parent's parent, and the ancestors include all parent environments up to the empty environment. I typically won't draw all the ancestors to save space; just remember when ever you see a sky-blue circle, there's an parent environment somewhere.
 
-### Inspecting
+Note that It's rare to talk about the children of an environment because there are no back links: given an environment we have no way to find its children.
 
-The default print method is not very useful, but you can call `env_names()` to get the names of the contents, or `env_parent()` to find out the parent environment:
+\index{environments!empty}
+Only one environment doesn't have a parent: the __empty__ environment.
 
 ```{r}
-env_names(e)
-
-# The default environmnet in `env()` is the environment from which
-# the function is called, i.e. the global environment.
-env_parent(e)
+empty_env()
+env_parent(empty_env())
 ```
+
+I draw the empty environment with a hollow parent environment, and when space allows I'll label with `R_EmptyEnv`, the name R uses.
+
+```{r}
+e2c <- env(emptyenv(), d = 4, e = 5)
+e2d <- env(e2c, a = 1, b = 2, c = 3)
+```
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/environments/parents-empty.png", dpi = 300)
+```
+
+You can find the parent of an environment with `env_parent()`:
+
+```{r}
+env_parent(e2d)
+env_parent(e2c)
+```
+
+Or list them all with with `env_parents()`:
+
+```{r}
+env_parents(e2d)
+```
+
+::: base 
+Use `parent.env()` to find the parent of an environment.
+:::
+
+### Comparing
 
 To compare environments, use `identical()` not `==`:
 
@@ -209,17 +224,6 @@ To compare environments, use `identical()` not `==`:
 identical(global_env(), environment())
 global_env() == environment()
 ```
-
-::: base
-
-* Use `names()` to equivalent to `env_names()` (from R 3.2 on). You can also use 
-  `ls()` (which was recommended in the first edition of the book, and
-  works in all versions of R), but note that the default value of `all.names` 
-  is `FALSE` so you don't see any bindings that start with `.`.
-  
-* `parent.env()` finds the parent environment.
-
-:::
 
 ### Modifying
 
@@ -244,6 +248,7 @@ e3[c("x", "y")]
 
 ```{r, error = TRUE}
 e3$xyz
+
 env_get(e3, "xyz")
 ```
 
@@ -284,6 +289,58 @@ See `get()`, `assign()`, `rm()`, and `exists()`. Beware the `inherits` argument:
 
 :::
 
+### Advanced bindings
+
+The regular assignment arrow, `<-`, always creates a variable in the current environment. The deep assignment arrow, `<<-`, never creates a variable in the current environment, but instead modifies an existing variable found by walking up the parent environments. 
+
+```{r}
+x <- 0
+f <- function() {
+  x <<- 1
+}
+f()
+x
+```
+
+If `<<-` doesn't find an existing variable, it will create one in the global environment. This is usually undesirable, because global variables introduce non-obvious dependencies between functions. `<<-` is most often used in conjunction with a closure, as described in [Closures](#closures).
+
+There are two other special types of binding, delayed and active:
+
+*   Rather than assigning the result of an expression immediately, a 
+    __delayed binding__ creates and stores a promise to evaluate the expression
+    when needed. We can create delayed bindings with the `env_bind_exprs()`.
+
+    ```{r, cache = TRUE}
+    env_bind_exprs(current_env(), b = {Sys.sleep(1); 1})
+    
+    system.time(print(b))
+    system.time(print(b))
+    ```
+
+    Delayed bindings are used to implement `autoload()`, which makes R behave 
+    as if the package data is in memory, even though it's only loaded from 
+    disk when you ask for it.
+    \index{bindings!delayed}
+  
+*   __Active__ are not bound to a constant object. Instead, they're re-computed
+    every time they're accessed:
+
+    ```{r}
+    current_env() %>% env_bind_fns(z = function() runif(1))
+    
+    z
+    z
+    ```
+
+    You may 
+    want to use this function directly if you want more control. Active 
+    bindings are used to implement reference class fields.
+    \index{bindings!active}
+
+::: base
+`delayedAssign()`, and `makeActiveBinding()`.
+:::
+
 ### Exercises
 
 1.  List three ways in which an environment differs from a list.
@@ -300,9 +357,39 @@ See `get()`, `assign()`, `rm()`, and `exists()`. Beware the `inherits` argument:
     knitr::include_graphics("diagrams/environments/recursive-2.png", dpi = 300)
     ```
 
-1.  Using `parent_env()` and a loop (or a recursive function), verify that the 
+1.  Using `env_parent()` and a loop (or a recursive function), verify that the 
     ancestors of `global_env()` include `base_env()` and `empty_env()`. Use the 
     same basic idea to implement your own version of `search()`.
+
+
+1.  What does this function do? How does it differ from `<<-` and why
+    might you prefer it?
+    
+    ```{r, error = TRUE}
+    rebind <- function(name, value, env = parent.frame()) {
+      if (identical(env, emptyenv())) {
+        stop("Can't find ", name, call. = FALSE)
+      } else if (exists(name, envir = env, inherits = FALSE)) {
+        assign(name, value, envir = env)
+      } else {
+        rebind(name, value, parent.env(env))
+      }
+    }
+    rebind("a", 10)
+    a <- 5
+    rebind("a", 10)
+    a
+    ```
+
+1.  Create a version of `env_bind()` that will only bind new names, never 
+    re-bind old names. Some programming languages only do this, and are known 
+    as [single assignment languages][single assignment].
+
+1.  Write an assignment function that can do active, delayed, and locked 
+    bindings. What might you call it? What arguments should it take? Can you 
+    guess which sort of assignment it should do based on the input?
+
+
 
 ## Recursing over environments {#env-recursion}
 \index{recursion!over environments}
@@ -419,51 +506,55 @@ f2 <- function(..., env = caller_env()) {
     add an `inherits` argument which controls whether the function recurses up 
     the parents or only looks in one environment.
 
-## Function environments and lexical scope {#function-envs}
+## Special environments {#function-envs}
 \index{functions!environments}
  
-Most environments are not created by you with `env()` but are created as a consequence of using functions. This section discusses the two types of environments associated with a function: 
+Most environments are not created by you with `env()` but are created by R. 
 
-* The __parent__ environment is the environment where the function was created. 
+* The __global__ environment.
+
+* The __function__ environment is the environment where the function was created. 
   Just like environments, every function has exactly one parent environment. 
-  The enclosing environment defines R's usual lexical scoping rules. 
+  This defines R's lexical scoping rules. 
   
 * Every time you run the function, it creates an __execution__ environment, 
-  which is a child of the parent environment. This stores variables created 
-  during execution and is usually ephemeral.
+  a child of the parent environment. This stores variables created during 
+  execution and is usually ephemeral.
 
-These are explained in detail in the following sections.
+Finally we'll finish off with a discussion of __package__ environments and __namespaces__.
 
-### The parent environment
-\index{environments!parent}
+### The global environment
 
-When a function is created, it gains a reference to the environment where it was made. This is the __parent environment__ and is used for lexical scoping. You can determine the parent environment with `parent_env()`: 
+The `global_env()`, or global environment, is the interactive workspace. This is the environment in which you normally work:
+
+```{r}
+current_env()
+```
+
+R prints this as `R_GlobalEnv`, and you can access anywhere with `global_env()`.
+
+### The function environment
+\index{environments!function}
+
+During creation, a function captures the current environment. This is called the __function environment__, and is used for lexical scoping. You can get the function environment with `fn_env()`: 
 
 ```{r}
 y <- 1
 f <- function(x) x + y
-parent_env(f)
-```
-
-In diagrams, I'll depict functions as rounded rectangles. The parent environment of a function is displayed in the same way as the parent of an environment: a small black circle that points to the parent environment.
-
-```{r, echo = FALSE, out.width = NULL}
-knitr::include_graphics("diagrams/environments/enclosing.png", dpi = 300)
+fn_env(f)
 ```
 
 ::: base 
-
-Use `environment(x)` to access the parent environment of a function.
-
+Use `environment(f)` to access the environment of function `f`.
 :::
 
-The previous diagram is a polite function, because functions don't have names. Instead, the name of a function is defined by a binding in an environment. The following diagram better reflects this relationship because the enclosing environment contains a binding from `f` to the function: 
+In diagrams, I'll depict functions as rectangles with a rounded end that holds the reference to the environment.
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/environments/binding.png", dpi = 300)
 ```
 
-In this case the two environments are the same. They will be different if you assign a function into a different environment:
+In this case the parent of `f` is the same environment that defines its name. But that's not always true: in the following code `g` is bound in a new environment `e`, but its parent will still be the global environment. This distinction is important to making namespaces work, as described below.
 
 ```{r}
 e <- env()
@@ -473,8 +564,6 @@ e$g <- function() 1
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/environments/binding-2.png", dpi = 300)
 ```
-
-The enclosing environment belongs to the function, and never changes, even if the function is moved to a different environment. The enclosing environment determines how the function finds values; the binding environments determine how we find the function.
 
 ### Execution environments
 
@@ -501,69 +590,57 @@ g(10)
 
 This function returns the same value every time because of the fresh start principle, described in [a fresh start](#fresh-start). Each time a function is called, a new environment is created to host execution. The parent of the execution environment is the enclosing environment of the function. Once the function has completed, this environment is thrown away.
 
-Let's depict that graphically with a simpler function. I draw execution environments around the function they belong to with a dotted border.
+Let's draw that the process out with a simpler function. You can tell an environment is an execution environment because the parent arrow goes via the function environment.
 
 ```{r}
 h <- function(x) {
-  a <- 2
+  # 1.
+  a <- 2 # 2.
   x + a
 }
-y <- h(1)
+y <- h(1) # 3.
 ```
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/environments/execution.png", dpi = 300)
 ```
 
-When you create a function inside another function, the enclosing environment of the child function is the execution environment of the parent, and the execution environment is no longer ephemeral. The following example illustrates that idea with a function factory, `plus()`. We use that factory to create a function called `plus_one()`. The enclosing environment of `plus_one()` is the execution environment of `plus()` where `x` is bound to the value 1. \index{closures|environment}
+When you return a function from another function, the parent environment of the child function is the execution environment of the parent. This means that the execution environment is no longer ephemeral.
+
+\index{closures|environment}
+The following example illustrates that idea with a function factory, `plus()`. We use that factory to create a function called `plus_one()`. There's a lot going on in the diagram because the enclosing environment of `plus_one()` is the execution environment of `plus()`. 
 
 ```{r}
 plus <- function(x) {
   function(y) x + y
 }
 plus_one <- plus(1)
-identical(env_parent(get_env(plus_one)), get_env(plus))
 ```
 
 ```{r, echo = FALSE, out.width = NULL}
-knitr::include_graphics("diagrams/environments/closure-2.png", dpi = 300)
+knitr::include_graphics("diagrams/environments/closure.png", dpi = 300)
 ```
 
 You'll learn more about function factories in [functional programming](#functional-programming).
 
-## Special environments
 
-There are three special environments that every R session has:
-
-* The `global_env()`, or global environment, is the interactive workspace. 
-  This is the environment in which you normally work. The parent of the 
-  global environment is the last package that you attached with `library()`
-  or `require()`.
+### Package environments
 
 * The `base_env()`, or base environment, is the environment of the base package.
   Its parent is the empty environment.
 
-* The `empty_env()`, or empty environment, is the ultimate ancestor of all
-  environments, and the only environment without a parent.
+The parent of the global environment changes every time you load a package.
 
-::: base
+[Draw a diagram]{.todo}
 
-The base equivalents lack underscored: `globalenv()`, `baseenv()`, and `emptyenv()`.
-
-:::
-
-Almost every R session also has an environment for each attached package. You can see these with `search()`, which lists all parents of the global environment. This is called the search path because objects in these environments can be found from the top-level interactive workspace. The search path contains one environment for each attached package and any other objects that you've `attach()`ed. It also contains a special environment called `Autoloads` which is used to save memory by only loading package objects (like big datasets) when needed. \indexc{search()}
+Almost every R session also has packages, and each package has its own environment. You can see these with `search()`, which lists all parents of the global environment. This is called the search path because objects in these environments can be found from the top-level interactive workspace. The search path contains one environment for each attached package and any other objects that you've `attach()`ed. It also contains a special environment called `Autoloads` which is used to save memory by only loading package objects (like big datasets) when needed. \indexc{search()}
 
 [Use `search_envs()`]{.todo}
 
-```{r, eval = FALSE}
+```{r}
 search()
-#> [1] ".GlobalEnv"        "package:stats"     "package:graphics" 
-#> [4] "package:grDevices" "package:utils"     "package:datasets" 
-#> [7] "package:methods"   "Autoloads"         "package:base"     
 
 pkg_env("stats")
-#> <environment: package:stats>
 ```
 
 The `global_env()`, the `base_env()`, the search-path environments, and the `emptyenv()` are connected as shown below. 
@@ -609,15 +686,13 @@ knitr::include_graphics("diagrams/environments/namespace.png", dpi = 300)
 
 When we type `var` into the console, it's found first in the global environment. When `sd()` looks for `var()` it finds it first in its namespace environment so never looks in the `globalenv()`.
 
-## Frames and the call stack.
+## Frames and the call stack
 
 The frame, aka evaluation context. 
 
 Every frame has a parent (another frame), and an environemnt. https://github.com/wch/r-source/blob/d1109cfit occ97e1179668736ab36beb0d1a89e787a87/src/include/Defn.h#L524. (Note that `?environment` uses different sense of frame, which comes from S.)
 
-`current_frame()`, `global_frame()`, `caller_frame()`.
-
-The environment associated with a frame is usually an execution environment of a function (but can be an environment supplied to `eval()`).
+The environment associated with a frame is usually an execution environment of a function (but can be an environment supplied to `eval()` or `global_env()`).
 
 Frames are not explicitly reified in base R. You can only inspect their properties using the sys functions. There's no other way to inspect or manipulate. Not exposed in C API. (So can't give quosure treatment.)
 
@@ -723,83 +798,6 @@ Other than triggering execution, what "good" is the calling environment to the c
 
 <!-- Jenny: I don't see how to do the "draw a diagram" exercise in 3 separate steps: [1] enclosing, then [2] binding, then [3] execution & calling environments. Because 2 of the 3 enclosing environments *are* execution environments.-->
 
-## Advanced bindings {#binding}
-
-The regular assignment arrow, `<-`, always creates a variable in the current environment. The deep assignment arrow, `<<-`, never creates a variable in the current environment, but instead modifies an existing variable found by walking up the parent environments. 
-
-```{r}
-x <- 0
-f <- function() {
-  x <<- 1
-}
-f()
-x
-```
-
-If `<<-` doesn't find an existing variable, it will create one in the global environment. This is usually undesirable, because global variables introduce non-obvious dependencies between functions. `<<-` is most often used in conjunction with a closure, as described in [Closures](#closures).
-
-There are two other special types of binding, delayed and active:
-
-*   Rather than assigning the result of an expression immediately, a 
-    __delayed binding__ creates and stores a promise to evaluate the expression
-    when needed. We can create delayed bindings with the `env_bind_exprs()`.
-
-    ```{r, cache = TRUE}
-    env_bind_exprs(current_env(), b = {Sys.sleep(1); 1})
-    
-    system.time(b)
-    system.time(b)
-    ```
-
-    `%<d-%` is a wrapper around the base `delayedAssign()` function, which you 
-    may need to use directly if you need more control. Delayed bindings are 
-    used to implement `autoload()`, which makes R behave as if the package data
-    is in memory, even though it's only loaded from disk when you ask for it.
-    \index{bindings!delayed}
-  
-*   __Active__ are not bound to a constant object. Instead, they're re-computed
-    every time they're accessed:
-
-    ```{r}
-    current_env() %>% env_bind_fns(z = function() runif(1))
-    
-    z
-    z
-    ```
-
-    `env_bind_fns()` is a wrapper for the base function `makeActiveBinding()`. You may 
-    want to use this function directly if you want more control. Active 
-    bindings are used to implement reference class fields.
-    \index{bindings!active}
-
-### Exercises
-
-1.  What does this function do? How does it differ from `<<-` and why
-    might you prefer it?
-    
-    ```{r, error = TRUE}
-    rebind <- function(name, value, env = parent.frame()) {
-      if (identical(env, emptyenv())) {
-        stop("Can't find ", name, call. = FALSE)
-      } else if (exists(name, envir = env, inherits = FALSE)) {
-        assign(name, value, envir = env)
-      } else {
-        rebind(name, value, parent.env(env))
-      }
-    }
-    rebind("a", 10)
-    a <- 5
-    rebind("a", 10)
-    a
-    ```
-
-1.  Create a version of `env_bind()` that will only bind new names, never 
-    re-bind old names. Some programming languages only do this, and are known 
-    as [single assignment languages][single assignment].
-
-1.  Write an assignment function that can do active, delayed, and locked 
-    bindings. What might you call it? What arguments should it take? Can you 
-    guess which sort of assignment it should do based on the input?
 
 ## Explicit environments {#explicit-envs}
 
