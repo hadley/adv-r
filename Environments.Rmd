@@ -52,6 +52,13 @@ env <- function(.parent = caller_env(), ...) {
   rlang::child_env(.parent, ...)
 }
 current_env <- environment
+
+search_envs <- function() {
+  c(
+    list(global_env()),
+    head(env_parents(global_env()), -1)
+  )
+}
 ```
 
 ## Environment basics {#env-basics}
@@ -478,19 +485,17 @@ f2 <- function(..., env = caller_env()) {
 ## Special environments {#function-envs}
 \index{functions!environments}
  
-Most environments are not created by you (with `env()`) but are instead created by R. In this section, you'll learn about the most important environments, starting with the global and package environments. You'll then learn then about the function environment that is bound to the function when it is created, and the (usually) ephemeral execution environment that is created every time the function is called. Finally, you'll see how the package and function environments interact to support namespaces, which ensure that a package always behaves the same way, regardless of what other packages the user has loaded.
+Most environments are not created by you (e.g. with `env()`) but are instead created by R. In this section, you'll learn about the most important environments, starting with the global and package environments. You'll then learn then about the function environment bound to the function when it is created, and the (usually) ephemeral execution environment created every time the function is called. Finally, you'll see how the package and function environments interact to support namespaces, which ensure that a package always behaves the same way, regardless of what other packages the user has loaded.
 
 ### The global environment
 
-The `global_env()`, or global environment, is the interactive workspace. This is the environment in which you normally work:
+The global environment, `global_env()`, is the interactive workspace. This is the current environment in which you normally work:
 
 ```{r}
 current_env()
 ```
 
-R prints this as `R_GlobalEnv`, and you can access anywhere with `global_env()`.
-
-Working with the global environment object is equivalent to getting and setting values at the console:
+And working with the global environment object is equivalent to getting and setting values at the console:
 
 ```{r}
 a <- 1
@@ -500,7 +505,7 @@ env_poke(global_env(), "b", 10)
 b
 ```
 
-### Package environments
+### Package environments and the search path
 \indexc{search()} \index{search path}
 
 The parent of the global environment is the last package you loaded:
@@ -515,41 +520,40 @@ And the parent of that package is the second to last package you loaded:
 env_parent(env_parent(global_env()))
 ```
 
-If you follow all the parents back, you see every package that's attached in the current session:
+If you follow all the parents back, you see every package that has been attached in the current session:
 
 ```{r, eval = FALSE}
-env_parents(global_env())
-#> [[1]]  <environment: package:rlang>
-#> [[2]]  <environment: package:methods>
-#> [[3]]  <environment: package:stats>
-#> [[4]]  <environment: package:graphics>
-#> [[5]]  <environment: package:grDevices>
-#> [[6]]  <environment: package:utils>
-#> [[7]]  <environment: package:datasets>
-#> [[8]]  <environment: Autoloads>
-#> [[9]]  <environment: base>
-#> [[10]] <environment: R_EmptyEnv>
+search_envs()
+#> [[1]]  <environment: R_GlobalEnv>
+#> [[2]]  <environment: package:rlang>
+#> [[3]]  <environment: package:methods>
+#> [[4]]  <environment: package:stats>
+#> [[5]]  <environment: package:graphics>
+#> [[6]]  <environment: package:grDevices>
+#> [[7]]  <environment: package:utils>
+#> [[8]]  <environment: package:datasets>
+#> [[9]]  <environment: Autoloads>
+#> [[10]] <environment: base>
 ```
 
-This is the so-called __search path__ because all objects in these environments can be found from the top-level interactive workspace. You can access the names of the 
+This is the so-called __search path__ because all objects in these environments can be found from the top-level interactive workspace. You can access the names of these environments with `base::search()`:
 
 ```{r}
 search()
 ```
 
-
-The last three environments are always the same:
+The last two environments are always the same:
 
 * The `Autoloads` environment uses delayed bindings to save memory by only 
   loading package objects (like big datasets) when needed. 
   
-* The base environment, or `base_env()`, is the environment of the base package.
-  It is special because it has to be able to bootstrap the loading of all other
-  packages.
+* The base environment, `package:base` or sometimes just `base`, is the
+  environment of the base package. It is special because it has to be able 
+  to bootstrap the loading of all other packages. The parent of the base 
+  environment is the empty environment. You can also access it directly with
+  `base_env()`.
 
-* The empty environment.
-
-Graphically, this looks like:
+Graphically, the search path looks like this:
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/environments/search-path.png", dpi = 300)
@@ -564,7 +568,7 @@ knitr::include_graphics("diagrams/environments/search-path-2.png", dpi = 300)
 ### The function environment
 \index{environments!function}
 
-A function binds the current environments when it is created. This is called the __function environment__, and is used for lexical scoping. Across computer languages, functions that capture their environments are called __closures__.
+A function binds the current environment when it is created. This is called the __function environment__, and is used for lexical scoping. Across computer languages, functions that capture their environments are called __closures__, which why this term is often used interchangeably with function in R's documentation.
 
 You can get the function environment with `fn_env()`: 
 
@@ -578,13 +582,13 @@ fn_env(f)
 Use `environment(f)` to access the environment of function `f`.
 :::
 
-In diagrams, I'll depict functions as rectangles with a rounded end that holds the reference to the environment. 
+In diagrams, I'll depict functions as rectangles with a rounded end that binds an environment. 
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/environments/binding.png", dpi = 300)
 ```
 
-In this case, the environment of `f()` is the same environment that binds the name `f` to the function object. But that's not always true: in the following code `g` is bound in a new environment `e`, but its environment will still be the global environment. The difference is how we find `g` vs. how `g` finds variables. This distinction is important to making namespaces work, as described below.
+In this case, `f()` binds the environment that binds the name `f` to the function. But that's not always the case: in the following example `g` is bound in a new environment `e`, but `g()` binds the global environment. The distinction being binding and being bound by is subtle but important; the difference is how we find `g` vs. how `g` finds its variables.
 
 ```{r}
 e <- env()
@@ -595,9 +599,54 @@ e$g <- function() 1
 knitr::include_graphics("diagrams/environments/binding-2.png", dpi = 300)
 ```
 
+### Namespaces
+
+One important application of this distinction is __namespaces__. For example, take `sd()`:
+
+```{r}
+sd
+```
+
+Its definition uses `
+
+For example, take the base function `sd()`. Its enclosing and binding environments are different:
+
+```{r, eval = FALSE}
+# enclosing = where sd() finds values, such as mean() or var()
+get_env(sd)
+#> <environment: namespace:stats>
+
+# binding = where we can find sd()
+where("sd")
+#> <environment: package:stats>
+```
+
+Namespaces are implemented using environments, taking advantage of the fact that functions don't have to live in their enclosing environments. 
+
+The distinction between the binding environment and the enclosing environment is important for package namespaces. Package namespaces keep packages independent. For example, if package A uses the base `mean()` function, what happens if package B creates its own `mean()` function? Namespaces ensure that package A continues to use the base `mean()` function, and that package A is not affected by package B (unless explicitly asked for). \index{namespaces}
+
+
+The definition of `sd()` uses `var()`, but if we make our own version of `var()` it doesn't affect `sd()`:
+
+```{r}
+x <- 1:10
+sd(x)
+var <- function(x, na.rm = TRUE) 100
+sd(x)
+```
+
+This works because every package has two environments associated with it: the _package_ environment and the _namespace_ environment. The package environment contains every publicly accessible function, and is placed on the search path. The namespace environment contains all functions (including internal functions), and its parent environment is a special imports environment that contains bindings to all the functions that the package needs. Every exported function in a package is bound into the _package_ environment, but enclosed by the _namespace_ environment. This complicated relationship is illustrated by the following diagram:
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/environments/namespace.png", dpi = 300)
+```
+
+When we type `var` into the console, it's found first in the global environment. When `sd()` looks for `var()` it finds it first in its namespace environment so never looks in the `globalenv()`.
+
+
 ### Execution environments
 
-What will the following function return the first time it's run? What about the second? \index{environments!execution}
+The last important topic we need to cover is the __execution__ environment. What will the following function return the first time it's run? What about the second? \index{environments!execution}
 
 ```{r}
 g <- function(x) {
@@ -618,9 +667,7 @@ g(10)
 g(10)
 ```
 
-This function returns the same value every time because of the fresh start principle, described in [a fresh start](#fresh-start). Each time a function is called, a new environment is created to host execution. The parent of the execution environment is the function environment. Once the function has completed, this environment is thrown away.
-
-Let's draw that the process out with a simpler function. You can tell an environment is an execution environment because the parent arrow goes via the function environment.
+This function returns the same value every time because of the fresh start principle, described in [a fresh start](#fresh-start). Each time a function is called, a new environment is created to host execution. This is called the execution environment, and its parent is the function environment. Let's illustrate that process with a simpler function. I'll draw execution environments with an indirect parent; the parent environment is found via the function environment.
 
 ```{r}
 h <- function(x) {
@@ -635,56 +682,51 @@ y <- h(1) # 3.
 knitr::include_graphics("diagrams/environments/execution.png", dpi = 300)
 ```
 
-When you return a function from another function, the parent environment of the child function is the execution environment of the parent. This means that the execution environment is no longer ephemeral.
+The execution environment is usually ephemeral; once the function has completed, the environment will be GC'd. There are several ways to make it stay around for longer. The first is to explicitly return it:
 
+[use `env_show()` when available]{.todo}
+
+```{r}
+h2 <- function(x) {
+  a <- 2
+  current_env()
+}
+e <- h2(x = 10)
+env_names(e)
+
+env_parent(e)
+fn_env(h2)
+```
 \index{closures|environment}
-The following example illustrates that idea with a function factory, `plus()`. We use that factory to create a function called `plus_one()`. There's a lot going on in the diagram because the enclosing environment of `plus_one()` is the execution environment of `plus()`. 
+
+Another way to capture it is to return an object with a binding to that environment, like a function. The following example illustrates that idea with a function factory, `plus()`. We use that factory to create a function called `plus_one()`. 
+
+There's a lot going on in the diagram because the enclosing environment of `plus_one()` is the execution environment of `plus()`. 
 
 ```{r}
 plus <- function(x) {
   function(y) x + y
 }
+
 plus_one <- plus(1)
+plus_one
 ```
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/environments/closure.png", dpi = 300)
 ```
 
-You'll learn more about function factories in [functional programming](#functional-programming).
-
-### Namespaces
-
-The distinction between the binding environment and the enclosing environment is important for package namespaces. Package namespaces keep packages independent. For example, if package A uses the base `mean()` function, what happens if package B creates its own `mean()` function? Namespaces ensure that package A continues to use the base `mean()` function, and that package A is not affected by package B (unless explicitly asked for). \index{namespaces}
-
-Namespaces are implemented using environments, taking advantage of the fact that functions don't have to live in their enclosing environments. For example, take the base function `sd()`. Its enclosing and binding environments are different:
-
-```{r, eval = FALSE}
-# enclosing = where sd() finds values, such as mean() or var()
-get_env(sd)
-#> <environment: namespace:stats>
-
-# binding = where we can find sd()
-where("sd")
-#> <environment: package:stats>
-```
-
-The definition of `sd()` uses `var()`, but if we make our own version of `var()` it doesn't affect `sd()`:
+What happens when we call `plus_one()`? It's execution environment will have an execution environment of `plus()` as its parent, and it will find the 
 
 ```{r}
-x <- 1:10
-sd(x)
-var <- function(x, na.rm = TRUE) 100
-sd(x)
+plus_one(2)
 ```
-
-This works because every package has two environments associated with it: the _package_ environment and the _namespace_ environment. The package environment contains every publicly accessible function, and is placed on the search path. The namespace environment contains all functions (including internal functions), and its parent environment is a special imports environment that contains bindings to all the functions that the package needs. Every exported function in a package is bound into the _package_ environment, but enclosed by the _namespace_ environment. This complicated relationship is illustrated by the following diagram:
 
 ```{r, echo = FALSE, out.width = NULL}
-knitr::include_graphics("diagrams/environments/namespace.png", dpi = 300)
+knitr::include_graphics("diagrams/environments/closure-call.png", dpi = 300)
 ```
 
-When we type `var` into the console, it's found first in the global environment. When `sd()` looks for `var()` it finds it first in its namespace environment so never looks in the `globalenv()`.
+You'll learn more about function factories in [functional programming](#functional-programming).
 
 ### Exercises
 
