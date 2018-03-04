@@ -508,13 +508,15 @@ b
 ### Package environments and the search path
 \indexc{search()} \index{search path}
 
-The parent of the global environment is the last package you loaded:
+The parent of the global environment is the last package you attached[^attach]:
+
+[^attach]: Attached is different to load. A package is loaded automatically if you access one of its functions using `::`; it is only __attached__ to the search path by `library()` or `require()`.
 
 ```{r}
 env_parent(global_env())
 ```
 
-And the parent of that package is the second to last package you loaded:
+And the parent of that package is the second to last package you attached:
 
 ```{r}
 env_parent(env_parent(global_env()))
@@ -600,49 +602,50 @@ knitr::include_graphics("diagrams/environments/binding-2.png", dpi = 300)
 ```
 
 ### Namespaces
+\index{namespaces}
 
-One important application of this distinction is __namespaces__. For example, take `sd()`:
+In the diagram above, you saw that the parent environment of a package varies based on what other packages have been loaded. This seems worrying: doesn't that mean that the package will find different functions if packages are loaded in a different order? The goal of __namespaces__ is to make sure that this does not happen, and that every package works the same way regardless of what packages are attached by the user. 
 
-```{r}
-sd
+[Find concrete example]{.todo}
+
+Every function in a package is associated with a pair of environments: the package environment, which you learned about earlier, and the __namespace__ environment. 
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/environments/namespace-bind.png", dpi = 300)
 ```
 
-Its definition uses `
+The package environment is the external interface to the package. It's how you find a function in an attached package or with `::`. Its parent is determined by the order in which the user has loaded packages. 
 
-For example, take the base function `sd()`. Its enclosing and binding environments are different:
+The namespace environment is the internal interface to the package. The package environment controls look up of the function; the namespace controls lookup __by__ the function. Every namespace environment has the same set of ancestors:
 
-```{r, eval = FALSE}
-# enclosing = where sd() finds values, such as mean() or var()
-get_env(sd)
-#> <environment: namespace:stats>
-
-# binding = where we can find sd()
-where("sd")
-#> <environment: package:stats>
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/environments/namespace-env.png", dpi = 300)
 ```
 
-Namespaces are implemented using environments, taking advantage of the fact that functions don't have to live in their enclosing environments. 
+* Each namespace has an __imports__ environment that contains bindings to all 
+  the functions used by the package. The imports environment is controlled by 
+  the package developer with the `NAMESPACE` file.
 
-The distinction between the binding environment and the enclosing environment is important for package namespaces. Package namespaces keep packages independent. For example, if package A uses the base `mean()` function, what happens if package B creates its own `mean()` function? Namespaces ensure that package A continues to use the base `mean()` function, and that package A is not affected by package B (unless explicitly asked for). \index{namespaces}
+* Explicitly importing every base funtion would be tiresome, so the parent
+  of the imports environment is the base __namespace__. The base namespace 
+  contains the same bindings as the base environment, but it has different
+  parent.
+  
+* The parent of the base namespace is the global environment. This means that 
+  if a binding isn't defined in the imports environment the packge will look
+  for it in the usual way. This is usually a bad idea (because it makes code
+  depend on other loaded packages), so `R CMD check` automatically warns about
+  such code. It is needed, however, in order for S3 methods to work.
 
-
-The definition of `sd()` uses `var()`, but if we make our own version of `var()` it doesn't affect `sd()`:
-
-```{r}
-x <- 1:10
-sd(x)
-var <- function(x, na.rm = TRUE) 100
-sd(x)
-```
-
-This works because every package has two environments associated with it: the _package_ environment and the _namespace_ environment. The package environment contains every publicly accessible function, and is placed on the search path. The namespace environment contains all functions (including internal functions), and its parent environment is a special imports environment that contains bindings to all the functions that the package needs. Every exported function in a package is bound into the _package_ environment, but enclosed by the _namespace_ environment. This complicated relationship is illustrated by the following diagram:
+Putting all these diagrams together we get:
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/environments/namespace.png", dpi = 300)
 ```
 
-When we type `var` into the console, it's found first in the global environment. When `sd()` looks for `var()` it finds it first in its namespace environment so never looks in the `globalenv()`.
+Note that every binding in the package environment is also found in the namespace environment; this ensures every function can use every other function. But some binding only occur in the namespace environment; these are known as internal or non-exported objects. This makes it possible to hide internal implementation details from the user.
 
+Note that there's no direct link between the package and namespace environments; the link is define by the function environments.
 
 ### Execution environments
 
