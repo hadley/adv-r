@@ -719,7 +719,7 @@ plus_one
 knitr::include_graphics("diagrams/environments/closure.png", dpi = 300)
 ```
 
-What happens when we call `plus_one()`? It's execution environment will have an execution environment of `plus()` as its parent, and it will find the 
+What happens when we call `plus_one()`? Its execution environment will have the captured execution environment of `plus()` as its parent:
 
 ```{r}
 plus_one(2)
@@ -747,28 +747,55 @@ You'll learn more about function factories in [functional programming](#function
     }
     f1(1)
     ```
-    
-1.  Expand your previous diagram to show function bindings.
 
 1.  Write an enhanced version of `str()` that provides more information 
     about functions. Show where the function was found and what environment 
     it was defined in.
 
-
-1.  Using `env_parent()` and a loop (or a recursive function), verify that the 
-    ancestors of `global_env()` include `base_env()` and `empty_env()`. Use the 
-    same basic idea to implement your own version of `search()`.
-
-
 ## Frames and the call stack
+\index{environments|calling}
 
-The frame, aka evaluation context. 
 
-Every frame has a parent (another frame), and an environemnt. https://github.com/wch/r-source/blob/d1109cfit occ97e1179668736ab36beb0d1a89e787a87/src/include/Defn.h#L524. (Note that `?environment` uses different sense of frame, which comes from S.)
+There is one last environment we need to explain, the __caller__ environment. To explain this environment we need to introduce two new concepts: the call stack and frames.
 
-The environment associated with a frame is usually an execution environment of a function (but can be an environment supplied to `eval()` or `global_env()`).
+Executing a function creates two types of context. You've learn about one already: the execution environment is a child of the function environment, which is determined by where the function was created. There's another type of context created by where the function was called: this is called the call stack.
 
-Frames are not explicitly reified in base R. You can only inspect their properties using the sys functions. There's no other way to inspect or manipulate. Not exposed in C API. (So can't give quosure treatment.)
+We can capture the call stack with `call_stack()`:
+
+```{r}
+f <- function() {
+  x <- 1
+  g()
+}
+g <- function() {
+  x <- 2
+  h()
+}
+h <- function() {
+  y <- 3
+  call_stack()
+}
+f()
+```
+
+Each element of the call stack is a frame[^frame], which in C code also known as an evaluation context. A frame has three main components:
+
+* An expression giving the function call.
+
+* An environment, which is typically the execution environment of a funtion.
+  (There are two main exceptions: the environment of the global frame is 
+  the global environment, and calling `eval()` also generates frames, where
+  the environment can be anything.)
+
+* A parent, the previous call in the call stack.
+
+(The frame also stores exit handlers created with `on.exit()`, restarts and handlers for th the condition system, and other important internal information, but it's not possible to retrieve these values so I ignore them here. Frames are not explicitly reified in base R. You can only inspect their properties using the sys functions. )
+
+[^frame]: NB: `?environment` also uses frame this sentence: "Environments consist of a frame, or collection of named objects, and a pointer to an enclosing environment.". We avoid this homonym, which comes from S, because this meaning of frame is very specific and not widely used in base R. For example, the "frame" in `parent.frame()` is an execution context, not a collection of named objects.
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/environments/calling.png", dpi = 300)
+```
 
 Looking up variables in the calling stack rather than in the enclosing environment is called __dynamic scoping__. Few languages implement dynamic scoping (Emacs Lisp is a [notable exception](http://www.gnu.org/software/emacs/emacs-paper.html#SEC15).) This is because dynamic scoping makes it much harder to reason about how a function operates: not only do you need to know how it was defined, you also need to know in what context it was called. Dynamic scoping is primarily useful for developing functions that aid interactive data analysis. It is one of the topics discussed in [non-standard evaluation](#nse). 
 
@@ -780,61 +807,6 @@ The __caller__ environment is the environment from which the function is
   called. In a sense, the caller environment has two parents: the parent
   environment, and the caller of the caller.
 
-Look at the following code. What do you expect `i()` to return when the code is run? \index{environments|calling}
-
-```{r, eval = FALSE}
-h <- function() {
-  x <- 10
-  function() {
-    x
-  }
-}
-i <- h()
-x <- 20
-i()
-```
-
-The top-level `x` (bound to 20) is a red herring: using the regular scoping rules, `h()` looks first where it is defined and finds that the value associated with `x` is 10. However, it's still meaningful to ask what value `x` is associated with in the environment where `i()` is called: `x` is 10 in the environment where `h()` is defined, but it is 20 in the environment where `h()` is called.
-
-We can access this environment with `caller_env()`. This function returns the __environment__ where the function was called. We can also use this function to look up the value of names in that environment:
-
-```{r}
-f2 <- function() {
-  x <- 10
-  function() {
-    def <- env_get(current_env(), "x", inherit = TRUE)
-    cll <- env_get(caller_env(), "x")
-    list(defined = def, called = cll)
-  }
-}
-g2 <- f2()
-x <- 20
-str(g2())
-```
-
-In more complicated scenarios, there's not just one parent call, but a sequence of calls which lead all the way back to the initiating function, called from the top-level. The following code generates a call stack three levels deep. The open-ended arrows represent the calling environment of each execution environment. 
-
-```{r}
-x <- 0
-y <- 10
-f <- function() {
-  x <- 1
-  g()
-}
-g <- function() {
-  x <- 2
-  h()
-}
-h <- function() {
-  x <- 3
-  x + y
-}
-f()
-```
-
-```{r, echo = FALSE, out.width = NULL}
-knitr::include_graphics("diagrams/environments/calling.png", dpi = 300)
-```
 
 ## As data structures {#explicit-envs}
 
