@@ -3,8 +3,14 @@
 ```{r setup, include = FALSE}
 source("common.R")
 library(pryr)
+library(rlang)
 knitr::read_chunk("memory-read-delim.r")
 options(scipen = 9)
+
+id <- function() {
+  x <- sample(c(0:9, letters[1:6]), 3, replace = TRUE)
+  paste0("0x", paste(x, collapse = ""))
+}
 ```
 
 ## Introduction
@@ -22,36 +28,20 @@ call-by-value vs call-by-reference
 
 for(x in 1:10) {}
 x
-
 -->
 
-A solid understanding of R's memory management will help you predict how much memory you'll need for a given task and help you to make the most of the memory you have. It can even help you write faster code because accidental copies are a major cause of slow code. The goal of this chapter is to help you understand the basics of memory management in R, moving from individual objects to functions to larger blocks of code. Along the way, you'll learn about some common myths, such as that you need to call `gc()` to free up memory, or that `for` loops are always slow. \index{memory}
+Understanding the distinction between names and values is critical.
+
+An improved mental will help you better predict performance and memory usage of R code. It can even help you write faster code because accidental copies are a major cause of slow code.
+
+It will also help you better understand R's functional programming tools.
+
+Along the way, you'll learn about some common myths, such as that you need to call `gc()` to free up memory, or that `for` loops are always slow. 
 
 ### Outline {-}
 
-* [Object size](#object-size) shows you how to use `object_size()` to see 
-  how much memory an object occupies, and uses that as a launching point to
-  improve your understanding of how R objects are stored in memory.
-  
-* [Memory usage and garbage collection](#gc) introduces you to the `mem_used()`
-  and `mem_change()` functions that will help you understand how R allocates 
-  and frees memory.
-  
-* [Modification in place](#modification) introduces you to the `address()` and
-  `refs()` functions so that you can understand when R modifies in place and 
-  when R modifies a copy. Understanding when objects are copied is very 
-  important for writing efficient R code.
-
 ### Prerequisites {-}
 
-In this chapter, we'll use tools from the pryr and lineprof packages to understand memory usage, and a sample dataset from ggplot2. If you don't already have them, run this code to get the packages you need:
-
-```{r, eval = FALSE}
-install.packages("ggplot2")
-install.packages("pryr")
-install.packages("devtools")
-devtools::install_github("hadley/lineprof")
-```
 
 ### Sources {-}
 
@@ -59,11 +49,154 @@ devtools::install_github("hadley/lineprof")
 
 The details of R's memory management are not documented in a single place. Most of the information in this chapter was gleaned from a close reading of the documentation (particularly `?Memory` and `?gc`), the [memory profiling](http://cran.r-project.org/doc/manuals/R-exts.html#Profiling-R-code-for-memory-use) section of R-exts, and the [SEXPs](http://cran.r-project.org/doc/manuals/R-ints.html#SEXPs) section of R-ints. The rest I figured out by reading the C source code, performing small experiments, and asking questions on R-devel. Any mistakes are entirely mine.
 
-## Binding
+## Assignment
+\index{bindings} \index{assignment}
 
-Assignment is the act of binding (or rebinding) a name to a value in an environment. It is the counterpart to scoping, the set of rules that determines how to find the value associated with a name. Compared to most languages, R has extremely flexible tools for binding names to values. In fact, you can not only bind values to names, but you can also bind expressions (promises) or even functions, so that every time you access the value associated with a name, you get something different! \index{bindings}
+Assignment is the act of binding (or rebinding) a name to a value. It is the counterpart to scoping, the set of rules that determines how to find the value associated with a name.  We'll start by exploring what happens when you use `<-` to create and modify bindings.
 
-## Non-syntactic names
+### Vectors
+
+When you read code like `x <- 1:3` it's easy to think of it as creating an object called `x`. But actually there are two things going on:
+
+* We create the object (`1:3`)
+* Then __bind__ it to a name.
+
+We'll draw that as:
+
+```{r}
+x <- 1:3
+```
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/binding-1.png", dpi = 300)
+```
+
+Note that the arrow points in the opposite direction. Assignment creates the binding. We look up the value in the opposite direction.
+
+Objects in R don't have names; names have objects. But it's difficult to talk about things that don't have names, so in diagrams we'll give objects labels like `0x001`. These are unique identifiers which look a little bit like the memory location of objects that we'll talk about later.
+
+You can think of a name as a pointer. If you run code like `y <- x` we get two bindings to the same object:
+
+```{r}
+y <- x
+```
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/binding-2.png", dpi = 300)
+```
+
+What happens if we modify `x`? `y` doesn't also change
+
+```{r}
+y[[3]] <- 4
+y
+```
+
+That's because most R objects are __immutable__. That means you can't change the object; instead you create a modified copy. Now `x` refernces object `0x001` and `y` references a new object, `0x002`.
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/binding-3.png", dpi = 300)
+```
+
+### Lists
+
+It's not just top-level variables that point to other objects. Lists do too. Take this list, which superficially is very similar to the vector above:
+
+```{r}
+l <- list(1, 2, 3)
+```
+
+In memory, it's actually quite different. A list is really a list of refences:
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/list.png", dpi = 300)
+```
+
+This is particularly important when we modify a list:
+
+```{r}
+l1 <- list(1, 2, 3)
+l2 <- l1
+```
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/l-modify-1.png", dpi = 300)
+```
+
+```{r}
+l2[[3]] <- 4
+```
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/l-modify-2.png", dpi = 300)
+```
+
+Like vectors, lists are immutable; you do not modify the list, but instead create a modified copy. Note that the copy is __shallow__: only the list object is copied (and modified), the individual elements are not.
+
+### Environments {#env-modify}
+
+There are two exceptions to the copy-on-modify rule. The first is environments, which you'll learn more in [Environments]. Environments have reference semantics so unlike vectors and lists they are modified in place.  Take this environment, which we reference from `e1` and `e2`:
+
+```{r}
+e1 <- env(a = 1, b = 2, c = 3)
+e2 <- e1
+```
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/e-modify-1.png", dpi = 300)
+```
+
+If we modify one reference, the environment is modified in place:
+
+```{r}
+e1$c <- 4
+e2$d
+```
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/e-modify-2.png", dpi = 300)
+```
+
+### Mononymous objects
+
+There is one other exception to the copy-on-modify rule: objects that only have single reference pointing to them. I think it's best to think of this as a performance optimisation; if an object only has one name that points to it, then this has the same behaviour as copy-on-modify, but is obviously much faster.
+
+```{r}
+v <- 1:3
+```
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/v-inplace-1.png", dpi = 300)
+```
+
+```{r}
+v[3] <- 4L
+```
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/v-inplace-2.png", dpi = 300)
+```
+
+The rules for when R applies this optimisation are a little subtle due to the way it counts the number of references that point to an object, so we'll come back to it the end of the chapter.
+
+## Advanced assignment
+
+### `<<-`
+
+The regular assignment arrow, `<-`, always creates a variable in the current environment. The deep assignment arrow, `<<-`, never creates a variable in the current environment, but instead modifies an existing variable found by walking up the parent environments. 
+
+```{r}
+x <- 0
+f <- function() {
+  x <<- 1
+}
+f()
+x
+```
+
+If `<<-` doesn't find an existing variable, it will create one in the global environment. This is usually undesirable, because global variables introduce non-obvious dependencies between functions. `<<-` is most often used in conjunction with a closure, as described in [Closures](#closures).
+
+
+### Non-syntactic names
 \index{reserved names} \indexc{`} \index{non-syntactic names}
 
 You've probably used regular assignment in R thousands of times. Regular assignment creates a binding between a name and an object in the current environment. Names usually consist of letters, digits, `.` and `_`, and can't begin with `_`.  If you try to use a name that doesn't follow these rules, you get an error:
@@ -98,22 +231,6 @@ ls()
 ### Quotes {-}
 You can also create non-syntactic bindings using single and double quotes instead of backticks, but I don't recommend it. The ability to use strings on the left hand side of the assignment arrow is a historical artefact, used before R supported backticks.
 :::
-
-## Assignment
-
-
-The regular assignment arrow, `<-`, always creates a variable in the current environment. The deep assignment arrow, `<<-`, never creates a variable in the current environment, but instead modifies an existing variable found by walking up the parent environments. 
-
-```{r}
-x <- 0
-f <- function() {
-  x <<- 1
-}
-f()
-x
-```
-
-If `<<-` doesn't find an existing variable, it will create one in the global environment. This is usually undesirable, because global variables introduce non-obvious dependencies between functions. `<<-` is most often used in conjunction with a closure, as described in [Closures](#closures).
 
 
 ## Mutable objects / reference semantics
@@ -158,6 +275,8 @@ get("x", envir = e2)
 
 
 ## Lexical scoping {#lexical-scoping}
+
+Assignment is the act of binding a name to a value. Scoping is the opposite; finding a value given a name.
 
 Scoping is the set of rules that govern how R looks up the value of a symbol. In the example below, scoping is the set of rules that R applies to go from the symbol `x` to its value `10`: \index{scoping!lexical|see{lexical scoping}} \index{lexical scoping}
 
@@ -703,7 +822,7 @@ for (i in seq_along(medians)) {
 You may be surprised to realise that every iteration of the loop copies the data frame. We can see that more clearly by using `address()` and `refs()` for a small sample of the loop:
 
 ```{r}
-for (i in seq_along(medians)) {
+for (i in 1:10) {
   x[[i]] <- x[[i]] - medians[[i]]
   print(c(address(x), refs(x)))
 }
@@ -714,7 +833,7 @@ For each iteration, `x` is moved to a new location so `refs(x)` is always 2. Thi
 ```{r}
 y <- as.list(x)
 
-for (i in seq_along(medians)) {
+for (i in 1:10) {
   y[[i]] <- y[[i]] - medians[[i]]
   print(c(address(y), refs(y)))
 }
