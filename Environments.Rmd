@@ -757,43 +757,61 @@ You'll learn more about function factories in [functional programming](#function
 
 There is one last environment we need to explain, the __caller__ environment. To explain this environment we need to introduce two new concepts: the call stack and frames. Executing a function creates two types of context. You've learn about one already: the execution environment is a child of the function environment, which is determined by where the function was created. There's another type of context created by where the function was called: this is called the __call stack__.
 
-We can capture the call stack with `call_stack()`:
+Let's illustrate this with a simple sequence of calls: `f()` calls `g()` calls `h()`.
 
 ```{r}
-f <- function(y = 0) {
-  g(y = 1)
+f <- function(x) {
+  g(x = 2)
 }
-g <- function(y) {
-  h(y = 2)
+g <- function(x) {
+  h(x = 3)
 }
-h <- function(y) {
-  call_stack()
+h <- function(x) {
+  stop()
 }
-f()
 ```
+
+The way you most commonly see a call stack in R is after by looking at the `traceback()` after an error has occured:
+
+```{r, eval = FALSE}
+f(x = 1)
+#> Error:
+traceback()
+#> 4: stop()
+#> 3: h(x = 3) 
+#> 2: g(x = 2)
+#> 1: f(x = 1)
+```
+
+We can represent the call stack just before the error occurs with this diagram:
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/environments/calling.png", dpi = 300)
+```
+
+(To focus on the calling environments, I have omitted the bindings in the global environment from `f`, `g`, and `h` to the respective function objects.)
+
+Each element of the call stack is a __frame__[^frame], also known as an evaluation context. A frame has three main components:
+
+* An expression (labelled with `expr`) giving the function call. This is
+  what `traceback()` prints out.
+
+* An environment (labelled with `env`), which is typically the execution 
+  environment of a funtion. There are two main exceptions: the environment of 
+  the global frame is the global environment, and calling `eval()` also 
+  generates frames, where the environment can be anything.
+
+* A parent, the previous call in the call stack (shown by a grey arrow). 
+
+The frame is an extremely important internal data structure. It also holds exit handlers created with `on.exit()`, restarts and handlers for the the condition system, and which context to `return()` to when a function completes.  R code can only access a small part of the data structure because it's so important: making changes without using the official API could be disastrous.
+
+[^frame]: NB: `?environment` uses frame in a different sense: "Environments consist of a _frame_, or collection of named objects, and a pointer to an enclosing environment.". We avoid this sense of frame, which comes from S, because it's very specific and not widely used in base R. For example, the "frame" in `parent.frame()` is an execution context, not a collection of named objects.
+
 
 ::: base
 Rather than one function that exposes a list of frame objects, base R provides functions that return lists of the individual components. Use `sys.frames()` to access environments and `sys.calls()` to access expressions.
 :::
 
-Each element of the call stack is a frame[^frame], which in C code also known as an evaluation context. A frame has three main components:
-
-* An expression giving the function call.
-
-* An environment, which is typically the execution environment of a funtion.
-  (There are two main exceptions: the environment of the global frame is 
-  the global environment, and calling `eval()` also generates frames, where
-  the environment can be anything.)
-
-* A parent, the previous call in the call stack.
-
-The call stack is an extremely important internal data structure. It holds exit handlers created with `on.exit()`, restarts and handlers for the the condition system, and which context to `return()` to when a function completes. The call stack is captured when there's an error and exposed in the `traceback()`. R code can only access a small part of the data structure because it's so important: making changes without using the official API could be disastrous.
-
-[^frame]: NB: `?environment` uses frame in a different sense: "Environments consist of a _frame_, or collection of named objects, and a pointer to an enclosing environment.". We avoid this sense of frame, which comes from S, because it's very specific and not widely used in base R. For example, the "frame" in `parent.frame()` is an execution context, not a collection of named objects.
-
-```{r, echo = FALSE, out.width = NULL}
-knitr::include_graphics("diagrams/environments/calling.png", dpi = 300)
-```
 
 While you can access any frame environment in the call stack, there is one only environment that you routinely _should_: __caller__ environment, which you can access with `caller_env()`. This is a good default for an user directed function that needs an environment argument.
 
