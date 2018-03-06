@@ -1,8 +1,7 @@
 # Names and values {#names-values}
 
-```{r setup, include = FALSE}
+```{r, include = FALSE}
 source("common.R")
-library(pryr)
 library(rlang)
 knitr::read_chunk("memory-read-delim.r")
 options(scipen = 9)
@@ -42,6 +41,9 @@ Along the way, you'll learn about some common myths, such as that you need to ca
 
 ### Prerequisites {-}
 
+```{r setup}
+library(lobstr)
+```
 
 ### Sources {-}
 
@@ -169,19 +171,19 @@ This behaviour has implications for the size of an object:
 
 ```{r}
 x <- 1:1e6
-object_size(x)
+obj_size(x)
 
 y <- list(x, x, x)
-object_size(y)
+obj_size(y)
 ```
 
-It's even misleading to think about the sizes of `x` and `y` individually. If you want to know how much space they take up together, you have to supply them to the same `object_size()` call:
+It's even misleading to think about the sizes of `x` and `y` individually. If you want to know how much space they take up together, you have to supply them to the same `obj_size()` call:
 
 ```{r}
-object_size(x, y)
+obj_size(x, y)
 ```
 
-In this case, `x` and `y` together take up the same amount of space as `y` alone: `object_size(x) + object_size(y)` will only equal `object_size(x, y)` if there are no shared values.
+In this case, `x` and `y` together take up the same amount of space as `y` alone: `obj_size(x) + obj_size(y)` will only equal `obj_size(x, y)` if there are no shared values.
 
 ### Data frames
 
@@ -238,8 +240,8 @@ This means that character vectors take up less memory than you might expect: \in
 
 ```{r}
 banana <- "bananas bananas bananas"
-object_size(banana)
-object_size(rep(banana, 100))
+obj_size(banana)
+obj_size(rep(banana, 100))
 ```
 
 Generally, however, this detail is not important, so we'll typically draw character vectors as if the strings live inside the vectors.
@@ -614,21 +616,21 @@ This will introduce a particularly pernicious bug: 10% of the time, 1 will be ad
 
 ## Object size {#object-size}
 
-To understand memory usage in R, we will use `pryr::object_size()`. This function tells you how many bytes of memory an object occupies: \index{object\_size()}
+To understand memory usage in R, we will use `lobstr::obj_size()`. This function tells you how many bytes of memory an object occupies: \index{object\_size()}
 
 ```{r}
 library(pryr)
-object_size(1:10)
-object_size(mean)
-object_size(mtcars)
+obj_size(1:10)
+obj_size(mean)
+obj_size(mtcars)
 ```
 
 (This function is better than the built-in `object.size()` because it accounts for shared elements within an object and includes the size of environments.)
 
-Something interesting occurs if we use `object_size()` to systematically explore the size of an integer vector. The code below computes and plots the memory usage of integer vectors ranging in length from 0 to 50 elements. You might expect that the size of an empty vector would be zero and that memory usage would grow proportionately with length. Neither of those things are true! \index{vectors!size of}
+Something interesting occurs if we use `obj_size()` to systematically explore the size of an integer vector. The code below computes and plots the memory usage of integer vectors ranging in length from 0 to 50 elements. You might expect that the size of an empty vector would be zero and that memory usage would grow proportionately with length. Neither of those things are true! \index{vectors!size of}
 
 ```{r size-q, fig.height = 2.5, fig.width = 4, small_mar = TRUE}
-sizes <- sapply(0:50, function(n) object_size(seq_len(n)))
+sizes <- sapply(0:50, function(n) obj_size(seq_len(n)))
 plot(0:50, sizes, xlab = "Length", ylab = "Size (bytes)", 
   type = "s")
 ```
@@ -636,10 +638,10 @@ plot(0:50, sizes, xlab = "Length", ylab = "Size (bytes)",
 This isn't just an artefact of integer vectors. Every length 0 vector occupies 40 bytes of memory:
 
 ```{r}
-object_size(numeric())
-object_size(logical())
-object_size(raw())
-object_size(list())
+obj_size(numeric())
+obj_size(logical())
+obj_size(raw())
+obj_size(list())
 ```
 
 Those 40 bytes are used to store four components possessed by every object in R:
@@ -709,11 +711,10 @@ Beyond 128 bytes, it no longer makes sense for R to manage vectors. After all, a
 
 ## Memory usage and garbage collection {#gc}
 
-While `object_size()` tells you the size of a single object, `pryr::mem_used()` tells you the total size of all objects in memory: \indexc{mem\_used()}
+While `obj_size()` tells you the size of a single object, `pryr::mem_used()` tells you the total size of all objects in memory: \indexc{mem\_used()}
 
 ```{r}
-library(pryr)
-mem_used()
+pryr::mem_used()
 ```
 
 This number won't agree with the amount of memory reported by your operating system for a number of reasons:
@@ -731,16 +732,16 @@ This number won't agree with the amount of memory reported by your operating sys
 
 ```{r}
 # Need about 4 mb to store 1 million integers
-mem_change(x <- 1:1e6)
+pryr::mem_change(x <- 1:1e6)
 # We get that memory back when we delete it
-mem_change(rm(x))
+pryr::mem_change(rm(x))
 ```
 
 Even operations that don't do anything use up a little memory. This is because R is tracking the history of everything you do. You can ignore anything smaller than a couple kB.
 
 ```{r}
-mem_change(NULL)
-mem_change(NULL)
+pryr::mem_change(NULL)
+pryr::mem_change(NULL)
 ```
 
 In some languages, you have to explicitly delete unused objects for their memory to be returned. R uses an alternative approach: garbage collection (or GC for short). GC automatically releases memory when an object is no longer used. It does this by tracking how many names point to each object, and when there are no names pointing to an object, it deletes that object. \index{garbage collection}
@@ -751,13 +752,13 @@ rm(y)
 
 ```{r}
 # Create a big object
-mem_change(x <- 1:1e6)
+pryr::mem_change(x <- 1:1e6)
 # Also point to 1:1e6 from y
-mem_change(y <- x)
+pryr::mem_change(y <- x)
 # Remove x, no memory freed because y is still pointing to it
-mem_change(rm(x))
+pryr::mem_change(rm(x))
 # Now nothing points to it and the memory can be freed
-mem_change(rm(y))
+pryr::mem_change(rm(y))
 ```
 
 Despite what you might have read elsewhere, there's never any need to call `gc()` yourself. R will automatically run garbage collection whenever it needs more space; if you want to see when that is, call `gcinfo(TRUE)`. The only reason you _might_ want to call `gc()` is to ask R to return memory to the operating system. However, even that might not have any effect: older versions of Windows had no way for a program to return memory to the OS. \indexc{gc()}
@@ -769,22 +770,22 @@ f1 <- function() {
   x <- 1:1e6
   10
 }
-mem_change(x <- f1())
-object_size(x)
+pryr::mem_change(x <- f1())
+obj_size(x)
 
 f2 <- function() {
   x <- 1:1e6
   a ~ b
 }
-mem_change(y <- f2())
-object_size(y)
+pryr::mem_change(y <- f2())
+obj_size(y)
 
 f3 <- function() {
   x <- 1:1e6
   function() 10
 }
-mem_change(z <- f3())
-object_size(z)
+pryr::mem_change(z <- f3())
+obj_size(z)
 ```
 
 ```{r, echo = FALSE}
@@ -814,11 +815,11 @@ It turns out that R can do either depending on the circumstances. In the example
 ```{r, eval = FALSE}
 library(pryr)
 x <- 1:10
-c(address(x), refs(x))
+c(pryr::address(x), pryr::refs(x))
 # [1] "0x103100060" "1"
 
 y <- x
-c(address(y), refs(y))
+c(pryr::address(y), pryr::refs(y))
 # [1] "0x103100060" "2"
 ```
 
@@ -831,13 +832,13 @@ x <- 1:5
 y <- x
 rm(y)
 # Should really be 1, because we've deleted y
-refs(x)
+pryr::refs(x)
 
 x <- 1:5
 y <- x
 z <- x
 # Should really be 3
-refs(x)
+pryr::refs(x)
 ```
 
 When `refs(x)` is 1, modification will occur in place. When `refs(x)` is 2, R will make a copy (this ensures that other pointers to the object remain unaffected). Note that in the following example, `y` keeps pointing to the same location while `x` changes.
@@ -845,10 +846,10 @@ When `refs(x)` is 1, modification will occur in place. When `refs(x)` is 2, R wi
 ```{r}
 x <- 1:10
 y <- x
-c(address(x), address(y))
+c(pryr::address(x), pryr::address(y))
 
 x[5] <- 6L
-c(address(x), address(y))
+c(pryr::address(x), pryr::address(y))
 ```
 
 Another useful function is `tracemem()`. It prints a message every time the traced object is copied: \indexc{tracemem()}
@@ -874,17 +875,17 @@ Non-primitive functions that touch the object always increment the ref count. Pr
 ```{r}
 # Touching the object forces an increment
 f <- function(x) x
-{x <- 1:10; f(x); refs(x)}
+{x <- 1:10; f(x); pryr::refs(x)}
 
 # Sum is primitive, so no increment
-{x <- 1:10; sum(x); refs(x)}
+{x <- 1:10; sum(x); pryr::refs(x)}
 
 # f() and g() never evaluate x, so refs don't increment
 f <- function(x) 10
 g <- function(x) substitute(x)
 
-{x <- 1:10; f(x); refs(x)}
-{x <- 1:10; g(x); refs(x)}
+{x <- 1:10; f(x); pryr::refs(x)}
+{x <- 1:10; g(x); pryr::refs(x)}
 ```
 
 Generally, provided that the object is not referred to elsewhere, any primitive replacement function will modify in place. This includes `[[<-`, `[<-`, `@<-`, `$<-`, `attr<-`, `attributes<-`, `class<-`, `dim<-`, `dimnames<-`, `names<-`, and `levels<-`. To be precise, all non-primitive functions increment refs, but a primitive function may be written in such a way that it doesn't. The rules are sufficiently complicated that there's little point in trying to memorise them. Instead, you should approach the problem practically by using `refs()` and `address()` to figure out when objects are being copied. \index{subsetting|subassignment}
@@ -909,7 +910,7 @@ You may be surprised to realise that every iteration of the loop copies the data
 ```{r}
 for (i in 1:10) {
   x[[i]] <- x[[i]] - medians[[i]]
-  print(c(address(x), refs(x)))
+  print(c(pryr::address(x), pryr::refs(x)))
 }
 ```
 
@@ -920,7 +921,7 @@ y <- as.list(x)
 
 for (i in 1:10) {
   y[[i]] <- y[[i]] - medians[[i]]
-  print(c(address(y), refs(y)))
+  print(c(pryr::address(y), pryr::refs(y)))
 }
 ```
 
