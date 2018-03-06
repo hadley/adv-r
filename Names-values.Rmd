@@ -49,7 +49,7 @@ Along the way, you'll learn about some common myths, such as that you need to ca
 
 The details of R's memory management are not documented in a single place. Most of the information in this chapter was gleaned from a close reading of the documentation (particularly `?Memory` and `?gc`), the [memory profiling](http://cran.r-project.org/doc/manuals/R-exts.html#Profiling-R-code-for-memory-use) section of R-exts, and the [SEXPs](http://cran.r-project.org/doc/manuals/R-ints.html#SEXPs) section of R-ints. The rest I figured out by reading the C source code, performing small experiments, and asking questions on R-devel. Any mistakes are entirely mine.
 
-## Overview
+## Bindings
 \index{bindings} \index{assignment}
 
 Assignment is the act of binding (or rebinding) a name to a value. It is the counterpart to scoping, the set of rules that determines how to find the value associated with a name.  We'll start by exploring what happens when you use `<-` to create and modify bindings.
@@ -71,11 +71,9 @@ x <- 1:3
 knitr::include_graphics("diagrams/name-value/binding-1.png", dpi = 300)
 ```
 
-Note that the arrow points in the opposite direction. Assignment creates the binding. We look up the value in the opposite direction.
+Note that the arrow in the diagram points in the opposite direction to the assigment arrow. That's because `<-` creates the binding, then we look up the value associated with the name in the opposite direction.
 
-Objects in R don't have names; names have objects. But it's difficult to talk about things that don't have names, so in diagrams we'll give objects labels like `0x6f4`. These are unique identifiers which look similar to the memory location of objects that we'll talk about later.
-
-You can think of a name as a pointer. If you run code like `y <- x` we get two bindings to the same object:
+You can think of a name as a pointer. If you run code like `y <- x` we get two bindings to the same value:
 
 ```{r}
 y <- x
@@ -84,18 +82,24 @@ y <- x
 knitr::include_graphics("diagrams/name-value/binding-2.png", dpi = 300)
 ```
 
-What happens if we modify `x`? `y` doesn't also change
+Objects in R don't have names; names have objects. But it's difficult to talk about things that don't have names, so in diagrams we'll give objects labels like `0x6f4`. These are unique identifiers which look similar to the memory location of objects that we'll talk about later.
+
+What happens if we modify `y`? `x` doesn't also change:
 
 ```{r}
 y[[3]] <- 4
-y
+x
 ```
 
-That's because most R objects are __immutable__. That means you can't change the object; instead you create a modified copy. `x` continues to reference the same object (`0x74b`), and `y` references a new object, `0xcd2`.
+That's because most objects are __immutable__. While the values associated with `y` change, the object does not. Instead, R creates a new object, `0xcd2`, a copy of `0x74b` with one value changed, then rebinds `y` to that object.
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/name-value/binding-3.png", dpi = 300)
 ```
+
+This behaviour is called __copy-on-modify__. 
+
+NB: because vectors are contiguous in memory, in most case, modifying a single value will require the complete vector to be copied. This is one reason that you should prefer using vectorised operations to modify multiple values at once as only one copy is needed.
 
 ### Functional calls
 
@@ -123,6 +127,8 @@ knitr::include_graphics("diagrams/name-value/binding-f2.png", dpi = 300)
 
 No copies were made because no modifications were made.
 
+If `f()` modified `x`, R would create a new copy, and then `z` would bind that object. There would be one copy because of the modification, but there's no copy when the object is returned from the function.
+
 ### Lists
 
 It's not just top-level names (i.e. variables) that point to values. Lists do too. Take this list, which superficially is very similar to the vector above:
@@ -131,7 +137,7 @@ It's not just top-level names (i.e. variables) that point to values. Lists do to
 l1 <- list(1, 2, 3)
 ```
 
-But the internal representation of the list is actually quite different to that of a vector. A list is really a list of references:
+The internal representation of the list is actually quite different to that of a vector. A list is really a vector of references:
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/name-value/list.png", dpi = 300)
@@ -140,7 +146,6 @@ knitr::include_graphics("diagrams/name-value/list.png", dpi = 300)
 This is particularly important when we modify a list:
 
 ```{r}
-l1 <- list(1, 2, 3)
 l2 <- l1
 ```
 
@@ -156,9 +161,29 @@ l2[[3]] <- 4
 knitr::include_graphics("diagrams/name-value/l-modify-2.png", dpi = 300)
 ```
 
-Like vectors, lists are immutable; the original list is left unchanged, but instead create a modified copy. Note that the copy is __shallow__: only the list object is copied (and modified), the individual elements are not.
+Like vectors, lists are immutable; the original list is left unchanged, but instead create a modified copy. Note that the copy is __shallow__: only the list object is copied (and modified), the individual elements are not. This has a big impact on performance.
 
-### Dataframes
+### Object size
+
+This behaviour has implications for the size of an object:
+
+```{r}
+x <- 1:1e6
+object_size(x)
+
+y <- list(x, x, x)
+object_size(y)
+```
+
+It's even misleading to think about the sizes of `x` and `y` individually. If you want to know how much space they take up together, you have to supply them to the same `object_size()` call:
+
+```{r}
+object_size(x, y)
+```
+
+In this case, `x` and `y` together take up the same amount of space as `y` alone: `object_size(x) + object_size(y)` will only equal `object_size(x, y)` if there are no shared values.
+
+### Data frames
 
 Data frames are lists, so this behaviour has important consequences when you modify a data frame. Let's take this data frame:
 
@@ -174,7 +199,7 @@ If you modify a column, only that column needs to be modified; the others can co
 
 ```{r}
 d2 <- d1
-d2$y <- d2$y * 2
+d2[, 2] <- d2[, 2] * 2
 ```
 
 ```{r, echo = FALSE, out.width = NULL}
@@ -191,6 +216,33 @@ d3[1, ] <- d3[1, ] * 2
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/name-value/d-modify-r.png", dpi = 300)
 ```
+
+### Character vectors
+
+One other surprising wrinkle is character vectors. You might think of a character vector like this:
+
+```{r}
+x <- c("a", "a", "abc", "d")
+```
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/character.png", dpi = 300)
+```
+
+But R has a global string pool, so each element of a character vector is actually a pointer to a unique string:
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/character-2.png", dpi = 300)
+```
+
+This means that character vectors take up less memory than you might expect: \index{string pool}
+
+```{r}
+banana <- "bananas bananas bananas"
+object_size(banana)
+object_size(rep(banana, 100))
+```
+
+Generally, however, this detail is not important, so we'll typically draw character vectors as if the strings live inside the vectors.
 
 ### Environments {#env-modify}
 
@@ -211,14 +263,25 @@ If we modify one reference, the environment is modified in place:
 e1$c <- 4
 e2$d
 ```
-
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/name-value/e-modify-2.png", dpi = 300)
 ```
 
+One consequence of this is that environments can contain themselves:
+
+```{r}
+e <- env()
+e$self <- e
+```
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/e-self.png", dpi = 300)
+```
+
+No other object in R can contain itself because all other objects are modified.
+
 ### Mononymous objects
 
-There is one other exception to the copy-on-modify rule: objects that only have single reference pointing to them. I think it's best to think of this as a performance optimisation; if an object only has one name that points to it, then this has the same behaviour as copy-on-modify, but is obviously much faster.
+There second exception to the copy-on-modify rule applies to all objects in R: objects that only have single binding can be modified in place. I think it's best to think of this as a performance optimisation; if an object only has one name that points to it, then this has the same behaviour as copy-on-modify, but is obviously much faster.
 
 ```{r}
 v <- 1:3
@@ -229,18 +292,31 @@ knitr::include_graphics("diagrams/name-value/v-inplace-1.png", dpi = 300)
 ```
 
 ```{r}
-v[3] <- 4L
+v[[3]] <- 4L
 ```
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/name-value/v-inplace-2.png", dpi = 300)
 ```
 
-The rules for when R applies this optimisation are a little subtle due to the way it counts the number of references that point to an object, so we'll come back to it the end of the chapter.
+(Note that the value `0x207` is modified.)
+
+It's challenging to predict exactyl when R applies this optimisation because of two challenges:
+
+* When it comes to bindings, R can currently[^refcnt] only count 0, 1, 
+  and many. 
+  
+* As described above, any regular function call makes a binding to its
+  argument. The only exception are "primitive" C level functions in the
+  base package.
+
+Together, this means that it's very hard to create a value that only has a single binding. We'll discuss this in detail in [Modification in place](#modification).
+
+[^refcnt]: By the time you read this, that may have changed as plans are afoot to improve reference counting: https://developer.r-project.org/Refcnt.html
 
 ### Unbinding and the garbage collector
 
-Consider the following sequence of function calls
+Consider this code:
 
 ```{r}
 x <- 1:3
@@ -266,9 +342,7 @@ rm(x)
 knitr::include_graphics("diagrams/name-value/unbinding-3.png", dpi = 300)
 ```
 
-Note that `rm()` doesn't delete the object; it deletes the binding.
-
-So how do the objects get deleted? That's the job of the __garbage collector__. It walks through every object in memory and looks to see how many references it has. If there are no references, the object is deleted. We'll come back to this in more detail below.
+We create two objects, but by the end of code neither object is bound to a name. How do these values get deleted? That's the job of the __garbage collector__. It walks through every object in memory and counting how many references it has. If there are no references, the object is deleted. We'll come back to this in more detail below.
 
 ## Assignment
 
@@ -540,9 +614,7 @@ This will introduce a particularly pernicious bug: 10% of the time, 1 will be ad
 
 ## Object size {#object-size}
 
-<!-- deletion size vs. serialization size -->
-
-To understand memory usage in R, we will start with `pryr::object_size()`. This function tells you how many bytes of memory an object occupies: \index{object\_size()}
+To understand memory usage in R, we will use `pryr::object_size()`. This function tells you how many bytes of memory an object occupies: \index{object\_size()}
 
 ```{r}
 library(pryr)
@@ -612,43 +684,6 @@ lines(sizes - 40, type = "s")
 ```
 
 Beyond 128 bytes, it no longer makes sense for R to manage vectors. After all, allocating big chunks of memory is something that operating systems are very good at. Beyond 128 bytes, R will ask for memory in multiples of 8 bytes. This ensures good alignment.
-
-A subtlety of the size of an object is that components can be shared across multiple objects. For example, look at the following code:
-
-```{r}
-x <- 1:1e6
-object_size(x)
-
-y <- list(x, x, x)
-object_size(y)
-```
-
-`y` isn't three times as big as `x` because R is smart enough to not copy `x` three times; instead it just points to the existing `x`. 
-
-It's misleading to look at the sizes of `x` and `y` individually. If you want to know how much space they take up together, you have to supply them to the same `object_size()` call:
-
-```{r}
-object_size(x, y)
-```
-
-In this case, `x` and `y` together take up the same amount of space as `y` alone. This is not always the case. If there are no shared components, as in the following example, then you can add up the sizes of individual components to find out the total size:
-
-```{r}
-x1 <- 1:1e6
-y1 <- list(1:1e6, 1:1e6, 1:1e6)
-
-object_size(x1)
-object_size(y1)
-object_size(x1, y1)
-object_size(x1) + object_size(y1) == object_size(x1, y1)
-```
-
-The same issue also comes up with strings, because R has a global string pool. This means that each unique string is only stored in one place, and therefore character vectors take up less memory than you might expect: \index{string pool}
-
-```{r}
-object_size("banana")
-object_size(rep("banana", 10))
-```
 
 ### Exercises
 
