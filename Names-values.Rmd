@@ -298,7 +298,7 @@ knitr::include_graphics("diagrams/name-value/e-self.png", dpi = 300)
 
 This is a unique property of environments!
 
-### Mononymous objects
+### Modify-in-place
 
 The second exception to the copy-on-modify rule applies to any object that has only single binding. I think it's best to think of this as a performance optimisation; if an object only has one name that points to it, then this has the same behaviour as copy-on-modify, but is obviously much faster.
 
@@ -329,9 +329,63 @@ It's challenging to predict exactly when R applies this optimisation because of 
   argument. The only exception are "primitive" C level functions in the
   base package.
 
-Together, this means that it's very hard to create a value that only has a single binding. We'll discuss this in detail in [Modification in place](#modification).
-
 [^refcnt]: By the time you read this, that may have changed, as plans are afoot to improve reference counting: https://developer.r-project.org/Refcnt.html
+
+Because the rules are complex, it's not usually worthwhile to predict whether or not a copy will occur. Instead determine empirically by using `tracemem()`. 
+
+For loops in R have a reputation for being slow. Often that slowness is because you're modifying a copy instead of modifying in place. Consider the following code. It subtracts the median from each column of a large data frame: \index{loops!avoiding copies}
+
+```{r, cache = TRUE}
+x <- data.frame(matrix(runif(5 * 1e4), ncol = 5))
+medians <- vapply(x, median, numeric(1))
+
+for (i in seq_along(medians)) {
+  x[[i]] <- x[[i]] - medians[[i]]
+}
+```
+
+You may be surprised to realise that every iteration of the loop copies the data frame. We can see that more clearly by using `tracemem()`:
+
+```{r}
+cat(tracemem(x))
+for (i in 1:5) {
+  x[[i]] <- x[[i]] - medians[[i]]
+}
+
+untracemem(x)
+```
+
+And in fact, each iteration copies the data frame not once, not twice, but three times! We get two copies because of how `[[.data.frame` is implemented, and we get one copy because `[[.data.frame` is a regular function and hences increments the reference count. I think these copies will be shallow so they are not too expensive, but it obviously adds overhead.
+
+We can make the function substantially more efficient by using a list instead of a data frame. Modifying a list uses internal C code, so the refs are not incremented and only a single copy is made.
+
+```{r}
+y <- as.list(x)
+cat(tracemem(y))
+
+for (i in 1:5) {
+  y[[i]] <- y[[i]] - medians[[i]]
+}
+```
+
+## Replacement bindings
+
+```{r}
+x <- c(a = 1, b = 2, c = 3)
+names(x)
+names(x)[2] <- "two"
+names(x)
+```
+
+This works because the expression `names(x)[2] <- "two"` is evaluated as if you had written:
+
+```{r, eval = FALSE}
+`*tmp*` <- names(x)
+`*tmp*`[2] <- "two"
+names(x) <- `*tmp*`
+```
+
+(Yes, it really does create a local variable named `*tmp*`, which is removed afterwards.)
 
 ### Unbinding and the garbage collector
 
@@ -777,32 +831,6 @@ pryr::refs(x)
 
 When `refs(x)` is 1, modification will occur in place. When `refs(x)` is 2, R will make a copy (this ensures that other pointers to the object remain unaffected). Note that in the following example, `y` keeps pointing to the same location while `x` changes.
 
-```{r}
-x <- 1:10
-y <- x
-c(pryr::address(x), pryr::address(y))
-
-x[5] <- 6L
-c(pryr::address(x), pryr::address(y))
-```
-
-Another useful function is `tracemem()`. It prints a message every time the traced object is copied: \indexc{tracemem()}
-
-```{r tracemem, eval = FALSE}
-x <- 1:10
-# Prints the current memory location of the object
-tracemem(x)
-# [1] "<0x7feeaaa1c6b8>"
-
-x[5] <- 6L
-
-y <- x
-# Prints where it has moved from and to
-x[5] <- 6L
-# tracemem[0x7feeaaa1c6b8 -> 0x7feeaaa1c768]:
-```
-
-For interactive use, `tracemem()` is slightly more useful than `refs()`, but because it just prints a message, it's harder to program with. I don't use it in this book because it interacts poorly with [knitr](http://yihui.name/knitr/), the tool I use to interleave text and code.
 
 Non-primitive functions that touch the object always increment the ref count. Primitive functions usually don't. (The reasons are a little complicated, but see the R-devel thread [confused about NAMED](http://r.789695.n4.nabble.com/Confused-about-NAMED-td4103326.html).) \index{primitive functions}
 
@@ -826,38 +854,6 @@ Generally, provided that the object is not referred to elsewhere, any primitive 
 
 While determining that copies are being made is not hard, preventing such behaviour is. If you find yourself resorting to exotic tricks to avoid copies, it may be time to rewrite your function in C++, as described in [Rcpp](#rcpp).
 
-### Loops
-
-For loops in R have a reputation for being slow. Often that slowness is because you're modifying a copy instead of modifying in place. Consider the following code. It subtracts the median from each column of a large data frame: \index{loops!avoiding copies}
-
-```{r, cache = TRUE}
-x <- data.frame(matrix(runif(100 * 1e4), ncol = 100))
-medians <- vapply(x, median, numeric(1))
-
-for (i in seq_along(medians)) {
-  x[[i]] <- x[[i]] - medians[[i]]
-}
-```
-
-You may be surprised to realise that every iteration of the loop copies the data frame. We can see that more clearly by using `address()` and `refs()` for a small sample of the loop:
-
-```{r}
-for (i in 1:10) {
-  x[[i]] <- x[[i]] - medians[[i]]
-  print(c(pryr::address(x), pryr::refs(x)))
-}
-```
-
-For each iteration, `x` is moved to a new location so `refs(x)` is always 2. This occurs because `[[<-.data.frame` is not a primitive function, so it always increments the refs. We can make the function substantially more efficient by using a list instead of a data frame. Modifying a list uses primitive functions, so the refs are not incremented and all modifications occur in place:
-
-```{r}
-y <- as.list(x)
-
-for (i in 1:10) {
-  y[[i]] <- y[[i]] - medians[[i]]
-  print(c(pryr::address(y), pryr::refs(y)))
-}
-```
 
 ### Exercises
 
