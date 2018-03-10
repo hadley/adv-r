@@ -36,10 +36,8 @@ library(lobstr)
 
 The details of R's memory management are not documented in a single place. Most of the information in this chapter was gleaned from a close reading of the documentation (particularly `?Memory` and `?gc`), the [memory profiling](http://cran.r-project.org/doc/manuals/R-exts.html#Profiling-R-code-for-memory-use) section of R-exts, and the [SEXPs](http://cran.r-project.org/doc/manuals/R-ints.html#SEXPs) section of R-ints. The rest I figured out by reading the C source code, performing small experiments, and asking questions on R-devel. Any mistakes are entirely mine.
 
-## Bindings
+## Binding basics
 \index{bindings} \index{assignment}
-
-### Basics
 
 It's easy to read this code as: "create an object named 'x', containing the values 1, 2, and 3". 
 
@@ -78,7 +76,32 @@ obj_addr(y)
 
 It takes some time to get your head around the distinction between names and values, but it's really helpful for functional programming when you start to work with functions that have different names in different contexts.
 
-### Copy-on-modify
+### Non-syntactic names
+\index{reserved names} \indexc{`} \index{non-syntactic names}
+
+You've probably used regular assignment in R thousands of times. Regular assignment creates a binding between a name and an object in the current environment. Names usually consist of letters, digits, `.` and `_`, and can't begin with `_`.  If you try to use a name that doesn't follow these rules, you get an error:
+
+```{r, eval = FALSE}
+_abc <- 1
+# Error: unexpected input in "_"
+```
+
+Reserved words (like `TRUE`, `NULL`, `if`, and `function`) follow the rules but are reserved by R for other purposes. A complete list of reserved words can be found in `?Reserved`.It's possible to override the usual rules and use a name with any sequence of characters by surrounding the name with backticks:
+
+```{r}
+`:)` <- "smile"
+`:)`
+```
+
+Typically the use of backticks is most important when you are accessing the name of a column in a data frame from a weird datasource.
+
+::: sidebar
+You can also create non-syntactic bindings using single and double quotes (i.e. `"a + b" <- 3`) instead of backticks, but I don't recommend it. The ability to use strings on the left hand side of the assignment arrow is a historical artefact, used before R supported backticks.
+:::
+
+
+
+## Copy-on-modify
 
 What happens if we modify `y`? `x` doesn't also change:
 
@@ -95,16 +118,14 @@ knitr::include_graphics("diagrams/name-value/binding-3.png", dpi = 300)
 
 This behaviour is called __copy-on-modify__, and understanding it makes your intuition for the performance of R code radically better.
 
-To dig into this behaviour, it can be useful to use `base::tracemem()`. You give it a name that binds an object, and it will tell you every time that object gets copied:
+You can see when an object gets copied with `base::tracemem()`. You give it a name that binds an object, and it will tell you every time that object gets copied:
 
-```{r, results = FALSE}
+```{r}
 x <- 1:3
 cat(tracemem(x))
-#> <0x112060c08>
 
 y <- x
 y[[3]] <- 4L
-#> tracemem[0x112060c08 -> 0x111a6af78]
 
 y[[3]] <- 5L
 ```
@@ -113,7 +134,7 @@ Note that if you modify `y` again, it doesn't get copied. That's because the new
 
 ### Functional calls
 
-The same rules also apply to function calls. Take this code:
+The same rules for copying also apply to function calls. Take this code:
 
 ```{r}
 f <- function(a) {
@@ -238,7 +259,7 @@ knitr::include_graphics("diagrams/name-value/d-modify-r.png", dpi = 300)
 ### Character vectors
 \index{string pool}
 
-One other surprising wrinkle is character vectors. In the previous chapter, we drew character vectors like this:
+The final place that R uses references is in character vectors. In the previous chapter, we drew character vectors like this:
 
 ```{r}
 x <- c("a", "a", "abc", "d")
@@ -262,6 +283,28 @@ obj_size(rep(banana, 100))
 ```
 
 Generally, however, this detail is not important, so elsewhere in the book I'll draw character vectors as if the individual strings live inside the vector.
+
+### Replacement bindings
+
+```{r}
+x <- c(a = 1, b = 2, c = 3)
+names(x)
+names(x)[2] <- "two"
+names(x)
+```
+
+This works because the expression `names(x)[2] <- "two"` is evaluated as if you had written:
+
+```{r, eval = FALSE}
+`*tmp*` <- names(x)
+`*tmp*`[2] <- "two"
+names(x) <- `*tmp*`
+```
+
+(Yes, it really does create a local variable named `*tmp*`, which is removed afterwards.)
+
+
+## Modify-in-place
 
 ### Environments {#env-modify}
 
@@ -298,7 +341,7 @@ knitr::include_graphics("diagrams/name-value/e-self.png", dpi = 300)
 
 This is a unique property of environments!
 
-### Modify-in-place
+### Objects with a single binding
 
 The second exception to the copy-on-modify rule applies to any object that has only single binding. I think it's best to think of this as a performance optimisation; if an object only has one name that points to it, then this has the same behaviour as copy-on-modify, but is obviously much faster.
 
@@ -326,8 +369,8 @@ It's challenging to predict exactly when R applies this optimisation because of 
   and many. 
   
 * As described above, any regular function call makes a binding to its
-  argument. The only exception are "primitive" C level functions in the
-  base package.
+  argument. The only exception are specially written C functions, which
+  occur mostly in the base package.
 
 [^refcnt]: By the time you read this, that may have changed, as plans are afoot to improve reference counting: https://developer.r-project.org/Refcnt.html
 
@@ -368,26 +411,22 @@ for (i in 1:5) {
 }
 ```
 
-## Replacement bindings
+While determining that copies are being made is not hard, preventing such behaviour is. If you find yourself resorting to exotic tricks to avoid copies, it may be time to rewrite your function in C++, as described in [Rcpp](#rcpp).
 
-```{r}
-x <- c(a = 1, b = 2, c = 3)
-names(x)
-names(x)[2] <- "two"
-names(x)
-```
+### Exercises
 
-This works because the expression `names(x)[2] <- "two"` is evaluated as if you had written:
+1.  Explain why `tracemem()` records two copies when you run this code.
+    Hint: carefully look at the difference between this code and the code 
+    earlier in the section.
+     
+    ```{r, results = FALSE}
+    x <- 1:3
+    tracemem(x)
+    
+    x[[3]] <- 4
+    ```
 
-```{r, eval = FALSE}
-`*tmp*` <- names(x)
-`*tmp*`[2] <- "two"
-names(x) <- `*tmp*`
-```
-
-(Yes, it really does create a local variable named `*tmp*`, which is removed afterwards.)
-
-### Unbinding and the garbage collector
+## Unbinding and the garbage collector {#gc}
 
 Consider this code:
 
@@ -417,288 +456,11 @@ knitr::include_graphics("diagrams/name-value/unbinding-3.png", dpi = 300)
 
 We create two objects, but by the end of code neither object is bound to a name. How do these values get deleted? That's the job of the __garbage collector__. It walks through every object in memory and counting how many references it has. If there are no references, the object is deleted. We'll come back to this in more detail below.
 
-### Exercises
+### When does the garbage collector run?
 
-1.  Explain why `tracemem()` records two copies when you run this code.
-    Hint: carefully look at the difference between this code and the code 
-    earlier in the section.
-     
-    ```{r, results = FALSE}
-    x <- 1:3
-    tracemem(x)
-    
-    x[[3]] <- 4
-    ```
-     
+Despite what you might have read elsewhere, there's never any need to call `gc()` yourself. R will automatically run garbage collection whenever it needs more space; if you want to see when that is, call `gcinfo(TRUE)`. The only reason you _might_ want to call `gc()` is to ask R to return memory to the operating system. However, even that might not have any effect: older versions of Windows had no way for a program to return memory to the OS. \indexc{gc()}
 
-## Assignment
-
-### `<<-`
-
-The regular assignment arrow, `<-`, always creates a variable in the current environment. The deep assignment arrow, `<<-`, never creates a variable in the current environment, but instead modifies an existing variable found by walking up the parent environments. 
-
-```{r}
-x <- 0
-f <- function() {
-  x <<- 1
-}
-f()
-x
-```
-
-If `<<-` doesn't find an existing variable, it will create one in the global environment. This is usually undesirable, because global variables introduce non-obvious dependencies between functions. `<<-` is most often used in conjunction with a closure, as described in [Closures](#closures).
-
-
-### Non-syntactic names
-\index{reserved names} \indexc{`} \index{non-syntactic names}
-
-You've probably used regular assignment in R thousands of times. Regular assignment creates a binding between a name and an object in the current environment. Names usually consist of letters, digits, `.` and `_`, and can't begin with `_`.  If you try to use a name that doesn't follow these rules, you get an error:
-
-```{r, eval = FALSE}
-_abc <- 1
-# Error: unexpected input in "_"
-```
-
-Reserved words (like `TRUE`, `NULL`, `if`, and `function`) follow the rules but are reserved by R for other purposes:
-
-```{r, eval = FALSE}
-if <- 10
-#> Error: unexpected assignment in "if <-"
-```
-
-A complete list of reserved words can be found in `?Reserved`. 
-
-It's possible to override the usual rules and use a name with any sequence of characters by surrounding the name with backticks:
-
-```{r, eval = FALSE}
-`a + b` <- 3
-`:)` <- "smile"
-`    ` <- "spaces"
-ls()
-#  [1] "    "   ":)"     "a + b"
-`:)`
-#  [1] "smile"
-```
-
-::: sidebar
-### Quotes {-}
-You can also create non-syntactic bindings using single and double quotes instead of backticks, but I don't recommend it. The ability to use strings on the left hand side of the assignment arrow is a historical artefact, used before R supported backticks.
-:::
-
-## Lexical scoping {#lexical-scoping}
-
-Assignment is the act of binding a name to a value. Scoping is the opposite; finding a value given a name.
-
-Scoping is the set of rules that govern how R looks up the value of a symbol. In the example below, scoping is the set of rules that R applies to go from the symbol `x` to its value `10`: \index{scoping!lexical|see{lexical scoping}} \index{lexical scoping}
-
-```{r}
-x <- 10
-x
-```
-
-Understanding scoping allows you to:
-
-* build tools by composing functions, as described in 
-  [functional programming](#functional-programming).
-
-* overrule the usual evaluation rules and do non-standard evaluation, as 
-  described in [non-standard evaluation](#nse).
-
-R has two types of scoping: __lexical scoping__, implemented automatically at the language level, and __dynamic scoping__, used in select functions to save typing during interactive analysis. We discuss lexical scoping here because it is intimately tied to function creation. Dynamic scoping is described in more detail in [scoping issues](#scoping-issues).
-
-Lexical scoping looks up symbol values based on how functions were nested when they were created, not how they are nested when they are called. With lexical scoping, you don't need to know how the function is called to figure out where the value of a variable will be looked up. You just need to look at the function's definition.
-
-The "lexical" in lexical scoping doesn't correspond to the usual English definition ("of or relating to words or the vocabulary of a language as distinguished from its grammar and construction") but comes from the computer science term "lexing", which is part of the process that converts code represented as text to meaningful pieces that the programming language understands.
-
-There are four basic principles behind R's implementation of lexical scoping:
-
-* name masking
-* functions vs. variables
-* a fresh start
-* dynamic lookup
-
-You probably know many of these principles already, although you might not have thought about them explicitly. Test your knowledge by mentally running through the code in each block before looking at the answers.
-
-### Name masking
-
-The following example illustrates the most basic principle of lexical scoping, and you should have no problem predicting the output.
-
-```{r, eval = FALSE}
-f <- function() {
-  x <- 1
-  y <- 2
-  c(x, y)
-}
-f()
-rm(f)
-```
-
-If a name isn't defined inside a function, R will look one level up.
-
-```{r, eval = FALSE}
-x <- 2
-g <- function() {
-  y <- 1
-  c(x, y)
-}
-g()
-rm(x, g)
-```
-
-The same rules apply if a function is defined inside another function: look inside the current function, then where that function was defined, and so on, all the way up to the global environment, and then on to other loaded packages. Run the following code in your head, then confirm the output by running the R code.
-
-```{r, eval = FALSE}
-x <- 1
-h <- function() {
-  y <- 2
-  i <- function() {
-    z <- 3
-    c(x, y, z)
-  }
-  i()
-}
-h()
-rm(x, h)
-```
-
-The same rules apply to closures, functions created by other functions. Closures will be described in more detail in [functional programming](#functional-programming); here we'll just look at how they interact with scoping. The following function, `j()`, returns a function.  What do you think this function will return when we call it? \index{closures!scoping}
-
-```{r, eval = FALSE}
-j <- function(x) {
-  y <- 2
-  function() {
-    c(x, y)
-  }
-}
-k <- j(1)
-k()
-rm(j, k)
-```
-
-This seems a little magical (how does R know what the value of `y` is after the function has been called). It works because `k` preserves the environment in which it was defined and because the environment includes the value of `y`. [Environments](#environments) gives some pointers on how you can dive in and figure out what values are stored in the environment associated with each function.
-
-### Functions vs. variables
-
-The same principles apply regardless of the type of associated value --- finding functions works exactly the same way as finding variables:
-
-```{r}
-l <- function(x) x + 1
-m <- function() {
-  l <- function(x) x * 2
-  l(10)
-}
-m()
-rm(l, m)
-```
-
-For functions, there is one small tweak to the rule. If you are using a name in a context where it's obvious that you want a function (e.g., `f(3)`), R will ignore objects that are not functions while it is searching. In the following example `n` takes on a different value depending on whether R is looking for a function or a variable.
-
-```{r}
-n <- function(x) x / 2
-o <- function() {
-  n <- 10
-  n(n)
-}
-o()
-rm(n, o)
-```
-
-However, using the same name for functions and other objects will make for confusing code, and is generally best avoided.
-
-### A fresh start {#fresh-start}
-
-What happens to the values in between invocations of a function? What will happen the first time you run this function? What will happen the second time? (If you haven't seen `exists()` before: it returns `TRUE` if there's a variable of that name, otherwise it returns `FALSE`.)
-
-```{r, eval = FALSE}
-j <- function() {
-  if (!exists("a")) {
-    a <- 1
-  } else {
-    a <- a + 1
-  }
-  a
-}
-j()
-rm(j)
-```
-
-You might be surprised that it returns the same value, `1`, every time. This is because every time a function is called, a new environment is created to host execution. A function has no way to tell what happened the last time it was run; each invocation is completely independent. (We'll see some ways to get around this in [mutable state](#mutable-state).)
-
-### Dynamic lookup
-
-Lexical scoping determines where to look for values, not when to look for them. R looks for values when the function is run, not when it's created. This means that the output of a function can be different depending on objects outside its environment: 
-
-```{r}
-f <- function() x
-x <- 15
-f()
-
-x <- 20
-f()
-```
-
-You generally want to avoid this behaviour because it means the function is no longer self-contained. This is a common error --- if you make a spelling mistake in your code, you won't get an error when you create the function, and you might not even get one when you run the function, depending on what variables are defined in the global environment.
-
-One way to detect this problem is the `findGlobals()` function from `codetools`. This function lists all the external dependencies of a function: \indexc{findGlobals()}
-
-```{r}
-f <- function() x + 1
-codetools::findGlobals(f)
-```
-
-Another way to try and solve the problem would be to manually change the environment of the function to the `emptyenv()`, an environment which contains absolutely nothing:
-
-```{r, error = TRUE}
-environment(f) <- emptyenv()
-f()
-```
-
-This doesn't work because R relies on lexical scoping to find _everything_, even the `+` operator. It's never possible to make a function completely self-contained because you must always rely on functions defined in base R or other packages.
-
-You can use this same idea to do other things that are extremely ill-advised. For example, since all of the standard operators in R are functions, you can override them with your own alternatives.  If you ever are feeling particularly evil, run the following code while your friend is away from their computer:
-
-```{r}
-`(` <- function(e1) {
-  if (is.numeric(e1) && runif(1) < 0.1) {
-    e1 + 1
-  } else {
-    e1
-  }
-}
-replicate(50, (1 + 2))
-rm("(")
-```
-
-This will introduce a particularly pernicious bug: 10% of the time, 1 will be added to any numeric calculation inside parentheses. This is another good reason to regularly restart with a clean R session!
-
-### Exercises
-
-1. What does the following code return? Why? What does each of the three `c`'s mean?
-
-    ```{r, eval = FALSE}
-    c <- 10
-    c(c = c)
-    ```
-
-2. What are the four principles that govern how R looks for values?
-
-3. What does the following function return? Make a prediction before 
-   running the code yourself.
-
-    ```{r, eval = FALSE}
-    f <- function(x) {
-      f <- function(x) {
-        f <- function(x) {
-          x ^ 2
-        }
-        f(x) + 1
-      }
-      f(x) * 2
-    }
-    f(10)
-    ```
-
-## The garbage collector {#gc}
+### Memory usage
 
 While `obj_size()` tells you the size of a single object, `pryr::mem_used()` tells you the total size of all objects in memory: \indexc{mem\_used()}
 
@@ -716,6 +478,8 @@ This number won't agree with the amount of memory reported by your operating sys
 
 1. R counts the memory occupied by objects but there may be gaps due to 
    deleted objects. This problem is known as memory fragmentation.
+
+### Memory change
 
 `mem_change()` builds on top of `mem_used()` to tell you how memory changes during code execution. Positive numbers represent an increase in the memory used by R, and negative numbers represent a decrease. \indexc{mem\_change()}
 
@@ -750,7 +514,7 @@ pryr::mem_change(rm(x))
 pryr::mem_change(rm(y))
 ```
 
-Despite what you might have read elsewhere, there's never any need to call `gc()` yourself. R will automatically run garbage collection whenever it needs more space; if you want to see when that is, call `gcinfo(TRUE)`. The only reason you _might_ want to call `gc()` is to ask R to return memory to the operating system. However, even that might not have any effect: older versions of Windows had no way for a program to return memory to the OS. \indexc{gc()}
+### Memory leaks
 
 GC takes care of releasing objects that are no longer used. However, you do need to be aware of possible memory leaks. A memory leak occurs when you keep pointing to an object without realising it. In R, the two main causes of memory leaks are formulas and closures because they both capture the enclosing environment. The following code illustrates the problem. In `f1()`, `1:1e6` is only referenced inside the function, so when the function completes the memory is returned and the net memory change is 0. `f2()` and `f3()` both return objects that capture environments, so that `x` is not freed when the function completes. \index{memory!leaks}
 
@@ -780,95 +544,6 @@ obj_size(z)
 ```{r, echo = FALSE}
 rm(y, z)
 ```
-
-## Modification in place {#modification}
-
-What happens to `x` in the following code? \index{copy-on-modify!exceptions} \index{avoiding copies}
-
-```{r}
-x <- 1:10
-x[5] <- 10L
-x
-```
-
-There are two possibilities:
-
-1. R modifies `x` in place.
-
-2. R makes a copy of `x` to a new location, modifies the copy, and then uses 
-   the name `x` to point to the new location.
-
-It turns out that R can do either depending on the circumstances. In the example above, it will modify in place. But if another variable also points to `x`, then R will copy it to a new location. To explore what's going on in greater detail, we use two tools from the pryr package. Given the name of a variable, `lobstr::obj_addr()` will tell us the variable's location in memory and `lobstr::obj_refs()` will tell us how many names point to that location. \indexc{address()} \indexc{refs()}
-
-```{r, eval = FALSE}
-library(pryr)
-x <- 1:10
-c(obj_addr(x), obj_refs(x))
-# [1] "0x103100060" "1"
-
-y <- x
-c(obj_addr(y), obj_refs(y))
-# [1] "0x103100060" "2"
-```
-
-(Note that if you're using RStudio, `refs()` will always return 2: the environment browser makes a reference to every object you create on the command line.)
-
-`refs()` is only an estimate. It can only distinguish between one and more than one reference (future versions of R might do better). This means that `refs()` returns 2 in both of the following cases: \index{reference counting}
-
-```{r}
-x <- 1:5
-y <- x
-rm(y)
-# Should really be 1, because we've deleted y
-pryr::refs(x)
-
-x <- 1:5
-y <- x
-z <- x
-# Should really be 3
-pryr::refs(x)
-```
-
-When `refs(x)` is 1, modification will occur in place. When `refs(x)` is 2, R will make a copy (this ensures that other pointers to the object remain unaffected). Note that in the following example, `y` keeps pointing to the same location while `x` changes.
-
-
-Non-primitive functions that touch the object always increment the ref count. Primitive functions usually don't. (The reasons are a little complicated, but see the R-devel thread [confused about NAMED](http://r.789695.n4.nabble.com/Confused-about-NAMED-td4103326.html).) \index{primitive functions}
-
-```{r}
-# Touching the object forces an increment
-f <- function(x) x
-{x <- 1:10; f(x); pryr::refs(x)}
-
-# Sum is primitive, so no increment
-{x <- 1:10; sum(x); pryr::refs(x)}
-
-# f() and g() never evaluate x, so refs don't increment
-f <- function(x) 10
-g <- function(x) substitute(x)
-
-{x <- 1:10; f(x); pryr::refs(x)}
-{x <- 1:10; g(x); pryr::refs(x)}
-```
-
-Generally, provided that the object is not referred to elsewhere, any primitive replacement function will modify in place. This includes `[[<-`, `[<-`, `@<-`, `$<-`, `attr<-`, `attributes<-`, `class<-`, `dim<-`, `dimnames<-`, `names<-`, and `levels<-`. To be precise, all non-primitive functions increment refs, but a primitive function may be written in such a way that it doesn't. The rules are sufficiently complicated that there's little point in trying to memorise them. Instead, you should approach the problem practically by using `refs()` and `address()` to figure out when objects are being copied. \index{subsetting|subassignment}
-
-While determining that copies are being made is not hard, preventing such behaviour is. If you find yourself resorting to exotic tricks to avoid copies, it may be time to rewrite your function in C++, as described in [Rcpp](#rcpp).
-
-
-### Exercises
-
-1.  The code below makes one duplication. Where does it occur and why? 
-    (Hint: look at `refs(y)`.)
-
-    ```{r}
-    y <- as.list(x)
-    for(i in seq_along(medians)) {
-      y[[i]] <- y[[i]] - medians[[i]]
-    }
-    ```
-
-1.  The implementation of `as.data.frame()` in the previous section has one 
-    big downside. What is it and how could you avoid it?
 
 
 [long-vectors]: http://cran.r-project.org/doc/manuals/R-ints.html#Long-vectors
