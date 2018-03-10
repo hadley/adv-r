@@ -418,7 +418,7 @@ Most of the time, modifying an R object will create a copy. There are two except
 
 ### Objects with a single binding
 
-The second exception to the copy-on-modify rule applies to any object that has only single binding. I think it's best to think of this as a performance optimisation; if an object only has one name that points to it, then this has the same behaviour as copy-on-modify, but is obviously much faster.
+If an object only has a single binding to it, R will modify it in plane:
 
 ```{r}
 v <- 1:3
@@ -436,22 +436,21 @@ v[[3]] <- 4L
 knitr::include_graphics("diagrams/name-value/v-inplace-2.png", dpi = 300)
 ```
 
-(Carefully note the object ids here: `0x207` is modified in place.)
+(Carefully note the object ids here: `v` continues to bind to the same object, `0x207`.)
 
 It's challenging to predict exactly when R applies this optimisation because of two complications:
 
 * When it comes to bindings, R can currently[^refcnt] only count 0, 1, 
-  and many. 
+  and many. That means if an object has two bindings, and one goes away,
+  the reference count does not get decremented.
   
-* As described above, any regular function call makes a binding to its
-  argument. The only exception are specially written C functions, which
+* Whenever you call any regular function, it will make a reference to the 
+  object. The only exception are specially written C functions, which
   occur mostly in the base package.
 
 [^refcnt]: By the time you read this, that may have changed, as plans are afoot to improve reference counting: https://developer.r-project.org/Refcnt.html
 
-Because the rules are complex, it's not usually worthwhile to predict whether or not a copy will occur. Instead determine empirically by using `tracemem()`. 
-
-For loops in R have a reputation for being slow. Often that slowness is because you're modifying a copy instead of modifying in place. Consider the following code. It subtracts the median from each column of a large data frame: \index{loops!avoiding copies}
+Together, this make it hard to predict whether or not a copy will occur. Instead, it's better to determine empirically with `tracemem()`. Lets explore the subtleties with a case study using for loops. In R, for loops have a reputation for being slow. Often that slowness is because every cycle of the loop is creating a copy. Consider the following code. It subtracts the median from each column of a large data frame: \index{loops!avoiding copies}
 
 ```{r, cache = TRUE}
 x <- data.frame(matrix(runif(5 * 1e4), ncol = 5))
@@ -462,10 +461,11 @@ for (i in seq_along(medians)) {
 }
 ```
 
-You may be surprised to realise that every iteration of the loop copies the data frame. We can see that more clearly by using `tracemem()`:
+This loop is surprisingly slow because every iteration of the loop copies the data frame. We can see that more clearly by using `tracemem()`:
 
 ```{r}
-cat(tracemem(x))
+cat(tracemem(x), "\n")
+
 for (i in 1:5) {
   x[[i]] <- x[[i]] - medians[[i]]
 }
@@ -473,13 +473,13 @@ for (i in 1:5) {
 untracemem(x)
 ```
 
-And in fact, each iteration copies the data frame not once, not twice, but three times! We get two copies because of how `[[.data.frame` is implemented, and we get one copy because `[[.data.frame` is a regular function and hences increments the reference count. I think these copies will be shallow so they are not too expensive, but it obviously adds overhead.
+In fact, each iteration copies the data frame not once, not twice, but three times! We get two copies inside of `[[.data.frame`, and a further copy because `[[.data.frame` is a regular function and hences increments the reference count of `x`. Note however, that these copies will be shallow so they are not too expensive, but they obviously make the loop slower than you might hope.
 
-We can make the function substantially more efficient by using a list instead of a data frame. Modifying a list uses internal C code, so the refs are not incremented and only a single copy is made.
+We can reduce the number of copies by using a list instead of a data frame. Modifying a list uses internal C code, so the refs are not incremented and only a single copy is made.
 
 ```{r}
 y <- as.list(x)
-cat(tracemem(y))
+cat(tracemem(y), "\n")
 
 for (i in 1:5) {
   y[[i]] <- y[[i]] - medians[[i]]
@@ -490,7 +490,9 @@ While determining that copies are being made is not hard, preventing such behavi
 
 ### Environments {#env-modify}
 
-You'll learn more about environmetns in [Environments], but it's important to mention them here because they behave different to every other object in R. Environments have reference semantics which means that they are modified in place. Take this environment, which we bind to `e1` and `e2`:
+You'll learn more about environments in [Environments], but it's important to mention them here because they behave differently to other objects: environments are always modified in place. This is sometimes described as having __reference semantics__ because whenever you modify an environment the existing bindings continue to have the same reference.
+
+Take this environment, which we bind to `e1` and `e2`:
 
 ```{r}
 e1 <- rlang::env(a = 1, b = 2, c = 3)
@@ -501,7 +503,7 @@ e2 <- e1
 knitr::include_graphics("diagrams/name-value/e-modify-1.png", dpi = 300)
 ```
 
-If we modify one reference, the environment is modified in place:
+If we change a binding, the environment is modified in place:
 
 ```{r}
 e1$c <- 4
@@ -525,7 +527,11 @@ This is a unique property of environments!
 
 ### Exercises
 
-1.   What happens if you attempt to use `tracemem()` on an environment?
+1.  Wrap the two methods for subtracting medians into two functions, then
+    use the microbenchmark to carefully compare their speeds. How does
+    performance change as the number of columns increase?
+
+1.  What happens if you attempt to use `tracemem()` on an environment?
 
 ## Unbinding and the garbage collector {#gc}
 
@@ -555,20 +561,23 @@ rm(x)
 knitr::include_graphics("diagrams/name-value/unbinding-3.png", dpi = 300)
 ```
 
-We create two objects, but by the end of code neither object is bound to a name. How do these values get deleted? That's the job of the __garbage collector__. It walks through every object in memory and counting how many references it has. If there are no references, the object is deleted. We'll come back to this in more detail below.
+We create two objects, but by the end of code neither object is bound to a name. How do these objects get deleted? That's the job of the __garbage collector__, or GC, for short. It walks through every object in memory and counting how many references it has. If there are no references, the object is deleted. We'll come back to this in more detail below.
 
 ### When does the garbage collector run?
+\index{garbage collector} \indexc{gc()}
 
-Despite what you might have read elsewhere, there's never any need to call `gc()` yourself. R will automatically run garbage collection whenever it needs more space; if you want to see when that is, call `gcinfo(TRUE)`. The only reason you _might_ want to call `gc()` is to ask R to return memory to the operating system. However, even that might not have any effect: older versions of Windows had no way for a program to return memory to the OS. \indexc{gc()}
+The garbage collector is run automatically whenever a new R object is created and R needs more memory. If you want to see when that is, call `gcinfo(TRUE)`. Running the GC will free up memory by deleting R objects that are no longer used, and if needed, requeset more memory from the operating system. 
 
-For technical reasons, there is unfortunately no way to tell when most R objects are garbage collected with `tracemem()`.
-
-### Memory usage
-
-While `obj_size()` tells you the size of a single object, `pryr::mem_used()` tells you the total size of all objects in memory: \indexc{mem\_used()}
+You can force the garbage collector to run by calling `gc()`. Despite what you might have read elsewhere, there's never any need to call `gc()` yourself. You might want to call `gc()` to ask R to return memory to your operating system, or for its side-effect of telling you how much memory is currently being used:  
 
 ```{r}
-pryr::mem_used()
+gc()
+```
+
+`lobstr::mem_used()` is a wrapper around `gc()` that just prints the total number of bytes used:
+
+```{r}
+mem_used()
 ```
 
 This number won't agree with the amount of memory reported by your operating system for a number of reasons:
@@ -582,71 +591,35 @@ This number won't agree with the amount of memory reported by your operating sys
 1. R counts the memory occupied by objects but there may be gaps due to 
    deleted objects. This problem is known as memory fragmentation.
 
-### Memory change
-
-`mem_change()` builds on top of `mem_used()` to tell you how memory changes during code execution. Positive numbers represent an increase in the memory used by R, and negative numbers represent a decrease. \indexc{mem\_change()}
-
-```{r}
-# Need about 4 mb to store 1 million integers
-pryr::mem_change(x <- 1:1e6)
-# We get that memory back when we delete it
-pryr::mem_change(rm(x))
-```
-
-Even operations that don't do anything use up a little memory. This is because R is tracking the history of everything you do. You can ignore anything smaller than a couple kB.
-
-```{r}
-pryr::mem_change(NULL)
-pryr::mem_change(NULL)
-```
-
-In some languages, you have to explicitly delete unused objects for their memory to be returned. R uses an alternative approach: garbage collection (or GC for short). GC automatically releases memory when an object is no longer used. It does this by tracking how many names point to each object, and when there are no names pointing to an object, it deletes that object. \index{garbage collection}
-
-```{r, echo = FALSE}
-rm(y)
-```
-
-```{r}
-# Create a big object
-pryr::mem_change(x <- 1:1e6)
-# Also point to 1:1e6 from y
-pryr::mem_change(y <- x)
-# Remove x, no memory freed because y is still pointing to it
-pryr::mem_change(rm(x))
-# Now nothing points to it and the memory can be freed
-pryr::mem_change(rm(y))
-```
-
 ### Memory leaks
 
-GC takes care of releasing objects that are no longer used. However, you do need to be aware of possible memory leaks. A memory leak occurs when you keep pointing to an object without realising it. In R, the two main causes of memory leaks are formulas and closures because they both capture the enclosing environment. The following code illustrates the problem. In `f1()`, `1:1e6` is only referenced inside the function, so when the function completes the memory is returned and the net memory change is 0. `f2()` and `f3()` both return objects that capture environments, so that `x` is not freed when the function completes. \index{memory!leaks}
+The GC collector takes care of deleting all objects that have no names binding them. But you are still a risk for a __memory leak__, which occurs when you keep pointing to an object without realising it. In R, the two main causes of memory leaks are formulas and closures because they both capture the enclosing environment. The following code illustrates the problem. In `f1()`, `1:1e6` is only referenced inside the function, so when the function completes the memory is returned and the net memory change is 0. `f2()` and `f3()` both return objects that capture environments, so that `x` is not freed when the function completes. \index{memory!leaks}
 
 ```{r}
 f1 <- function() {
   x <- 1:1e6
   10
 }
-pryr::mem_change(x <- f1())
+x <- f1()
 obj_size(x)
 
 f2 <- function() {
   x <- 1:1e6
   a ~ b
 }
-pryr::mem_change(y <- f2())
+y <- f2()
 obj_size(y)
 
 f3 <- function() {
   x <- 1:1e6
   function() 10
 }
-pryr::mem_change(z <- f3())
+z <- f3()
 obj_size(z)
 ```
 
 ```{r, echo = FALSE}
-rm(y, z)
+rm(x, y, z)
 ```
 
-
-[long-vectors]: http://cran.r-project.org/doc/manuals/R-ints.html#Long-vectors
+### Exercises
