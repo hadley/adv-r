@@ -83,7 +83,7 @@ It takes some time to get your head around the distinction between names and val
 ### Non-syntactic names
 \index{reserved names} \indexc{`} \index{non-syntactic names}
 
-Names that don't follow these rules are called __non-syntactic__ names, and if you try to use them, you'll get an error:
+R has strict rules about what constitutes a valid name. A __syntactic__ name must consist of letters[^letters], digits, `.` and `_`, and can't begin with `_`. Additionally, it can not be one of a list of __reserved words__ like `TRUE`, `NULL`, `if`, and `function` (see the complete list in `?Reserved`). Names that don't follow these rules are called __non-syntactic__ names, and if you try to use them, you'll get an error:
 
 ```{r, eval = FALSE}
 _abc <- 1
@@ -92,6 +92,8 @@ _abc <- 1
 if <- 10
 #> Error: unexpected assignment in "if <-"
 ```
+
+[^letters]: Surprisingly, what constitutes a letter is determined by your current locale. That means that the syntax of R code actually differs from computer to computer, and it's possible for a file that works on one computer to not even parse on another!
 
 It's possible to override the usual rules and use a name with any sequence of characters by surrounding the name with backticks:
 
@@ -103,10 +105,10 @@ It's possible to override the usual rules and use a name with any sequence of ch
 `if`
 ```
 
-Typically you shouldn't go around creating such crazy names. Instead, it's important to understand how to use `` ` `` to escape names when working with data frames that have been created outside of R, and don't follow R's rules.
+Typically, you won't deliberately create such crazy names. Instead, you need to understand them because you'll be subjected to the crazy names created by others. This happens most commonly when you load data that has been created outside of R, and doesn't follow R's rules.
 
 ::: sidebar
-You can also create non-syntactic bindings using single and double quotes (i.e. `"a + b" <- 3`) instead of backticks, but I don't recommend it. The ability to use strings on the left hand side of the assignment arrow is a historical artefact, used before R supported backticks.
+You can also create non-syntactic bindings using single and double quotes (i.e. `"a + b" <- 3`) instead of backticks, but I don't recommend it because you'll have to use a difference syntax to retrieve the values. The ability to use strings on the left hand side of the assignment arrow is a historical artefact, used before R supported backticks.
 :::
 
 ### Exercises
@@ -189,6 +191,8 @@ y[[3]] <- 5L
 
 untracemem(y)
 ```
+
+`untracemem()` is the opposite of `tracemem()`; it turns tracing off.
 
 ### Function calls
 
@@ -326,7 +330,7 @@ Generally, however, this detail is not important, so elsewhere in the book I'll 
 
 1.  Explain why `tracemem()` records two copies when you run this code.
     Hint: carefully look at the difference between this code and the code 
-    earlier in the section.
+    show earlier in the section.
      
     ```{r, results = FALSE}
     x <- 1:3
@@ -349,6 +353,8 @@ Generally, however, this detail is not important, so elsewhere in the book I'll 
     x <- list(1:10)
     x[[2]] <- x
     ```
+    
+    Draw a picture.
 
 ## Object size
 \indexc{object\_size} \indexc{obj\_size}
@@ -426,7 +432,7 @@ obj_size(x, y)
 
 ## Modify-in-place
 
-Most of the time, modifying an R object will create a copy. There are two exceptions when R will actually modify-in-place:
+Most of the time, modifying an R object will create a copy. There are two exceptions:
 
 * Objects with a single binding get a special performance optimisation.
 
@@ -434,7 +440,7 @@ Most of the time, modifying an R object will create a copy. There are two except
 
 ### Objects with a single binding
 
-If an object only has a single binding to it, R will modify it in plane:
+If an object only has a single binding to it, R will modify it in place:
 
 ```{r}
 v <- 1:3
@@ -458,7 +464,8 @@ It's challenging to predict exactly when R applies this optimisation because of 
 
 * When it comes to bindings, R can currently[^refcnt] only count 0, 1, 
   and many. That means if an object has two bindings, and one goes away,
-  the reference count does not get decremented.
+  the reference count does not get decremented (one less than many is still
+  many).
   
 * Whenever you call any regular function, it will make a reference to the 
   object. The only exception are specially written C functions, which
@@ -466,7 +473,9 @@ It's challenging to predict exactly when R applies this optimisation because of 
 
 [^refcnt]: By the time you read this, that may have changed, as plans are afoot to improve reference counting: https://developer.r-project.org/Refcnt.html
 
-Together, this make it hard to predict whether or not a copy will occur. Instead, it's better to determine empirically with `tracemem()`. Lets explore the subtleties with a case study using for loops. In R, for loops have a reputation for being slow. Often that slowness is because every cycle of the loop is creating a copy. Consider the following code. It subtracts the median from each column of a large data frame: \index{loops!avoiding copies}
+Together, this make it hard to predict whether or not a copy will occur. Instead, it's better to determine it empirically with `tracemem()`. Lets explore the subtleties with a case study using for loops. For loops have a reputation for being slow in R, but often that slowness is because every iteration of the loop is creating a copy. 
+
+Consider the following code. It subtracts the median from each column of a large data frame: \index{loops!avoiding copies}
 
 ```{r, cache = TRUE}
 x <- data.frame(matrix(runif(5 * 1e4), ncol = 5))
@@ -477,7 +486,7 @@ for (i in seq_along(medians)) {
 }
 ```
 
-This loop is surprisingly slow because every iteration of the loop copies the data frame. We can see that more clearly by using `tracemem()`:
+This loop is surprisingly slow because every iteration of the loop copies the data frame, as revealed by using `tracemem()`:
 
 ```{r}
 cat(tracemem(x), "\n")
@@ -489,9 +498,9 @@ for (i in 1:5) {
 untracemem(x)
 ```
 
-In fact, each iteration copies the data frame not once, not twice, but three times! We get two copies inside of `[[.data.frame`, and a further copy because `[[.data.frame` is a regular function and hences increments the reference count of `x`. Note however, that these copies will be shallow so they are not too expensive, but they obviously make the loop slower than you might hope.
+In fact, each iteration copies the data frame not once, not twice, but three times! We get two copies inside of `[[.data.frame`, and a further copy because `[[.data.frame` is a regular function and hences increments the reference count of `x`. (Note that these copies will be shallow so they are not too expensive, but they obviously make the loop slower than you might hope).
 
-We can reduce the number of copies by using a list instead of a data frame. Modifying a list uses internal C code, so the refs are not incremented and only a single copy is made.
+We can reduce the number of copies by using a list instead of a data frame. Modifying a list uses internal C code, so the refs are not incremented and only a single copy is made:
 
 ```{r}
 y <- as.list(x)
@@ -558,7 +567,6 @@ Consider this code:
 ```{r}
 x <- 1:3
 ```
-
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/name-value/unbinding-1.png", dpi = 300)
 ```
@@ -566,7 +574,6 @@ knitr::include_graphics("diagrams/name-value/unbinding-1.png", dpi = 300)
 ```{r}
 x <- 2:4
 ```
-
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/name-value/unbinding-2.png", dpi = 300)
 ```
@@ -574,19 +581,18 @@ knitr::include_graphics("diagrams/name-value/unbinding-2.png", dpi = 300)
 ```{r}
 rm(x)
 ```
-
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/name-value/unbinding-3.png", dpi = 300)
 ```
 
-We create two objects, but by the end of code neither object is bound to a name. How do these objects get deleted? That's the job of the __garbage collector__, or GC, for short. It walks through every object in memory and counting how many references it has. If there are no references, the object is deleted. We'll come back to this in more detail below.
+We create two objects, but by the end of code neither object is bound to a name. How do these objects get deleted? That's the job of the __garbage collector__, or GC, for short. It walks through every object in memory and counts how many references it has. If there are no references, the object is deleted. 
 
 ### When does the garbage collector run?
 \index{garbage collector} \indexc{gc()}
 
-The garbage collector is run automatically whenever a new R object is created and R needs more memory. If you want to see when that is, call `gcinfo(TRUE)`. Running the GC will free up memory by deleting R objects that are no longer used, and if needed, request more memory from the operating system. 
+The garbage collector is run automatically whenever a new R object is created and R needs more memory. If you want to see when that occur, call `gcinfo(TRUE)`: it will print a message to the console every time the garbage collector runs. Running the GC creates more memory by deleting R objects that are no longer used, and if needed, requesting more memory from the operating system. 
 
-You can force the garbage collector to run by calling `gc()`. Despite what you might have read elsewhere, there's never any need to call `gc()` yourself. You might want to call `gc()` to ask R to return memory to your operating system, or for its side-effect of telling you how much memory is currently being used:  
+You can force the garbage collector to run by calling `gc()`. Despite what you might have read elsewhere, there's never any _need_ to call `gc()` yourself. You may _want_ to call `gc()` to ask R to return memory to your operating system, or for its side-effect of telling you how much memory is currently being used:  
 
 ```{r}
 gc()
@@ -598,7 +604,7 @@ gc()
 mem_used()
 ```
 
-This number won't agree with the amount of memory reported by your operating system for a number of reasons:
+This number won't agree with the amount of memory reported by your operating system for three reasons:
 
 1. It only includes objects created by R, not the R interpreter itself.
 
@@ -611,7 +617,7 @@ This number won't agree with the amount of memory reported by your operating sys
 
 ### Memory leaks
 
-The GC collector takes care of deleting all objects that have no names binding them. But you are still a risk for a __memory leak__, which occurs when you keep pointing to an object without realising it. In R, the two main causes of memory leaks are formulas and closures because they both capture the enclosing environment. The following code illustrates the problem. In `f1()`, `1:1e6` is only referenced inside the function, so when the function completes the memory is returned and the net memory change is 0. `f2()` and `f3()` both return objects that capture environments, so that `x` is not freed when the function completes. \index{memory!leaks}
+The GC collector takes care of deleting all objects that have bindings. But you are still a risk for a __memory leak__, which occurs when you keep a binding to an object without realising it. In R, the two main causes of memory leaks are formulas and functions because they both capture the enclosing environment. The following code illustrates the problem. In `f1()`, `1:1e6` is only referenced inside the function, so when the function completes the memory is returned and the net memory change is 0. `f2()` and `f3()` both return objects that capture environments, so that `x` is not freed when the function completes. \index{memory!leaks}
 
 ```{r}
 f1 <- function() {
@@ -641,3 +647,5 @@ rm(x, y, z)
 ```
 
 ### Exercises
+
+1. 
