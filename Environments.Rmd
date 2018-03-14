@@ -3,7 +3,6 @@
 
 ```{r, include = FALSE}
 source("common.R")
-`%>%` <- magrittr::`%>%`
 ```
 
 ## Introduction
@@ -715,10 +714,16 @@ You'll learn more about function factories in [functional programming](#function
     about functions. Show where the function was found and what environment 
     it was defined in.
 
-## Frames and the call stack
+## The call stack
 \index{environments|calling}
 
 There is one last environment we need to explain, the __caller__ environment. To explain this environment we need to introduce two new concepts: the call stack and frames. Executing a function creates two types of context. You've learn about one already: the execution environment is a child of the function environment, which is determined by where the function was created. There's another type of context created by where the function was called: this is called the __call stack__.
+
+`caller_env()`
+
+There are also a couple of small wrinkles when it comes to custom evaluation. See [environments vs. frames](#eval-frame) for more details.
+
+### Simple call stacks
 
 Let's illustrate this with a simple sequence of calls: `f()` calls `g()` calls `h()`.
 
@@ -746,15 +751,50 @@ traceback()
 #> 1: f(x = 1)
 ```
 
-We can represent the call stack just before the error occurs with this diagram:
+Instead of `stop()` + `traceback()` to understand the call stack, we're going to use `lobstr::cst()` to print out the **c**all **s**tack **t**ree:
 
-```{r, echo = FALSE, out.width = NULL}
-knitr::include_graphics("diagrams/environments/calling.png", dpi = 300)
+```{r, eval = FALSE}
+h <- function(x) {
+  lobstr::cst()
+}
+f(x = 1)
+#> █
+#> └─f(x = 1)
+#>   └─g(x = 2)
+#>     └─h(x = 3)
+#>       └─lobstr::cst()
 ```
 
-(To focus on the calling environments, I have omitted the bindings in the global environment from `f`, `g`, and `h` to the respective function objects.)
+This shows us that `cst()` was called from `h()`, which was called from `g()`, which was called from `f()`. Note that the order is the opposite from `traceback()`. As the call stacks get more compliated, I think it's easier to understand the sequence of calls if you start from the beginning, rather than the end (`f()` calls `g()`, rather than `g()` was called by `f()`).
 
-Each element of the call stack is a __frame__[^frame], also known as an evaluation context. A frame has three main components:
+### Lazy evaluation
+
+The call stack above is simple - while you get a hint that there's some tree-like structure involved, everything happens on a single branch of the tree. This is typical of a call stack when all arguments are eagerly evaluated. 
+
+Let's create a more complicated example that involves some lazy evaluation. We'll create a sequence of functions, `a()`, `b()`, `c()`, that call each passing along an argument `x`.
+
+```{r, eval = FALSE}
+a <- function(x) b(x)
+b <- function(x) c(x)
+c <- function(x) x
+
+a(f())
+#> █
+#> ├─a(f())
+#> │ └─b(x)
+#> │   └─c(x)
+#> └─f()
+#>   └─g(x = 2)
+#>     └─h(x = 3)
+#>       └─lobstr::cst()
+```
+
+`x` is lazily evaluated so this tree gets two branches. In the first branch `a()` calls `b()`, then `b()` calls `c()`. The second branch starts when `c()` evaluates its argument `x`. This argument is evaluated in a new call stack because it needs to behave in the same way as if it had been evaluated in the top level environment.
+
+### Frames
+
+Each element of the call stack is a __frame__[^frame], also known as an evaluation context.
+The frame is an extremely important internal data structure, and R code can only access a small part of the data structure because it's so critical. A frame has three main components that are accessible from R:
 
 * An expression (labelled with `expr`) giving the function call. This is
   what `traceback()` prints out.
@@ -766,23 +806,31 @@ Each element of the call stack is a __frame__[^frame], also known as an evaluati
 
 * A parent, the previous call in the call stack (shown by a grey arrow). 
 
-The frame is an extremely important internal data structure. It also holds exit handlers created with `on.exit()`, restarts and handlers for the the condition system, and which context to `return()` to when a function completes. R code can only access a small part of the data structure because it's so important: making changes without using the official API could be disastrous.
-
 [^frame]: NB: `?environment` uses frame in a different sense: "Environments consist of a _frame_, or collection of named objects, and a pointer to an enclosing environment.". We avoid this sense of frame, which comes from S, because it's very specific and not widely used in base R. For example, the "frame" in `parent.frame()` is an execution context, not a collection of named objects.
 
-::: base
-Rather than one function that exposes a list of frame objects, base R provides functions that return lists of the individual components. Use `sys.frames()` to access environments and `sys.calls()` to access expressions.
-:::
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/environments/calling.png", dpi = 300)
+```
 
-While you can access any frame environment in the call stack, there is one only environment that you routinely _should_: __caller__ environment, which you can access with `caller_env()`. This is a good default for an user directed function that needs an environment argument.
+(To focus on the calling environments, I have omitted the bindings in the global environment from `f`, `g`, and `h` to the respective function objects.)
 
-::: base
-`parent.frame()` is equivalent to `caller_env()`; confusingly it returns an environment, not a frame. However, most functions that modify an attribute of the frame will use the current environment to find the current frame.
-::: 
+The frame also holds exit handlers created with `on.exit()`, restarts and handlers for the the condition system, and which context to `return()` to when a function completes. These are important for the internal operation of R, but are not directly accessible.
 
+### The caller environment
 \index{scoping!dynamic} \index{dynamic scoping}
 
+While it's possible to access any frame environment in the call stack, there is one only environment that you routinely _should_: __caller__ environment, which you can access with `caller_env()`. This is a good default for an user directed function that needs an environment argument.
+
+::: base
+`parent.frame()` is equivalent to `caller_env()`; just note that it returns an environment, not a frame.
+::: 
+
 Looking up variables in the calling stack rather than in the enclosing environment is called __dynamic scoping__. Few languages implement dynamic scoping (Emacs Lisp is a [notable exception](http://www.gnu.org/software/emacs/emacs-paper.html#SEC15).) This is because dynamic scoping makes it much harder to reason about how a function operates: not only do you need to know how it was defined, you also need to know in what context it was called. Dynamic scoping is primarily useful for developing functions that aid interactive data analysis. It is one of the topics discussed in [non-standard evaluation](#nse). 
+
+### Exercises
+
+
+
 
 ## As data structures {#explicit-envs}
 
