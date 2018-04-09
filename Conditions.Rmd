@@ -56,6 +56,8 @@ library(rlang)
 ```
 
 ## Signalling conditions
+\index{errors!throwing}
+\index{conditions!signalling}
 
 Collectively messages, warnings, and errors are known as conditions, and creating and sending them to the user is known as __signalling__. `stop()`, `warning()`, `message()`.
 
@@ -178,7 +180,7 @@ Interrupts can't be generated directly by the programmer, but are raised when th
 
 ## Ignoring conditions 
 
-There are three ways to handle conditions signalled by other code. You can ignore them, you can handle the, or you can observe them.
+Simplest way of handling conditions in R is to simply ignore them. These are the bluntest instruments, but can be convenient.
 
 ### Ignoring errors
 
@@ -240,13 +242,25 @@ Be aware that these functions are fairly heavy handed: you can't use them to sup
 
 The implementation of these functions are complex because they rely on the restart system. This is basically the only use of the restart system in base R (or pretty much any package) so we don't discuss here.
 
-## Handling conditions
+## Condition handlers
 \index{errors!catching}
-\index{signals!handling}
+\index{conditions!handling}
 
-`tryCatch()` is a general tool for handling conditions. It allows you to map conditions to __handlers__, functions that are called with the condition as an input. `tryCatch()` defines __exiting__ handlers; after the condition is captured control returns to the context where `tryCatch()` was called. This means that it's generally most suitable for working with errors, as errors have to exit the code anyway. In the next section, you'll learn about `withCallingHandlers()` which plays a similar role to `tryCatch()` for other types of condition.
+`tryCatch()` and `withCallingHandlers()` are general tool for handling conditions. They allows you to map conditions to __handlers__, functions that are called with the condition as an input. 
 
-### `tryCatch()`
+`tryCatch()` and `withCallingHandlers()` differ in the type of handlers they define;
+
+*  `tryCatch()` defines __exiting__ handlers; after the condition is captured 
+   control returns to the context where `tryCatch()` was called. This makes it
+   most suitable for working with errors, as errors have to exit the code 
+   anyway.
+  
+*  `withCallingHandlers()` defines __in-place__ handlers; after the condition
+   is captued control returns to the context where the condition was signalled.
+   This makes it most suitable for working with `warnings()`, `messages()`,
+   and other conditions.
+
+### Exiting handlers
 \indexc{tryCatch()} 
 
 If a condition is signalled, `tryCatch()` will call the first handler whose name matches one of the classes of the condition. The names useful for built-in conditions are `error`, `warning`, `message`, `interrupt`, and the catch-all `condition`.
@@ -273,80 +287,7 @@ show_condition(message("?"))
 show_condition(10)
 ```
 
-You can use `tryCatch()` to implement `try()`. A simple implementation is shown below. `base::try()` is more complicated in order to make the error message look more like what you'd see if `tryCatch()` wasn't used. Note the use of `conditionMessage()` to extract the message associated with the original error.
-
-```{r}
-try2 <- function(code, silent = FALSE) {
-  tryCatch(code, error = function(c) {
-    msg <- conditionMessage(c)
-    if (!silent) message(msg)
-    structure(msg, class = "try-error")
-  })
-}
-
-try2(1)
-
-try2(stop("Hi"))
-
-try2(stop("Hi"), silent = TRUE)
-```
-
-### Re-signalling conditions
-
-As well as returning default values when a condition is signalled, handlers can be used to make more informative error messages. For example, by modifying the message stored in the error condition object, the following function wraps `read.csv()` to add the file name to any errors:
-
-```{r, error = TRUE, warning = FALSE}
-read.csv2 <- function(file, ...) {
-  tryCatch(read.csv(file, ...), error = function(c) {
-    c$message <- paste0(c$message, " (in ", file, ")")
-    stop(c)
-  })
-}
-read.csv("code/dummy.csv")
-read.csv2("code/dummy.csv")
-```
-
-### Interrupts
-\index{interrupts}
-
-Catching interrupts can be useful if you want to take special action when the user tries to abort running code. But be careful, it's easy to create a loop that you can never escape (unless you kill R)! 
-
-```{r, eval = FALSE}
-trapped <- function(times = 3) {
-  i <- 1
-
-  message("Try to escape")
-  while(i <= times) {
-    tryCatch({
-      Sys.sleep(1)
-    }, interrupt = function(x) {
-      message("Try again!")
-      i <<- i + 1
-    })
-  }
-  message("You escaped!")
-}
-trapped()
-```
-
-### Finally
-
-`tryCatch()` has one other argument: `finally`. It specifies a block of code (not a function) to run regardless of whether the initial expression succeeds or fails. This can be useful for clean up (e.g., deleting files, closing connections). This is functionally equivalent to using `on.exit()` (and indeed that's how it's implemented) but it can wrap smaller chunks of code than an entire function. \indexc{on.exit()}
-
-### Exercises
-
-1.  Read the source code for `catch_cnd()` and explain how it works.
-
-1.  How could you rewrite `show_condition()` to use a single handler.
-
-## Observing conditions
-\indexc{withCallingHandlers()}
-
-An alternative to `tryCatch()` is `withCallingHandlers()`. The difference between the two is that the former establishes *exiting* handlers while the latter registers *in-place* handlers. 
-
-This makes `withCallingHandlers()` particularly suitable for working with messages and warnings.
-
-### Local handlers
+### In-place handlers
 
 The primary difference from `tryCatch()` is execution continues normally when the handler returns. This includes the signalling function which continues its course after having called the handler (e.g., `stop()` will continue stopping the program and `message()` or `warning()` will continue signalling a message/warning). 
 
@@ -370,40 +311,42 @@ withCallingHandlers(
 )
 ```
 
-### Returning values
+`tryCatch()` has one other argument: `finally`. It specifies a block of code (not a function) to run regardless of whether the initial expression succeeds or fails. This can be useful for clean up (e.g., deleting files, closing connections). This is functionally equivalent to using `on.exit()` (and indeed that's how it's implemented) but it can wrap smaller chunks of code than an entire function. \indexc{on.exit()}
 
-* The return value of a handler is returned by `tryCatch()`, whereas it is
-  ignored with `withCallingHandlers()`:
+### Differences
 
-    ```{r, message = TRUE}
-    f <- function() message("!")
-    tryCatch(f(), message = function(m) 1)
-    withCallingHandlers(f(), message = function(m) 1)
-    ```
+The handlers in `withCallingHandlers()` are called in the context of the call that generated the condition whereas the handlers in `tryCatch()` are called in the context of `tryCatch()`. We can see this most easily by using `calltrace()`
 
-### Call context
+```{r, error = TRUE}
+f <- function() g()
+g <- function() h()
+h <- function() stop("!")
 
-* The handlers in `withCallingHandlers()` are called in the context of the
-  call that generated the condition whereas the handlers in `tryCatch()` are
-  called in the context of `tryCatch()`. This is shown here with `sys.calls()`,
-  which is the run-time equivalent of `traceback()` --- it lists all calls
-  leading to the current function.
+tryCatch(f(), error = function(e) print(rlang::calltrace(globalenv())))
 
-    ```{r, error = TRUE}
-    f <- function() g()
-    g <- function() h()
-    h <- function() stop("!")
+withCallingHandlers(f(), error = function(e) print(rlang::calltrace(globalenv())))
+```
 
-    tryCatch(f(), error = function(e) rlang::calltrace(globalenv()))
+Closely related is the return value of an inplace handler is effectively ignored, because control flow returns to the previous location.
+`withCallingHandlers()`:
 
-    withCallingHandlers(f(), error = function(e) rlang::calltrace(globalenv()))
-    ```
+```{r, message = TRUE}
+f <- function() message("!")
+
+tryCatch(f(), message = function(m) 1)
+
+withCallingHandlers(f(), message = function(m) 1)
+```
 
 ### Exercises
 
-* Compare the following two implementations of `message2error()`. What is the
-  main advantage of `withCallingHandlers()` in this scenario? (Hint: look
-  carefully at the traceback.)
+1.  Read the source code for `catch_cnd()` and explain how it works.
+
+1.  How could you rewrite `show_condition()` to use a single handler.
+
+1.  Compare the following two implementations of `message2error()`. What is the
+    main advantage of `withCallingHandlers()` in this scenario? (Hint: look
+    carefully at the traceback.)
 
     ```{r}
     message2error <- function(code) {
@@ -411,6 +354,133 @@ withCallingHandlers(
     }
     message2error <- function(code) {
       tryCatch(code, message = function(e) stop(e))
+    }
+    ```
+
+## Use cases
+
+What can you do with this tools? The following section exposes some come use cases.
+
+### Replacement value
+
+You can use `tryCatch()` to implement `try()`. A simple implementation is shown below. `base::try()` is more complicated in order to make the error message look more like what you'd see if `tryCatch()` wasn't used. Note the use of `conditionMessage()` to extract the message associated with the original error.
+
+```{r}
+fail_with <- function(expr, value = NULL) {
+  tryCatch(expr, error = function(c) value)
+}
+```
+
+```{r}
+try2 <- function(code, silent = FALSE) {
+  tryCatch(code, error = function(c) {
+    msg <- conditionMessage(c)
+    if (!silent) {
+      message(msg)
+    }
+    structure(msg, class = "try-error")
+  })
+}
+
+try2(1)
+
+try2(stop("Hi"))
+
+try2(stop("Hi"), silent = TRUE)
+```
+
+### Resignal
+
+As well as returning default values when a condition is signalled, handlers can be used to make more informative error messages. For example, by modifying the message stored in the error condition object, the following function wraps `read.csv()` to add the file name to any errors:
+
+```{r, error = TRUE, warning = FALSE}
+read.csv2 <- function(file, ...) {
+  tryCatch(read.csv(file, ...), error = function(c) {
+    message <- paste0(c$message, " (in ", file, ")")
+    abort(message)
+  })
+}
+read.csv("code/dummy.csv")
+read.csv2("code/dummy.csv")
+```
+
+Update to use whatever `rethrow()` becomes.
+
+### Record
+
+This is what the evaluate package does. It powers knitr. (A little more complicated because it also has to handle output which uses a different system.)
+
+### Return early
+
+```{r}
+try_parse_eval <- function(x, env = globalenv()) {
+  expr <- tryCatch(parse(text = text), error = function(e) NULL)
+  if (is.null(expr)) {
+    return(NULL)
+  }
+
+  res <- tryCatch(eval(expr, env), error = function(e) NULL)
+  if (is.null(res)) {
+    return(res)
+  }
+  
+  ...
+}
+
+try_parse_eval <- function(x, env = globalenv()) {
+  expr <- tryCatch(parse(text = text), error = function(e) return_from(NULL))
+  res <- tryCatch(eval(expr, env), error = function(e) return_from(NULL))
+  ...
+}
+```
+
+
+### Muffle
+
+Due to the way that restarts are implemented in R, the ability to muffle, or ignore a condition (so it doesn't bubble up to other handlers) is defined by the function that signals the condition.  `message()` and `warning()` automatically setup muffle handlers, but `signalCondition()` does not.
+
+`cnd_signal()` ensures that a muffler is always set up. `cnd_muffle(c)` always picks the right muffler depending on the class of the condition.
+
+Log messages to disk example.
+
+```{r}
+write_line <- function(path, ...) {
+  cat(..., "\n", file = path, append = TRUE, sep = "")
+}
+
+log_messages <- function(expr, path) {
+  
+  withCallingHandlers(expr,
+    message = function(c) {
+      write_line(path, "[MESSAGE] ", conditionMessage(c))
+      cnd_muffle(c)
+    })
+}
+```
+
+
+### Exercises
+
+1.  Why is catching interrupts dangerous?
+
+    ```{r, eval = FALSE}
+    bottles_of_beer <- function(i = 99) {
+      message("There are ", i, " bottles of beer on the wall, ", i, " bottles of beer.")
+      while(i > 0) {
+        tryCatch(
+          Sys.sleep(1),
+          interrupt = function(err) {
+            i <<- i - 1
+            if (i > 0) {
+              message(
+                "Take one down, pass it around, ", i, 
+                " bottle", if (i > 1) "s", " of beer on the wall."
+              )
+            }
+          }
+        )
+      }
+      message("No more bottles of beer on the wall, no more bottles of beer.")
     }
     ```
 
