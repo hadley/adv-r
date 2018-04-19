@@ -10,6 +10,14 @@ Not all problems are unexpected. When writing a function, you can often anticipa
 
 Unexpected errors require interactive debugging to figure out what went wrong. Some errors, however, are expected, and you want to handle them automatically. In R, expected errors crop up most frequently when you're fitting many models to different datasets, such as bootstrap replicates. Sometimes the model might fail to fit and throw an error, but you don't want to stop everything. Instead, you want to fit as many models as possible and then perform diagnostics after the fact. \index{conditions}
 
+Internally, signalling happens in three phases: 
+
+1. An S3 object containing information about the error is created.
+1. That object is "signalled".
+1. The object is passed to any registered handlers
+1. If no handlers, the default behaviour occurs.
+
+
 In R, there are three tools for handling conditions (including errors) programmatically:
 
 * `try()` gives you the ability to continue execution even when an error occurs.
@@ -85,12 +93,12 @@ cnd_muffle <- function(cnd) {
   )
 }
 
-abort <- function(msg, ..., .type = NULL, .trace = calltrace(globalenv())) {
-  .trace # force evaluation
-  
-  cnd <- error_cnd(c(.type, "error_trace"), .msg = msg, ..., trace = .trace)
-  cnd_abort(cnd)
-}
+# abort <- function(msg, ..., .type = NULL, .trace = calltrace(globalenv())) {
+#   .trace # force evaluation
+#   
+#   cnd <- error_cnd(c(.type, "error_trace"), .msg = msg, ..., trace = .trace)
+#   cnd_abort(cnd)
+# }
 conditionMessage.error_trace <- function(c) {
   trace <- rlang:::trace_simplify(c$trace)
   calls <- purrr::map_chr(trace$calls, expr_text)
@@ -100,45 +108,56 @@ conditionMessage.error_trace <- function(c) {
 }
 ```
 
-## Signalling conditions
-\index{errors!throwing}
-\index{conditions!signalling}
+## Errors 
 
-Collectively messages, warnings, and errors are known as conditions, and creating and sending them to the user is known as __signalling__. Internally, signalling happens in three phases: 
+To begin our discussion of signals we'll start with an in-depth exploration of the most important type of condition: errors. Errors indicate that there is no way for a function to continue and force execution to terminate.
 
-1. An S3 object containing information about the error is created.
-1. That object is "signalled".
+This section 
 
-Most errors only contain a text `message`, but later you'll learn how we can include other fields, making it possible to pass useful information around (and hence test your functions).
+### `stop()`
 
-Usually you don't see the condition object, but here we want to dig in and understand what's going on. To do so, we'll use `rlang::catch_cnd()` which takes a block of code and returns the first condition signalled, or `NULL` (if no conditions were signalled).
 
-```{r}
-# Captures error object
-c <- catch_cnd(stop("An error"))
-c
-str(c)
-
-# Captures first condition
-c <- catch_cnd({
-  warning("First")
-  warning("Second")
-})
-c
-
-# No condition, so returns NULL
-catch_cnd(1 + 2)
-```
-
-The rest of this section discusses each of the built-in condition types in turn.
-
-### Errors
-
-Fatal errors are raised by `stop()` and force all execution to terminate. Errors are used when there is no way for a function to continue. 
+In base R, errors are signalled, or __thrown__, by `stop()`:
 
 ```{r, error = TRUE}
-stop("This is an error message")
+f <- function() g()
+g <- function() h()
+h <- function() stop("This is an error!")
+
+f()
 ```
+
+The call is often not useful (and recapitulates information that you can easily get from `traceback()`), so I think it's good practice to use `call. = FALSE`:
+
+```{r, error = TRUE}
+h <- function() stop("This is an error!", call. = FALSE)
+f()
+```
+
+### `abort()`
+
+The rlang equivalent to `stop()` is `abort()`. It has three main differences:
+
+* It does not capture the call. 
+does not capture the call. Instead it captures the call stack:
+
+```{r, error = TRUE}
+h <- function() abort("This is an error!")
+f()
+```
+
+It also makes it easier to include other data in the condition object. We'll learn more about that later.
+
+You might wonder why the call stack is useful when the name of the calling function is not. We'll 
+
+```{r}
+x <- try(identity(f()), silent = TRUE)
+x
+```
+
+The other advantage of capturing the call stack when the error is throw is that it allows us to create more informative error messages when recovering from an error. We'll come back to that when we talk about `try()` and `tryCatch()`.
+
+### Guidelines
 
 The best error messages tell you what is wrong, and point you in the right direction for fixing the problem. Writing good error messages is extremely hard because usually the error occurs because the funtion caller has an incorrect mental model of the function. As a developer it's hard to predict how the mental model might be incorrect, especially when you've just written the function and the details are fresh in your mind. Often writing a good error message takes some iteration - you have to wait until someone sees it in the wild, and then you can talk to them to figure out what went wrong in their prediction of your function's behaviour.
 
@@ -153,35 +172,12 @@ There is some evolving advice of writing good error messages in the tidyverse st
   
 Writing useful error messages is often a lot of work because you need to generate a bunch of text explaining the problem. `glue::glue()` is often helpful.
 
-To learn more about the internal construction of the object, we need to capture it:
 
-```{r}
-e <- catch_cnd(stop("Oops"))
-str(e)
-```
+## Signalling conditions
+\index{errors!throwing}
+\index{conditions!signalling}
 
-This shows us that the error object has class inherits from "condition". And it has two components: the error message, and the call from which the error occured.
-
-The call is often not useful (and recapitulates information that you can easily get from `traceback()`), so I think it's good practice to use `call. = FALSE`.
-
-```{r, error = TRUE}
-stop("No call info", call. = FALSE)
-
-e <- catch_cnd(stop("Oops", call. = FALSE))
-str(e)
-```
-
-rlang provides an alternative to the `stop()` function called `abort()`. The primary advantagef is that it capture the full call stack. This  makes it easier to diagnose errors.
-
-```{r, error = TRUE}
-f <- function() g()
-g <- function() h()
-h <- function() abort("Uhoh")
-
-f()
-```
-  
-It also makes it easier to include other data in the condition object. We'll learn more about that later.
+Collectively messages, warnings, and errors are known as conditions, and creating and sending them to the user is known as signalling. 
 
 ### Warnings
 
@@ -271,6 +267,115 @@ Generally, you should use `message()` rather than `cat()` or `print()` for infor
 ### Interrupts
   
 Interrupts can't be generated directly by the programmer, but are raised when the user attempts to terminate execution by pressing Ctrl + Break, Escape,  or Ctrl + C (depending on the platform). 
+
+## Condition objects
+
+
+Most errors only contain a text `message`, but later you'll learn how we can include other fields, making it possible to pass useful information around (and hence test your functions).
+
+The rest of this section discusses each of the built-in condition types in turn.
+
+
+Usually you don't see the condition object, but here we want to dig in and understand what's going on. To do so, we'll use `rlang::catch_cnd()` which takes a block of code and returns the first condition signalled, or `NULL` (if no conditions were signalled).
+
+```{r}
+# Captures error object
+c <- catch_cnd(stop("An error"))
+c
+str(c)
+
+# Captures first condition
+c <- catch_cnd({
+  warning("First")
+  warning("Second")
+})
+c
+
+# No condition, so returns NULL
+catch_cnd(1 + 2)
+```
+
+
+To learn more about the internal construction of the object, we need to capture it:
+
+```{r}
+e <- catch_cnd(stop("Oops"))
+str(e)
+```
+
+This shows us that the error object has class inherits from "condition". And it has two components: the error message, and the call from which the error occured.
+
+
+### Custom classes
+\index{errors!custom classes}
+
+One of the challenges of error handling in R is that most functions just call `stop()` with a string. That means if you want to figure out if a particular error occurred, you have to look at the text of the error message. This is error prone, not only because the text of the error might change over time, but also because many error messages are translated, so the message might be completely different to what you expect. 
+
+There are two reasons to create your own conditions:
+
+* To make it easier to test your own code. Rather than relying on string
+  matching on the text of the error, you can perform richer comparisons.
+
+* To make it easier for the user to take different actions for different
+  types of errors. 
+
+For example, "expected" errors (like a model failing to converge for some input datasets) can be silently ignored, while unexpected errors (like no disk space available) can be propagated to the user.
+
+Base R doesn't make it easier to create your own classed conditions but the rlang equivalents provide some hlpers.
+
+`abort()`, `warn()`, `inform()`.
+
+```{r, error = TRUE}
+abort <- function(.msg, .type = NULL, ...) {
+  cnd <- error_cnd(.type = .type, ..., .msg = .msg)
+  stop(cnd)
+}
+
+abort_bad_argument <- function(arg, must, not = NULL) {
+  msg <- glue::glue("`{arg}` must {must}")
+  if (!is.null(not)) {
+    msg <- glue::glue("{msg}; not {not}")
+  }
+  abort(msg, "error_bad_argument", arg = arg)
+}
+
+abort_bad_argument("x", must = "be numeric")
+abort_bad_argument("x", must = "be numeric", not = "logical")
+
+catch_cnd(abort_bad_argument("x", must = "be numeric"))$arg
+```
+
+(Note that you can define a method for the `conditionMessage()` message generic instead of generating a message at creation time. This is usually of limited utility. )
+
+```{r}
+my_log <- function(x, base = exp(1)) {
+  if (!is.numeric(x)) {
+    abort_bad_argument("x", must = "be numeric", not = typeof(x))
+  }
+  if (!is.numeric(base) && length(base) == 1) {
+    abort_bad_argument("base", must = "be a single number")
+  }
+
+  log(x)
+}
+
+cnd <- catch_cnd(my_log("a"))
+str(cnd)
+```
+
+Note that when using `tryCatch()` with multiple handlers and custom classes, the first handler to match any class in the signal's class hierarchy is called, not the best match. For this reason, you need to make sure to put the most specific handlers first:
+
+```{r}
+tryCatch(my_log("a"),
+  error = function(c) "???",
+  error_bad_argument = function(c) "bad_argument"
+)
+
+tryCatch(my_log("a"),
+  error_bad_argument = function(c) "bad_argument",
+  error = function(c) "???"
+)
+```
 
 ## Ignoring conditions 
 
@@ -588,76 +693,6 @@ log_messages <- function(expr, path) {
     ```
 
 
-## Custom condition classes
-\index{errors!custom classes}
-
-One of the challenges of error handling in R is that most functions just call `stop()` with a string. That means if you want to figure out if a particular error occurred, you have to look at the text of the error message. This is error prone, not only because the text of the error might change over time, but also because many error messages are translated, so the message might be completely different to what you expect. 
-
-There are two reasons to create your own conditions:
-
-* To make it easier to test your own code. Rather than relying on string
-  matching on the text of the error, you can perform richer comparisons.
-
-* To make it easier for the user to take different actions for different
-  types of errors. 
-
-For example, "expected" errors (like a model failing to converge for some input datasets) can be silently ignored, while unexpected errors (like no disk space available) can be propagated to the user.
-
-Base R doesn't make it easier to create your own classed conditions but the rlang equivalents provide some hlpers.
-
-`abort()`, `warn()`, `inform()`.
-
-```{r, error = TRUE}
-abort <- function(.msg, .type = NULL, ...) {
-  cnd <- error_cnd(.type = .type, ..., .msg = .msg)
-  stop(cnd)
-}
-
-abort_bad_argument <- function(arg, must, not = NULL) {
-  msg <- glue::glue("`{arg}` must {must}")
-  if (!is.null(not)) {
-    msg <- glue::glue("{msg}; not {not}")
-  }
-  abort(msg, "error_bad_argument", arg = arg)
-}
-
-abort_bad_argument("x", must = "be numeric")
-abort_bad_argument("x", must = "be numeric", not = "logical")
-
-catch_cnd(abort_bad_argument("x", must = "be numeric"))$arg
-```
-
-(Note that you can define a method for the `conditionMessage()` message generic instead of generating a message at creation time. This is usually of limited utility. )
-
-```{r}
-my_log <- function(x, base = exp(1)) {
-  if (!is.numeric(x)) {
-    abort_bad_argument("x", must = "be numeric", not = typeof(x))
-  }
-  if (!is.numeric(base) && length(base) == 1) {
-    abort_bad_argument("base", must = "be a single number")
-  }
-
-  log(x)
-}
-
-cnd <- catch_cnd(my_log("a"))
-str(cnd)
-```
-
-Note that when using `tryCatch()` with multiple handlers and custom classes, the first handler to match any class in the signal's class hierarchy is called, not the best match. For this reason, you need to make sure to put the most specific handlers first:
-
-```{r}
-tryCatch(my_log("a"),
-  error = function(c) "???",
-  error_bad_argument = function(c) "bad_argument"
-)
-
-tryCatch(my_log("a"),
-  error_bad_argument = function(c) "bad_argument",
-  error = function(c) "???"
-)
-```
 
 ## Quiz answers {#conditions-answers}
 
