@@ -6,32 +6,7 @@ source("common.R")
 
 ## Introduction
 
-Not all problems are unexpected. When writing a function, you can often anticipate potential problems (like a non-existent file or the wrong type of input). Communicating these problems to the user is the job of __conditions__ such as errors (`stop()`), warnings (`warning()`), and messages (`message()`). Conditions are usually displayed prominently, in a bold font or coloured red, depending on your R interface. You can tell them apart because errors always start with "Error" and warnings with "Warning message". 
-
-Unexpected errors require interactive debugging to figure out what went wrong. Some errors, however, are expected, and you want to handle them automatically. In R, expected errors crop up most frequently when you're fitting many models to different datasets, such as bootstrap replicates. Sometimes the model might fail to fit and throw an error, but you don't want to stop everything. Instead, you want to fit as many models as possible and then perform diagnostics after the fact. \index{conditions}
-
-Internally, signalling happens in three phases: 
-
-1. An S3 object containing information about the error is created.
-1. That object is "signalled".
-1. The object is passed to any registered handlers
-1. If no handlers, the default behaviour occurs.
-
-
-In R, there are three tools for handling conditions (including errors) programmatically:
-
-* `try()` gives you the ability to continue execution even when an error occurs.
-
-* `tryCatch()` lets you specify __handler__ functions that control what
-  happens when a condition is signalled.
-
-* `withCallingHandlers()` is a variant of `tryCatch()` that establishes local
-  handlers, whereas `tryCatch()` registers exiting handlers. Local handlers are
-  called in the same context as where the condition is signalled, without
-  interrupting the execution of the function. When an exiting handler from
-  `tryCatch()` is called, the execution of the function is interrupted and the
-  handler is called. `withCallingHandlers()` is rarely needed, but is useful to
-  be aware of.
+The job of the __condition__ system is to alert the user to problems and give them tools to handle them. In R, conditions encompass errors (`stop()`), warnings (`warning()`), and messages (`message()`), and other custom classes. It's important to understand the condition system because in your own code you'll need to both __signal__ conditions to the user, and to __handle__ conditions thrown by other functions.
 
 R offers an exceptionally powerful condition handling system based on ideas from Common Lisp, but it's currently not very well documented or often used. This chapter will introduce you to the most important basics, but if you want to learn more, I recommend the following two sources:
 
@@ -46,6 +21,13 @@ R offers an exceptionally powerful condition handling system based on ideas from
   to be very similar to R's approach. It provides useful motivation and 
   more sophisticated examples. I have provided an R translation of the 
   chapter at <http://adv-r.had.co.nz/beyond-exception-handling.html>.
+
+### Overview {-}
+
+* Discuss the details of signalling conditions
+* Show the basic tools for ignoring conditions
+* Dive into condition handlers, including the details of condition objects.
+* Show a bunch of smaller applications.
 
 ### Quiz {-}
 
@@ -93,29 +75,29 @@ cnd_muffle <- function(cnd) {
   )
 }
 
-# abort <- function(msg, ..., .type = NULL, .trace = calltrace(globalenv())) {
-#   .trace # force evaluation
-#   
-#   cnd <- error_cnd(c(.type, "error_trace"), .msg = msg, ..., trace = .trace)
-#   cnd_abort(cnd)
-# }
-conditionMessage.error_trace <- function(c) {
-  trace <- rlang:::trace_simplify(c$trace)
-  calls <- purrr::map_chr(trace$calls, expr_text)
-  trace <- paste0(format(seq_along(calls)), ": ", calls, collapse = "\n")
-  
-  paste0(c$message, "\n\n", trace)
+abort <- function(.msg, .type = NULL, ...) {
+  cnd <- error_cnd(.type = .type, ..., .msg = .msg)
+  stop(cnd)
 }
 ```
 
-## Errors 
+## Signalling conditions
+\index{errors!throwing}
+\index{conditions!signalling}
 
-To begin our discussion of signals we'll start with an in-depth exploration of the most important type of condition: errors. Errors indicate that there is no way for a function to continue and force execution to terminate.
+There are three conditions that you can signal in code: errors, warnings, and messages.Errors are the most severe; they indicate that there is no way for a function to continue and force execution to terminate. Messages are the mildest; they are way of informing the user that some action has been performed. Warnings fall somewhat in between, and typically indicate that something has gone wrong but the function has been able to recover in some way. There is a final condition that can only be generated interactively: an interrupt, which indicates that the user has "interrupted" execution by pressing Escape, Ctrl + Break, or Ctrl + C (depending on the platform).
 
-This section 
+Conditions are usually displayed prominently, in a bold font or coloured red, depending on the R interface. You can tell them apart because errors always start with "Error", warnings with "Warning message", and messages with nothing.
 
-### `stop()`
+```{r, error = TRUE}
+stop("This is what an error looks like")
 
+warning("This is what a warning looks like")
+
+message("This is what a message looks like")
+```
+
+### Errors
 
 In base R, errors are signalled, or __thrown__, by `stop()`:
 
@@ -127,61 +109,27 @@ h <- function() stop("This is an error!")
 f()
 ```
 
-The call is often not useful (and recapitulates information that you can easily get from `traceback()`), so I think it's good practice to use `call. = FALSE`:
+By default, the error message includes the call, but this is typically not useful (and recapitulates information that you can easily get from `traceback()`), so I think it's good practice to use `call. = FALSE`:
 
 ```{r, error = TRUE}
 h <- function() stop("This is an error!", call. = FALSE)
 f()
 ```
 
-### `abort()`
-
-The rlang equivalent to `stop()` is `abort()`. It has three main differences:
-
-* It does not capture the call. 
-does not capture the call. Instead it captures the call stack:
+The rlang equivalent, `rlang::abort()`, does not capture the call by default:
 
 ```{r, error = TRUE}
 h <- function() abort("This is an error!")
 f()
 ```
 
-It also makes it easier to include other data in the condition object. We'll learn more about that later.
+We'll use of `abort()` throughout this chapter, but we won't get to its most compelling feature, the ability to add additional metadata to the condition object, until we're near the end of the chapter.
 
-You might wonder why the call stack is useful when the name of the calling function is not. We'll 
-
-```{r}
-x <- try(identity(f()), silent = TRUE)
-x
-```
-
-The other advantage of capturing the call stack when the error is throw is that it allows us to create more informative error messages when recovering from an error. We'll come back to that when we talk about `try()` and `tryCatch()`.
-
-### Guidelines
-
-The best error messages tell you what is wrong, and point you in the right direction for fixing the problem. Writing good error messages is extremely hard because usually the error occurs because the funtion caller has an incorrect mental model of the function. As a developer it's hard to predict how the mental model might be incorrect, especially when you've just written the function and the details are fresh in your mind. Often writing a good error message takes some iteration - you have to wait until someone sees it in the wild, and then you can talk to them to figure out what went wrong in their prediction of your function's behaviour.
-
-There is some evolving advice of writing good error messages in the tidyverse style guide: <http://style.tidyverse.org/error-messages.html>. A few current principles:
-
-* Start the error message with a statement of the problem. It should use
-  "must" if you know what the input should be, or "can't" if you don't.
-  
-* Ideally, provide information about the location of the error. For example,
-  if you have written a vectorised function and the problem occurs in just 
-  one element, display the location so it's easier for the user to find it.
-  
-Writing useful error messages is often a lot of work because you need to generate a bunch of text explaining the problem. `glue::glue()` is often helpful.
-
-
-## Signalling conditions
-\index{errors!throwing}
-\index{conditions!signalling}
-
-Collectively messages, warnings, and errors are known as conditions, and creating and sending them to the user is known as signalling. 
+The best error messages tell you what is wrong, and point you in the right direction for fixing the problem. Writing good error messages is extremely hard because usually the error occurs because the funtion caller has an incorrect mental model of the function. As a developer it's hard to predict how the mental model might be incorrect, especially when you've just written the function and the details are fresh in your mind. Often writing a good error message takes some iteration - you have to wait until someone sees it in the wild, and then you can talk to them to figure out what went wrong in their prediction of your function's behaviour. There is some evolving advice of writing good error messages in the tidyverse style guide: <http://style.tidyverse.org/error-messages.html>.
 
 ### Warnings
 
-Warnings are weaker than errors: they signal that something has gone wrong, but the code has been able to recover and continue. They are generated by `warning()`.
+Warnings are weaker than errors: they signal that something has gone wrong, but the code has been able to recover and continue. They are generated by `warning()`. Unlike errors, you can have multiple warnings from a single function call:
 
 ```{r}
 f <- function() {
@@ -194,7 +142,7 @@ f <- function() {
 }
 ```
 
-By defaults, warnings are cached and printed only when control returns to the top level. 
+By default, warnings are cached and printed only when control returns to the top level:
 
 ```{r, eval = FALSE}
 f()
@@ -207,94 +155,159 @@ f()
 #> 3: In f() : W3
 ```
 
-You can override this setting in two ways:
+You can control this behaviour with the `warn` option:
 
-* To control someone else's warnings, set `options(warn = 1)`
-* To control your own warnings, set `immediate. = TRUE`
+* To have warnings to appear immediately, set `options(warn = 1)`. 
 
-Warning objects are very similar to error objects. They have `message` and `call`, and are inherit from the condition class.
+* To turn warnings into errors, set `options(warn = 2)`. This is usually
+  the easiest way to debug a warning, as once it's an error you can
+  use tools like `traceback()` to find the source. 
 
-```{r}
-e <- catch_cnd(warning("Oops"))
-str(e)
-```
+* Restore the default behaviour with `option(warn = 0)`.
 
-Warnings occupy a somewhat awkward limnal state between messages (you should know about this) and errors (something has gone irreparably wrong). There are two cases where warnings are clearly useful:
+Like `stop()`, `warning()` also has a call argument. It is slightly more useful (since warnings are often more distant from their source), but I still generally suppress it with `call. = FALSE`. The rlang wrapper, `rlang::warn()`, also suppresses by default.
 
-* When you're trying to be helpful, but it's possible your helpfulness might
-  backfire. You might want to warn
-
-* If a failure occurs, but you're reasonably certain that you can recover 
-  from it, you can generate a warning. If you were 100% certain that you could
-  fix the problem, you wouldn't need any message; if you were uncertain
-  that you could correctly fix the issue, you'd throw an error.
-  
-* When deprecating a function, it's helpful to give people some warning of
-  the transition. A warning allows users to keep running existing code while
-  clearly indicating that they should move ASAP.
-
-You should be cautious with your use of `warnings()`: warnings are easy to miss if there's a lot of other output, and you don't want your function to recover too easily from clearly incorrect input. When embedded inside other code, it is challenging to figure the source of the warning. In fact, usually the best technique is to turn warnings into errors with `options(warn = 2)`. Then you can use your existing error diagnosis skills.
-
-`ks.test()` warns if ties.
-
-For example, when only part of a vectorised input is invalid. However, I don't find these warnings terrifically informative: they don't tell you where the problem lies in the vector, 
-
-```{r}
-as.numeric(c("a", "1", "10"))
-```
-
-In my opinion, base R tends to overuse warnings. 
-
-Another case is the `file()` function, which opens a connection, 
+Warnings occupy a somewhat awkward limnal state between messages ("you should know about this") and errors ("you must fix this"). You should be cautious with your use of `warnings()`: warnings are easy to miss if there's a lot of other output, and you don't want your function to recover too easily from clearly incorrect input. In my opinion, base R tends to overuse warnings, and many warnings in base R would be better off as clear errors. For example, take `read.csv()`, which uses the the `file()` function. The file function simple warns if the file exists. That means that when you try and read a file that does not exist, you get both a warning and an error:
 
 ```{r, error = TRUE}
 read.csv("blah.csv")
 ```
 
+There are a few cases where warnings are clearly useful:
+
+* When deprecating a function. A deprecated function still works, but you want
+  to ensure users know that they need to transition to a new approach. A 
+  deprecation warning should always help the user do the right thing.
+
+* When you are reasonably certain you can recover from a problem.
+  If you were 100% certain that you could fix the problem, you wouldn't need 
+  any message; if you were uncertain that you could correctly fix the issue, 
+  you'd throw an error.
+
 ### Messages
 
-Messages are generated by `message()` and are used to give informative output in a way that can easily be suppressed by the user (`?suppressMessages()`). I often use messages to let the user know what value the function has chosen for an important missing argument.
+Messages are informational; use them to inform the user of important actions that you function has taken on their behalf. The key principle is don't try and be silently helpful. 
 
-* Don't try and be silently helpful. 
-* Always provide some mechansim to opt-out.
-
-Messages are also important when developing packages. you need to print messages during startup, use ``packageStartupMessage()`: that ensures `library(yourpackage, quietly = TRUE)` hides all your messages too.
-
-Function authors can also communicate with their users with `print()` or `cat()`, but I think that's a bad idea because it's hard to capture and selectively ignore this sort of output. Printed output is not a condition, so you can't use any of the useful condition handling tools you'll learn about below.
-
-Generally, you should use `message()` rather than `cat()` or `print()` for informing the user about actions that your function has taken. This is useful, for example, if you've had to do non-trivial computation to determine the default value of an argument, and you want to let the user know exactly what you've done.
-
-### Interrupts
+* Determining a function default that requires a lot of computation.
+  For example, 
   
-Interrupts can't be generated directly by the programmer, but are raised when the user attempts to terminate execution by pressing Ctrl + Break, Escape,  or Ctrl + C (depending on the platform). 
+Generally any function that produces a message should have some way to suppress it, like `quiet = TRUE`. The user can always use `suppressMessages()`, but this the nuclear option as it suppresses all messages regardless of source.
 
-## Condition objects
+Generally, you should use `message()` rather than `cat()` or `print()` for informing the user about actions that your function has taken. This is useful, for example, if you've had to do non-trivial computation to determine the default value of an argument, and you want to let the user know exactly what you've done. Messages are a side-channel. Functions that are primarily called for their printed output (like `print()` or `str()` methods), should use `cat()` to write directly to the console. 
 
+Messages are also important when developing packages: when displaying messages during package startup (i.e. in `.onAttach()`), you must use `packageStartupMessage()`.
 
-Most errors only contain a text `message`, but later you'll learn how we can include other fields, making it possible to pass useful information around (and hence test your functions).
+### Exercises
 
-The rest of this section discusses each of the built-in condition types in turn.
+## Ignoring conditions 
 
+The simplest way of handling conditions in R is to simply ignore them. These are the bluntest instruments, but because they require little knowledge of the condition system, they're a good place to start.
 
-Usually you don't see the condition object, but here we want to dig in and understand what's going on. To do so, we'll use `rlang::catch_cnd()` which takes a block of code and returns the first condition signalled, or `NULL` (if no conditions were signalled).
+`try()` allows execution to continue even after an error has occurred. Normally if you run a function that throws an error, it terminates immediately and doesn't return a value: \indexc{try()}
 
-```{r}
-# Captures error object
-c <- catch_cnd(stop("An error"))
-c
-str(c)
-
-# Captures first condition
-c <- catch_cnd({
-  warning("First")
-  warning("Second")
-})
-c
-
-# No condition, so returns NULL
-catch_cnd(1 + 2)
+```{r, error = TRUE}
+f1 <- function(x) {
+  log(x)
+  10
+}
+f1("x")
 ```
 
+However, if you wrap the statement that creates the error in `try()`, the error message will be printed but execution will continue:
+
+```{r, eval = FALSE}
+f2 <- function(x) {
+  try(log(x))
+  10
+}
+f2("a")
+#> Error in log(x) : non-numeric argument to mathematical function
+#> [1] 10
+```
+
+(You can suppress the message with `try(..., silent = TRUE)`.)
+
+A useful `try()` pattern is to do assignment inside: this lets you define a default value to be used if the code does not succeed.
+
+```{r, eval = FALSE}
+default <- NULL
+try(default <- read.csv("possibly-bad-input.csv"), silent = TRUE)
+```
+
+It is possible, but not recommended, to save the result of `try()` and perform different actions based on whether or not the result has class `try-error`. Instead, it is better to use `tryCatch()`, which we'll get to shortly.
+
+There are two functions that are analagous to `try()` for warnings and messages: `suppressWarnings()` and `suppressMessages()`. These allow you to suppress all warnings and messages generated by a block of code.
+
+```{r}
+suppressWarnings({
+  warning("Uhoh!")
+})
+
+suppressMessages({
+  message("Hello there")
+})
+```
+
+These functions are heavy handed: you can't use them to suppress a single warning that you know about, while allowing other warnings that you don't know about to pass through. We'll come back to that challenge later in the chapter.
+
+### Exercises
+
+
+
+## Condition handlers
+\index{errors!catching}
+\index{conditions!handling}
+
+
+`tryCatch()` and `withCallingHandlers()` are general tools for handling conditions. They allows you to map conditions to __handlers__, functions that are called with the condition as an input. 
+
+`tryCatch()` and `withCallingHandlers()` differ in the type of handlers they create:
+
+*  `tryCatch()` defines __exiting__ handlers; after the condition is captured 
+   control returns to the context where `tryCatch()` was called. This makes it
+   most suitable for working with errors, as errors have to exit the code 
+   anyway.
+  
+*  `withCallingHandlers()` defines __in-place__ handlers; after the condition
+   is captued control returns to the context where the condition was signalled.
+   This makes it most suitable for working with `warnings()`, `messages()`,
+   and other conditions.
+
+Before we can continue on to the more sophisticated condition handlers, we need to talk a little bit about condition __objects__.  In simple usage, you never need to think about these objects, but they are always constructed for you behind the scenes, and are important as scenarios get more complex.
+
+
+* `tryCatch()` lets you specify __handler__ functions that control what
+  happens when a condition is signalled.
+
+* `withCallingHandlers()` is a variant of `tryCatch()` that establishes local
+  handlers, whereas `tryCatch()` registers exiting handlers. Local handlers are
+  called in the same context as where the condition is signalled, without
+  interrupting the execution of the function. When an exiting handler from
+  `tryCatch()` is called, the execution of the function is interrupted and the
+  handler is called. `withCallingHandlers()` is rarely needed, but is useful to
+  be aware of.
+
+
+### Condition objects
+
+
+Conditions are S3 objects (which you'll learn more about [S3]). Fortunately, conditions are very simple objects so you don't need to know anything about S3 to work with them: they're just a lists with components `message` and `call` and a `class` attribute (that attribute is what makes it an S3 object). 
+
+You can capture a condition object with `rlang::catch_cnd()`.
+
+```{r}
+c <- catch_cnd(abort("An error"))
+
+typeof(c)
+attr(c, "class")
+```
+
+Every condition object has a `message` (the text display to a user), and a `call` (which as described above, we don't user).
+
+```{r}
+c$message
+c$call
+```
 
 To learn more about the internal construction of the object, we need to capture it:
 
@@ -306,46 +319,63 @@ str(e)
 This shows us that the error object has class inherits from "condition". And it has two components: the error message, and the call from which the error occured.
 
 
-### Custom classes
+
+### Exiting handlers
+\indexc{tryCatch()} 
+
+If a condition is signalled, `tryCatch()` will call the first handler whose name matches one of the classes of the condition. The names useful for built-in conditions are `error`, `warning`, `message`, `interrupt`, and the catch-all `condition`.
+
+A handler function can do anything, but typically it will either return a value or create a more informative error message. For example, the `show_condition()` function below sets up handlers that return the type of condition signalled: \index{error handlers}
+
+```{r}
+show_condition <- function(code) {
+  tryCatch(
+    {
+      code
+      NULL
+    },
+    error = function(c) "error",
+    warning = function(c) "warning",
+    message = function(c) "message"
+  )
+}
+show_condition(stop("!"))
+show_condition(warning("?!"))
+show_condition(message("?"))
+
+# If no condition is captured, tryCatch returns NULL
+show_condition(10)
+```
+
+### Custom conditions
 \index{errors!custom classes}
 
 One of the challenges of error handling in R is that most functions just call `stop()` with a string. That means if you want to figure out if a particular error occurred, you have to look at the text of the error message. This is error prone, not only because the text of the error might change over time, but also because many error messages are translated, so the message might be completely different to what you expect. 
 
-There are two reasons to create your own conditions:
+Currently, the primary motivation for creating your own conditions is to make it easier to test your own code, because you are no longer forced to use string comparisons of the error message. Over time, however, as more people learn about and master the condition system, custom conditions will make it easier for the user to take different actions for different types of errors. For example, "expected" errors (like a model failing to converge for some input datasets) can be silently ignored, while unexpected errors (like no disk space available) can be propagated to the user.
 
-* To make it easier to test your own code. Rather than relying on string
-  matching on the text of the error, you can perform richer comparisons.
+It is somewhat fiddly to create custom conditions in base R, but the rlang makes it very easy: you can simply supply a custom `type` and additional metadata in the call to `abort()`.  The code below illustrates the basic pattern: we create a nice error message for the user, and store metadata for the developer. We must always create a text `message` (because that is part of the specification of the condition object) and `glue::glue()` is a convenient way to do so.
 
-* To make it easier for the user to take different actions for different
-  types of errors. 
-
-For example, "expected" errors (like a model failing to converge for some input datasets) can be silently ignored, while unexpected errors (like no disk space available) can be propagated to the user.
-
-Base R doesn't make it easier to create your own classed conditions but the rlang equivalents provide some hlpers.
-
-`abort()`, `warn()`, `inform()`.
-
-```{r, error = TRUE}
-abort <- function(.msg, .type = NULL, ...) {
-  cnd <- error_cnd(.type = .type, ..., .msg = .msg)
-  stop(cnd)
-}
-
+```{r}
 abort_bad_argument <- function(arg, must, not = NULL) {
   msg <- glue::glue("`{arg}` must {must}")
   if (!is.null(not)) {
     msg <- glue::glue("{msg}; not {not}")
   }
-  abort(msg, "error_bad_argument", arg = arg)
+  abort(msg, "error_bad_argument", arg = arg, must = must, not = not)
 }
-
-abort_bad_argument("x", must = "be numeric")
-abort_bad_argument("x", must = "be numeric", not = "logical")
-
-catch_cnd(abort_bad_argument("x", must = "be numeric"))$arg
 ```
 
-(Note that you can define a method for the `conditionMessage()` message generic instead of generating a message at creation time. This is usually of limited utility. )
+(Note that you can define a method for the `conditionMessage()` generic instead of generating a message at creation time. This is usually of limited utility because to fulfill the specification of the condition object you must always provide a text `message`.)
+
+```{r, error = TRUE}
+abort_bad_argument("x", must = "be numeric")
+```
+
+```{r}
+cnd <- catch_cnd(abort_bad_argument("x", must = "be numeric", not = "logical"))
+str(cnd)
+```
 
 ```{r}
 my_log <- function(x, base = exp(1)) {
@@ -375,115 +405,6 @@ tryCatch(my_log("a"),
   error_bad_argument = function(c) "bad_argument",
   error = function(c) "???"
 )
-```
-
-## Ignoring conditions 
-
-Simplest way of handling conditions in R is to simply ignore them. These are the bluntest instruments, but can be convenient.
-
-### Ignoring errors
-
-`try()` allows execution to continue even after an error has occurred. For example, normally if you run a function that throws an error, it terminates immediately and doesn't return a value: \indexc{try()}
-
-```{r, error = TRUE}
-f1 <- function(x) {
-  log(x)
-  10
-}
-f1("x")
-```
-
-However, if you wrap the statement that creates the error in `try()`, the error message will be printed but execution will continue:
-
-```{r, eval = FALSE}
-f2 <- function(x) {
-  try(log(x))
-  10
-}
-f2("a")
-#> Error in log(x) : non-numeric argument to mathematical function
-#> [1] 10
-```
-
-You can suppress the message with `try(..., silent = TRUE)`.
-
-You can also capture the output of the `try()` function. If successful, it will be the last result evaluated in the block (just like a function). If unsuccessful it will be an (invisible) object of class "try-error". 
-
-```{r}
-success <- try(1 + 2)
-failure <- try("a" + "b")
-class(success)
-class(failure)
-```
-
-Generally, however, you should avoid switching between different behaviours based on the result of `try()`. Instead use `tryCatch()`, as described below.  A useful `try()` pattern is to do assignment inside: this lets you define a default value to be used if the code does not succeed.
-
-```{r, eval = FALSE}
-default <- NULL
-try(default <- read.csv("possibly-bad-input.csv"), silent = TRUE)
-```
-
-### Silencing messages and warnings
-
-There are two functions that are sort of analagous to `try()` for `warnings()` and `messages()`: `suppressWarnings()` and `suppressMessages()`. These allow you to suppress all warnings and messages generated by a block of code.
-
-```{r}
-suppressWarnings({
-  warning("Uhoh!")
-})
-
-suppressMessages({
-  message("Hello there")
-})
-```
-
-Be aware that these functions are fairly heavy handed: you can't use them to suppress a single warning that you know about, while allowing other warnings that you don't know about to pass through.
-
-The implementation of these functions are complex because they rely on the restart system. This is basically the only use of the restart system in base R (or pretty much any package) so we don't discuss here.
-
-## Condition handlers
-\index{errors!catching}
-\index{conditions!handling}
-
-`tryCatch()` and `withCallingHandlers()` are general tools for handling conditions. They allows you to map conditions to __handlers__, functions that are called with the condition as an input. 
-
-`tryCatch()` and `withCallingHandlers()` differ in the type of handlers they create:
-
-*  `tryCatch()` defines __exiting__ handlers; after the condition is captured 
-   control returns to the context where `tryCatch()` was called. This makes it
-   most suitable for working with errors, as errors have to exit the code 
-   anyway.
-  
-*  `withCallingHandlers()` defines __in-place__ handlers; after the condition
-   is captued control returns to the context where the condition was signalled.
-   This makes it most suitable for working with `warnings()`, `messages()`,
-   and other conditions.
-
-### Exiting handlers
-\indexc{tryCatch()} 
-
-If a condition is signalled, `tryCatch()` will call the first handler whose name matches one of the classes of the condition. The names useful for built-in conditions are `error`, `warning`, `message`, `interrupt`, and the catch-all `condition`.
-
-A handler function can do anything, but typically it will either return a value or create a more informative error message. For example, the `show_condition()` function below sets up handlers that return the type of condition signalled: \index{error handlers}
-
-```{r}
-show_condition <- function(code) {
-  tryCatch(
-    {
-      code
-      NULL
-    },
-    error = function(c) "error",
-    warning = function(c) "warning",
-    message = function(c) "message"
-  )
-}
-show_condition(stop("!"))
-show_condition(warning("?!"))
-show_condition(message("?"))
-
-# If no condition is captured, tryCatch returns NULL
-show_condition(10)
 ```
 
 ### In-place handlers
@@ -537,6 +458,7 @@ tryCatch(f(), message = function(m) 1)
 withCallingHandlers(f(), message = function(m) 1)
 ```
 
+
 ### Exercises
 
 1.  Read the source code for `catch_cnd()` and explain how it works.
@@ -556,9 +478,28 @@ withCallingHandlers(f(), message = function(m) 1)
     }
     ```
 
-## Handler actions
+## Applications {#condition-applications}
 
 What can you do with thse tools? The following section exposes some come use cases.
+
+### Catching a condition
+
+```{r}
+# Captures error object
+c <- catch_cnd(stop("An error"))
+c
+str(c)
+
+# Captures first condition
+c <- catch_cnd({
+  warning("First")
+  warning("Second")
+})
+c
+
+# No condition, so returns NULL
+catch_cnd(1 + 2)
+```
 
 ### Replacement value
 
@@ -596,6 +537,21 @@ does_error <- function(expr) {
   }, error = function(c) TRUE)
 }
 ```
+
+```{r}
+safety <- function(expr) {
+  tryCatch(
+    {
+      list(result = expr, error = NULL)
+    }, 
+    function(e) {
+      list(result = NULL, error = e)
+    }
+  )
+}
+```
+
+
 
 ### Resignal
 
