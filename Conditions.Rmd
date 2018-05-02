@@ -76,9 +76,13 @@ cnd_muffle <- function(cnd) {
 }
 
 abort <- function(.msg, .type = NULL, ...) {
-  cnd <- error_cnd(.type = .type, ..., .msg = .msg)
+  cnd <- error_cnd(.type = .type, ..., .msg = .msg, call = NULL)
   stop(cnd)
 }
+
+# Waiting for lobstr update
+cst <- function() print(rlang::calltrace(globalenv()))
+
 ```
 
 ## Signalling conditions
@@ -200,10 +204,11 @@ Messages are also important when developing packages: when displaying messages d
 ### Exercises
 
 ## Ignoring conditions 
+\indexc{try()} \indexc{suppressWarnings()} \indexc{suppressMessages()}  
 
 The simplest way of handling conditions in R is to simply ignore them. These are the bluntest instruments, but because they require little knowledge of the condition system, they're a good place to start.
 
-`try()` allows execution to continue even after an error has occurred. Normally if you run a function that throws an error, it terminates immediately and doesn't return a value: \indexc{try()}
+`try()` allows execution to continue even after an error has occurred. Normally if you run a function that throws an error, it terminates immediately and doesn't return a value: 
 
 ```{r, error = TRUE}
 f1 <- function(x) {
@@ -254,78 +259,61 @@ These functions are heavy handed: you can't use them to suppress a single warnin
 
 
 
-## Condition handlers
+## Handling conditions
 \index{errors!catching}
 \index{conditions!handling}
 
-
-`tryCatch()` and `withCallingHandlers()` are general tools for handling conditions. They allows you to map conditions to __handlers__, functions that are called with the condition as an input. 
-
-`tryCatch()` and `withCallingHandlers()` differ in the type of handlers they create:
+`tryCatch()` and `withCallingHandlers()` are general tools for handling conditions. They allows you to map conditions to __handlers__, functions that are called with the condition as an input. `tryCatch()` and `withCallingHandlers()` differ in the type of handlers they create:
 
 *  `tryCatch()` defines __exiting__ handlers; after the condition is captured 
    control returns to the context where `tryCatch()` was called. This makes it
-   most suitable for working with errors, as errors have to exit the code 
-   anyway.
+   most suitable for working with errors and interrupts, as these have to exit 
+   the code anyway.
   
 *  `withCallingHandlers()` defines __in-place__ handlers; after the condition
    is captued control returns to the context where the condition was signalled.
-   This makes it most suitable for working with `warnings()`, `messages()`,
-   and other conditions.
+   This makes it most suitable for working with non-error conditions.
 
-Before we can continue on to the more sophisticated condition handlers, we need to talk a little bit about condition __objects__.  In simple usage, you never need to think about these objects, but they are always constructed for you behind the scenes, and are important as scenarios get more complex.
-
-
-* `tryCatch()` lets you specify __handler__ functions that control what
-  happens when a condition is signalled.
-
-* `withCallingHandlers()` is a variant of `tryCatch()` that establishes local
-  handlers, whereas `tryCatch()` registers exiting handlers. Local handlers are
-  called in the same context as where the condition is signalled, without
-  interrupting the execution of the function. When an exiting handler from
-  `tryCatch()` is called, the execution of the function is interrupted and the
-  handler is called. `withCallingHandlers()` is rarely needed, but is useful to
-  be aware of.
-
+But before we can learn about these handlers, we need to talk a little bit about condition __objects__.  In simple usage, you never need to think about these objects, but they become explicit when you start working with the handlers.
 
 ### Condition objects
+\index{conditions!objects}
 
-
-Conditions are S3 objects (which you'll learn more about [S3]). Fortunately, conditions are very simple objects so you don't need to know anything about S3 to work with them: they're just a lists with components `message` and `call` and a `class` attribute (that attribute is what makes it an S3 object). 
-
-You can capture a condition object with `rlang::catch_cnd()`.
+So far we've signalled conditions, but haven't looked at the objects created as part of that process. The easiest way to see what's going on is to capture a condition object with `rlang::catch_cnd()`:
 
 ```{r}
+library(rlang)
 c <- catch_cnd(abort("An error"))
+str(c)
 
 typeof(c)
 attr(c, "class")
 ```
 
-Every condition object has a `message` (the text display to a user), and a `call` (which as described above, we don't user).
+Conditions are S3 objects (which you'll learn more about [S3]). Fortunately, conditions are very simple objects so you don't need to know anything about S3 to work with them: a condition is just a list with a special `class` attribute (that attribute is what makes it an S3 object). Every condition object must have two components in the list: the `message` (the text display to a user), and the `call` (which as described above, we don't use).
 
 ```{r}
 c$message
 c$call
 ```
 
-To learn more about the internal construction of the object, we need to capture it:
-
-```{r}
-e <- catch_cnd(stop("Oops"))
-str(e)
-```
-
-This shows us that the error object has class inherits from "condition". And it has two components: the error message, and the call from which the error occured.
-
-
+Conditions can contain other elements, which we'll discuss shortly in in [custom conditions].
 
 ### Exiting handlers
-\indexc{tryCatch()} 
+\indexc{tryCatch()} \index{handlers!exiting}
 
-If a condition is signalled, `tryCatch()` will call the first handler whose name matches one of the classes of the condition. The names useful for built-in conditions are `error`, `warning`, `message`, `interrupt`, and the catch-all `condition`.
+Each condition has some default behaviour: errors stop execution and return to the top-level, warnings are captured, and messages are display. `tryCatch()` allows us to temporarily override the default behaviour and do something else. 
 
-A handler function can do anything, but typically it will either return a value or create a more informative error message. For example, the `show_condition()` function below sets up handlers that return the type of condition signalled: \index{error handlers}
+The basic form of `tryCatch()` is shown below. The first argument, usually left unnamed, is the code to execute. The second and subsequent arguments are named functions that override the default behaviour for a condition. The name should be a type of condition (e.g. `error`, `warning`, `message`, or `interrupt`), and the function will be called with a single object, the condition.
+
+```{r}
+tryCatch(
+  stop("This is an error!"),
+  error = function(c) 10
+)
+```
+
+You can run multiple statements by using `{}`, and you can capture multiple conditions by providing multiple name-function pairs. For example, the `show_condition()` function below sets up handlers that return the type of condition signalled: 
 
 ```{r}
 show_condition <- function(code) {
@@ -339,79 +327,27 @@ show_condition <- function(code) {
     message = function(c) "message"
   )
 }
+
+show_condition(10)
 show_condition(stop("!"))
 show_condition(warning("?!"))
-show_condition(message("?"))
 
-# If no condition is captured, tryCatch returns NULL
-show_condition(10)
+# Note that tryCatch() sets up existing handlers so no 
+# code is run after the first condition is signalled
+show_condition({
+  message("?")
+  print("Hi!") 
+})
 ```
 
-### Custom conditions
-\index{errors!custom classes}
-
-One of the challenges of error handling in R is that most functions just call `stop()` with a string. That means if you want to figure out if a particular error occurred, you have to look at the text of the error message. This is error prone, not only because the text of the error might change over time, but also because many error messages are translated, so the message might be completely different to what you expect. 
-
-Currently, the primary motivation for creating your own conditions is to make it easier to test your own code, because you are no longer forced to use string comparisons of the error message. Over time, however, as more people learn about and master the condition system, custom conditions will make it easier for the user to take different actions for different types of errors. For example, "expected" errors (like a model failing to converge for some input datasets) can be silently ignored, while unexpected errors (like no disk space available) can be propagated to the user.
-
-It is somewhat fiddly to create custom conditions in base R, but the rlang makes it very easy: you can simply supply a custom `type` and additional metadata in the call to `abort()`.  The code below illustrates the basic pattern: we create a nice error message for the user, and store metadata for the developer. We must always create a text `message` (because that is part of the specification of the condition object) and `glue::glue()` is a convenient way to do so.
-
-```{r}
-abort_bad_argument <- function(arg, must, not = NULL) {
-  msg <- glue::glue("`{arg}` must {must}")
-  if (!is.null(not)) {
-    msg <- glue::glue("{msg}; not {not}")
-  }
-  abort(msg, "error_bad_argument", arg = arg, must = must, not = not)
-}
-```
-
-(Note that you can define a method for the `conditionMessage()` generic instead of generating a message at creation time. This is usually of limited utility because to fulfill the specification of the condition object you must always provide a text `message`.)
-
-```{r, error = TRUE}
-abort_bad_argument("x", must = "be numeric")
-```
-
-```{r}
-cnd <- catch_cnd(abort_bad_argument("x", must = "be numeric", not = "logical"))
-str(cnd)
-```
-
-```{r}
-my_log <- function(x, base = exp(1)) {
-  if (!is.numeric(x)) {
-    abort_bad_argument("x", must = "be numeric", not = typeof(x))
-  }
-  if (!is.numeric(base) && length(base) == 1) {
-    abort_bad_argument("base", must = "be a single number")
-  }
-
-  log(x)
-}
-
-cnd <- catch_cnd(my_log("a"))
-str(cnd)
-```
-
-Note that when using `tryCatch()` with multiple handlers and custom classes, the first handler to match any class in the signal's class hierarchy is called, not the best match. For this reason, you need to make sure to put the most specific handlers first:
-
-```{r}
-tryCatch(my_log("a"),
-  error = function(c) "???",
-  error_bad_argument = function(c) "bad_argument"
-)
-
-tryCatch(my_log("a"),
-  error_bad_argument = function(c) "bad_argument",
-  error = function(c) "???"
-)
-```
+`tryCatch()` has one other argument: `finally`. It specifies a block of code (not a function) to run regardless of whether the initial expression succeeds or fails. This can be useful for clean up (e.g., deleting files, closing connections). This is functionally equivalent to using `on.exit()` (and indeed that's how it's implemented) but it can wrap smaller chunks of code than an entire function. \indexc{on.exit()}
 
 ### In-place handlers
+\index{handlers!in-place}
 
-The primary difference from `tryCatch()` is execution continues normally when the handler returns. This includes the signalling function which continues its course after having called the handler (e.g., `stop()` will continue stopping the program and `message()` or `warning()` will continue signalling a message/warning). 
+The handlers set up by `tryCatch()` are called exiting, because they cause code to exit once the condition has been caught. By contrast, the handlers set up by `withCallingHandler()` are in-place: code execution will continue normally once the handler completes. This tends to make `withCallingHandlers()` a more natural pairing with the non-error conditions.
 
-```{r, message = TRUE}
+```{r}
 message_handler <- function(c) cat("Caught a message!\n")
 
 tryCatch(
@@ -431,33 +367,23 @@ withCallingHandlers(
 )
 ```
 
-`tryCatch()` has one other argument: `finally`. It specifies a block of code (not a function) to run regardless of whether the initial expression succeeds or fails. This can be useful for clean up (e.g., deleting files, closing connections). This is functionally equivalent to using `on.exit()` (and indeed that's how it's implemented) but it can wrap smaller chunks of code than an entire function. \indexc{on.exit()}
-
-### Differences
-
-The handlers in `withCallingHandlers()` are called in the context of the call that generated the condition whereas the handlers in `tryCatch()` are called in the context of `tryCatch()`. We can see this most easily by using `calltrace()`
+Note that the return value of an in-place handler is effectively ignored; they are only useful for their side-effects. Also note that the calling environment of exiting and in-place handlers is a little different. The handlers in `withCallingHandlers()` are called in the context of the call that generated the condition whereas the handlers in `tryCatch()` are called in the context of `tryCatch()`. We can see this most easily by using `calltrace()`
 
 ```{r, error = TRUE}
 f <- function() g()
 g <- function() h()
 h <- function() stop("!")
 
-tryCatch(f(), error = function(e) print(rlang::calltrace(globalenv())))
+tryCatch(
+  f(), 
+  error = function(e) cst()
+)
 
-withCallingHandlers(f(), error = function(e) print(rlang::calltrace(globalenv())))
+withCallingHandlers(
+  f(), 
+  error = function(e) cst()
+)
 ```
-
-Closely related is the return value of an inplace handler is effectively ignored, because control flow returns to the previous location.
-`withCallingHandlers()`:
-
-```{r, message = TRUE}
-f <- function() message("!")
-
-tryCatch(f(), message = function(m) 1)
-
-withCallingHandlers(f(), message = function(m) 1)
-```
-
 
 ### Exercises
 
@@ -465,18 +391,129 @@ withCallingHandlers(f(), message = function(m) 1)
 
 1.  How could you rewrite `show_condition()` to use a single handler.
 
-1.  Compare the following two implementations of `message2error()`. What is the
-    main advantage of `withCallingHandlers()` in this scenario? (Hint: look
-    carefully at the traceback.)
+## Custom conditions
+\index{conditions!custom}
 
-    ```{r}
-    message2error <- function(code) {
-      withCallingHandlers(code, message = function(e) stop(e))
-    }
-    message2error <- function(code) {
-      tryCatch(code, message = function(e) stop(e))
-    }
-    ```
+One of the challenges of error handling in R is that, to date, most functions on generate the default conditions which consistent only of a `message` and `call`. This makes detecting a specific error challenging because you have to at the text of the error message. This is error prone, not only because the message might change over time, but also because messages can be translated into other languages. 
+
+Fortunately, however, R has a powerful but little used feature: the ability to use custom condition objects. It is somewhat fiddly to create custom conditions in base R, but rlang makes it very easy: in `rlang::abort()` you can supply a custom `type` and additional metadata. 
+
+Chicken and egg situation.
+
+Currently, the primary motivation for creating your own conditions is to make it easier to test your own code, because you are no longer forced to use string comparisons of the error message. Over time, however, as more people learn about and master the condition system, custom conditions will make it easier for the user to take different actions for different types of errors. For example, "expected" errors (like a model failing to converge for some input datasets) can be silently ignored, while unexpected errors (like no disk space available) can be propagated to the user.
+
+### Motivation
+
+```{r, error = TRUE}
+log(letters)
+log(1:10, base = letters)
+```
+
+We want something a little more informative.
+
+```{r}
+log <- function(x, base = exp(1)) {
+  if (!is.numeric(x)) {
+    stop("`x` must be numeric; not ", typeof(x), call. = FALSE)
+  }
+  if (!is.numeric(base) || length(base) != 1) {
+    stop("`base` must be a single number", call. = FALSE)
+  }
+
+  base::log(x, base = base)
+}
+```
+
+```{r, error = TRUE}
+log(letters)
+log(1:10, base = letters)
+```
+
+This is a big improvement from the interactive point of view - the error messages are much more likely to yield a correct fix. However, from the programming point of a view, it's not a big win - all the data is jammed into a string. This makes it hard to program with; and importantly it also makes our code harder to test.
+
+### Signalling
+
+So let's build some infrastructure to improve this problem.
+
+Let's illustrate this idea with an example. Let's provide a helper for a common type of issue: supplying the wrong type on input to a function. There are three key arguments: 
+
+* `arg`: the name of the argument
+* `must`: a description of what the argument must be 
+* `not`: a description of what the argument actually is
+
+The pattern is fairly simple. We create a nice error message for the user, using `glue::glue()`, and store metadata for the developer. 
+
+This is a little over-generalised for the example at hand, but it reflects common patterns that I've seen across other functions.
+
+```{r}
+abort_bad_argument <- function(arg, must, not = NULL) {
+  msg <- glue::glue("`{arg}` must {must}")
+  if (!is.null(not)) {
+    msg <- glue::glue("{msg}; not {not}")
+  }
+  abort(msg, "error_bad_argument", arg = arg, must = must, not = not)
+}
+```
+
+This means we still get a nice
+
+```{r, error = TRUE}
+abort_bad_argument("x", must = "be numeric")
+```
+
+(Note that you can define a method for the `conditionMessage()` generic instead of generating a message at creation time. This is usually of limited utility because to fulfill the specification of the condition object you must always provide a text `message`.)
+
+With this in hand, we can now rewrite `my_log()`
+
+```{r}
+log <- function(x, base = exp(1)) {
+  if (!is.numeric(x)) {
+    abort_bad_argument("x", must = "be numeric", not = typeof(x))
+  }
+  if (!is.numeric(base) || length(base) != 1) {
+    abort_bad_argument("base", must = "be a single number")
+  }
+
+  log(x)
+}
+```
+
+The code is not much shorter, but I think more semantically meaningful.
+
+This yields the same interactive error messages as before:
+
+```{r, error = TRUE}
+log(letters)
+log(1:10, base = letters)
+```
+
+But importantly yields better structured objects that are easier to program with.
+
+### Handling
+
+```{r}
+cnd <- catch_cnd(my_log(1:10, base = "x"))
+str(cnd)
+```
+
+```{r}
+cnd <- catch_cnd(my_log("a"))
+str(cnd)
+```
+
+Note that when using `tryCatch()` with multiple handlers and custom classes, the first handler to match any class in the signal's class hierarchy is called, not the best match. For this reason, you need to make sure to put the most specific handlers first:
+
+```{r}
+tryCatch(my_log("a"),
+  error = function(c) "???",
+  error_bad_argument = function(c) "bad_argument"
+)
+
+tryCatch(my_log("a"),
+  error_bad_argument = function(c) "bad_argument",
+  error = function(c) "???"
+)
+```
 
 ## Applications {#condition-applications}
 
@@ -598,6 +635,27 @@ try_parse_eval <- function(x, env = globalenv()) {
 }
 ```
 
+### Performance {#cond-perf}
+
+```{r, eval = FALSE}
+f1 <- function(n) {
+  for (i in seq_len(n)) {
+    cat("Hi")
+  }
+}
+
+f2 <- function(n) {
+  for (i in seq_len(n)) {
+    message("Hi")
+  }
+}
+
+bench::mark(
+  cat("Hello"),
+  message("Hello"), 
+  withCallingHandlers(message("Hello"), message = function(e) {})
+)
+```
 
 ### Muffle
 
@@ -624,6 +682,19 @@ log_messages <- function(expr, path) {
 
 
 ### Exercises
+
+1.  Compare the following two implementations of `message2error()`. What is the
+    main advantage of `withCallingHandlers()` in this scenario? (Hint: look
+    carefully at the traceback.)
+
+    ```{r}
+    message2error <- function(code) {
+      withCallingHandlers(code, message = function(e) stop(e))
+    }
+    message2error <- function(code) {
+      tryCatch(code, message = function(e) stop(e))
+    }
+    ```
 
 1.  Why is catching interrupts dangerous? Run this code to find out.
 
