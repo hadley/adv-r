@@ -89,7 +89,7 @@ cst <- function() print(rlang::calltrace(globalenv()))
 \index{errors!throwing}
 \index{conditions!signalling}
 
-There are three conditions that you can signal in code: errors, warnings, and messages.Errors are the most severe; they indicate that there is no way for a function to continue and force execution to terminate. Messages are the mildest; they are way of informing the user that some action has been performed. Warnings fall somewhat in between, and typically indicate that something has gone wrong but the function has been able to recover in some way. There is a final condition that can only be generated interactively: an interrupt, which indicates that the user has "interrupted" execution by pressing Escape, Ctrl + Break, or Ctrl + C (depending on the platform).
+There are three conditions that you can signal in code: errors, warnings, and messages. Errors are the most severe; they indicate that there is no way for a function to continue and force execution to terminate. Messages are the mildest; they are way of informing the user that some action has been performed. Warnings fall somewhat in between, and typically indicate that something has gone wrong but the function has been able to recover in some way. There is a final condition that can only be generated interactively: an interrupt, which indicates that the user has "interrupted" execution by pressing Escape, Ctrl + Break, or Ctrl + C (depending on the platform).
 
 Conditions are usually displayed prominently, in a bold font or coloured red, depending on the R interface. You can tell them apart because errors always start with "Error", warnings with "Warning message", and messages with nothing.
 
@@ -263,12 +263,12 @@ These functions are heavy handed: you can't use them to suppress a single warnin
 \index{errors!catching}
 \index{conditions!handling}
 
-`tryCatch()` and `withCallingHandlers()` are general tools for handling conditions. They allows you to map conditions to __handlers__, functions that are called with the condition as an input. `tryCatch()` and `withCallingHandlers()` differ in the type of handlers they create:
+`tryCatch()` and `withCallingHandlers()` are general tools for handling conditions. They allows you to map conditions to __handlers__, functions that are called with the condition as an argument. `tryCatch()` and `withCallingHandlers()` differ in the type of handlers they create:
 
 *  `tryCatch()` defines __exiting__ handlers; after the condition is captured 
-   control returns to the context where `tryCatch()` was called. This makes it
-   most suitable for working with errors and interrupts, as these have to exit 
-   the code anyway.
+   control returns to the context where `tryCatch()` was called. This makes 
+   `tryCatch()` most suitable for working with errors and interrupts, as these 
+   have to exit the code anyway.
   
 *  `withCallingHandlers()` defines __in-place__ handlers; after the condition
    is captued control returns to the context where the condition was signalled.
@@ -304,40 +304,51 @@ Conditions can contain other elements, which we'll discuss shortly in in [custom
 
 Each condition has some default behaviour: errors stop execution and return to the top-level, warnings are captured, and messages are display. `tryCatch()` allows us to temporarily override the default behaviour and do something else. 
 
-The basic form of `tryCatch()` is shown below. The first argument, usually left unnamed, is the code to execute. The second and subsequent arguments are named functions that override the default behaviour for a condition. The name should be a type of condition (e.g. `error`, `warning`, `message`, or `interrupt`), and the function will be called with a single object, the condition.
+The basic form of `tryCatch()` is shown below. The named arguments set up handlers to be called when the unnamed argument, the `expr` to evaluate, is executed. The name is usually one of `error`, `warning`, `message`, or `interrupt` (the components of the condition class), and the function will be called with a single object, the condition.
 
 ```{r}
 tryCatch(
-  stop("This is an error!"),
-  error = function(c) 10
+  error = function(c) 10,
+  stop("This is an error!")
 )
 ```
 
-You can run multiple statements by using `{}`, and you can capture multiple conditions by providing multiple name-function pairs. For example, the `show_condition()` function below sets up handlers that return the type of condition signalled: 
+If no conditions are signalled, or the signalled condition does not match the handler name, the code executes normally:
 
 ```{r}
-show_condition <- function(code) {
-  tryCatch(
-    {
-      code
-      NULL
-    },
-    error = function(c) "error",
-    warning = function(c) "warning",
-    message = function(c) "message"
-  )
-}
+tryCatch(
+  error = function(c) 10,
+  1 + 1
+)
 
-show_condition(10)
-show_condition(stop("!"))
-show_condition(warning("?!"))
+tryCatch(
+  error = function(c) 10,
+  {
+    message("Hi!")
+    1 + 1
+  }
+)
+```
 
-# Note that tryCatch() sets up existing handlers so no 
-# code is run after the first condition is signalled
-show_condition({
-  message("?")
-  print("Hi!") 
-})
+The handlers set up by `tryCatch()` are called __exiting__ handlers because after the condition is signal, control passes to the handler and never returns to the original code, effectively meaning that the code "exits":
+
+```{r}
+tryCatch(
+  message = function(c) "There",
+  {
+    message("Here")
+    stop("This code is never run!")
+  }
+)
+```
+
+The argument to the handler is the condition object (hence, by convention, I use the name `c`). This is only moderately useful for the base conditions because they only have `message` and `call` fields. As we'll see shortly, it's more useful when you make your own custom conditions.
+
+```{r}
+tryCatch(
+  error = function(c) c$message,
+  stop("This is an error")
+)
 ```
 
 `tryCatch()` has one other argument: `finally`. It specifies a block of code (not a function) to run regardless of whether the initial expression succeeds or fails. This can be useful for clean up (e.g., deleting files, closing connections). This is functionally equivalent to using `on.exit()` (and indeed that's how it's implemented) but it can wrap smaller chunks of code than an entire function. \indexc{on.exit()}
@@ -345,13 +356,11 @@ show_condition({
 ### In-place handlers
 \index{handlers!in-place}
 
-The handlers set up by `tryCatch()` are called exiting, because they cause code to exit once the condition has been caught. By contrast, the handlers set up by `withCallingHandler()` are in-place: code execution will continue normally once the handler completes. This tends to make `withCallingHandlers()` a more natural pairing with the non-error conditions.
+The handlers set up by `tryCatch()` are called exiting, because they cause code to exit once the condition has been caught. By contrast, the handlers set up by `withCallingHandler()` are __in-place__: code execution will continue normally once the handler returns. This tends to make `withCallingHandlers()` a more natural pairing with the non-error conditions.
 
 ```{r}
-message_handler <- function(c) cat("Caught a message!\n")
-
 tryCatch(
-  message = message_handler, 
+  message = function(c) cat("Caught a message!\n"), 
   {
     message("Someone there?")
     message("Why, yes!")
@@ -359,7 +368,7 @@ tryCatch(
 )
 
 withCallingHandlers(
-  message = message_handler, 
+  message = function(c) cat("Caught a message!\n"), 
   {
     message("Someone there?")
     message("Why, yes!")
@@ -367,7 +376,75 @@ withCallingHandlers(
 )
 ```
 
-Note that the return value of an in-place handler is effectively ignored; they are only useful for their side-effects. Also note that the calling environment of exiting and in-place handlers is a little different. The handlers in `withCallingHandlers()` are called in the context of the call that generated the condition whereas the handlers in `tryCatch()` are called in the context of `tryCatch()`. We can see this most easily by using `calltrace()`
+The return value of an in-place handler is ignored; they are only useful for their side-effects.
+
+Handlers apply to the wrapped code, not code in the handlers. That means you don't need to worry about getting caught in an infinite loop:
+
+```{r}
+withCallingHandlers(
+  message = function(c) message("Second message"),
+  message("First message")
+)
+```
+
+By default, a condition will continue to propogate to parent handlers, all the way up to the default handler (or an exiting handler, if provided):
+
+```{r}
+# Bubbles all the way up to default handler which generates the message
+withCallingHandlers(
+  message = function(c) cat("Level 2\n"),
+  withCallingHandlers(
+    message = function(c) cat("Level 1\n"),
+    message("Hello")
+  )
+)
+
+# Bubbles up to tryCatch
+tryCatch(
+  message = function(c) cat("Level 2\n"),
+  withCallingHandlers(
+    message = function(c) cat("Level 1\n"),
+    message("Hello")
+  )
+)
+```
+
+If you want to prevent the condition "bubbling up" but still run the rest of the code in the block, you need to explicitly muffle it with `rlang::cnd_muffle()`:
+
+```{r}
+withCallingHandlers(
+  message = function(c) {
+    cat("Level 2\n")
+    cnd_muffle(c)
+  },
+  withCallingHandlers(
+    message = function(c) cat("Level 1\n"),
+    message("Hello")
+  )
+)
+
+withCallingHandlers(
+  message = function(c) cat("Level 2\n"),
+  withCallingHandlers(
+    message = function(c) {
+      cat("Level 1\n")
+      cnd_muffle(c)
+    },
+    message("Hello")
+  )
+)
+```
+
+### Calling environments
+
+To complete the section, there are some subtle differences between the calling environment of exiting and in-place handlers. This generally is not important, unless you need to capture call stacks. Generally, you can skip this section without worrying about it.
+
+* `withCallingHandlers()`: handlers are called in the context of the call that 
+  signalled the condition
+  
+* `tryCatch()`: handlers are called in the context the call to `tryCatch()`. 
+
+We can see this most easily by using `lobstr::cst()`
 
 ```{r, error = TRUE}
 f <- function() g()
@@ -386,6 +463,31 @@ withCallingHandlers(
 ```
 
 ### Exercises
+
+1.  Predict the results of evaluating the following code
+
+    ```{r, eval = FALSE}
+    show_condition <- function(code) {
+      tryCatch(
+        error = function(c) "error",
+        warning = function(c) "warning",
+        message = function(c) "message",
+        {
+          code
+          NULL
+        }
+      )
+    }
+    
+    show_condition(stop("!"))
+    show_condition(10)
+    show_condition(warning("?!"))
+    show_condition({
+      10
+      message("?")
+      warning("?!")
+    })
+    ```
 
 1.  Read the source code for `catch_cnd()` and explain how it works.
 
@@ -650,10 +752,18 @@ f2 <- function(n) {
   }
 }
 
+
+
 bench::mark(
-  cat("Hello"),
+  signalCondition(cnd),
+  handled = withCallingHandlers(signalCondition(cnd), silent = function(c) {})
+)
+
+
+bench::mark(
+  cat("Hello\n"),
   message("Hello"), 
-  withCallingHandlers(message("Hello"), message = function(e) {})
+  handler = withCallingHandlers(message("Hello"), message = function(e) {})
 )
 ```
 
