@@ -117,7 +117,7 @@ Understanding how `base::local()` works is harder, as it uses `eval()` and `subs
 
 ### Application: `source()`
 
-We can create a simple version of `source()` by combining `expr_text()` and `eval_bare()`. We read in the file from disk, use `parse_expr()` to parse the string into a list of expressions, and then use `eval_bare()` to evaluate each component in turn. This version evaluates the code in the caller environment, and invisibly returns the result of the last expression in the file like `source()`. \index{source()}
+We can create a simple version of `source()` by combining `parse_expr()` and `eval_bare()`. We read in the file from disk, use `parse_expr()` to parse the string into a list of expressions, and then use `eval_bare()` to evaluate each component in turn. This version evaluates the code in the caller environment, and invisibly returns the result of the last expression in the file like `source()`. \index{source()}
 
 ```{r}
 source2 <- function(path, env = caller_env()) {
@@ -415,7 +415,7 @@ Quosures rely on R's internal representation of function arguments as a special 
 There is one big difference between promises and quosures. A promise is evaluated once, when you access it for the first time. Every time you access it subsequently it will return the same value. A quosure must be evaluated explicitly, and each evaluation is independent of the previous evaluations.
 
 ```{r}
-# The argument x is evaluated once, then reuses
+# The argument x is evaluated once, then reused
 foo <- function(x_arg) {
   list(x_arg, x_arg)
 }
@@ -440,7 +440,7 @@ Initial versions of rlang used formulas instead of quosures, as an attractive fe
 
 ### When not to use quosures
 
-Almost all quoting functions should capture quosures rather than expressions, and you should default to using `enquo()` and `enquos()` to capture arguments from the user. You should only use expressions if you have a explicitly decided that the environment is not important. This tends to happen in three main cases:
+Almost all quoting functions should capture quosures rather than expressions, and you should default to using `enquo()` and `enquos()` to capture arguments from the user. You should only use expressions if you have explicitly decided that the environment is not important. This tends to happen in three main cases:
 
 *   In code generation, such as you saw in [Slicing an array].
 
@@ -461,7 +461,7 @@ Almost all quoting functions should capture quosures rather than expressions, an
     expr(log(x, base = !!base))
     ```
     
-    (Assuming that `x` will be suppled in some other way)
+    (Assuming that `x` will be supplied in some other way)
 
 ### Exercises
 
@@ -495,7 +495,7 @@ We'll explore tidy evaluation in the context of `base::subset()`, because it's a
 
 ### Data masks
 
-In the previous section, you learned that `eval_tidy()` is basically a wrapper around `eval_bare()` when evaluating a quosure. The real power of `eval_tidy()` comes with the second argument: `data` [^env]. This lets you set up a __data mask__, where variables in the environment are potentially masked by variables in data frame. This allows you to mingle variables from the environment and variables from a data frame: 
+In the previous section, you learned that `eval_tidy()` is basically a wrapper around `eval_bare()` when evaluating a quosure. The real power of `eval_tidy()` comes with the second argument: `data` [^env]. This lets you set up a __data mask__, where variables in the environment are potentially masked by variables in a data frame. This allows you to mingle variables from the environment and variables from a data frame: 
 
 [^env]: `eval_tidy()` has a `env` argument, but you only need this if you pass an expression to the first arugment.
 
@@ -637,16 +637,16 @@ What if we generalise `threshold_x()` slightly so that the user can pick the var
 ```{r}
 threshold_var1 <- function(df, var, val) {
   var <- ensym(var)
-  subset2(df, `$`(data, !!var) >= !!val)
+  subset2(df, `$`(.data, !!var) >= !!val)
 }
 
 threshold_var2 <- function(df, var, val) {
   var <- as.character(ensym(var))
-  subset2(df, data[[!!var]] >= !!val)
+  subset2(df, .data[[var]] >= !!val)
 }
 ```
 
-In `threshold_var1` we need to use the prefix form of `$`, because `df$!!var` is not valid R syntax. Alternatively, we can convert the symbol to a string, and use `[[`.
+In `threshold_var1` we need to use the prefix form of `$`, because `.data$!!var` is not valid R syntax. Alternatively, we can convert the symbol to a string, and use `[[`.
 
 Note that it is not always the responsibility of the function author to avoid ambiguity. Imagine we generalise further to allow thresholding based on any expression:
 
@@ -750,7 +750,7 @@ That means `subset(df, x == y)` is not equivalent to `df[x == y,]` as you might 
 
 ### Performance {#tidy-eval-performance}
 
-Note that there some performance overhead when evaluating a quosure compared to evaluating an expression:
+Note that there is some performance overhead when evaluating a quosure compared to evaluating an expression:
 
 ```{r}
 n <- 1000
@@ -766,7 +766,7 @@ microbenchmark::microbenchmark(
 )
 ```
 
-However, most of the overhead is due to setting up the data mask so if you need to evaluate code repeatedly, it's a good idea to define the data mask once then reuse it. This considerably reduces the overhead, with a small change in behaviour: if the code being evaluated creates object in the "current" environment, those objects will persist across calls.
+However, most of the overhead is due to setting up the data mask so if you need to evaluate code repeatedly, it's a good idea to define the data mask once then reuse it. This considerably reduces the overhead, with a small change in behaviour: if the code being evaluated creates objects in the "current" environment, those objects will persist across calls.
 
 ```{r}
 d_mtcars <- as_data_mask(mtcars)
@@ -837,14 +837,14 @@ microbenchmark::microbenchmark(
     Use intermediate variables to make the function easier to understand, then
     explain how this approach differs to the approach in the text.
 
-1.  Implement a form of `arrange()` where you can request a variable to 
+1.  Implement a form of `arrange()` where you can request a variable to be 
     sorted in descending order using named arguments:
     
     ```{r, eval = FALSE}
     arrange(mtcars, cyl, desc = mpg, vs)
     ```
     
-    (Hint: The `descreasing` argument to `order()` will not help you. Instead,
+    (Hint: The `decreasing` argument to `order()` will not help you. Instead,
     look at the definition of `dplyr::desc()`, and read the help for `xtfrm()`.)
 
 1.  Why do you not need to worry about ambiguous argument names with `...` in
@@ -874,7 +874,7 @@ microbenchmark::microbenchmark(
 
 ## Wrapping quoting functions
 
-Now we have all the tools need to wrap a quoting function inside another function, regardless of the whether the quoting function uses tidy evaluation or base R. This is important because it allows you to reduce duplication by turning repeated code into functions. It's straightforward to do this for evaluated argument; now you'll learn the techniques that allow you to wrap quoted arguments.
+Now we have all the tools we need to wrap a quoting function inside another function, regardless of whether the quoting function uses tidy evaluation or base R. This is important because it allows you to reduce duplication by turning repeated code into functions. It's straightforward to do this for evaluated arguments; now you'll learn the techniques that allow you to wrap quoted arguments.
 
 ### Tidy evaluation
 
@@ -889,7 +889,7 @@ df %>% group_by(x3) %>% summarise(mean = mean(y3))
 If no arguments were quoted, we could remove the duplication with:
 
 ```{r}
-grouped_mean <- function(df, group_var, summar_vary) {
+grouped_mean <- function(df, group_var, summary_var) {
   df %>% 
     group_by(group_var) %>% 
     summarise(mean = mean(summary_var))
@@ -899,7 +899,7 @@ grouped_mean <- function(df, group_var, summar_vary) {
 However, both `group_by()` and `summarise()` quote their second and subsequent arguments. That means we need to quote `group_var` and `summary_var` and then unquote when we call `group_by()` and `summarise()`:
 
 ```{r}
-grouped_mean <- function(df, group_var, summar_vary) {
+grouped_mean <- function(df, group_var, summary_var) {
   group_var <- enquo(group_var)
   summary_var <- enquo(summary_var)
   
@@ -923,7 +923,7 @@ lm2 <- function(formula, data) {
 }
 ```
 
-This wrapper works, but is supoptimal because `lm()` captures its call, and displays it when printing:
+This wrapper works, but is suboptimal because `lm()` captures its call, and displays it when printing:
 
 ```{r}
 lm2(mpg ~ disp, mtcars)
@@ -959,7 +959,7 @@ coef(lm4(mpg ~ disp, mtcars))
 coef(lm4(mpg ~ disp, mtcars, subset = cyl == 4))
 ```
 
-Note that I've supplied a default argument to `subset`. I think this is good practice because it clearly indicates that `subset` is optional: arguments with no default are ususally required. `NULL` has two nice properties here: 
+Note that I've supplied a default argument to `subset`. I think this is good practice because it clearly indicates that `subset` is optional: arguments with no default are usually required. `NULL` has two nice properties here: 
 
 1. `lm()` already knows how to handle `subset = NULL`: it treats it the 
    same way as a missing `subset`.
@@ -1005,7 +1005,7 @@ lm5(!!resp ~ disp, mtcars)$call
 
 ### The evaluation environment
 
-What if you want to mingle object supplied by the user with objects that you create in the function?  For example, imagine you want to make an auto-boostrapping version of `lm()`. You might write it like this:
+What if you want to mingle objects supplied by the user with objects that you create in the function?  For example, imagine you want to make an auto-boostrapping version of `lm()`. You might write it like this:
 
 ```{r, error = TRUE}
 boot_lm0 <- function(formula, data) {
@@ -1022,7 +1022,7 @@ boot_lm0(y ~ x, data = df)
 
 Why doesn't this code work? It's because we're evaluating `lm_call` in the caller environment, but `boot_data` exists in the execution environment. We could instead evaluate in the execution environment of `boot_lm0()`, but there's no guarantee that `formula` could be evaluated in that environment.
 
-There are two basic way to overcome this challenge:
+There are two basic ways to overcome this challenge:
 
 1.  Unquote the data frame into the call. This means that no look up has
     to occur, but has all the problems of inlining expressions. For modelling 
@@ -1057,7 +1057,7 @@ There are two basic way to overcome this challenge:
 
 ### Making formulas
 
-One final aspect to wrapping modelling functions is generating formulas. You just need to learn about one small wrinkle and then you can use the techniques you learned in [Quotation]. Formulas they print the same when evaluated and unevaluated:
+One final aspect to wrapping modelling functions is generating formulas. You just need to learn about one small wrinkle and then you can use the techniques you learned in [Quotation]. Formulas print the same when evaluated and unevaluated:
 
 ```{r}
 y ~ x
@@ -1089,7 +1089,7 @@ build_formula(y, a, b, c)
 
 ### Exercises
 
-1.  When model building, typically the predictor and data are relatively 
+1.  When model building, typically the response and data are relatively 
     constant while you rapidly experiment with different predictors. Write a
     small wrapper that allows you to reduce duplication in this situation.
     
