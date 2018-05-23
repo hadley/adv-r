@@ -1,0 +1,651 @@
+# Names and values {#names-values}
+
+```{r, include = FALSE}
+source("common.R")
+
+id <- function() {
+  x <- sample(c(0:9, letters[1:6]), 3, replace = TRUE)
+  paste0("0x", paste(x, collapse = ""))
+}
+```
+
+## Introduction
+
+In R, it is important to understand the distinction between an object and its name. A correct mental model is important because it will help you:
+
+* More accurately predict performance and memory usage of R code. 
+* Write faster code because accidental copies are a major cause of slow code. 
+* Better understand R's functional programming tools.
+
+The goal of this chapter is to help you understand the distinction between names and values, and when R will copy an object.
+
+<!-- ### Outline {-} -->
+
+### Prerequisites {-}
+
+We'll use the development version of [lobstr](https://github.com/r-lib/lobstr) to dig into the memory representation of R objects.
+
+```{r setup}
+# devtools::install_github("r-lib/lobstr")
+library(lobstr)
+```
+
+### Sources {-}
+
+<!-- FIXME: cite R-exts and R-ints formally -->
+
+The details of R's memory management are not documented in a single place. Most of the information in this chapter was gleaned from a close reading of the documentation (particularly `?Memory` and `?gc`), the [memory profiling](http://cran.r-project.org/doc/manuals/R-exts.html#Profiling-R-code-for-memory-use) section of R-exts, and the [SEXPs](http://cran.r-project.org/doc/manuals/R-ints.html#SEXPs) section of R-ints. The rest I figured out by reading the C source code, performing small experiments, and asking questions on R-devel. Any mistakes are entirely mine.
+
+## Binding basics
+\index{bindings} \index{assignment}
+
+Take this code: 
+
+```{r bind1}
+x <- 1:3
+```
+
+It's easy to read this code as: "create an object named 'x', containing the values 1, 2, and 3". But that's a simplification that will lead to you make inaccurate predictions about what R is actually doing behind the scenes. It's more accurate to think about this code as doing two things:
+
+* Creating an object, a vector of values, `1:3`.
+* Binding the object to a name, `x`.
+
+Note that the object, or value, doesn't have a name; it's the name that has a value. To make that distinction more clear, I'll draw diagrams like this: 
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/binding-1.png", dpi = 300)
+```
+
+The name, `x`, is drawn with a rounded rectangle, and it has an arrow that points to the  value, the vector `1:3`. Note that the arrow points in opposite direction to the assignment arrow: `<-` creates a binding from the name on the left-hand side to the object on the right-hand side.
+
+You can think of a name as a reference to a value. For example, if you run this code, you don't get another copy of the value `1:3`, you get another binding to the existing object:
+
+```{r bind2, dependson = "bind1"}
+y <- x
+```
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/binding-2.png", dpi = 300)
+```
+
+You might have noticed the value `1:3` has a label: `0x74b`. While the vector doesn't have a name, I'll occasionally need to refer to objects independently of their bindings. To make that possible, I'll label values with a unique identifier. These unique identifers have a special form that looks like the object's memory "address", i.e. the location in memory in which the object is stored. 
+
+You can access the address of an object with `lobstr::obj_addr()`. This allows us to see that `x` and `y` both point to the same location in memory:
+
+```{r bind3, dependson = "bind2"}
+obj_addr(x)
+obj_addr(y)
+```
+
+These identifiers are long, and change every time you restart R.
+
+It takes some time to get your head around the distinction between names and values, but it's really helpful for functional programming when you start to work with functions that have different names in different contexts.
+
+### Non-syntactic names
+\index{reserved names} \indexc{`} \index{non-syntactic names}
+
+R has strict rules about what constitutes a valid name. A __syntactic__ name must consist of letters[^letters], digits, `.` and `_`, and can't begin with `_` or a digit. Additionally, it can not be one of a list of __reserved words__ like `TRUE`, `NULL`, `if`, and `function` (see the complete list in `?Reserved`). Names that don't follow these rules are called __non-syntactic__ names, and if you try to use them, you'll get an error:
+
+```{r, eval = FALSE}
+_abc <- 1
+#> Error: unexpected input in "_"
+
+if <- 10
+#> Error: unexpected assignment in "if <-"
+```
+
+[^letters]: Surprisingly, what constitutes a letter is determined by your current locale. That means that the syntax of R code actually differs from computer to computer, and it's possible for a file that works on one computer to not even parse on another!
+
+It's possible to override the usual rules and use a name with any sequence of characters by surrounding the name with backticks:
+
+```{r}
+`_abc` <- 1
+`_abc`
+
+`if` <- 10
+`if`
+```
+
+Typically, you won't deliberately create such crazy names. Instead, you need to understand them because you'll be subjected to the crazy names created by others. This happens most commonly when you load data that has been created outside of R, and doesn't follow R's rules.
+
+::: sidebar
+You can also create non-syntactic bindings using single and double quotes (i.e. `"a + b" <- 3`) instead of backticks, but I don't recommend it because you'll have to use a different syntax to retrieve the values. The ability to use strings on the left hand side of the assignment arrow is a historical artefact, used before R supported backticks.
+:::
+
+### Exercises
+
+1.  Explain the relationship between `a`, `b`, `c` and `d` in the following 
+    code:
+
+    ```{r}
+    a <- 1:10
+    b <- a
+    c <- b
+    d <- 1:10
+    ```
+
+1.  The following code accesses the mean function in multiple different ways.
+    Do they all point to the same underlying function object? Verify with
+    `lobstr::obj_addr()`.
+    
+    ```{r, eval = FALSE}
+    mean
+    base::mean
+    get("mean")
+    evalq(mean)
+    match.fun("mean")
+    ```
+    
+1.  By default, base R data import functions, like `read.csv()`, will automatically
+    convert non-syntactic names to syntactic names. Why might this be 
+    problematic? What option allows you to suppress this behaviour?
+    
+1.  What rules does `make.names()` use to convert non-syntactic names into
+    syntactic names?
+
+1.  I slightly simplified the rules that govern syntactic names. Why is `.123e1`
+    not a syntactic name? Read `?make.names`.
+
+## Copy-on-modify
+
+Consider the following code, which binds `x` and `y` to the same underlying value, then modifies `y`.
+
+```{r}
+x <- 1:3
+y <- x
+
+y[[3]] <- 4
+x
+```
+
+Clearly modifying `y` doesn't also modify `x`, so what happens to the shared binding? While the value associated with `y` changes, the original object does not. Instead, R creates a new object, `0xcd2`, a copy of `0x74b` with one value changed, then rebinds `y` to that object.
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/binding-3.png", dpi = 300)
+```
+
+This behaviour is called __copy-on-modify__, and understanding it makes your intuition for the performance of R code radically better. A related way to describe this phenomenon is to say that R objects are __immutable__; I'll generally avoid that term because there are a couple of important exceptions to copy-on-modify that you'll learn about in [modify-in-place]. 
+
+### `tracemem()`
+
+You can see when an object gets copied with the help of `base::tracemem()`. You call it with an object and it returns the current address of the object:
+
+```{r trace1}
+x <- 1:3
+cat(tracemem(x), "\n")
+```
+
+Whenever that object is copied in the future, `tracemem()` will print out a message telling you which object was copied, what the new address is, and the sequence of calls that lead to the copy:
+
+```{r trace2, dependson = "trace1"}
+y <- x
+y[[3]] <- 4L
+```
+
+[Figure out how to make results nicer inside RMarkdown]{.todo}
+
+Note that if you modify `y` again, it doesn't get copied. That's because the new object now only has a single name binding it, so R can apply a modify-in-place optimisation. We'll come
+back to that shortly.
+
+```{r trace3, dependson = "trace2"}
+y[[3]] <- 5L
+
+untracemem(y)
+```
+
+`untracemem()` is the opposite of `tracemem()`; it turns tracing off.
+
+### Function calls
+
+The same rules for copying also apply to function calls. Take this code:
+
+```{r}
+f <- function(a) {
+  a
+}
+
+x <- 1:3
+cat(tracemem(x), "\n")
+
+z <- f(x)
+
+untracemem(x)
+```
+
+While `f()` is running, `a` inside the function will point to the same value as `x` does outside of it:
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/binding-f1.png", dpi = 300)
+```
+
+(You'll learn more about the conventions used in this diagram in [Execution environments].)
+
+And once complete, `z` will point to the same object.
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/binding-f2.png", dpi = 300)
+```
+
+`0x74b` never gets copied because it never gets modified. If `f()` did modify `x`, R would create a new copy, and then `z` would bind that object. 
+
+### Lists
+
+It's not just names (i.e. variables) that point to values; the elements of lists do too. Take this list, which superficially is very similar to the vector above:
+
+```{r list1}
+l1 <- list(1, 2, 3)
+```
+
+The internal representation of the list is actually quite different to that of a vector. A list is really a vector of references:
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/list.png", dpi = 300)
+```
+
+This is particularly important when we modify a list:
+
+```{r list2, dependson = "list1"}
+l2 <- l1
+```
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/l-modify-1.png", dpi = 300)
+```
+
+```{r list3, dependson = "list2"}
+l2[[3]] <- 4
+```
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/l-modify-2.png", dpi = 300)
+```
+
+Like vectors, lists are copied-on-modify; the original list is left unchanged, and R creates a modified copy. Note that the copy is __shallow__: the list object and its bindings are copied, but the values pointed to by the bindings are not. This behaviour was added in R 3.1.0 and had a big impact on performance.
+
+You can use `lobstr::ref()` to see values that are shared across lists. `ref()` prints the memory address of each object, along with a local id so that you can easily cross-reference shared components.
+
+```{r list4, dependson = "list3"}
+ref(l1, l2)
+```
+
+### Data frames
+
+Data frames are lists, so copy-on-modify has important consequences when you modify a data frame. Take this data frame as an example:
+
+```{r}
+d1 <- data.frame(x = c(1, 5, 6), y = c(2, 4, 3))
+```
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/dataframe.png", dpi = 300)
+```
+
+If you modify a column, only that column needs to be modified; the others can continue to point to the same place:
+
+```{r}
+d2 <- d1
+d2[, 2] <- d2[, 2] * 2
+```
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/d-modify-c.png", dpi = 300)
+```
+
+However, if you modify a row, there is no way to share data with the previous version of the data frame.
+
+```{r}
+d3 <- d1
+d3[1, ] <- d3[1, ] * 2
+```
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/d-modify-r.png", dpi = 300)
+```
+
+### Character vectors
+\index{string pool}
+
+The final place that R uses references is in character vectors. In the previous chapter, we drew character vectors like this:
+
+```{r}
+x <- c("a", "a", "abc", "d")
+```
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/character.png", dpi = 300)
+```
+
+This is polite fiction, because R has a __global string pool__. Each element of a character vector is actually a pointer to a unique string in that pool:
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/character-2.png", dpi = 300)
+```
+
+You can request that `ref()` show these references:
+
+```{r}
+ref(x, character = TRUE)
+```
+
+Generally, however, this detail is not important, so elsewhere in the book I'll draw character vectors as if the individual strings live inside the vector.
+
+### Exercises
+
+1.  Why is `tracemem(1:10)` not useful?
+
+1.  Explain why `tracemem()` records two copies when you run this code.
+    Hint: carefully look at the difference between this code and the code 
+    shown earlier in the section.
+     
+    ```{r, results = FALSE}
+    x <- 1:3
+    tracemem(x)
+    
+    x[[3]] <- 4
+    ```
+
+1.  Sketch out the relationship between the following objects:
+
+    ```{r}
+    a <- 1:10
+    b <- list(a, a)
+    c <- list(b, a, 1:10)
+    ```
+
+1.  What happens when you run this code?
+
+    ```{r}
+    x <- list(1:10)
+    x[[2]] <- x
+    ```
+    
+    Draw a picture.
+
+## Object size
+\indexc{object\_size} \indexc{obj\_size}
+
+You can find out how much space an object occupies in memory with `obj_size()`:
+
+```{r}
+obj_size(letters)
+obj_size(ggplot2::diamonds)
+```
+
+Since the elements of lists are references to values, the size of a list might be much smaller than you expect:
+
+```{r}
+x <- 1:1e6
+obj_size(x)
+
+y <- list(x, x, x)
+obj_size(y)
+```
+
+`y` is only 72 bytes[^32bit] bigger than `x`. That's the size of an empty list with three elements:
+
+```{r}
+obj_size(list(NULL, NULL, NULL))
+```
+
+[^32bit]: If you're running 32-bit R you'll see slightly different sizes.
+
+::: base
+We need to use `lobstr::obj_size()` here because the base equivalent, `utils::object.size()`, incorrectly counts `x` three times when computing the size of `y`.
+:::
+
+Similarly, the global string pool means that character vectors take up less memory than you might expect: repeating a string 1000 times does not make it take up 1000 times as much memory.
+
+```{r}
+banana <- "bananas bananas bananas"
+obj_size(banana)
+obj_size(rep(banana, 100))
+```
+
+References also make it challenging to think about the size of individual objects. `obj_size(x) + obj_size(y)` will only equal `obj_size(x, y)` if there are no shared values. Here, the combined size of `x` and `y` is the same as the size of `y`:
+
+```{r}
+obj_size(x, y)
+```
+
+### Exercises
+
+1.  Take the following list. Why is its size somewhat misleading?
+
+    ```{r}
+    x <- list(mean, sd, var)
+    obj_size(x)
+    ```
+
+1.  Predict the output of the following code:
+
+    ```{r, result = FALSE}
+    x <- 1:1e6
+    obj_size(x)
+    
+    y <- list(x, x)
+    obj_size(y)
+    obj_size(x, y)
+    
+    y[[1]][[1]] <- 10
+    obj_size(y)
+    obj_size(x, y)
+    
+    y[[2]][[1]] <- 10
+    obj_size(y)
+    obj_size(x, y)
+    ```
+
+## Modify-in-place
+
+Most of the time, modifying an R object will create a copy. There are two exceptions:
+
+* Objects with a single binding get a special performance optimisation.
+
+* Environments are a special type of object that is always modified in place.
+
+### Objects with a single binding
+
+If an object only has a single binding to it, R will modify it in place:
+
+```{r}
+v <- 1:3
+```
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/v-inplace-1.png", dpi = 300)
+```
+
+```{r}
+v[[3]] <- 4L
+```
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/v-inplace-2.png", dpi = 300)
+```
+
+(Carefully note the object ids here: `v` continues to bind to the same object, `0x207`.)
+
+It's challenging to predict exactly when R applies this optimisation because of two complications:
+
+* When it comes to bindings, R can currently[^refcnt] only count 0, 1, 
+  and many. That means if an object has two bindings, and one goes away,
+  the reference count does not get decremented (one less than many is still
+  many).
+  
+* Whenever you call any regular function, it will make a reference to the 
+  object. The only exception are specially written C functions, which
+  occur mostly in the base package.
+
+[^refcnt]: By the time you read this, that may have changed, as plans are afoot to improve reference counting: https://developer.r-project.org/Refcnt.html
+
+Together, this makes it hard to predict whether or not a copy will occur. Instead, it's better to determine it empirically with `tracemem()`. Let's explore the subtleties with a case study using for loops. For loops have a reputation for being slow in R, but often that slowness is because every iteration of the loop is creating a copy. 
+
+Consider the following code. It subtracts the median from each column of a large data frame: \index{loops!avoiding copies}
+
+```{r, cache = TRUE}
+x <- data.frame(matrix(runif(5 * 1e4), ncol = 5))
+medians <- vapply(x, median, numeric(1))
+
+for (i in seq_along(medians)) {
+  x[[i]] <- x[[i]] - medians[[i]]
+}
+```
+
+This loop is surprisingly slow because every iteration of the loop copies the data frame, as revealed by using `tracemem()`:
+
+```{r}
+cat(tracemem(x), "\n")
+
+for (i in 1:5) {
+  x[[i]] <- x[[i]] - medians[[i]]
+}
+
+untracemem(x)
+```
+
+In fact, each iteration copies the data frame not once, not twice, but three times! We get two copies inside of `[[.data.frame`, and a further copy because `[[.data.frame` is a regular function and hences increments the reference count of `x`. (Note that these copies will be shallow so they are not too expensive, but they obviously make the loop slower than you might hope).
+
+We can reduce the number of copies by using a list instead of a data frame. Modifying a list uses internal C code, so the refs are not incremented and only a single copy is made:
+
+```{r}
+y <- as.list(x)
+cat(tracemem(y), "\n")
+
+for (i in 1:5) {
+  y[[i]] <- y[[i]] - medians[[i]]
+}
+```
+
+While determining that copies are being made is not hard, preventing such behaviour is. If you find yourself resorting to exotic tricks to avoid copies, it may be time to rewrite your function in C++, as described in [Rcpp](#rcpp).
+
+### Environments {#env-modify}
+
+You'll learn more about environments in [Environments], but it's important to mention them here because they behave differently to other objects: environments are always modified in place. This is sometimes described as having __reference semantics__ because whenever you modify an environment the existing bindings continue to have the same reference.
+
+Take this environment, which we bind to `e1` and `e2`:
+
+```{r}
+e1 <- rlang::env(a = 1, b = 2, c = 3)
+e2 <- e1
+```
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/e-modify-1.png", dpi = 300)
+```
+
+If we change a binding, the environment is modified in place:
+
+```{r}
+e1$c <- 4
+e2$c
+```
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/e-modify-2.png", dpi = 300)
+```
+
+One consequence of this is that environments can contain themselves:
+
+```{r}
+e <- rlang::env()
+e$self <- e
+
+ref(e)
+```
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/e-self.png", dpi = 300)
+```
+
+This is a unique property of environments!
+
+### Exercises
+
+1.  Wrap the two methods for subtracting medians into two functions, then
+    use the microbenchmark to carefully compare their speeds. How does
+    performance change as the number of columns increase?
+
+1.  What happens if you attempt to use `tracemem()` on an environment?
+
+## Unbinding and the garbage collector {#gc}
+
+Consider this code:
+
+```{r}
+x <- 1:3
+```
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/unbinding-1.png", dpi = 300)
+```
+
+```{r}
+x <- 2:4
+```
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/unbinding-2.png", dpi = 300)
+```
+
+```{r}
+rm(x)
+```
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/name-value/unbinding-3.png", dpi = 300)
+```
+
+We create two objects, but by the end of code neither object is bound to a name. How do these objects get deleted? That's the job of the __garbage collector__, or GC, for short. 
+
+R uses a __tracing__ garbage collector. That means it traces every object reachable from the global[^callstack] environment, and all the objects reachable from those objects (i.e. the references in lists and environments are searched recursively). The garbage collector does not use the reference count used for the modify-in-place optimisation described above. The two ideas are closely related but the internal data structures have been optimised for different use cases.
+
+[^callstack]: And every environment on the current call stack.
+
+### When does the garbage collector run?
+\index{garbage collector} \indexc{gc()}
+
+The garbage collector is run automatically whenever a new R object is created and R needs more memory. If you want to see when that occurs, call `gcinfo(TRUE)`: it will print a message to the console every time the garbage collector runs. Running the GC creates more memory by deleting R objects that are no longer used, and if needed, requesting more memory from the operating system. 
+
+You can force the garbage collector to run by calling `gc()`. Despite what you might have read elsewhere, there's never any _need_ to call `gc()` yourself. You may _want_ to call `gc()` to ask R to return memory to your operating system, or for its side-effect of telling you how much memory is currently being used:  
+
+```{r}
+gc()
+```
+
+`lobstr::mem_used()` is a wrapper around `gc()` that just prints the total number of bytes used:
+
+```{r}
+mem_used()
+```
+
+This number won't agree with the amount of memory reported by your operating system for three reasons:
+
+1. It only includes objects created by R, not the R interpreter itself.
+
+1. Both R and the operating system are lazy: they won't reclaim memory 
+   until it's actually needed. R might be holding on to memory because 
+   the OS hasn't yet asked for it back.
+
+1. R counts the memory occupied by objects but there may be gaps due to 
+   deleted objects. This problem is known as memory fragmentation.
+
+### Memory leaks
+
+The GC takes care of deleting all objects that do not have bindings. But you are still a risk for a __memory leak__, which occurs when you keep a binding to an object without realising it. In R, the two main causes of memory leaks are formulas and functions because they both capture the enclosing environment. The following code illustrates the problem. In `f1()`, `1:1e6` is only referenced inside the function, so when the function completes the memory is returned and the net memory change is 0. `f2()` and `f3()` both return objects that capture environments, so that `x` is not freed when the function completes. \index{memory!leaks}
+
+```{r}
+f1 <- function() {
+  x <- 1:1e6
+  10
+}
+x <- f1()
+obj_size(x)
+
+f2 <- function() {
+  x <- 1:1e6
+  a ~ b
+}
+y <- f2()
+obj_size(y)
+
+f3 <- function() {
+  x <- 1:1e6
+  function() 10
+}
+z <- f3()
+obj_size(z)
+```
+
+```{r, echo = FALSE}
+rm(x, y, z)
+```

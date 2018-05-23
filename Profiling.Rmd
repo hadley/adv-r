@@ -5,6 +5,8 @@ source("common.R")
 source("performance-microbenchmark.R")
 ```
 
+## Introduction
+
 > "Programmers waste enormous amounts of time thinking about, or worrying 
 > about, the speed of noncritical parts of their programs, and these attempts 
 > at efficiency actually have a strong negative impact when debugging and 
@@ -24,7 +26,7 @@ Even experienced programmers have a hard time identifying bottlenecks in their c
 
 It's easy to get caught up in trying to remove all bottlenecks. Don't! Your time is valuable and is better spent analysing your data, not eliminating possible inefficiencies in your code. Be pragmatic: don't spend hours of your time to save seconds of computer time. To enforce this advice, you should set a goal time for your code and optimise only up to that goal. This means you will not eliminate all bottlenecks. Some you will not get to because you've met your goal. Others you may need to pass over and accept either because there is no quick and easy solution or because the code is already well optimised and no significant improvement is possible. Accept these possibilities and move on to the next candidate. \index{bottlenecks}
 
-##### Outline
+### Outline {-}
 
 * [Measuring performance](#measure-perf) describes how to find the bottlenecks 
   in your code using line profiling.
@@ -60,7 +62,7 @@ It's easy to get caught up in trying to remove all bottlenecks. Don't! Your time
 * [Other techniques](#more-techniques) finishes the chapter with pointers to
   more resources that will help you write fast code.
 
-##### Prerequisites
+### Prerequisites {-}
 
 In this chapter we'll be using the `lineprof` package to understand the performance of R code. Get it with:
 
@@ -179,6 +181,109 @@ There are some other limitations to profiling:
     
     If this is confusing, you can create temporary variables to force 
     computation to happen earlier.
+
+## Memory profiling with lineprof {#memory-profiling}
+
+`mem_change()` captures the net change in memory when running a block of code. Sometimes, however, we may want to measure incremental change. One way to do this is to use memory profiling to capture usage every few milliseconds. This functionality is provided by `utils::Rprof()` but it doesn't provide a very useful display of the results. Instead we'll use the [lineprof](https://github.com/hadley/lineprof) package. It is powered by `Rprof()`, but displays the results in a more informative manner. \index{memory!profiling}
+
+To demonstrate `lineprof`, we're going to explore a bare-bones implementation of `read.delim()` with only three arguments: \indexc{read\_delim()}
+
+```{r read_delim}
+```
+
+We'll also create a sample csv file:
+
+```{r}
+library(ggplot2)
+write.csv(diamonds, "diamonds.csv", row.names = FALSE)
+```
+
+Using lineprof is straightforward. `source()` the code, apply `lineprof()` to an expression, then use `shine()` to view the results. Note that you _must_ use `source()` to load the code. This is because lineprof uses srcrefs to match up the code and run times. The needed srcrefs are only created when you load code from disk.
+
+```{r, eval = FALSE}
+library(lineprof)
+
+source("code/read-delim.R")
+prof <- lineprof(read_delim("diamonds.csv"))
+shine(prof)
+```
+
+```{r, echo = FALSE}
+knitr::include_graphics("screenshots/memory-lineprof.png", dpi = 220)
+```
+
+`shine()` will also open a new web page (or if you're using RStudio, a new pane) that shows your source code annotated with information about memory usage. `shine()` starts a shiny app which will "block" your R session. To exit, press escape or ctrl + break. 
+
+Next to the source code, four columns provide details about the performance of the code:
+
+* `t`, the time (in seconds) spent on that line of code (explained in 
+  [measuring performance](#measure-perf)).
+
+* `a`, the memory (in megabytes) allocated by that line of code.
+
+* `r`, the memory (in megabytes) released by that line of code. While memory 
+  allocation is deterministic, memory release is stochastic: it depends on when 
+  the GC was run. This means that memory release only tells you that the memory 
+  released was no longer needed before this line.
+
+* `d`, the number of vector duplications that occurred. A vector duplication 
+  occurs when R copies a vector as a result of its copy on modify semantics.
+
+You can hover over any of the bars to get the exact numbers. In this example, looking at the allocations tells us most of the story:
+
+* `scan()` allocates about 2.5 MB of memory, which is very close to the 2.8 MB
+  of space that the file occupies on disk. You wouldn't expect the two numbers 
+  to be identical because R doesn't need to store the commas and because the 
+  global string pool will save some memory.
+
+* Converting the columns allocates another 0.6 MB of memory. You'd also expect 
+  this step to free some memory because we've converted string columns into 
+  integer and numeric columns (which occupy less space), but we can't see those 
+  releases because GC hasn't been triggered yet.
+
+* Finally, calling `as.data.frame()` on a list allocates about 1.6 megabytes 
+  of memory and performs over 600 duplications. This is because 
+  `as.data.frame()` isn't terribly efficient and ends up copying the input 
+  multiple times. We'll discuss duplication more in the next section.
+
+There are two downsides to profiling:
+
+1. `read_delim()` only takes around half a second, but profiling can, at best, 
+   capture memory usage every 1 ms. This means we'll only get about 500 samples.
+
+1. Since GC is lazy, we can never tell exactly when memory is no longer needed.
+
+You can work around both problems by using `torture = TRUE`, which forces R to run GC after every allocation (see `gctorture()` for more details). This helps with both problems because memory is freed as soon as possible, and R runs 10--100x slower. This effectively makes the resolution of the timer greater, so that you can see smaller allocations and exactly when memory is no longer needed. 
+
+### Exercises
+
+1. When the input is a list, we can make a more efficient `as.data.frame()` 
+   by using special knowledge. A data frame is a list with class `data.frame` 
+   and `row.names` attribute. `row.names` is either a character vector or 
+   vector of sequential integers, stored in a special format created by 
+   `.set_row_names()`. This leads to an alternative `as.data.frame()`:
+
+    ```{r}
+    to_df <- function(x) {
+      class(x) <- "data.frame"
+      attr(x, "row.names") <- .set_row_names(length(x[[1]]))
+      x
+    }
+    ```
+
+    What impact does this function have on `read_delim()`?  What are the 
+    downsides of this function?
+
+1.  Line profile the following function with `torture = TRUE`. What is 
+    surprising? Read the source code of `rm()` to figure out what's going on.
+
+    ```{r}
+    f <- function(n = 1e5) {
+      x <- rep(1, n)
+      rm(x)
+    }
+    ```
+
 
 ## Improving performance {#improve-perf}
 
