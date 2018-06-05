@@ -768,7 +768,7 @@ tryCatch(
 
 ## Applications {#condition-applications}
 
-What can you do with these tools? The following section exposes some come use cases. The goal here is not to show every possible usage of `tryCatch()` and `withCallingHandlers()` but to illustrate some common patterns that frequently crop up. Hopefully these will get your creative juices flowing, so when you encounter a new problem you'll be able to rearrange familiar pieces to solve it.
+Now that you've learned the basic tools of R's condition system, it's time to dive into some applications. The goal of this section is not to show every possible usage of `tryCatch()` and `withCallingHandlers()` but to illustrate some common patterns that frequently crop up. Hopefully these will get your creative juices flowing, so when you encounter a new problem you can come up with a useful solution.
 
 ### Failure value
 
@@ -782,11 +782,11 @@ fail_with <- function(expr, value = NULL) {
   )
 }
 
-fail_with(log(10), NA)
+fail_with(log(10), NA_real_)
 fail_with(log("x"), NA_real_)
 ```
 
-A somewhat more sophisticated application is `base::try()`. Below, `try2()` extracts the essense of `base::try()`; the real function is more complicated in order to make the error message look more like what you'd see if `tryCatch()` wasn't used. 
+A more sophisticated application is `base::try()`. Below, `try2()` extracts the essense of `base::try()`; the real function is more complicated in order to make the error message look more like what you'd see if `tryCatch()` wasn't used. 
 
 ```{r}
 try2 <- function(expr, silent = FALSE) {
@@ -809,7 +809,7 @@ try2(stop("Hi"), silent = TRUE)
 
 ### Success and failure values
 
-We can extend this pattern to returns one value if the code evaluates successfully (`success_val`), and another if it fails (`error_val`). This pattern just requires one small trick: evaluating the user supplied code then the `success_val`. If the code throws an error, we'll never get to `success_val` and will instead return `error_val`.
+We can extend this pattern to returns one value if the code evaluates successfully (`success_val`), and another if it fails (`error_val`). This pattern just requires one small trick: evaluating the user supplied code, then `success_val`. If the code throws an error, we'll never get to `success_val` and will instead return `error_val`.
 
 ```{r}
 foo <- function(expr) {
@@ -842,7 +842,7 @@ Or to capture any condition, like just `rlang::catch_cnd()`:
 ```{r, eval = FALSE}
 catch_cnd <- function(expr) {
   tryCatch(
-    condition = function(cnd) c, 
+    condition = function(cnd) cnd, 
     {
       expr
       NULL
@@ -851,7 +851,7 @@ catch_cnd <- function(expr) {
 }
 ```
 
-We can also use this pattern to create a `try()` variant. One challenge with `try()` is that it's slightly challenging to determine if the code succeeded or failed. I think it's slightly nicer to return a list with two components `result` and `error`.
+We can also use this pattern to create a `try()` variant. One challenge with `try()` is that it's slightly challenging to determine if the code succeeded or failed. Rather than returning an object with a special class, I think it's slightly nicer to return a list with two components `result` and `error`.
 
 ```{r}
 safety <- function(expr) {
@@ -866,6 +866,8 @@ safety <- function(expr) {
 str(safety(1 + 10))
 str(safety(abort("Error!")))
 ```
+
+(This is closely related to `purrr::safely()`, an adverb.)
 
 ### Resignal
 
@@ -887,8 +889,9 @@ warning2error({
 })
 ```
 
-You could write a similar function if you were trying to find the source of a rascally message.
+You could write a similar function if you were trying to find the source of an annyoing message.
 
+<!-- 
 Another common place where it's useful to add additional context dependent information. For example, you might have a function to download data from a remote website:
 
 ```{r}
@@ -916,9 +919,11 @@ There are two important ideas here:
 * We include the original error as the `parent` so that the original context is
   still available.
 
+-->
+
 ### Record
 
-Another common pattern is to record conditions for later replay. The new challenge here is that calling handlers are called only for their side-effects so we can't return values, but instead need to modify some object in place.
+Another common pattern is to record conditions for later investigation. The new challenge here is that calling handlers are called only for their side-effects so we can't return values, but instead need to modify some object in place.
 
 ```{r}
 catch_cnds <- function(expr) {
@@ -943,8 +948,6 @@ catch_cnds({
   inform("c")
 })
 ```
-
-This is the key idea underlying the evaluate package which powers knitr: it captures every output into a special data structure so that it can be later replayed. The evaluate package is a little more complicated than the code here because it also needs to handle plots and text output.
 
 What if you also want to capture errors? You'll need to wrap the `withCallingHandlers()` in a `tryCatch()`. If an error occurs, it will be the last condition.
 
@@ -977,20 +980,20 @@ catch_cnds({
 })
 ```
 
+This is the key idea underlying the [evaluate](https://github.com/r-lib/evaluate) package which powers knitr: it captures every output into a special data structure so that it can be later replayed. As a whole, the evaluate package is quite a lot more complicated than the code here because it also needs to handle plots and text output.
+
 ### No default behaviour
 
-A final pattern that can be useful is to signal a condition that doesn't inherit from `message`, `warning` or `error`. Because there is no default behaviour, this will effectively do nothing unless the user specifically requests it.
-
-For example, you could imagine a logging system based on conditions:
+A final useful pattern is to signal a condition that doesn't inherit from `message`, `warning` or `error`. Because there is no default behaviour, this means the condition has no effect unless the user specifically requests it. For example, you could imagine a logging system based on conditions:
 
 ```{r}
-log <- function(message, level = c("message", "warning", "error")) {
+log <- function(message, level = c("info", "error", "fatal")) {
   level <- match.arg(level)
   signal(message, "log", level = level)
 }
 ```
 
-By default, when you call log a condition is signalled, but because it has no handlers, nothing happens:
+When you call `log()` a condition is signalled, but nothing happens because it has no default handler:
 
 ```{r}
 log("This code was run")
@@ -1028,9 +1031,8 @@ ignore_log_levels <- function(expr, levels) {
   )
 }
 
-record_log(ignore_log_levels(log("Hello"), "message"))
+record_log(ignore_log_levels(log("Hello"), "info"))
 ```
-
 
 :::base
 If you create a condition object by hand, and signal it with `signalCondition()`,  `cnd_muffle()` will not work. Instead you need to call it with a muffle restart defined, like this:
@@ -1038,6 +1040,8 @@ If you create a condition object by hand, and signal it with `signalCondition()`
 ```R
 withRestarts(signalCondition(cond), muffle = function() NULL)
 ```
+
+Restarts are currently beyond the scope of the book, but I suspect will be included in the 3rd edition.
 :::
 
 
@@ -1085,7 +1089,6 @@ withRestarts(signalCondition(cond), muffle = function() NULL)
       message("No more bottles of beer on the wall, no more bottles of beer.")
     }
     ```
-
 
 
 ## Quiz answers {#conditions-answers}
