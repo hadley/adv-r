@@ -608,7 +608,7 @@ One of the challenges of error handling in R is that most functions generate one
 
 Fortunately R has a powerful, but little used feature: the ability to create custom conditions that can contain additional metadata. Creating custom conditions is a little fiddly in base R, but `rlang::abort()` makes it very easy as you can supply a custom `.subclass` and additional metadata. 
 
-I recommend using the following call structure for custom conditions. This takes advantage of R's flexible argument matching so that the name of the "type" of error comes first, followed by the user facing text, followed by custom metadata.
+The following example shows the basic pattern. I recommend using the following call structure for custom conditions. This takes advantage of R's flexible argument matching so that the name of the "type" of error comes first, followed by the user facing text, followed by custom metadata.
 
 ```{r, error = TRUE}
 abort(
@@ -622,22 +622,22 @@ Custom conditions work just like regular conditions when used interactively, but
 
 ### Motivation
 
-To explore these ideas in more depth, let's take `base::log()`. It does an ok job of providing errors about invalid arguments:
+To explore these ideas in more depth, let's take `base::log()`. It does the minimum when throwing errors  caused by invalid arguments:
 
 ```{r, error = TRUE}
 log(letters)
 log(1:10, base = letters)
 ```
 
-But I think we can do better by being explicit about which argument is the problem (i.e. `x` or `base`), as saying precisively what the problem is.
+I think we can do better by being explicit about which argument is the problem (i.e. `x` or `base`), and saying what the problematic input is (not just what it isn't).
 
 ```{r}
 my_log <- function(x, base = exp(1)) {
   if (!is.numeric(x)) {
-    abort(paste0("`x` must be a numeric vector; not ", typeof(x)))
+    abort(paste0("`x` must be a numeric vector; not ", typeof(x), "."))
   }
   if (!is.numeric(base)) {
-    abort(paste0("`base` must be a numeric vector; not ", typeof(base)))
+    abort(paste0("`base` must be a numeric vector; not ", typeof(base), "."))
   }
 
   base::log(x, base = base)
@@ -651,7 +651,7 @@ my_log(letters)
 my_log(1:10, base = letters)
 ```
 
-This is an improvement for interactive usage as the error messages are more likely to guide the user towards a correct fix. However, they're no better if you want to handle the errros: all that useful metadata about the error is jammed into a single string. That makes it hard to program with.
+This is an improvement for interactive usage as the error messages are more likely to guide the user towards a correct fix. However, they're no better if you want to programmatically handle the errors: all the useful metadata about the error is jammed into a single string.
 
 ### Signalling
 
@@ -661,7 +661,8 @@ Let's build some infrastructure to improve this situtation, We'll start by provi
 abort_bad_argument <- function(arg, must, not = NULL) {
   msg <- glue::glue("`{arg}` must {must}")
   if (!is.null(not)) {
-    msg <- glue::glue("{msg}; not {not}")
+    not <- typeof(not)
+    msg <- glue::glue("{msg}; not {not}.")
   }
   
   abort("error_bad_argument", 
@@ -673,22 +674,46 @@ abort_bad_argument <- function(arg, must, not = NULL) {
 }
 ```
 
+::: base
+
+If you want to throw a custom error without adding a dependency on rlang, you can create a condition object "by hand" and then pass it to `stop()`:
+
+```{r, eval = FALSE}
+stop_custom <- function(.subclass, message, call = NULL, ...) {
+  err <- structure(
+    list(
+      message = message,
+      call = call,
+      ...
+    ),
+    class = c(.subclass, "error", "condition")
+  )
+  stop(err)
+}
+
+err <- catch_cnd(stop_custom("error_new", "This is a custom error", x = 10))
+class(err)
+err$x
+```
+
+:::
+
 We can now rewrite `my_log()` to use this new helper:
 
 ```{r}
 my_log <- function(x, base = exp(1)) {
   if (!is.numeric(x)) {
-    abort_bad_argument("x", must = "be numeric", not = typeof(x))
+    abort_bad_argument("x", must = "be numeric", not = x)
   }
   if (!is.numeric(base)) {
-    abort_bad_argument("base", must = "be numeric", not = typeof(base))
+    abort_bad_argument("base", must = "be numeric", not = base)
   }
 
   base::log(x, base = base)
 }
 ```
 
-The code is not much shorter, but is a little more meanginful, and ensures that error messages for bad arguments is identical across functions. This yields the same interactive error messages as before:
+`my_log()` itself is not much shorter, but is a little more meanginful, and it ensures that error messages for bad arguments are consistent across functions. It yields the same interactive error messages as before:
 
 ```{r, error = TRUE}
 my_log(letters)
@@ -697,40 +722,49 @@ my_log(1:10, base = letters)
 
 ### Handling
 
-These structured condition objects make it much easier to test code. Rather than relying on regular expressions, you can now catch the condition object and inspect its elements.
+These structured condition objects are much easier to program with. The first place you might want to use this capability is when testing your function. Unit testing is not a subject of this book (see [R packages](http://r-pkgs.had.co.nz/) for details), but the basics are easy to understand. The following code captures the error, and then asserts it has the structure that we expect.
 
 ```{r}
-cnd <- catch_cnd(log("a"))
-cnd$arg
+library(testthat)
 
-cnd <- catch_cnd(log(1:10, base = "x"))
-cnd$arg
+err <- catch_cnd(my_log("a"))
+expect_s3_class(err, "error_bad_argument")
+expect_equal(err$arg, "x")
+expect_equal(err$not, "character")
 ```
 
-Note that when using `tryCatch()` with multiple handlers and custom classes, the first handler to match any class in the signal's class vector is called, not the best match. For this reason, you need to make sure to put the most specific handlers first:
+We can also use the class (`error_bad_argument`) in `tryCatch()` to only handle that specfic error:
 
 ```{r}
 tryCatch(
-  error = function(cnd) "???",
   error_bad_argument = function(cnd) "bad_argument",
-  my_log("a")
-)
-
-tryCatch(
-  error_bad_argument = function(cnd) "bad_argument",
-  error = function(cnd) "???",
+  error = function(cnd) "other error",
   my_log("a")
 )
 ```
 
-### Use in practice
+Note that when using `tryCatch()` with multiple handlers and custom classes, the first handler to match any class in the signal's class vector is called, not the best match. For this reason, you need to make sure to put the most specific handlers first. The following code does not do what you might hope:
 
-There's a bit of a chicken and egg situation when it comes to custom conditions: no one creates them, and hence one knows how to work with them, so therefore no one creates them. 
-
-If you're bundling code in a package and writing tests for that package, I think the improved ability to test your errors is enough to make using custom conditions worthwhile. (The same reasoning applies to messages and warnings too, but since they're lower stakes the cost-benefit ratio is a little different). In the short-term, at least, it's unlikely that many users of your code will take advantage of your custom conditions. 
-However, over time, as more people learn about and master the condition system, custom conditions will make it easier for others to take different actions for different types of errors. For example, you could imagine the user of your function silently ignoring "expected" errors (like a model failing to converge for some input datasets), while propagating unexpected errors (like no disk space available).
+```{r}
+tryCatch(
+  error = function(cnd) "other error",
+  error_bad_argument = function(cnd) "bad_argument",
+  my_log("a")
+)
+```
 
 ### Exercises
+
+1.  Inside a package, it's occassionally useful to check that a package is 
+    installed before using it. Write a function that checks if a package is 
+    installed (with `requireNamespace("pkg", quietly = FALSE))` and if not,
+    throws a custom condition that includes the package name in the metadata.
+    
+1.  Inside a package you often need to stop with an error when something
+    is not right. Other packages that depend on your package might be
+    tempted to check these errors in their unit tests. How could you help
+    these packages to avoid relying on the error message which is part of
+    the user interface rather than the API and might change without notice?
 
 ## Applications {#condition-applications}
 
