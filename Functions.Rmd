@@ -369,9 +369,9 @@ Both of these approaches reveal why this undesirable behaviour exists: R relies 
 >
 > --- John Chambers
 
-While everything that happens in R is a result of a function call, not all calls look the same. There are three common forms:
+While everything that happens in R is a result of a function call, not all calls look the same. There are four possible options:
 
-* In __prefix__ form where the name of the function comes before its
+* In __prefix__ form, the name of the function comes before its
   arguments, like `foofy(a, b, c)`. These constitute of the majority of
   function calls in R.
 
@@ -382,12 +382,19 @@ While everything that happens in R is a result of a function call, not all calls
 * A __replacement__ function looks like a prefix functions, but includes
   a `<-`, like `names(df) <- c("a", "b", "c")`.
   
-There are also a variety of __special forms__ like `[[`, `if`, and `for`. These are built-in to R; you can only add new forms by modifying R's parser, which can only be done by R-core (and requires careful analysis to prevent introducing parsing ambiguities).
+* A variety of __special forms__ like `[[`, `if`, and `for`. These are 
+  part of the structure of the R language itself and have remained unchanged
+  for many years.
+
+While four forms exist, you only need to use one, because any call can be written in prefix form. I'll demonstrate this property, and then you'll learn about each of the forms in turn.
 
 ### Rewriting to prefix form
-\indexc{`} \index{backticks|see{\texttt{`}}}
+\indexc{`} 
+\index{backticks|see{\texttt{`}}}
 
-An interesting propety of R is every infix, replacement, or special form has an underlying function that can be called in prefix form. This means that you can rewrite any R expression to use only prefix form. The names of these underlying forms always have non-syntactic names, you to convert to prefix form you must wrap in in backticks, `` ` ``. The following example shows three pairs of equivalent calls, for an infix form, replacement form, and a special form.
+An interesting propety of R is every infix, replacement, or special form can be rewritten in prefix form, and that calls gives the name of the underlying function. The names of non-prefix functions always have non-syntactic names so you must use backticks, `` ` ``, when rewriting in prefix form. 
+
+The following example shows three pairs of equivalent calls, for an infix form, replacement form, and a special form.
 
 ```{r, eval = FALSE}
 x + y
@@ -400,7 +407,7 @@ for(i in 1:10) print(i)
 `for`(i, 1:10, print(i))
 ```
 
-This transformation is performed automatically behind the scenes, then R uses the usual rules to find the function given its name. This means that you can override the behaviour of any infix function or special  form. For example, if you're ever feeling particularly evil, run the following code while your friend is away from their computer. It will introduce a particularly pernicious bug: 10% of the time, 1 will be added to any numeric calculation inside of parentheses.
+This transformation is performed automatically behind the scenes, then R uses the usual rules to find the function given its name. This means that you can override the behaviour of any infix function or special form. For example, if you're ever feeling particularly evil, run the following code while a friend is away from their computer. It will introduce a particularly pernicious bug: 10% of the time, 1 will be added to any numeric calculation inside of parentheses.
 
 ```{r}
 `(` <- function(e1) {
@@ -414,26 +421,33 @@ replicate(50, (1 + 2))
 rm("(")
 ```
 
-Of course, overriding built-in functions like this is a bad idea, but it is possible to apply it only selected code blocks. This provides a clean and elegant approach to writing domain specific languages and translators to other languages, as you'll learn about in [metaprogramming].
+Of course, overriding built-in functions like this is a bad idea, but, as you'll learn about in [metaprogramming], it's possible to apply it only selected code blocks. This provides a clean and elegant approach to writing domain specific languages and translators to other languages.
 
-A technique more often useful in practice is this allows us to use more functions with functional programming tools. For example, could use `sapply()` to add 3 to every element of a list by first defining a function `add()`, like this: \indexc{sapply()}
+A more useful technique is to use this knowledge when using functional programming tools. For example, could use `sapply()` to add 3 to every element of a list by first defining a function `add()`, like this: \indexc{sapply()}
 
 ```{r}
 add <- function(x, y) x + y
 sapply(1:10, add, 3)
 ```
 
-But we can also get the same effect using the built-in `+` function.
+But we can also get the same effect more simply by relying on the existing `+` function:
 
 ```{r}
 sapply(1:5, `+`, 3)
 ```
 
-We'll explore this idea in detail later on in [functionals].
+We'll explore this idea in detail in [functionals].
 
 ### Prefix form
+\index{functions!arguments}
 
-The prefix form is the most common form in R code, and indeed in the majority of programming languages. R is a little special however, in that you can specific arguments by position, complete name, or partial name. Arguments are matched first by exact name, then partialy (by unique prefix), and finally by position. \index{functions!arguments}
+The prefix form is the most common form in R code, and indeed in the majority of programming languages. Prefix calls in R are a little special because you can specify arguments in three ways:
+
+* By position, like `help(mean)`.
+* Using partial matching, like `help(to = mean)`.
+* By name, like `help(topic = mean)`.
+
+As illustrated by the following chunk, arguments are matched by exact name, then to unique prefixes, and finally by position.
 
 ```{r, error = TRUE}
 f <- function(abcdef, bcde1, bcde2) {
@@ -449,14 +463,14 @@ str(f(2, 3, a = 1))
 str(f(1, 3, b = 1))
 ```
 
-Generally, you only want to use positional matching for the first one or two arguments; they will be the most commonly used, and most readers will know what they are. Avoid using positional matching for less commonly used arguments, and never use partial matching. Named arguments should always come after unnamed arguments. The tidyverse style guide, <http://style.tidyverse.org/syntax.html#argument-names>, has more advice on good function calling style.
+Generally, only use positional matching for the first one or two arguments; they will be the most commonly used, and most readers will know what they are. Avoid using positional matching for less commonly used arguments, and never use partial matching. See the tidyverse style guide, <http://style.tidyverse.org/syntax.html#argument-names>, for more advice.
 
 ### Infix functions
 \index{functions!infix} 
 \index{infix functions} 
 \indexc{\%\%}
- 
-R comes with a number of built-in infix operators: `:, ::, :::, $, @, ^, *, /, +, -, >, >=, <, <=, ==, !=, !, &, &&, |, ||, ~, <-, <<-`. You can also create your own infix functions must start and end with `%`, and base R uses this to additionally define `%%`, `%*%`, `%/%`, `%in%`, `%o%`, and `%x%` functions.
+
+Infix functions are so called because function name comes **in**-between its arguments, and hence infix functions have two arguments. R comes with a number of built-in infix operators: `:`, `::`, `:::`, `$`, `@`, `^`, `*`, `/`, `+`, `-`, `>`, `>=`, `<`, `<=`, `==`, `!=`, `!`, `&`, `&&`, `|`, `||`, `~`, `<-`, and `<<-`. You can also create your own infix functions that start and end with `%`, and base R uses this to additionally define `%%`, `%*%`, `%/%`, `%in%`, `%o%`, and `%x%`.
 
 Defining your own infix function is simple. You create a two argument function and bind it to a name that starts and ends with `%`:
 
@@ -465,17 +479,13 @@ Defining your own infix function is simple. You create a two argument function a
 "new " %+% "string"
 ```
 
-Note that while prefix functions can have any number of arguments, infix functions must have exactly two. 
-
-The names of infix functions are more flexible than regular R functions: they can contain any sequence of characters, except "%". You will need to escape any special characters in the string used to define the function, but not when you call it:
+The names of infix functions are more flexible than regular R functions: they can contain any sequence of characters except "%". You will need to escape any special characters in the string used to define the function, but not when you call it:
 
 ```{r}
 `% %` <- function(a, b) paste(a, b)
-`%'%` <- function(a, b) paste(a, b)
 `%/\\%` <- function(a, b) paste(a, b)
 
 "a" % % "b"
-"a" %'% "b"
 "a" %/\% "b"
 ```
 
@@ -486,7 +496,7 @@ R's default precedence rules mean that infix operators are composed from left to
 "a" %-% "b" %-% "c"
 ```
 
-Note that there are two functions that are usually infix, but can be called with a single argument: `+` and `-`. 
+There are two special infix functions that can be called with a single argument: `+` and `-`. 
 
 ```{r}
 -1
@@ -507,15 +517,7 @@ Replacement functions act like they modify their arguments in place, and have th
 }
 ```
 
-You can of course call this using the prefix form, but it's not very useful
-
-```{r}
-x <- 1:4
-`second<-`(x, 100L)
-x
-```
-
-Instead, replacement functions are used by placing the function call on the LHS of `<-`: 
+Replacement functions are used by placing the function call on the LHS of `<-`: 
 
 ```{r}
 x <- 1:10
@@ -546,27 +548,13 @@ modify(x, 1) <- 10
 x
 ```
 
-When you call `modify(x, 1) <- 10`, behind the scenes R turns it into:
+When you write `modify(x, 1) <- 10`, behind the scenes R turns it into:
 
 ```{r, eval = FALSE}
 x <- `modify<-`(x, 1, 10)
 ```
 
-This means you can't do things like:
-
-```{r, eval = FALSE}
-modify(get("x"), 1) <- 10
-#> Error: target of assignment expands to non-language object
-```
-
-because that gets turned into the invalid code:
-
-```{r, eval = FALSE}
-get("x") <- `modify<-`(get("x"), 1, 10)
-#> Error: target of assignment expands to non-language object
-```
-
-It’s often useful to combine replacement and subsetting:
+Combining replacement with other functions requires more complex translation. For example, this:
 
 ```{r}
 x <- c(a = 1, b = 2, c = 3)
@@ -576,7 +564,7 @@ names(x)[2] <- "two"
 names(x)
 ```
 
-This works because the expression `names(x)[2] <- "two"` is evaluated as if you had written:
+Is translated into:
 
 ```{r}
 `*tmp*` <- x
@@ -610,7 +598,7 @@ And the tools of control flow:
 
 Finally, the most complex is the "function" function:
 
-* `function(arg1, arg2) {body}` (`` `function`(alist(arg1, arg2), body, env))
+* `function(arg1, arg2) {body}` (`` `function`(alist(arg1, arg2), body, env)``)
 
 Knowing the name of the function that underlies the special form is useful for getting documentation. `?(` is a syntax error; `` ?`(` `` will give you the documentation for parentheses.
 
@@ -630,6 +618,13 @@ Note that all special forms are implemented as primitive functions (i.e. in C); 
     1 + (2 + 3)
     
     if (length(x) <= 5) x[[5]] else x[[n]]
+    ```
+
+1. Explain why the following code fails:
+
+    ```{r, eval = FALSE}
+    modify(get("x"), 1) <- 10
+    #> Error: target of assignment expands to non-language object
     ```
 
 1. Create a replacement function that modifies a random location in a vector.
