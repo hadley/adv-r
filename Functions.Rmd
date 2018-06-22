@@ -119,7 +119,7 @@ environment(f)
 
 The assignment forms of `formals()`, `body()`, and `environment()` can also be used to modify functions.
 
-Like all objects in R, functions can also possess any number of additional `attributes()`. One attribute used by base R is "srcref", short for source reference, which points to the source code used to create the function. The srcref is used for printing because, unlike `body()`, it contains code comments and other formatting. 
+Like all objects in R, functions can also possess any number of additional `attributes()`. One attribute used by base R is "srcref", short for source reference, which points to the source code used to create the function. The srcref is used for printing because, unlike `body()`, it contains code comments and other formatting. Another attribute
 
 ### Primitive functions
 \index{primitive functions} 
@@ -359,6 +359,515 @@ Both of these approaches reveal why this undesirable behaviour exists: R relies 
     }
     f(10)
     ```
+
+## Lazy evaluation {#lazy-evaluation}
+\index{lazy evaluation} 
+\index{functions!lazy evaluation}
+
+In R, function arguments are __lazily evaluated__, which means that they're only evaluated if they're accessed. For example, this code doesn't generate an error because `x` is never used:
+
+```{r}
+f <- function(x) {
+  10
+}
+f(stop("This is an error!"))
+```
+
+
+
+One place that this laziness is useful is in if statements. For example, in the code block below, the second competent of the if statement (`x > 0`) will only be evaluated if the first (`!is.null(x)`) is true. If it wasn't, the statement would return an error because `NULL > 0` is a logical vector of length 0 and not a valid input to `if`.
+
+```{r, eval = FALSE}
+x <- NULL
+if (!is.null(x) && x > 0) {
+
+}
+```
+
+### Forcing evaluation
+\indexc{force()}
+
+If you want to ensure that an argument is __eagerly__ evaluated, use `force()`: 
+
+```{r, error = TRUE}
+f <- function(x) {
+  force(x)
+  10
+}
+f(stop("This is an error!"))
+```
+
+The definition of `force()` is simple:
+
+```{r}
+force
+```
+
+However, it's better to use `force(x)` than just `x`, even though they do the same thing: `force()` provides a clear signal that you're deliberately forcing evaluation.
+
+It is usually not necessary to force evaluation. It's primary usage is in higher order functions which return functions. Take this relative simple function. It takes a single argument, and returns a function that when called returns that function.
+
+```{r}
+g <- function(x) {
+  function() {
+    x
+  }
+}
+```
+
+There's a subtle bug in the definition of this function: the value of `x` is captured not when you call `g()`, but when you call the function that `g()` returns:
+
+```{r}
+x <- 10
+g1 <- g(x)
+
+x <- 20
+g1()
+```
+
+And even more confusingly this only happens once. Once you have called the function returned by `g()`, the value is locked in:
+
+```{r}
+x <- 30
+g1()
+```
+
+We can avoid this problem by forcing `x`:
+
+```{r}
+g <- function(x) {
+  force(x)
+  
+  function() {
+    x
+  }
+}
+
+x <- 10
+g1 <- g(x)
+
+x <- 20
+g1()
+```
+
+This is most important in functional programming, particularly when creating functional operators. In older versions of R, this was also a problem if you created functionals using an apply function, but as of R 3.2.0 and later, the base apply functions automatically force their inputs. 
+
+### Promises
+\index{promises}
+\index{thunks|see{promises}}
+
+Lazy evaluation is powered by a data structure called a __promise__, or (less commonly) a thunk. A promise has two components: 
+
+* The __expression__, like `x + y` which gives rise to the delayed computation.
+
+* The __environment__ where the expression should be evaluated.
+
+You'll learn more about these ideas in [expressions], and [environment], and then see their fullest expression in [translation].
+
+The first time a promise is accessed the expression is evaluated in the environment where it was created. This value is cached, so that subsequent access to the evaluated promise does not recompute the value. The following code only computes `runif(1)` once:
+
+```{r}
+j <- function(x) { 
+  c(x, x, x)  
+}
+
+j(runif(1))
+```
+
+You can also create promises "by hand" using `delayedAssign()`:
+
+```{r}
+delayedAssign("x", {print("Executing code"); runif(1)})
+x
+x
+```
+
+We'll come back to this idea again in [advanced bindings].
+
+### Default arguments
+\index{functions!default values}
+
+Thanks to lazy evaluation, defaults value can be defined in terms of other arguments, or even in terms of variables defined later in the function:
+
+```{r}
+g <- function(x = 1, y = x * 2, z = a + b) {
+  a <- 10
+  b <- 100
+  
+  c(x, y, z)
+}
+
+g()
+```
+
+Many base R functions use this technique, but I don't recommend because it makes requires that you know exactly _when_ default arguments are evaluated in order to predict _what_ they will evaluate to.
+
+The evaluation environment is slightly different for default and user supplied arguments, as default arguments are evaluated inside the function. This means that seemingly identical calls can yield different results. It's easiest to see this with an extreme example:
+
+```{r}
+f <- function(x = ls()) {
+  a <- 1
+  x
+}
+
+# ls() evaluated inside f:
+f()
+
+# ls() evaluated in global environment:
+f(ls())
+```
+
+### Missing arguments
+\indexc{missing()}
+
+If an argument has a default, you can determine if the value comes from the user or the defaultwith `missing()`:
+
+```{r}
+i <- function(x = 10) {
+  list(missing(x), x)
+}
+str(i())
+str(i(10))
+```
+
+I think `missing()` is best used sparingly. While you can use it for optional arguments, I think it's bad practice as it makes it harder to determine which arguments are required. Instead, I think it's better to use a default value of `NULL`. rlang provides `%||%` to make this even easier:
+
+```{r}
+`%||%` <- function(x, y) {
+  if (is.null(x)) {
+    y
+  } else {
+    x
+  }
+}
+
+NULL %||% 10
+10 %||% 20
+```
+
+Lazy evaluation means that you can put an expensive computation on the RHS, and it will only be run if the user did not provide a default argument:
+
+```{r}
+my_fun <- function(x, y, z = NULL) {
+  z <- z %||% default_z(x, y)
+}
+```
+
+Compare this with the equivalent code using a missing argument. The main problem is that when you look at the function definition, there's no way to tell that `z` is optional.
+
+```{r}
+my_fun <- function(x, y, z) {
+  if (missing(z)) {
+    z <- default_z(x, y)
+  }
+}
+```
+
+### Exercises
+
+1.  What does this function return? Why? Which principle does it illustrate?
+  
+    ```{r, results = "hide"}
+    y <- 10
+    f1 <- function(x = {y <- 1; 2}, y = 0) {
+      x + y
+    }
+    f1()
+    y
+    ```
+
+1.  What does this function return? Why? Which principle does it illustrate?
+
+    ```{r, results = "hide"}
+    f2 <- function(x = z) {
+      z <- 100
+      x
+    }
+    f2()
+    ```
+  
+1.  In `hist()`, the default value of `xlim` is `range(breaks)`, the default 
+    value for `breaks` is `"Sturges"`, and
+
+    ```{r}
+    range("Sturges")
+    ```
+    
+    Explain how `hist()` works to get a correct `xlim` value.
+    
+1.  Explain why this function works. Why is it confusing?
+
+    ```{r}
+    show_time <- function(x = stop("Error!")) {
+      stop <- function(...) Sys.time()
+      print(x)
+    }
+    show_time()
+    ```
+
+## `...`  (dot-dot-dot) {#fun-dot-dot-dot}
+\indexc{...}
+\index{varargs}
+\index{ellipsis}
+\index{dot-dot-dot}
+
+There is a special argument called `...` (pronounced dot-dot-dot). If a function has this argument, it can take any number of additional arguments. Inside a function, you can use `...` to pass those additional arguments on to another function:
+
+```{r}
+f <- function(x, ...) {
+  g(...)
+}
+
+g <- function(y, z) {
+  list(y = y, z = z)
+}
+
+str(f(x = 1, y = 2, z = 3))
+```
+
+It's possible (but rarely useful) to refer to elements of `...` by their position, using a special form:
+
+```{r}
+f <- function(...) {
+  list(first = ..1, third = ..3)
+}
+str(f(1, 2, 3))
+```
+
+If you want to capture the values of `...` in a form that you can compute upon, it's typically most useful to put them in a list: 
+
+```{r}
+f <- function(...) {
+  list(...)
+}
+str(f(a = 1, b = 2))
+```
+
+(See also `rlang::list2()` to support splicing and to silently ignore trailing commas.)
+
+`...` is useful if you want to collect arguments to call another function without prespecify possible argument names. There are two primary uses of `...`:
+
+*   If your function takes a function as an argument, you want some way to 
+    pass on additional arguments to that function. For example, here `lapply()`
+    uses `...` to pass `na.rm` on to `mean()`:
+    
+    ```{r}
+    x <- list(c(1, 3, NA), c(4, NA, 6))
+    str(lapply(x, mean, na.rm = TRUE))
+    ```
+    
+*   If your function is an S3 generic, you need some way to allow methods to 
+    take arbitrary extra arguments. For example, one relatively sophisticated 
+    user of `...` is the base `plot()` function, which has argument `x`, `y` 
+    and `...` . To understand what `...` does for a given function we need to 
+    read the help: "Arguments to be passed to methods, such as graphical
+    parameters". Most simple invocations of `plot()` end up calling
+    `plot.default()` which has many more arguments, but also has `...`.  
+    Again, reading the documentation reveals that `...` accepts "other 
+    graphical parameters", which are listed in the help for `par()`.  This 
+    allows us to write code like:
+    
+    ```{r, eval = FALSE}
+    plot(1:5, col = "red")
+    plot(1:5, cex = 5, pch = 20)
+    ```
+
+Using `...` comes with two downsides:
+
+*   When you use it to pass arguments on to another function, you have to 
+    carefully explain to the user where those arguments go. This makes it
+    hard to understand the what you can do with functions like `lapply()` and 
+    `plot()`.
+    
+*   Any misspelled arguments will not raise an error.  This makes it easy for 
+    typos to go unnoticed:
+
+    ```{r}
+    sum(1, 2, NA, na.mr = TRUE)
+    ```
+
+`...` is a powerful tool, but be aware of the downsides.
+
+### Exercises
+
+1.  Explain the following results:
+    
+    ```{r}
+    sum(1, 2, 3)
+    mean(1, 2, 3)
+    
+    sum(1, 2, 3, na.omit = TRUE)
+    mean(1, 2, 3, na.omit = TRUE)
+    ```
+
+1.  In the following call, explain how to find the documentation for the
+    the `col`, `pch`, `xlab`, and `col.lab` parameters:
+    
+    ```{r}
+    plot(1:10, col = "red", pch = 20, xlab = "x", col.lab = "blue")
+    ```
+    
+1.  Why does `plot(1:10, col = "red")` only colour the points, not the axes 
+    or labels? Read the source code of `plot.default()` to find out.
+
+## Returning values {#return-values}
+\index{functions!return value}
+
+### Implicit vs. explict
+\indexc{return()}
+
+You can return values from a function in two ways:
+
+*   Implicitly, where the last evaluated expression becomes the return 
+    value:
+
+    ```{r}
+    f <- function(x) {
+      if (x < 10) {
+        0
+      } else {
+        10
+      }
+    }
+    f(5)
+    f(15)
+    ```
+
+*   Explicitly, by calling `return()`:
+
+    ```{r}
+    f <- function(x) {
+      if (x < 10) {
+        return(0)
+      } else {
+        return(10)
+      }
+    }
+    ```
+    
+Generally, I think it is good style to reserve the use of an explicit `return()` for when you are returning early, such as for an error, or a simple case of the function. This style of programming can also reduce the level of indentation, and generally make functions easier to understand because you can reason about them locally.
+
+[Insert better example from Jenny]{.todo}
+
+```{r}
+f <- function(x, y) {
+  if (!x) {
+    return(y)
+  }
+
+  # complicated processing here
+}
+```
+
+### Invisible values
+\indexc{invisible()} 
+\index{functions!invisible results}
+ 
+Functions can return `invisible` values, which are not printed out by default when you call the function.
+
+```{r}
+f1 <- function() 1
+f2 <- function() invisible(1)
+
+f1()
+f2()
+f1() == 1
+f2() == 1
+```
+
+You can force an invisible value to be displayed by wrapping it in parentheses:
+
+```{r}
+(f2())
+```
+
+The most common function that returns invisibly is `<-`: \index{assignment}
+
+```{r}
+a <- 2
+(a <- 2)
+```
+
+This is what makes it possible to assign one value to multiple variables:
+
+```{r}
+a <- b <- c <- d <- 2
+```
+
+because this is parsed as:
+
+```{r}
+(a <- (b <- (c <- (d <- 2))))
+```
+
+In general, any function called primarily for its side effects (like `<-`, `print()`, or `plot`) should return an invisible value (typically the value of the first argument).
+
+### Exercises
+
+1.  What does `load()` return? Why don't you normally see these values?
+
+1.  What does `write.table()` return? What would be more useful?
+
+## On exit {#on-exit}
+
+As well as returning a value, functions can set up other triggers to occur when the function is finished using `on.exit()`. This is often used as a way to guarantee that changes to the global state are restored when the function exits. The code in `on.exit()` is run regardless of how the function exits, whether with an explicit (early) return, an error, or simply reaching the end of the function body. \indexc{on.exit()}
+
+```{r}
+in_dir <- function(dir, code) {
+  old <- setwd(dir)
+  on.exit(setwd(old))
+
+  force(code)
+}
+getwd()
+in_dir("~", getwd())
+```
+
+The basic pattern is simple:
+
+* We first set the directory to a new location, capturing the current location 
+  from the output of `setwd()`.
+
+* We then use `on.exit()` to ensure that the working directory is returned to 
+  the previous value regardless of how the function exits.
+
+* Finally, we explicitly force evaluation of the code. (We don't actually need 
+  `force()` here, but it makes it clear to readers what we're doing.)
+
+**Caution**: If you're using multiple `on.exit()` calls within a function, make sure to set `add = TRUE`. Unfortunately, the default in `on.exit()` is `add = FALSE`, so that every time you run it, it overwrites existing exit expressions. Because of the way `on.exit()` is implemented, it's not possible to create a variant with `add = TRUE`, so you must be careful when using it.
+
+### Exercises
+
+1.  How does the `chdir` parameter of `source()` compare to `in_dir()`? Why 
+    might you prefer one approach to the other?
+
+1.  What function undoes the action of `library()`? How do you save and restore
+    the values of `options()` and `par()`?
+
+1.  Write a function that opens a graphics device, runs the supplied code, and 
+    closes the graphics device (always, regardless of whether or not the plotting 
+    code worked).
+
+1.  We can use `on.exit()` to implement a simple version of `capture.output()`.
+
+    ```{r}
+    capture.output2 <- function(code) {
+      temp <- tempfile()
+      on.exit(file.remove(temp), add = TRUE)
+
+      sink(temp)
+      on.exit(sink(), add = TRUE)
+
+      force(code)
+      readLines(temp)
+    }
+    capture.output2(cat("a", "b", "c", sep = "\n"))
+    ```
+
+    Compare `capture.output()` to `capture.output2()`. How do the functions 
+    differ? What features have I removed to make the key ideas easier to see? 
+    How have I rewritten the key ideas to be easier to understand?
+
 
 ## Function forms {#all-calls}
 
@@ -620,6 +1129,15 @@ Note that all special forms are implemented as primitive functions (i.e. in C); 
     if (length(x) <= 5) x[[5]] else x[[n]]
     ```
 
+1.  Clarify the following list of odd function calls:
+
+    ```{r, eval = FALSE}
+    x <- sample(replace = TRUE, 20, x = c(1:10, NA))
+    y <- runif(min = 0, max = 1, 20)
+    cor(m = "k", y = y, u = "p", x = x)
+    ```
+
+
 1. Explain why the following code fails:
 
     ```{r, eval = FALSE}
@@ -648,481 +1166,9 @@ Note that all special forms are implemented as primitive functions (i.e. in C); 
 
 1. Create an infix `xor()` operator.
 
-1. Create infix versions of the set functions `intersect()`, `union()`, 
+1. Create infix versions of the set functions `intersect()`, `union()`, and
    `setdiff()`. You might call them `%n%`, `%u%`, and `%/%` to match 
    conventions from mathematics.
-
-## Function arguments {#function-arguments}
-
-### Lazy evaluation {#lazy-evaluation}
-\index{lazy evaluation} 
-\index{functions!lazy evaluation}
-
-In R, function arguments are __lazily evaluated__, which means that they're only evaluated if they're accessed. For example, this code doesn't generate an error because `x` is never used:
-
-```{r}
-f <- function(x) {
-  10
-}
-f(stop("This is an error!"))
-```
-
-One place that this laziness is useful is in if statements. For example, in the code block below, the second competent of the if statement (`x > 0`) will only be evaluated if the first (`!is.null(x)`) is true. If it wasn't, the statement would return an error because `NULL > 0` is a logical vector of length 0 and not a valid input to `if`.
-
-```{r, eval = FALSE}
-x <- NULL
-if (!is.null(x) && x > 0) {
-
-}
-```
-
-### Forcing evaluation
-\indexc{force()}
-
-If you want to ensure that an argument is __eagerly__ evaluated, use `force()`: 
-
-```{r, error = TRUE}
-f <- function(x) {
-  force(x)
-  10
-}
-f(stop("This is an error!"))
-```
-
-The definition of `force()` is simple:
-
-```{r}
-force
-```
-
-However, it's better to use `force(x)` than just `x`, even though they do the same thing: `force()` provides a clear signal that you're deliberately forcing evaluation.
-
-It is usually not necessary to force evaluation. It's primary usage is in higher order functions which return functions. Take this relative simple function. It takes a single argument, and returns a function that when called returns that function.
-
-```{r}
-g <- function(x) {
-  function() {
-    x
-  }
-}
-```
-
-There's a subtle bug in the definition of this function: the value of `x` is captured not when you call `g()`, but when you call the function that `g()` returns:
-
-```{r}
-x <- 10
-g1 <- g(x)
-
-x <- 20
-g1()
-```
-
-And even more confusingly this only happens once. Once you have called the function returned by `g()`, the value is locked in:
-
-```{r}
-x <- 30
-g1()
-```
-
-We can avoid this problem by forcing `x`:
-
-```{r}
-g <- function(x) {
-  force(x)
-  
-  function() {
-    x
-  }
-}
-
-x <- 10
-g1 <- g(x)
-
-x <- 20
-g1()
-```
-
-This is most important in functional programming, particularly when creating functional operators. In older versions of R, this was also a problem if you created functionals using an apply function, but as of R 3.2.0 and later, the base apply functions automatically force their inputs. 
-
-### Promises
-\index{promises}
-\index{thunks|see{promises}}
-
-Lazy evaluation is powered by a data structure called a __promise__, or (less commonly) a thunk. A promise has two components: 
-
-* The __expression__, like `x + y` which gives rise to the delayed computation.
-
-* The __environment__ where the expression should be evaluated.
-
-You'll learn more about these ideas in [expressions], and [environment], and then see their fullest expression in [translation].
-
-The first time a promise is accessed the expression is evaluated in the environment where it was created. This value is cached, so that subsequent access to the evaluated promise does not recompute the value. The following code only computes `runif(1)` once:
-
-```{r}
-j <- function(x) { 
-  c(x, x, x)  
-}
-
-j(runif(1))
-```
-
-You can also create promises "by hand" using `delayedAssign()`:
-
-```{r}
-delayedAssign("x", {print("Executing code"); runif(1)})
-x
-x
-```
-
-We'll come back to this idea again in [advanced bindings].
-
-### Default arguments
-\index{functions!default values}
-
-Another important property of function arguments is their default value. These are used if the caller does not supply a value:
-
-```{r}
-f <- function(a = 1, b = 2) {
-  c(a, b)
-}
-f()
-```
-
-Since arguments in R are evaluated lazily, the default value can be defined in terms of other arguments, or even in terms of variables defined later in the function:
-
-```{r}
-g <- function(x = 1, y = x * 2, z = a + b) {
-  a <- 10
-  b <- 100
-  
-  c(x, y, z)
-}
-
-g()
-```
-
-While base R functions use this technique frequently, I don't recommend it as it tends to make code harder to understand as it relies on exactly when an argument is evaluated.
-
-The evaluation environment is slightly different for default and user supplied arguments, as default arguments are evaluated inside the function. This means that seemingly identical calls can yield different results. It's easiest to see this with an extreme example:
-
-```{r}
-f <- function(x = ls()) {
-  a <- 1
-  x
-}
-
-# ls() evaluated inside f:
-f()
-
-# ls() evaluated in global environment:
-f(ls())
-```
-
-### Missing arguments
-\indexc{missing()}
-
-If an argument has a default, you can determine if the value comes from the user or the defaultwith `missing()`:
-
-```{r}
-i <- function(x = 10) {
-  list(missing(x), x)
-}
-str(i())
-str(i(10))
-```
-
-I think `missing()` is best used sparingly. While you can use it for optionalal arguments, I think it's bad practice as it makes it harder to determine which arguments are required. Instead, I think it's better to use a default value of `NULL`. rlang provides `%||%` to make this even easier:
-
-```{r}
-`%||%` <- function(x, y) {
-  if (is.null(x)) {
-    y
-  } else {
-    x
-  }
-}
-
-NULL %||% 10
-10 %||% 20
-```
-
-Lazy evaluation means that you can put an expensive computation on the RHS, and it will only be run if the user did not provide a default argument:
-
-```{r}
-my_fun <- function(x, y, z = NULL) {
-  z <- z %||% default_z(x, y)
-}
-```
-
-Compare this with the equivalent code using a missing argument. The main problem is that when you look at the function definition, there's no way to tell that `z` is optional.
-
-```{r}
-my_fun <- function(x, y, z) {
-  if (missing(z)) {
-    z <- default_z(x, y)
-  }
-}
-```
-
-### `...` {#fun-dot-dot-dot}
-\indexc{...}
-
-There is a special argument called `...`. If a function has this argument, it can take an number arguments as it match any arguments not otherwise matched. If you use `...` in the function arguments, you can use it inside your function to pass those arguments on to another function:
-
-```{r}
-f <- function(x, ...) {
-  g(...)
-}
-
-g <- function(y, z) {
-  y + 2 * z
-}
-
-f(x = 1, y = 2, z = 3)
-```
-
-It's possible (but rarely useful) to refer to elements of `...` by their position, using a special form:
-
-```{r}
-f <- function(...) {
-  list(first = ..1, third = ..3)
-}
-str(f(1, 2, 3))
-```
-
-If you want to capture the values of `...` in a form that you can compute upon, it's typically more useful to put them in a list: 
-
-```{r}
-f <- function(...) {
-  list(...)
-}
-str(f(a = 1, b = 2))
-```
-
-(See also `rlang::list2()` for support for splicing and to silently ignore trailing commas)
-
-`...` is useful if you want to collect arguments to call another function, but you don't want to prespecify their possible names. There are two primary uses of `...`:
-
-*   If your function takes a function as an argument, you want some way to 
-    pass on additional arguments to that function. For example, here `lapply()`
-    uses `...` to pass `na.rm` on to `mean()`:
-    
-    ```{r}
-    x <- list(c(1, 3, NA), c(4, NA, 6))
-    str(lapply(x, mean, na.rm = TRUE))
-    ```
-    
-*   If your function is an S3 generic, you need some way to allow methods to 
-    take arbitrary extra arguments. For example, one relatively sophisticated 
-    user of `...` is the base `plot()` function, which has argument `x`, `y` 
-    and `...` . To understand what `...` does for a given function we need to 
-    read the help: "Arguments to be passed to methods, such as graphical
-    parameters". Most simple invocations of `plot()` end up calling
-    `plot.default()` which has many more arguments, but also has `...`.  
-    Again, reading the documentation reveals that `...` accepts "other 
-    graphical parameters", which are listed in the help for `par()`.  This 
-    allows us to write code like:
-    
-    ```{r, eval = FALSE}
-    plot(1:5, col = "red")
-    plot(1:5, cex = 5, pch = 20)
-    ```
-
-Using `...` comes with two downsides:
-
-*   When you use it to pass arguments on to another function, you have to 
-    carefully explain to the user where those arguments go. This makes it
-    hard to understand the what you can do with functions like `lapply()` and 
-    `plot()`
-    
-*   Any misspelled arguments will not raise an error.  This makes it easy for 
-    typos to go unnoticed:
-
-    ```{r}
-    sum(1, 2, NA, na.mr = TRUE)
-    ```
-
-`...` is a powerful tool, but be aware of the downsides.
-
-### Exercises
-
-1.  Clarify the following list of odd function calls:
-
-    ```{r, eval = FALSE}
-    x <- sample(replace = TRUE, 20, x = c(1:10, NA))
-    y <- runif(min = 0, max = 1, 20)
-    cor(m = "k", y = y, u = "p", x = x)
-    ```
-
-1.  What does this function return? Why? Which principle does it illustrate?
-  
-    ```{r, results = "hide"}    
-    f1 <- function(x = {y <- 1; 2}, y = 0) {
-      x + y
-    }
-    f1()
-    ```
-
-1.  What does this function return? Why? Which principle does it illustrate?
-
-    ```{r, results = "hide"}
-    f2 <- function(x = z) {
-      z <- 100
-      x
-    }
-    f2()
-    ```
-  
-1.  In `hist()`, the default value of `xlim` is `range(breaks)`, the default 
-    value for `breaks` is `"Sturges"`, and 
-
-    ```{r}
-    range("Sturges")
-    ```
-    
-    Explain how `hist()` works to get a correct `xlim` value.
-    
-1.  Explain why this function works. Why is it confusing?
-
-    ```{r}
-    show_time <- function(x = stop("Error!")) {
-      stop <- function(...) Sys.time()
-      print(x)
-    }
-    show_time()
-    ```
-
-## Return values {#return-values}
-\index{functions!return value}
-
-The last expression evaluated in a function becomes the return value, the result of invoking the function:
-
-```{r}
-f <- function(x) {
-  if (x < 10) {
-    0
-  } else {
-    10
-  }
-}
-f(5)
-f(15)
-```
-
-### Explicit returns
-
-Generally, I think it's good style to reserve the use of an explicit `return()` for when you are returning early, such as for an error, or a simple case of the function. This style of programming can also reduce the level of indentation, and generally make functions easier to understand because you can reason about them locally. \indexc{return()}
-
-```{r}
-f <- function(x, y) {
-  if (!x) return(y)
-
-  # complicated processing here
-}
-```
-
-### Invisible values
-\indexc{invisible()} 
-\index{functions!invisible results}
- 
-Functions can return `invisible` values, which are not printed out by default when you call the function.
-
-```{r}
-f1 <- function() 1
-f2 <- function() invisible(1)
-
-f1()
-f2()
-f1() == 1
-f2() == 1
-```
-
-You can force an invisible value to be displayed by wrapping it in parentheses:
-
-```{r}
-(f2())
-```
-
-The most common function that returns invisibly is `<-`: \index{assignment}
-
-```{r}
-a <- 2
-(a <- 2)
-```
-
-This is what makes it possible to assign one value to multiple variables:
-
-```{r}
-a <- b <- c <- d <- 2
-```
-
-because this is parsed as:
-
-```{r}
-(a <- (b <- (c <- (d <- 2))))
-```
-
-In general, any function called primarily for its side effects (like `<-`, `print()`, or `plot`) should return an invisible value (typically the value of the first argument).
-
-### On exit {#on-exit}
-
-As well as returning a value, functions can set up other triggers to occur when the function is finished using `on.exit()`. This is often used as a way to guarantee that changes to the global state are restored when the function exits. The code in `on.exit()` is run regardless of how the function exits, whether with an explicit (early) return, an error, or simply reaching the end of the function body. \indexc{on.exit()}
-
-```{r}
-in_dir <- function(dir, code) {
-  old <- setwd(dir)
-  on.exit(setwd(old))
-
-  force(code)
-}
-getwd()
-in_dir("~", getwd())
-```
-
-The basic pattern is simple:
-
-* We first set the directory to a new location, capturing the current location 
-  from the output of `setwd()`.
-
-* We then use `on.exit()` to ensure that the working directory is returned to 
-  the previous value regardless of how the function exits.
-
-* Finally, we explicitly force evaluation of the code. (We don't actually need 
-  `force()` here, but it makes it clear to readers what we're doing.)
-
-**Caution**: If you're using multiple `on.exit()` calls within a function, make sure to set `add = TRUE`. Unfortunately, the default in `on.exit()` is `add = FALSE`, so that every time you run it, it overwrites existing exit expressions. Because of the way `on.exit()` is implemented, it's not possible to create a variant with `add = TRUE`, so you must be careful when using it.
-
-### Exercises
-
-1.  How does the `chdir` parameter of `source()` compare to `in_dir()`? Why 
-    might you prefer one approach to the other?
-
-1.  What function undoes the action of `library()`? How do you save and restore
-    the values of `options()` and `par()`?
-
-1.  Write a function that opens a graphics device, runs the supplied code, and 
-    closes the graphics device (always, regardless of whether or not the plotting 
-    code worked).
-
-1.  We can use `on.exit()` to implement a simple version of `capture.output()`.
-
-    ```{r}
-    capture.output2 <- function(code) {
-      temp <- tempfile()
-      on.exit(file.remove(temp), add = TRUE)
-
-      sink(temp)
-      on.exit(sink(), add = TRUE)
-
-      force(code)
-      readLines(temp)
-    }
-    capture.output2(cat("a", "b", "c", sep = "\n"))
-    ```
-
-    Compare `capture.output()` to `capture.output2()`. How do the functions 
-    differ? What features have I removed to make the key ideas easier to see? 
-    How have I rewritten the key ideas to be easier to understand?
 
 
 ## Quiz answers {#function-answers}
