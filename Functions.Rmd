@@ -374,25 +374,26 @@ Both of these approaches reveal why this undesirable behaviour exists: R relies 
 
 ### Exercises
 
-1. What does the following code return? Why? What does each of the three `c`'s mean?
+1. What does the following code return? Why? Describe how each of the three
+   `c`'s is interpreted.
 
     ```{r, eval = FALSE}
     c <- 10
     c(c = c)
     ```
 
-2. What are the four principles that govern how R looks for values?
+1. What are the four principles that govern how R looks for values?
 
-3. What does the following function return? Make a prediction before 
+1. What does the following function return? Make a prediction before 
    running the code yourself.
 
     ```{r, results = "hide"}
     f <- function(x) {
       f <- function(x) {
-        f <- function(x) {
+        f <- function() {
           x ^ 2
         }
-        f(x) + 1
+        f() + 1
       }
       f(x) * 2
     }
@@ -412,21 +413,12 @@ f <- function(x) {
 f(stop("This is an error!"))
 ```
 
-
-
-One place that this laziness is useful is in if statements. For example, in the code block below, the second competent of the if statement (`x > 0`) will only be evaluated if the first (`!is.null(x)`) is true. If it wasn't, the statement would return an error because `NULL > 0` is a logical vector of length 0 and not a valid input to `if`.
-
-```{r, eval = FALSE}
-x <- NULL
-if (!is.null(x) && x > 0) {
-
-}
-```
+This is an important part of the R language because it means that you can provide potential expensive computations in function arguments, and they will only be evaluated if needed.
 
 ### Forcing evaluation
 \indexc{force()}
 
-If you want to ensure that an argument is __eagerly__ evaluated, use `force()`: 
+To __eagerly__ evaluate an argument, i.e. to force it be immediately evaluated, use `force()`: 
 
 ```{r, error = TRUE}
 f <- function(x) {
@@ -436,45 +428,41 @@ f <- function(x) {
 f(stop("This is an error!"))
 ```
 
-The definition of `force()` is simple:
+It is usually not necessary to force evaluation. It's needed primarily for certain functional programming techniques which we'll cover in detail in [function operators]. Here, I want to show you the basic issue.
+
+Take this small but surprisingly tricky function. It takes a single argument `x`, and returns a function that returns `x` when called.
 
 ```{r}
-force
-```
-
-However, it's better to use `force(x)` than just `x`, even though they do the same thing: `force()` provides a clear signal that you're deliberately forcing evaluation.
-
-It is usually not necessary to force evaluation. It's primary usage is in higher order functions which return functions. Take this relative simple function. It takes a single argument, and returns a function that when called returns that function.
-
-```{r}
-g <- function(x) {
+capture1 <- function(x) {
   function() {
     x
   }
 }
 ```
 
-There's a subtle bug in the definition of this function: the value of `x` is captured not when you call `g()`, but when you call the function that `g()` returns:
+There's a subtle issue with this function: the value of `x` will be captured not when you call `capture()`, but when you call the function that `capture()` returns:
 
 ```{r}
 x <- 10
-g1 <- g(x)
+g1 <- capture1(x)
 
 x <- 20
 g1()
 ```
 
-And even more confusingly this only happens once. Once you have called the function returned by `g()`, the value is locked in:
+Even more confusingly this only happens once: after you have called `g1()`, the value is locked in.
 
 ```{r}
 x <- 30
 g1()
 ```
 
-We can avoid this problem by forcing `x`:
+This behaviour is a consequence of lazy evaluation. The `x` argument is evaluated once `g1()` is called, and then its vaue is cached. 
+
+We can avoid the confusion by forcing `x`:
 
 ```{r}
-g <- function(x) {
+capture2 <- function(x) {
   force(x)
   
   function() {
@@ -483,27 +471,28 @@ g <- function(x) {
 }
 
 x <- 10
-g1 <- g(x)
+g1 <- capture2(x)
 
 x <- 20
 g1()
 ```
 
-This is most important in functional programming, particularly when creating functional operators. In older versions of R, this was also a problem if you created functionals using an apply function, but as of R 3.2.0 and later, the base apply functions automatically force their inputs. 
-
 ### Promises
 \index{promises}
 \index{thunks|see{promises}}
 
-Lazy evaluation is powered by a data structure called a __promise__, or (less commonly) a thunk. A promise has two components: 
+Lazy evaluation is powered by a data structure called a __promise__, or (less commonly) a thunk. We'll come back to this data structure in [metaprogramming](#meta) because it's one of the features of R that makes it most interesting as a programming language.
 
-* The __expression__, like `x + y` which gives rise to the delayed computation.
+A promise has three components: 
 
-* The __environment__ where the expression should be evaluated.
+* The expression, like `x + y` which gives rise to the delayed computation.
 
-You'll learn more about these ideas in [expressions], and [environment], and then see their fullest expression in [translation].
+* The environment where the expression should be evaluated.
 
-The first time a promise is accessed the expression is evaluated in the environment where it was created. This value is cached, so that subsequent access to the evaluated promise does not recompute the value. The following code only computes `runif(1)` once:
+* The value, which is computed and cached when the promise is first accessed
+  by evaluating the expression in the specified environment.
+
+The value cache ensures that accessing the promise multiple times always returns the same value. For example, you can see in the following code that `runif(1)` is only evaluated once:
 
 ```{r}
 j <- function(x) { 
@@ -521,12 +510,12 @@ x
 x
 ```
 
-We'll come back to this idea again in [advanced bindings].
+You'll see this idea again in [advanced bindings].
 
 ### Default arguments
 \index{functions!default values}
 
-Thanks to lazy evaluation, defaults value can be defined in terms of other arguments, or even in terms of variables defined later in the function:
+Thanks to lazy evaluation, default value can be defined in terms of other arguments, or even in terms of variables defined later in the function:
 
 ```{r}
 g <- function(x = 1, y = x * 2, z = a + b) {
@@ -539,11 +528,11 @@ g <- function(x = 1, y = x * 2, z = a + b) {
 g()
 ```
 
-Many base R functions use this technique, but I don't recommend because it makes requires that you know exactly _when_ default arguments are evaluated in order to predict _what_ they will evaluate to.
+Many base R functions use this technique, but I don't recommend it. It makes code harder to understand because it requires that you know exactly _when_ default arguments are evaluated in order to predict _what_ they will evaluate to.
 
 The evaluation environment is slightly different for default and user supplied arguments, as default arguments are evaluated inside the function. This means that seemingly identical calls can yield different results. It's easiest to see this with an extreme example:
 
-```{r}
+```{r, eval = FALSE}
 f <- function(x = ls()) {
   a <- 1
   x
@@ -551,15 +540,17 @@ f <- function(x = ls()) {
 
 # ls() evaluated inside f:
 f()
+#> [1] "a" "x"
 
 # ls() evaluated in global environment:
 f(ls())
+#> [1] "f"
 ```
 
 ### Missing arguments
 \indexc{missing()}
 
-If an argument has a default, you can determine if the value comes from the user or the defaultwith `missing()`:
+If an argument has a default, you can determine if the value comes from the user or the default with `missing()`:
 
 ```{r}
 i <- function(x = 10) {
@@ -569,52 +560,79 @@ str(i())
 str(i(10))
 ```
 
-I think `missing()` is best used sparingly. While you can use it for optional arguments, I think it's bad practice as it makes it harder to determine which arguments are required. Instead, I think it's better to use a default value of `NULL`. rlang provides `%||%` to make this even easier:
+`missing()` is best used sparingly. Take `sample()`, for example. How many arguments are required?
 
 ```{r}
-`%||%` <- function(x, y) {
-  if (is.null(x)) {
-    y
+args(sample)
+```
+ 
+It looks like both `x` and `size` are required, but in fact `sample()` uses `missing()` to provide a default for `size` if it's not supplied. If I was to rewrite sample myself[^sample], I'd use an explicit `NULL` to indicate that `size` can be supplied, but it's not required:
+
+[^sample]: Note that this only implements one way of calling `sample()`: you can also call it with a single integer, like `sample(10)`. This unfortunately makes `sample()` prone to silent errors in situations like `sample(x[i])`.
+
+```{r}
+sample <- function(x, size = NULL, replace = FALSE, prob = NULL) {
+  if (is.null(size)) {
+    size <- length(x)
+  }
+  
+  x[sample.int(length(x), size, replace = replace, prob = prob)]
+}
+```
+
+You can make that pattern even simpler with a small helper. The infix `%||%` function uses the LHS if it's not null, otherwise it uses the RHS:
+
+```{r}
+`%||%` <- function(lhs, rhs) {
+  if (!is.null(lhs)) {
+    lhs
   } else {
-    x
+    rhs
   }
 }
 
-NULL %||% 10
-10 %||% 20
-```
-
-Lazy evaluation means that you can put an expensive computation on the RHS, and it will only be run if the user did not provide a default argument:
-
-```{r}
-my_fun <- function(x, y, z = NULL) {
-  z <- z %||% default_z(x, y)
+sample <- function(x, size = NULL, replace = FALSE, prob = NULL) {
+  size <- size %||% length(x)
+  x[sample.int(length(x), size, replace = replace, prob = prob)]
 }
 ```
 
-Compare this with the equivalent code using a missing argument. The main problem is that when you look at the function definition, there's no way to tell that `z` is optional.
-
-```{r}
-my_fun <- function(x, y, z) {
-  if (missing(z)) {
-    z <- default_z(x, y)
-  }
-}
-```
+Because of lazy evaluation, you don't need to worry about unnecessary computation: the RHS of `%||%` will only be evaluated if the LHS is null.
 
 ### Exercises
 
-1.  What does this function return? Why? Which principle does it illustrate?
-  
-    ```{r, results = "hide"}
-    y <- 10
-    f1 <- function(x = {y <- 1; 2}, y = 0) {
-      x + y
+1.  What important property of `&&` make `x_ok()` work?
+
+    ```{r}
+    x_ok <- function(x) {
+      !is.null(x) && length(x) == 1 && x > 0
     }
-    f1()
-    y
+    
+    x_ok(NULL)
+    x_ok(1)
+    x_ok(1:3)
     ```
 
+    What is different with this code? Why is this behaviour undesirable here?
+    
+    ```{r}
+    x_ok <- function(x) {
+      !is.null(x) & length(x) == 1 & x > 0
+    }
+    
+    x_ok(NULL)
+    x_ok(1)
+    x_ok(1:3)
+    ```
+
+1.  The definition of `force()` is simple:
+
+    ```{r}
+    force
+    ```
+    
+    Why is it better to `force(x)` instead of just `x`?
+    
 1.  What does this function return? Why? Which principle does it illustrate?
 
     ```{r, results = "hide"}
@@ -623,6 +641,17 @@ my_fun <- function(x, y, z) {
       x
     }
     f2()
+    ```
+
+1.  What does this function return? Why? Which principle does it illustrate?
+  
+    ```{r, results = "hide"}
+    y <- 10
+    f1 <- function(x = {y <- 1; 2}, y = 0) {
+      c(x, y)
+    }
+    f1()
+    y
     ```
   
 1.  In `hist()`, the default value of `xlim` is `range(breaks)`, the default 
@@ -643,6 +672,8 @@ my_fun <- function(x, y, z) {
     }
     show_time()
     ```
+
+1.  How many arguments are required when calling `library()`?
 
 ## `...`  (dot-dot-dot) {#fun-dot-dot-dot}
 \indexc{...}
