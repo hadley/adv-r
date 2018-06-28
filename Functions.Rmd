@@ -682,7 +682,9 @@ Because of lazy evaluation, you don't need to worry about unnecessary computatio
 \index{ellipsis}
 \index{dot-dot-dot}
 
-There is a special argument called `...` (pronounced dot-dot-dot). If a function has this argument, it can take any number of additional arguments (other programming languages sometimes call this a varargs or a variadic functions). Inside a function, you can use `...` to pass those additional arguments on to another function:
+Functions can have a special argument `...` (pronounced dot-dot-dot). If a function has this argument, it can take any number of additional arguments. In other programming languages, this type of argument is often called a varargs, or the function is said to be variadic. 
+
+Inside a function, you can use `...` to pass those additional arguments on to another function:
 
 ```{r}
 f <- function(x, ...) {
@@ -705,7 +707,7 @@ f <- function(...) {
 str(f(1, 2, 3))
 ```
 
-Use `list(...)` to capture the values of `...`: 
+More often useful is `list(...)`, which evaluates the arguments are stores in a list:
 
 ```{r}
 f <- function(...) {
@@ -714,12 +716,12 @@ f <- function(...) {
 str(f(a = 1, b = 2))
 ```
 
-(See also `rlang::list2()` to support splicing and to silently ignore trailing commas.)
+(See also `rlang::list2()` to support splicing and to silently ignore trailing commas, and `rlang::quos()` to capture the unevaluated arguments, the topic of [quasiquotation].)
 
-`...` is useful if you want to collect arguments to call another function without prespecify possible argument names. There are two primary uses of `...`:
+There are two primary uses of `...`, both of which we'll come back to later in the book:
 
 *   If your function takes a function as an argument, you want some way to 
-    pass on additional arguments to that function. For example, here `lapply()`
+    pass on additional arguments to that function. In this example, `lapply()`
     uses `...` to pass `na.rm` on to `mean()`:
     
     ```{r}
@@ -727,21 +729,21 @@ str(f(a = 1, b = 2))
     str(lapply(x, mean, na.rm = TRUE))
     ```
     
-*   If your function is an S3 generic, you need some way to allow methods to 
-    take arbitrary extra arguments. For example, one relatively sophisticated 
-    user of `...` is the base `plot()` function, which has argument `x`, `y` 
-    and `...` . To understand what `...` does for a given function we need to 
-    read the help: "Arguments to be passed to methods, such as graphical
-    parameters". Most simple invocations of `plot()` end up calling
-    `plot.default()` which has many more arguments, but also has `...`.  
-    Again, reading the documentation reveals that `...` accepts "other 
-    graphical parameters", which are listed in the help for `par()`.  This 
-    allows us to write code like:
+    We'll come back to this technique in Section \@ref(functional-dot-dot-dot).
     
+*   If your function is an S3 generic, you need some way to allow methods to 
+    take arbitrary extra arguments. For example, take the `print()` function.
+    There are different options for printing types of object, so there's no
+    way for the print generic to prespecify every possible argument. Instead,
+    it uses `...` to allow individual methods to have different arguments:
+
     ```{r, eval = FALSE}
-    plot(1:5, col = "red")
-    plot(1:5, cex = 5, pch = 20)
+    print(factor(letters), max.levels = 4)
+    
+    print(y ~ x, showEnv = TRUE)
     ```
+    
+    We'll come back to this use of `...` in Section \@ref(s3-arguments).
 
 Using `...` comes with two downsides:
 
@@ -754,7 +756,7 @@ Using `...` comes with two downsides:
     typos to go unnoticed:
 
     ```{r}
-    sum(1, 2, NA, na.mr = TRUE)
+    sum(1, 2, NA, na_rm = TRUE)
     ```
 
 `...` is a powerful tool, but be aware of the downsides.
@@ -774,7 +776,7 @@ Using `...` comes with two downsides:
 1.  In the following call, explain how to find the documentation for the
     named arguments in the following function call:
     
-    ```{r}
+    ```{r, fig.asp = 1}
     plot(1:10, col = "red", pch = 20, xlab = "x", col.lab = "blue")
     ```
     
@@ -783,7 +785,7 @@ Using `...` comes with two downsides:
 
 ## Exiting a function {#return-values}
 
-Most functions exit in one of two ways [^esoterica]: either returning a value, indicating successful completion, or throwing an error, indicating failure. This section provides details about returning values (implicitly vs. explicitly; visibly vs. invisibly), briefly previews how errors work before the full treatment in [Conditions], and discusses exit handlers, which allow you to run code when a function exits, regardless of how it exits.
+Most functions exit in one of two ways[^esoterica]: either returning a value, indicating successful completion, or throwing an error, indicating failure. This section describes return values (implicit vs. explicit; visible vs. invisible), briefly discusses errors, and introduces exit handlers, which allow you to run code when a function exits, regardless of how it exits.
 
 [^esoterica]: Functions can exit in other more esoteric ways like signalling a condition that is caught by an exiting handler, invoking a restart, or pressing "Q" in an interactive browser.
 
@@ -791,7 +793,7 @@ Most functions exit in one of two ways [^esoterica]: either returning a value, i
 \index{functions!return value}
 \indexc{return()}
 
-You can return values from a function in two ways:
+There are two ways that a function can return a value:
 
 *   Implicitly, where the last evaluated expression becomes the return 
     value:
@@ -820,10 +822,6 @@ You can return values from a function in two ways:
     }
     ```
     
-Generally, I think it is good style to reserve the use of an explicit `return()` for when you are returning early, such as for an error, or a simple case of the function. This style of programming can also reduce the level of indentation, and generally make functions easier to understand because you can reason about them locally.
-
-[Insert example from Jenny]{.todo}
-
 ### Invisible values
 \indexc{invisible()} 
 \index{functions!invisible results}
@@ -875,7 +873,7 @@ In general, any function called primarily for its side effects (like `<-`, `prin
 
 ### Errors
 
-If a function can not successful complete it's assigned task, it should throw an error with  `stop()`: this immediately terminates the execution of the function.
+If a function can not complete its assigned task, it should throw an error with `stop()`, which immediately terminates the execution of the function.
 
 ```{r, error = TRUE}
 f <- function() {
@@ -891,7 +889,7 @@ Errors indicate that something has gone wrong, and force the user to handle them
 \indexc{on.exit()}
 \index{handler!exit}
 
-Sometimes a function needs to make some temporary change to global state and you want to ensure those changes are restored when the function completes. It's painful to make sure you cleanup before any explicit return, and what happens if some internal code throws an error? Instead, you can set up an __exiting handler__ that is called when the function terminates, regardless of whether it returns a value or throws an error.
+Sometimes a function needs to make a temporary change to global state and you want to ensure those changes are restored when the function completes. It's painful to make sure you cleanup before any explicit return, and what happens if there's an error? Instead, you can set up an __exiting handler__ that is called when the function terminates, regardless of whether it returns a value or throws an error.
 
 To setup an exiting handler, call `on.exit()` with the code to be run. It will execute when the function exits, regardless of what causes it to exit.
 
@@ -913,7 +911,7 @@ f(FALSE)
 ```
 
 ::: sidebar
-Always set `add = TRUE` when using `on.exit()`. If you don't, each call to `on.exit()` will overwrite the previous exiting handler. Even when only registering a single handler, it's good practice to  set `add = TRUE` so that you don't get an unpleasant surprise when you use multiple handlers.
+Always set `add = TRUE` when using `on.exit()`. If you don't, each call to `on.exit()` will overwrite the previous exiting handler. Even when only registering a single handler, it's good practice to  set `add = TRUE` so that you don't get an unpleasant surprise if you later add more exit handlers
 :::
 
 `on.exit()` is important because it allows you to place clean-up actions next to actions with their cleanup operations. 
@@ -987,22 +985,20 @@ See the [withr package](http://withr.r-lib.org) for a collection of functions of
 >
 > --- John Chambers
 
-While everything that happens in R is a result of a function call, not all calls look the same. There are four possible options:
+While everything that happens in R is a result of a function call, not all calls look the same. Function calls come in four varieties:
 
-* In __prefix__ form, the name of the function comes before its
-  arguments, like `foofy(a, b, c)`. These constitute of the majority of
-  function calls in R.
+* In __prefix__ form, the function name comes before its arguments, like 
+  `foofy(a, b, c)`. These constitute of the majority of function calls in R.
 
-* In __infix__ form, the function come in between its arguments, like `x + y`. 
-  Infix forms are used for many mathematical operators, and user-defined 
-  functions that begin and end with `%`.
+* In __infix__ form, the function name comes inbetween its arguments, like 
+  `x + y`. Infix forms are used for many mathematical operators, as well as 
+  user-defined functions that begin and end with `%`.
   
-* A __replacement__ function looks like a prefix functions, but includes
-  a `<-`, like `names(df) <- c("a", "b", "c")`.
+* A __replacement__ function assigns into what looks like a prefix function, 
+  like `names(df) <- c("a", "b", "c")`.
   
-* A variety of __special forms__ like `[[`, `if`, and `for`. These are 
-  part of the structure of the R language itself and have remained unchanged
-  for many years.
+* __Special forms__ like `[[`, `if`, and `for`, don't have a consistent 
+  structure and provide some of the most important syntax in R.
 
 While four forms exist, you only need to use one, because any call can be written in prefix form. I'll demonstrate this property, and then you'll learn about each of the forms in turn.
 
@@ -1010,9 +1006,9 @@ While four forms exist, you only need to use one, because any call can be writte
 \indexc{`} 
 \index{backticks|see{\texttt{`}}}
 
-An interesting propety of R is every infix, replacement, or special form can be rewritten in prefix form, and that calls gives the name of the underlying function. The names of non-prefix functions always have non-syntactic names so you must use backticks, `` ` ``, when rewriting in prefix form. 
+An interesting propety of R is every infix, replacement, or special form can be rewritten in prefix form. Rewriting in prefix form is useful because it helps you better understand the structure of the language, and it gives you the real name of every function. Knowing the real name of non-prefix functions is useful because it allows you to modify them for fun and profit.
 
-The following example shows three pairs of equivalent calls, for an infix form, replacement form, and a special form.
+The following example shows three pairs of equivalent calls, rewriting an infix form, replacement form, and a special form into prefix form.
 
 ```{r, eval = FALSE}
 x + y
@@ -1025,7 +1021,7 @@ for(i in 1:10) print(i)
 `for`(i, 1:10, print(i))
 ```
 
-This transformation is performed automatically behind the scenes, then R uses the usual rules to find the function given its name. This means that you can override the behaviour of any infix function or special form. For example, if you're ever feeling particularly evil, run the following code while a friend is away from their computer. It will introduce a particularly pernicious bug: 10% of the time, 1 will be added to any numeric calculation inside of parentheses.
+Knowing the function name of a non-prefix function allows you to override its behaviour. For example, if you're ever feeling particularly evil, run the following code while a friend is away from their computer. It will introduce a fun bug: 10% of the time, 1 will be added to any numeric calculation inside of parentheses.
 
 ```{r}
 `(` <- function(e1) {
@@ -1065,7 +1061,7 @@ The prefix form is the most common form in R code, and indeed in the majority of
 * Using partial matching, like `help(to = mean)`.
 * By name, like `help(topic = mean)`.
 
-As illustrated by the following chunk, arguments are matched by exact name, then to unique prefixes, and finally by position.
+As illustrated by the following chunk, arguments are matched by exact name, then with unique prefixes, and finally by position.
 
 ```{r, error = TRUE}
 f <- function(abcdef, bcde1, bcde2) {
@@ -1088,7 +1084,7 @@ Generally, only use positional matching for the first one or two arguments; they
 \index{infix functions} 
 \indexc{\%\%}
 
-Infix functions are so called because function name comes **in**-between its arguments, and hence infix functions have two arguments. R comes with a number of built-in infix operators: `:`, `::`, `:::`, `$`, `@`, `^`, `*`, `/`, `+`, `-`, `>`, `>=`, `<`, `<=`, `==`, `!=`, `!`, `&`, `&&`, `|`, `||`, `~`, `<-`, and `<<-`. You can also create your own infix functions that start and end with `%`, and base R uses this to additionally define `%%`, `%*%`, `%/%`, `%in%`, `%o%`, and `%x%`.
+Infix functions are so called because the function name comes **in**between its arguments, and hence infix functions have two arguments. R comes with a number of built-in infix operators: `:`, `::`, `:::`, `$`, `@`, `^`, `*`, `/`, `+`, `-`, `>`, `>=`, `<`, `<=`, `==`, `!=`, `!`, `&`, `&&`, `|`, `||`, `~`, `<-`, and `<<-`. You can also create your own infix functions that start and end with `%`, and base R uses this to additionally define `%%`, `%*%`, `%/%`, `%in%`, `%o%`, and `%x%`.
 
 Defining your own infix function is simple. You create a two argument function and bind it to a name that starts and ends with `%`:
 
@@ -1155,7 +1151,7 @@ second(x) <- 6L
 #> tracemem[0x7ffae61b5480 -> 0x7ffae73f0408]: second<- 
 ```
 
-If you want to supply additional arguments, they go in between `x` and `value`:
+If you want to supply additional arguments, they go inbetween `x` and `value`:
 
 ```{r}
 `modify<-` <- function(x, position, value) {
@@ -1197,7 +1193,7 @@ rm(`*tmp*`)
 Finally, there are a bunch of language features that are usually written in special ways, but also have prefix forms. These include parentheses:
 
 * `(x)` (`` `(`(x) ``)
-* `{y}` (`` `{`(y) ``).
+* `{x}` (`` `{`(x) ``).
 
 The subsetting operators:
 
@@ -1220,7 +1216,7 @@ Finally, the most complex is the "function" function:
 
 Knowing the name of the function that underlies the special form is useful for getting documentation. `?(` is a syntax error; `` ?`(` `` will give you the documentation for parentheses.
 
-Note that all special forms are implemented as primitive functions (i.e. in C); this means printing these functions is not informative:
+Note that all special forms are implemented as primitive functions (i.e. in C); that means printing these functions is not informative:
 
 ```{r}
 `for`
