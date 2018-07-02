@@ -5,6 +5,8 @@
 source("common.R")
 ```
 
+## Introduction
+
 A function factory is a function that makes functions. Here's a simple example: we use a function factory (`power()`) to two child functions (`square()` and `cube()`)
 
 ```{r}
@@ -42,7 +44,7 @@ Function factories are most useful when:
 * The function factory has many arguments and you call the child functions 
   many times. A function factory allows you to partition the complexity so
   that individual code chunks are easier to understand. A good example of 
-  this usage is maximum likelihood problems, as shown in Section \@ref(mle).
+  this usage is maximum likelihood problems, as shown in Section \@ref(MLE).
   
 * When there's a family of functions defined by a set of general principles 
   where some functions have special known names. 
@@ -61,12 +63,22 @@ Function factories are most useful when:
 
 Function factories are an important building block for very useful function operators, which you'll learn about in the next chapter.
 
-## Closures {#closures}
+### Prerequisites {-}
+
+```{r}
+library(rlang)
+```
+
+
+## How do they work? {#closures}
+\index{functions!closures|see{closures}}
+\index{closures}
+\index{environments!of a closure}
 
 > "An object is data with functions. A closure is a function with data."
 > --- John D. Cook
 
-One use of anonymous functions is to create small functions that are not worth naming. Another important use is to create closures, functions written by functions. Closures get their name because they __enclose__ the environment of the parent function and can access all its variables. This is useful because it allows us to have two levels of parameters: a parent level that controls operation and a child level that does the work. \index{closures} \index{functions!closures|see{closures}}
+Function factories work because functions keep a reference to the environment in which they are defined. Technically this is called __enclosing__ the environment, and hence functions in R are also known as closures.
 
 When you print a closure, you don't see anything terribly useful:
 
@@ -76,32 +88,50 @@ square
 cube
 ```
 
-That's because the function itself doesn't change. The difference is the enclosing environment, `environment(square)`. One way to see the contents of the environment is to convert it to a list: \index{environments!of a closure}
+That's because the function itself doesn't change. The difference is the enclosing environment, `environment(square)`. (An alternative to function factories that does produce more revealing bodies is to use metaprograming to create the function. You'll learn about that in Section \@ref(creating-functions).)
 
-```{r}
-str(as.list(environment(square)))
-str(as.list(environment(cube)))
+We can see the structure most easily with a diagram:
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/function-factories/power-full.png", dpi = 300)
 ```
 
-Another way to see what's going on is to use `pryr::unenclose()`. This function replaces variables defined in the enclosing environment with their values:
+To simply the diagram, we'll assume that symbols not in an environment are found in the global environment, and if we don't explicitly specify the parent of a function environment, that's also the global environment. That allows us to simplify the diagram to:
 
-```{r}
-pryr::unenclose(square)
-pryr::unenclose(cube)
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/function-factories/power-simple.png", dpi = 300)
 ```
 
-The parent environment of a closure is the execution environment of the function that created it, as shown by this code:
+You can see that programmatically by looking at the environment of the function:
 
 ```{r}
-power <- function(exponent) {
-  print(environment())
-  function(x) x ^ exponent
+square_env <- environment(square)
+
+square_env$exponent
+env_parent(square_env)
+```
+
+The execution environment of a function is usually ephemeral. But because functions capture their enclosing environments. This means when function a returns function b, function b captures and stores the execution environment of function a, and it doesn't disappear.
+
+The GC takes care of deleting all objects that do not have bindings. But you are still a risk for a __memory leak__, which occurs when you keep a binding to an object without realising it. In R, the two main causes of memory leaks are formulas and functions because they both capture the enclosing environment. The following code illustrates the problem. In `f1()`, `1:1e6` is only referenced inside the function, so when the function completes the memory is returned and the net memory change is 0. `f2()` and `f3()` both return objects that capture environments, so that `x` is not freed when the function completes.
+
+```{r}
+f1 <- function() {
+  x <- 1:1e6
+  10
 }
-zero <- power(0)
-environment(zero)
+x <- f1()
+lobstr::obj_size(x)
+
+f3 <- function() {
+  x <- 1:1e6
+  function() 10
+}
+z <- f3()
+lobstr::obj_size(z)
 ```
 
-The execution environment normally disappears after the function returns a value. However, functions capture their enclosing environments. This means when function a returns function b, function b captures and stores the execution environment of function a, and it doesn't disappear. (This has important consequences for memory use, see [memory usage](#gc) for details.)
+
 
 In R, almost every function is a closure. All functions remember the environment in which they were created, typically either the global environment, if it's a function that you've written, or a package environment, if it's a function that someone else has written. The only exception is primitive functions, which call C code directly and don't have an associated environment. \index{primitive functions}
 
