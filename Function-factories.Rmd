@@ -1,13 +1,65 @@
 # Function factories
+\index{function factories}
 
-A function factory is a factory for making new functions. We've already seen two examples of function factories, `missing_fixer()` and `power()`. You call it with arguments that describe the desired actions, and it returns a function that will do the work for you. For `missing_fixer()` and `power()`, there's not much benefit in using a function factory instead of a single function with multiple arguments. Function factories are most useful when: \index{function factories}
+```{r setup, include = FALSE}
+source("common.R")
+```
 
-* The different levels are more complex, with multiple arguments and 
-  complicated bodies.
+A function factory is a function that makes functions. Here's a simple example: we use a function factory (`power()`) to two child functions (`square()` and `cube()`)
 
-* Some work only needs to be done once, when the function is generated.
+```{r}
+power1 <- function(exponent) {
+  function(x) {
+    x ^ exponent
+  }
+}
 
-Function factories are particularly well suited to maximum likelihood problems, and you'll see a more compelling use of them in [MLE](#mle).
+square <- power1(2)
+square(2)
+square(4)
+
+cube <- power1(3)
+cube(2)
+cube(4)
+```
+
+This illustrates the basic idea but does not provide a strong motivation for why you might care. In this simple case, there's little advantage to a function factory over adding an additional argument to `power1()`
+
+```{r}
+power2 <- function(x, exponent) {
+  x ^ exponent
+}
+
+power2(2, 2)
+power2(4, 2)
+
+power2(2, 3)
+power2(4, 3)
+```
+
+Function factories are most useful when:
+
+* The function factory has many arguments and you call the child functions 
+  many times. A function factory allows you to partition the complexity so
+  that individual code chunks are easier to understand. A good example of 
+  this usage is maximum likelihood problems, as shown in Section \@ref(mle).
+  
+* When there's a family of functions defined by a set of general principles 
+  where some functions have special known names. 
+
+* Some work only needs to be done once for a certain set of arguments. You
+  can do this work once, in the function factory, and then use the results
+  many times.
+
+* In conjuntion with `<<-`, function factories provide a simple approach to 
+  track changes across function calls, or provide mutable state. You'll learn 
+  a richer approach in [R6], but a function factory can be useful for simple 
+  cases. 
+
+* When combined with functionals, function factories can quickly generated 
+  a rich family of functions.
+
+Function factories are an important building block for very useful function operators, which you'll learn about in the next chapter.
 
 ## Closures {#closures}
 
@@ -16,44 +68,26 @@ Function factories are particularly well suited to maximum likelihood problems, 
 
 One use of anonymous functions is to create small functions that are not worth naming. Another important use is to create closures, functions written by functions. Closures get their name because they __enclose__ the environment of the parent function and can access all its variables. This is useful because it allows us to have two levels of parameters: a parent level that controls operation and a child level that does the work. \index{closures} \index{functions!closures|see{closures}}
 
-The following example uses this idea to generate a family of power functions in which a parent function (`power()`) creates two child functions (`square()` and `cube()`).
-
-```{r}
-power <- function(exponent) {
-  function(x) {
-    x ^ exponent
-  }
-}
-
-square <- power(2)
-square(2)
-square(4)
-
-cube <- power(3)
-cube(2)
-cube(4)
-```
-
 When you print a closure, you don't see anything terribly useful:
 
 ```{r}
 square
+
 cube
 ```
 
 That's because the function itself doesn't change. The difference is the enclosing environment, `environment(square)`. One way to see the contents of the environment is to convert it to a list: \index{environments!of a closure}
 
 ```{r}
-as.list(environment(square))
-as.list(environment(cube))
+str(as.list(environment(square)))
+str(as.list(environment(cube)))
 ```
 
 Another way to see what's going on is to use `pryr::unenclose()`. This function replaces variables defined in the enclosing environment with their values:
 
 ```{r}
-library(pryr)
-unenclose(square)
-unenclose(cube)
+pryr::unenclose(square)
+pryr::unenclose(cube)
 ```
 
 The parent environment of a closure is the execution environment of the function that created it, as shown by this code:
@@ -71,11 +105,47 @@ The execution environment normally disappears after the function returns a value
 
 In R, almost every function is a closure. All functions remember the environment in which they were created, typically either the global environment, if it's a function that you've written, or a package environment, if it's a function that someone else has written. The only exception is primitive functions, which call C code directly and don't have an associated environment. \index{primitive functions}
 
-Closures are useful for making function factories, and are one way to manage mutable state in R.
+## Maximum likelihood estimation {#MLE}
+\index{maximum likelihood}
 
-### Mutable state {#mutable-state}
+In statistics, optimisation is often used for maximum likelihood estimation (MLE). In MLE, we have two sets of parameters: the data, which is fixed for a given problem, and the parameters, which vary as we try to find the maximum. These two sets of parameters make the problem well suited for closures. Combining closures with optimisation gives rise to the following approach to solving MLE problems. 
 
-Having variables at two levels allows you to maintain state across function invocations. This is possible because while the execution environment is refreshed every time, the enclosing environment is constant. The key to managing variables at different levels is the double arrow assignment operator (`<<-`). Unlike the usual single arrow assignment (`<-`) that always assigns in the current environment, the double arrow operator will keep looking up the chain of parent environments until it finds a matching name. ([Binding names to values](#binding) has more details on how it works.) \indexc{<<-} \index{copy-on-modify!exceptions}
+The following example shows how we might find the maximum likelihood estimate for $\lambda$, if our data come from a Poisson distribution. First, we create a function factory that, given a dataset, returns a function that computes the negative log likelihood (NLL) for parameter `lambda`. In R, it's common to work with the negative since `optimise()` defaults to finding the minimum. \index{closures!maximum likelihood}
+
+```{r}
+poisson_nll <- function(x) {
+  n <- length(x)
+  sum_x <- sum(x)
+  function(lambda) {
+    n * lambda - sum_x * log(lambda) # + terms not involving lambda
+  }
+}
+```
+
+Note how the closure allows us to precompute values that are constant with respect to the data.
+
+We can use this function factory to generate specific NLL functions for input data. Then `optimise()` allows us to find the best values (the maximum likelihood estimates), given a generous starting range.
+
+```{r}
+x1 <- c(41, 30, 31, 38, 29, 24, 30, 29, 31, 38)
+x2 <- c(6, 4, 7, 3, 3, 7, 5, 2, 2, 7, 5, 4, 12, 6, 9)
+nll1 <- poisson_nll(x1)
+nll2 <- poisson_nll(x2)
+
+optimise(nll1, c(0, 100))$minimum
+optimise(nll2, c(0, 100))$minimum
+```
+
+We can check that these values are correct by comparing them to the analytic solution: in this case, it's just the mean of the data, `r mean(x1)` and `r mean(x2)`.
+
+Another important mathematical functional is `optim()`. It is a generalisation of `optimise()` that works with more than one dimension. If you're interested in how it works, you might want to explore the `Rvmmin` package, which provides a pure-R implementation of `optim()`. Interestingly `Rvmmin` is no slower than `optim()`, even though it is written in R, not C. For this problem, the bottleneck lies not in controlling the optimisation but with having to evaluate the function multiple times. \indexc{optim()}
+
+
+## Mutable state with `<<-` {#mutable-state}
+\indexc{<<-} 
+\index{copy-on-modify!exceptions}
+
+Having variables at two levels allows you to maintain state across function invocations. This is possible because while the execution environment is refreshed every time, the enclosing environment is constant. The key to managing variables at different levels is the double arrow assignment operator (`<<-`). Unlike the usual single arrow assignment (`<-`) that always assigns in the current environment, the double arrow operator will keep looking up the chain of parent environments until it finds a matching name. ([Binding names to values](#binding) has more details on how it works.)
 
 Together, a static parent environment and `<<-` make it possible to maintain state across function calls. The following example shows a counter that records how many times a function has been called. Each time `new_counter` is run, it creates an environment, initialises the counter `i` in this environment, and then creates a new function.
 
@@ -171,40 +241,6 @@ The power of closures is tightly coupled with the more advanced ideas in [functi
 
 
 
-
-## Maximum likelihood estimation {#MLE}
-
-In statistics, optimisation is often used for maximum likelihood estimation (MLE). In MLE, we have two sets of parameters: the data, which is fixed for a given problem, and the parameters, which vary as we try to find the maximum. These two sets of parameters make the problem well suited for closures. Combining closures with optimisation gives rise to the following approach to solving MLE problems. \index{maximum likelihood}
-
-The following example shows how we might find the maximum likelihood estimate for $\lambda$, if our data come from a Poisson distribution. First, we create a function factory that, given a dataset, returns a function that computes the negative log likelihood (NLL) for parameter `lambda`. In R, it's common to work with the negative since `optimise()` defaults to finding the minimum. \index{closures!maximum likelihood}
-
-```{r}
-poisson_nll <- function(x) {
-  n <- length(x)
-  sum_x <- sum(x)
-  function(lambda) {
-    n * lambda - sum_x * log(lambda) # + terms not involving lambda
-  }
-}
-```
-
-Note how the closure allows us to precompute values that are constant with respect to the data.
-
-We can use this function factory to generate specific NLL functions for input data. Then `optimise()` allows us to find the best values (the maximum likelihood estimates), given a generous starting range.
-
-```{r}
-x1 <- c(41, 30, 31, 38, 29, 24, 30, 29, 31, 38)
-x2 <- c(6, 4, 7, 3, 3, 7, 5, 2, 2, 7, 5, 4, 12, 6, 9)
-nll1 <- poisson_nll(x1)
-nll2 <- poisson_nll(x2)
-
-optimise(nll1, c(0, 100))$minimum
-optimise(nll2, c(0, 100))$minimum
-```
-
-We can check that these values are correct by comparing them to the analytic solution: in this case, it's just the mean of the data, `r mean(x1)` and `r mean(x2)`.
-
-Another important mathematical functional is `optim()`. It is a generalisation of `optimise()` that works with more than one dimension. If you're interested in how it works, you might want to explore the `Rvmmin` package, which provides a pure-R implementation of `optim()`. Interestingly `Rvmmin` is no slower than `optim()`, even though it is written in R, not C. For this problem, the bottleneck lies not in controlling the optimisation but with having to evaluate the function multiple times. \indexc{optim()}
 
 ## Function factories + functionals
 
