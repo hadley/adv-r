@@ -25,7 +25,7 @@ cube(2)
 cube(4)
 ```
 
-This illustrates the basic idea but does not provide a strong motivation for why you might care. In this simple case, there's little advantage to a function factory over adding an additional argument to `power1()`
+You might wonder what's the advantage of a function factor here. It would be easy to just use a two-argument function:
 
 ```{r}
 power2 <- function(x, exponent) {
@@ -39,24 +39,32 @@ power2(2, 3)
 power2(4, 3)
 ```
 
-Function factories are most useful when:
+And indeed, this is example is not a good motivation. This chapter includes a number of case studies that use more complicated examples to illustrate the utility. Admittedly, function factories are probably the least important/useful FP technique of the three. But they do come in handy from time to time.
 
-* The function factory has many arguments and you call the child functions 
-  many times. A function factory allows you to partition the complexity so
-  that individual code chunks are easier to understand. A good example of 
-  this usage is maximum likelihood problems, as shown in Section \@ref(MLE).
+### Outline {-}
+
+* Section \@ref(factory-fundamentals) begins the chapter with a description
+  of how function factories work, pulling together ideas from scoping and 
+  environments.
+
+* Section \@ref(MLE) uses function factories to help solve maximum likelihood
+  problems where function factory has many arguments and you call the child
+  functions many times. A function factory allows you to partition the 
+  complexity so that individual code chunks are easier to understand.
   
-* When there's a family of functions defined by a set of general principles 
-  where some functions have special known names. 
-
-* Some work only needs to be done once for a certain set of arguments. You
-  can do this work once, in the function factory, and then use the results
-  many times.
-
-* In conjuntion with `<<-`, function factories provide a simple approach to 
-  track changes across function calls, or provide mutable state. You'll learn 
+* Section \@ref(bootstrap-generators) uses boostrapping as motivation for
+  function factories that can do some work up front. The results are cached,
+  and then can be used again by the generated function.
+  
+* Section \@ref(mutable-state) shows how you can use `<<-` with function 
+  factories in order to preserve state across function calls. You'll learn 
   a richer approach in [R6], but a function factory can be useful for simple 
-  cases. 
+  cases, like capturing the number of times a function is called. 
+
+* Section \@ref(numerical-integration) explores numerical integration: 
+  starting with simple pieces like midpoint, trapezoid, Simpson, and Boole
+  and rules, and showing how they can all be generated with a single
+  function factory.
 
 * When combined with functionals, function factories can quickly generated 
   a rich family of functions.
@@ -69,8 +77,7 @@ Function factories are an important building block for very useful function oper
 library(rlang)
 ```
 
-
-## How do they work? {#closures}
+## Factory fundamentals
 \index{functions!closures|see{closures}}
 \index{closures}
 \index{environments!of a closure}
@@ -96,7 +103,7 @@ We can see the structure most easily with a diagram:
 knitr::include_graphics("diagrams/function-factories/power-full.png", dpi = 300)
 ```
 
-To simply the diagram, we'll assume that symbols not in an environment are found in the global environment, and if we don't explicitly specify the parent of a function environment, that's also the global environment. That allows us to simplify the diagram to:
+This diagram has a lot of arrows because both `square` and `cube` are bound in the global environment, and the function environments inherit from the global environment. To make things a bit simpler, I'll adopt the convention that any free floating symbols are bound in the global environment, and unlinked function environments inherit from global environment. That allows us to redraw the diagram more simply:
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/function-factories/power-simple.png", dpi = 300)
@@ -131,9 +138,51 @@ z <- f3()
 lobstr::obj_size(z)
 ```
 
-
-
 In R, almost every function is a closure. All functions remember the environment in which they were created, typically either the global environment, if it's a function that you've written, or a package environment, if it's a function that someone else has written. The only exception is primitive functions, which call C code directly and don't have an associated environment. \index{primitive functions}
+
+
+### Exercises
+
+1.  Why are functions created by other functions called closures? 
+
+1.  What does the following statistical function do? What would be a better 
+    name for it? (The existing name is a bit of a hint.)
+
+    ```{r}
+    bc <- function(lambda) {
+      if (lambda == 0) {
+        function(x) log(x)
+      } else {
+        function(x) (x ^ lambda - 1) / lambda
+      }
+    }
+    ```
+
+1.  What does `approxfun()` do? What does it return?
+
+1.  What does `ecdf()` do? What does it return?
+
+1.  Create a function that creates functions that compute the ith 
+    [central moment](http://en.wikipedia.org/wiki/Central_moment) of a numeric 
+    vector. You can test it by running the following code:
+
+    ```{r, eval = FALSE}
+    m1 <- moment(1)
+    m2 <- moment(2)
+
+    x <- runif(100)
+    stopifnot(all.equal(m1(x), 0))
+    stopifnot(all.equal(m2(x), var(x) * 99 / 100))
+    ```
+
+1.  Create a function `pick()` that takes an index, `i`, as an argument and 
+    returns a function with an argument `x` that subsets `x` with `i`.
+
+    ```{r, eval = FALSE}
+    lapply(mtcars, pick(5))
+    # should do the same as this
+    lapply(mtcars, function(x) x[[5]])
+    ```
 
 ## Maximum likelihood estimation {#MLE}
 \index{maximum likelihood}
@@ -169,7 +218,6 @@ optimise(nll2, c(0, 100))$minimum
 We can check that these values are correct by comparing them to the analytic solution: in this case, it's just the mean of the data, `r mean(x1)` and `r mean(x2)`.
 
 Another important mathematical functional is `optim()`. It is a generalisation of `optimise()` that works with more than one dimension. If you're interested in how it works, you might want to explore the `Rvmmin` package, which provides a pure-R implementation of `optim()`. Interestingly `Rvmmin` is no slower than `optim()`, even though it is written in R, not C. For this problem, the bottleneck lies not in controlling the optimisation but with having to evaluate the function multiple times. \indexc{optim()}
-
 
 ## Mutable state with `<<-` {#mutable-state}
 \indexc{<<-} 
@@ -223,62 +271,36 @@ Modifying values in a parent environment is an important technique because it is
 
 The power of closures is tightly coupled with the more advanced ideas in [functionals](#functionals) and [function operators](#function-operators). You'll see many more closures in those two chapters. The following section discusses the third technique of functional programming in R: the ability to store functions in a list.
 
-### Exercises
+## Bootstrap generators
 
-1.  Why are functions created by other functions called closures? 
+```{r}
+boot_permute <- function(df) {
+  n <- nrow(df)
+  
+  function() {
+    df[sample(n, n, replace = TRUE), ]
+  }
+}
+```
 
-1.  What does the following statistical function do? What would be a better 
-    name for it? (The existing name is a bit of a hint.)
+The advantage of a function factory is more clear with a parametric bootstrap where we have to first fit a model. This is a clear set up step that can be done once.
 
-    ```{r}
-    bc <- function(lambda) {
-      if (lambda == 0) {
-        function(x) log(x)
-      } else {
-        function(x) (x ^ lambda - 1) / lambda
-      }
-    }
-    ```
+```{r}
+boot_model <- function(df, formula) {
+  mod <- lm(formula, data = df)
+  fitted <- fitted(mod)
+  resid <- resid(mod)
 
-1.  What does `approxfun()` do? What does it return?
+  function() {
+    fitted + sample(resid)
+  }
+} 
+```
 
-1.  What does `ecdf()` do? What does it return?
+## Numerical integration {#numerical-integration}
+\index{integration}
 
-1.  Create a function that creates functions that compute the ith 
-    [central moment](http://en.wikipedia.org/wiki/Central_moment) of a numeric 
-    vector. You can test it by running the following code:
-
-    ```{r, eval = FALSE}
-    m1 <- moment(1)
-    m2 <- moment(2)
-
-    x <- runif(100)
-    stopifnot(all.equal(m1(x), 0))
-    stopifnot(all.equal(m2(x), var(x) * 99 / 100))
-    ```
-
-1.  Create a function `pick()` that takes an index, `i`, as an argument and 
-    returns a function with an argument `x` that subsets `x` with `i`.
-
-    ```{r, eval = FALSE}
-    lapply(mtcars, pick(5))
-    # should do the same as this
-    lapply(mtcars, function(x) x[[5]])
-    ```
-
-
-## Factory vs. additional arguments
-
-
-
-
-## Function factories + functionals
-
-Easily create a bunch of functions at once.
-
-## Case study: numerical integration {#numerical-integration}
-
-To conclude this chapter, I'll develop a simple numerical integration tool using first-class functions. Each step in the development of the tool is driven by a desire to reduce duplication and to make the approach more general. \index{integration}
+A powerful use case for functionals is when you have a family of functions with flexible parameters, and some of the members of the family have special, known, names. You can use the function factory to provide a general builder, and then use the factory to give interesting special cases names.
 
 The idea behind numerical integration is simple: find the area under a curve by approximating the curve with simpler components. The two simplest approaches are the __midpoint__ and __trapezoid__ rules. The midpoint rule approximates a curve with a rectangle. The trapezoid rule uses a trapezoid. Each takes the function we want to integrate, `f`, and a range of values, from `a` to `b`, to integrate over. For this example, I'll try to integrate `sin x` from 0 to $\pi$. This is a good choice for testing because it has a simple answer: 2.
 
@@ -393,13 +415,44 @@ Mathematically, the next step in improving numerical integration is to move from
 
 ### Exercises
 
-1.  Instead of creating individual functions (e.g., `midpoint()`, 
-      `trapezoid()`, `simpson()`, etc.), we could store them in a list. If we 
-    did that, how would that change the code? Can you create the list of 
-    functions from a list of coefficients for the Newton-Cotes formulae?
-
 1.  The trade-off between integration rules is that more complex rules are 
     slower to compute, but need fewer pieces. For `sin()` in the range 
     [0, $\pi$], determine the number of pieces needed so that each rule will 
     be equally accurate. Illustrate your results with a graph. How do they
     change for different functions? `sin(1 / x^2)` is particularly challenging.
+
+## Function factories + functionals
+
+Easily create a bunch of functions at once.
+
+```{r}
+names <- list(square = 2, cube = 3, root = 1/2, cuberoot = 1/3)
+funs <- purrr::map(names, power1)
+funs$root(64)
+
+funs$root
+```
+
+See alternative approach in translation - uses quasiquotation so requires more knowledge, but has the advantage of generating functions with more readable bodies.
+
+This is a quick preview of how we could rewrite `power1()` to use a 
+
+```{r}
+power3 <- function(exponent) {
+  new_function(exprs(x = ), expr({
+    x ^ !!exponent
+  }), env = caller_env())
+}
+
+funs <- purrr::map(names, power3)
+funs$root(64)
+funs$root
+```
+
+
+### Exercises
+
+1.  Instead of creating individual functions (e.g., `midpoint()`, 
+      `trapezoid()`, `simpson()`, etc.), we could store them in a list. If we 
+    did that, how would that change the code? Can you create the list of 
+    functions from a list of coefficients for the Newton-Cotes formulae?
