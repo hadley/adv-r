@@ -523,6 +523,109 @@ While increasing the number of cores will not always lead to linear improvement,
 1.  Implement `mcsapply()`, a multicore version of `sapply()`. Can you
     implement `mcvapply()`, a parallel version of `vapply()`? Why or why not?
 
+## Vector functionals {#functionals-fp}
+
+Another way of thinking about functionals is as a set of general tools for altering, subsetting, and collapsing vectors. Every functional programming language has three tools for this: `Map()`, `Reduce()`, and `Filter()`. We've seen `Map()` already, and the following sections describe `Reduce()`, a powerful tool for extending two-argument functions, and `Filter()`, a member of an important class of functionals that work with predicates, functions that return a single `TRUE` or `FALSE`.
+
+### `Reduce()`
+
+`Reduce()` reduces a vector, `x`, to a single value by recursively calling a function, `f`, two arguments at a time. It combines the first two elements with `f`, then combines the result of that call with the third element, and so on. Calling `Reduce(f, 1:3)` is equivalent to `f(f(1, 2), 3)`. Reduce is also known as fold, because it folds together adjacent elements in the list. \indexc{Reduce()} \index{fold}
+
+The following two examples show what `Reduce` does with an infix and prefix function:
+
+```{r, eval = FALSE}
+Reduce(`+`, 1:3) # -> ((1 + 2) + 3)
+Reduce(sum, 1:3) # -> sum(sum(1, 2), 3)
+```
+
+The essence of `Reduce()` can be described by a simple for loop:
+
+```{r}
+Reduce2 <- function(f, x) {
+  out <- x[[1]]
+  for(i in seq(2, length(x))) {
+    out <- f(out, x[[i]])
+  }
+  out
+}
+```
+
+The real `Reduce()` is more complicated because it includes arguments to control whether the values are reduced from the left or from the right (`right`), an optional initial value (`init`), and an option to output intermediate results (`accumulate`).
+
+`Reduce()` is an elegant way of extending a function that works with two inputs into a function that can deal with any number of inputs. It's useful for implementing many types of recursive operations, like merges and intersections. (We'll see another use in the final case study.) Imagine you have a list of numeric vectors, and you want to find the values that occur in every element:
+
+```{r}
+l <- replicate(5, sample(1:10, 15, replace = T), simplify = FALSE)
+str(l)
+```
+
+You could do that by intersecting each element in turn:
+
+```{r}
+intersect(intersect(intersect(intersect(l[[1]], l[[2]]),
+  l[[3]]), l[[4]]), l[[5]])
+```
+
+That's hard to read. With `Reduce()`, the equivalent is:
+
+```{r}
+Reduce(intersect, l)
+```
+
+### Predicate functionals
+
+A __predicate__ is a function that returns a single `TRUE` or `FALSE`, like `is.character`, `all`, or `is.NULL`. A predicate functional applies a predicate to each element of a list or data frame. There are three useful predicate functionals in base R: `Filter()`, `Find()`, and `Position()`. \index{predicates} \index{functions!predict|see{predicates}}
+
+* `Filter()` selects only those elements which match the predicate.
+   \indexc{Filter()}
+
+* `Find()` returns the first element which matches the predicate (or the last 
+  element if `right = TRUE`).
+  \indexc{Find()}
+
+* `Position()` returns the position of the first element that matches the
+  predicate (or the last element if `right = TRUE`).
+  \indexc{Position()}
+
+Another useful predicate functional is `where()`, a custom functional that generates a logical vector from a list (or a data frame) and a predicate: \indexc{where()}
+
+```{r}
+where <- function(f, x) {
+  vapply(x, f, logical(1))
+}
+```
+
+The following example shows how you might use these functionals with a data frame:
+
+```{r}
+df <- data.frame(x = 1:3, y = c("a", "b", "c"))
+where(is.factor, df)
+str(Filter(is.factor, df))
+str(Find(is.factor, df))
+Position(is.factor, df)
+```
+
+### Exercises
+
+1.  Why isn't `is.na()` a predicate function? What base R function is closest
+    to being a predicate version of `is.na()`?
+
+1.  Use `Filter()` and `vapply()` to create a function that applies a summary 
+    statistic to every numeric column in a data frame.
+
+1.  What's the relationship between `which()` and `Position()`? What's
+    the relationship between `where()` and `Filter()`?
+
+1.  Implement `Any()`, a function that takes a list and a predicate function, 
+    and returns `TRUE` if the predicate function returns `TRUE` for any of 
+    the inputs. Implement `All()` similarly.
+
+1.  Implement the `span()` function from Haskell: given a list `x` and a 
+    predicate function `f`, `span` returns the location of the longest 
+    sequential run of elements where the predicate is true. (Hint: you 
+    might find `rle()` helpful.)
+
+
 ## Manipulating matrices and data frames {#functionals-ds}
 
 Functionals can also be used to eliminate loops in common data manipulation tasks. In this section, we'll give a brief overview of the available options, hint at how they can help you, and point you in the right direction to learn more. We'll cover three categories of data structure functionals:
@@ -667,108 +770,6 @@ Each of these functions splits up the input, applies a function to each piece, a
 
 1.  What other types of input and output are missing? Brainstorm before you 
     look up some answers in the [plyr paper](http://www.jstatsoft.org/v40/i01/).
-
-## Manipulating lists {#functionals-fp}
-
-Another way of thinking about functionals is as a set of general tools for altering, subsetting, and collapsing lists. Every functional programming language has three tools for this: `Map()`, `Reduce()`, and `Filter()`. We've seen `Map()` already, and the following sections describe `Reduce()`, a powerful tool for extending two-argument functions, and `Filter()`, a member of an important class of functionals that work with predicates, functions that return a single `TRUE` or `FALSE`.
-
-### `Reduce()`
-
-`Reduce()` reduces a vector, `x`, to a single value by recursively calling a function, `f`, two arguments at a time. It combines the first two elements with `f`, then combines the result of that call with the third element, and so on. Calling `Reduce(f, 1:3)` is equivalent to `f(f(1, 2), 3)`. Reduce is also known as fold, because it folds together adjacent elements in the list. \indexc{Reduce()} \index{fold}
-
-The following two examples show what `Reduce` does with an infix and prefix function:
-
-```{r, eval = FALSE}
-Reduce(`+`, 1:3) # -> ((1 + 2) + 3)
-Reduce(sum, 1:3) # -> sum(sum(1, 2), 3)
-```
-
-The essence of `Reduce()` can be described by a simple for loop:
-
-```{r}
-Reduce2 <- function(f, x) {
-  out <- x[[1]]
-  for(i in seq(2, length(x))) {
-    out <- f(out, x[[i]])
-  }
-  out
-}
-```
-
-The real `Reduce()` is more complicated because it includes arguments to control whether the values are reduced from the left or from the right (`right`), an optional initial value (`init`), and an option to output intermediate results (`accumulate`).
-
-`Reduce()` is an elegant way of extending a function that works with two inputs into a function that can deal with any number of inputs. It's useful for implementing many types of recursive operations, like merges and intersections. (We'll see another use in the final case study.) Imagine you have a list of numeric vectors, and you want to find the values that occur in every element:
-
-```{r}
-l <- replicate(5, sample(1:10, 15, replace = T), simplify = FALSE)
-str(l)
-```
-
-You could do that by intersecting each element in turn:
-
-```{r}
-intersect(intersect(intersect(intersect(l[[1]], l[[2]]),
-  l[[3]]), l[[4]]), l[[5]])
-```
-
-That's hard to read. With `Reduce()`, the equivalent is:
-
-```{r}
-Reduce(intersect, l)
-```
-
-### Predicate functionals
-
-A __predicate__ is a function that returns a single `TRUE` or `FALSE`, like `is.character`, `all`, or `is.NULL`. A predicate functional applies a predicate to each element of a list or data frame. There are three useful predicate functionals in base R: `Filter()`, `Find()`, and `Position()`. \index{predicates} \index{functions!predict|see{predicates}}
-
-* `Filter()` selects only those elements which match the predicate.
-   \indexc{Filter()}
-
-* `Find()` returns the first element which matches the predicate (or the last 
-  element if `right = TRUE`).
-  \indexc{Find()}
-
-* `Position()` returns the position of the first element that matches the
-  predicate (or the last element if `right = TRUE`).
-  \indexc{Position()}
-
-Another useful predicate functional is `where()`, a custom functional that generates a logical vector from a list (or a data frame) and a predicate: \indexc{where()}
-
-```{r}
-where <- function(f, x) {
-  vapply(x, f, logical(1))
-}
-```
-
-The following example shows how you might use these functionals with a data frame:
-
-```{r}
-df <- data.frame(x = 1:3, y = c("a", "b", "c"))
-where(is.factor, df)
-str(Filter(is.factor, df))
-str(Find(is.factor, df))
-Position(is.factor, df)
-```
-
-### Exercises
-
-1.  Why isn't `is.na()` a predicate function? What base R function is closest
-    to being a predicate version of `is.na()`?
-
-1.  Use `Filter()` and `vapply()` to create a function that applies a summary 
-    statistic to every numeric column in a data frame.
-
-1.  What's the relationship between `which()` and `Position()`? What's
-    the relationship between `where()` and `Filter()`?
-
-1.  Implement `Any()`, a function that takes a list and a predicate function, 
-    and returns `TRUE` if the predicate function returns `TRUE` for any of 
-    the inputs. Implement `All()` similarly.
-
-1.  Implement the `span()` function from Haskell: given a list `x` and a 
-    predicate function `f`, `span` returns the location of the longest 
-    sequential run of elements where the predicate is true. (Hint: you 
-    might find `rle()` helpful.)
 
 ## Invoking a function
 
