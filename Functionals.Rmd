@@ -2,13 +2,10 @@
 
 ```{r setup, include = FALSE}
 source("common.R")
-library(pryr)
-library(stringr)
-# find_funs("package:base", fun_calls, fixed("match.fun"))
-# find_funs("package:base", fun_args, ignore.case("^(fun|f)$"))
 ```
 
 ## Introduction
+\index{functionals}
 
 > "To become significantly more reliable, code must become more transparent.
 > In particular, nested conditions and loops must be viewed with great
@@ -17,7 +14,7 @@ library(stringr)
 >
 > --- Bjarne Stroustrup
 
-A higher-order function is a function that takes a function as an input or returns a function as output. We've already seen one type of higher order function: closures, functions returned by another function. The complement to a closure is a __functional__, a function that takes a function as an input and returns a vector as output. Here's a simple functional: it calls the function provided as input with 1000 random uniform numbers. \index{functionals}
+A __functional__ is a function that takes a function as an input and returns a vector as output. Here's a simple functional: it calls the function provided as input with 1000 random uniform numbers. 
 
 ```{r}
 randomise <- function(f) f(runif(1e3))
@@ -48,6 +45,9 @@ Functionals reduce bugs in your code by better communicating intent. Functionals
   `Reduce()` and `Filter()` functions which are useful for working with 
   lists.
 
+* [Lists of functions](#lists-of-functions) shows how to put functions in a 
+  list, and explains why you might care.
+
 * [Mathematical functionals](#functionals-math) discusses functionals that you 
   might be familiar with from mathematics, like root finding, integration, and 
   optimisation.
@@ -62,7 +62,6 @@ Functionals reduce bugs in your code by better communicating intent. Functionals
 
 ### Prerequisites {-}
 
-You'll use closures frequently used in conjunction with functionals. If you need a refresher, review [closures](#closures).
 
 ## My first functional: lapply() {#lapply}
 
@@ -123,6 +122,8 @@ x <- rcauchy(1000)
 unlist(lapply(trims, function(trim) mean(x, trim = trim)))
 ```
 
+### `...` {#functional-dot-dot-dot}
+
 ### Looping patterns
 
 It's useful to remember that there are three basic ways to loop over a vector: \index{loops!common patterns}
@@ -160,6 +161,18 @@ lapply(names(xs), function(nm) {})
 ```
 
 Typically you'd use the first form because `lapply()` takes care of saving the output for you. However, if you need to know the position or name of the element you're working with, you should use the second or third form. Both give you an element's position (`i`, `nm`) and value (`xs[[i]]`, `xs[[nm]]`). If you're struggling to solve a problem using one form, you might find it easier with another.
+
+::: sidebar
+
+Note that you can get the same effect by passing the name of the function as a string, rather than the function itself:
+
+```{r}
+sapply(1:5, "+", 3)
+```
+
+This works because because `sapply` can be given the name of a function instead of the function itself: if you read the source of `sapply()`, you'll see the first line uses `match.fun()` to find functions given their names. Functions in the purrr package don't do this, instead using character inputs as a shortcut for subsetting.
+
+:::
 
 ### Exercises
 
@@ -510,6 +523,109 @@ While increasing the number of cores will not always lead to linear improvement,
 1.  Implement `mcsapply()`, a multicore version of `sapply()`. Can you
     implement `mcvapply()`, a parallel version of `vapply()`? Why or why not?
 
+## Vector functionals {#functionals-fp}
+
+Another way of thinking about functionals is as a set of general tools for altering, subsetting, and collapsing vectors. Every functional programming language has three tools for this: `Map()`, `Reduce()`, and `Filter()`. We've seen `Map()` already, and the following sections describe `Reduce()`, a powerful tool for extending two-argument functions, and `Filter()`, a member of an important class of functionals that work with predicates, functions that return a single `TRUE` or `FALSE`.
+
+### `Reduce()`
+
+`Reduce()` reduces a vector, `x`, to a single value by recursively calling a function, `f`, two arguments at a time. It combines the first two elements with `f`, then combines the result of that call with the third element, and so on. Calling `Reduce(f, 1:3)` is equivalent to `f(f(1, 2), 3)`. Reduce is also known as fold, because it folds together adjacent elements in the list. \indexc{Reduce()} \index{fold}
+
+The following two examples show what `Reduce` does with an infix and prefix function:
+
+```{r, eval = FALSE}
+Reduce(`+`, 1:3) # -> ((1 + 2) + 3)
+Reduce(sum, 1:3) # -> sum(sum(1, 2), 3)
+```
+
+The essence of `Reduce()` can be described by a simple for loop:
+
+```{r}
+Reduce2 <- function(f, x) {
+  out <- x[[1]]
+  for(i in seq(2, length(x))) {
+    out <- f(out, x[[i]])
+  }
+  out
+}
+```
+
+The real `Reduce()` is more complicated because it includes arguments to control whether the values are reduced from the left or from the right (`right`), an optional initial value (`init`), and an option to output intermediate results (`accumulate`).
+
+`Reduce()` is an elegant way of extending a function that works with two inputs into a function that can deal with any number of inputs. It's useful for implementing many types of recursive operations, like merges and intersections. (We'll see another use in the final case study.) Imagine you have a list of numeric vectors, and you want to find the values that occur in every element:
+
+```{r}
+l <- replicate(5, sample(1:10, 15, replace = T), simplify = FALSE)
+str(l)
+```
+
+You could do that by intersecting each element in turn:
+
+```{r}
+intersect(intersect(intersect(intersect(l[[1]], l[[2]]),
+  l[[3]]), l[[4]]), l[[5]])
+```
+
+That's hard to read. With `Reduce()`, the equivalent is:
+
+```{r}
+Reduce(intersect, l)
+```
+
+### Predicate functionals
+
+A __predicate__ is a function that returns a single `TRUE` or `FALSE`, like `is.character`, `all`, or `is.NULL`. A predicate functional applies a predicate to each element of a list or data frame. There are three useful predicate functionals in base R: `Filter()`, `Find()`, and `Position()`. \index{predicates} \index{functions!predict|see{predicates}}
+
+* `Filter()` selects only those elements which match the predicate.
+   \indexc{Filter()}
+
+* `Find()` returns the first element which matches the predicate (or the last 
+  element if `right = TRUE`).
+  \indexc{Find()}
+
+* `Position()` returns the position of the first element that matches the
+  predicate (or the last element if `right = TRUE`).
+  \indexc{Position()}
+
+Another useful predicate functional is `where()`, a custom functional that generates a logical vector from a list (or a data frame) and a predicate: \indexc{where()}
+
+```{r}
+where <- function(f, x) {
+  vapply(x, f, logical(1))
+}
+```
+
+The following example shows how you might use these functionals with a data frame:
+
+```{r}
+df <- data.frame(x = 1:3, y = c("a", "b", "c"))
+where(is.factor, df)
+str(Filter(is.factor, df))
+str(Find(is.factor, df))
+Position(is.factor, df)
+```
+
+### Exercises
+
+1.  Why isn't `is.na()` a predicate function? What base R function is closest
+    to being a predicate version of `is.na()`?
+
+1.  Use `Filter()` and `vapply()` to create a function that applies a summary 
+    statistic to every numeric column in a data frame.
+
+1.  What's the relationship between `which()` and `Position()`? What's
+    the relationship between `where()` and `Filter()`?
+
+1.  Implement `Any()`, a function that takes a list and a predicate function, 
+    and returns `TRUE` if the predicate function returns `TRUE` for any of 
+    the inputs. Implement `All()` similarly.
+
+1.  Implement the `span()` function from Haskell: given a list `x` and a 
+    predicate function `f`, `span` returns the location of the longest 
+    sequential run of elements where the predicate is true. (Hint: you 
+    might find `rle()` helpful.)
+
+
 ## Manipulating matrices and data frames {#functionals-ds}
 
 Functionals can also be used to eliminate loops in common data manipulation tasks. In this section, we'll give a brief overview of the available options, hint at how they can help you, and point you in the right direction to learn more. We'll cover three categories of data structure functionals:
@@ -655,107 +771,161 @@ Each of these functions splits up the input, applies a function to each piece, a
 1.  What other types of input and output are missing? Brainstorm before you 
     look up some answers in the [plyr paper](http://www.jstatsoft.org/v40/i01/).
 
-## Manipulating lists {#functionals-fp}
+## Invoking a function
 
-Another way of thinking about functionals is as a set of general tools for altering, subsetting, and collapsing lists. Every functional programming language has three tools for this: `Map()`, `Reduce()`, and `Filter()`. We've seen `Map()` already, and the following sections describe `Reduce()`, a powerful tool for extending two-argument functions, and `Filter()`, a member of an important class of functionals that work with predicates, functions that return a single `TRUE` or `FALSE`.
+Suppose you had a list of function arguments: \indexc{do.call()}
 
-### `Reduce()`
+```{r}
+args <- list(1:10, na.rm = TRUE)
+```
 
-`Reduce()` reduces a vector, `x`, to a single value by recursively calling a function, `f`, two arguments at a time. It combines the first two elements with `f`, then combines the result of that call with the third element, and so on. Calling `Reduce(f, 1:3)` is equivalent to `f(f(1, 2), 3)`. Reduce is also known as fold, because it folds together adjacent elements in the list. \indexc{Reduce()} \index{fold}
+How could you then send that list to `mean()`?  You need `do.call()`:
 
-The following two examples show what `Reduce` does with an infix and prefix function:
+```{r}
+do.call(mean, args)
+# Equivalent to
+mean(1:10, na.rm = TRUE)
+```
+
+
+## Lists of functions {#lists-of-functions}
+
+In R, functions can be stored in lists. This makes it easier to work with groups of related functions, in the same way a data frame makes it easier to work with groups of related vectors. \index{lists!of functions}
+
+We'll start with a simple benchmarking example. Imagine you are comparing the performance of multiple ways of computing the arithmetic mean. You could do this by storing each approach (function) in a list:
+
+```{r}
+compute_mean <- list(
+  base = function(x) mean(x),
+  sum = function(x) sum(x) / length(x),
+  manual = function(x) {
+    total <- 0
+    n <- length(x)
+    for (i in seq_along(x)) {
+      total <- total + x[i] / n
+    }
+    total
+  }
+)
+```
+
+Calling a function from a list is straightforward. You extract it then call it:
+
+```{r}
+x <- runif(1e5)
+system.time(compute_mean$base(x))
+system.time(compute_mean[[2]](x))
+system.time(compute_mean[["manual"]](x))
+```
+
+To call each function (e.g., to check that they all return the same results), use `lapply()`. We'll need either an anonymous function or a new named function, since there isn't a built-in function to handle this situation.
+
+```{r}
+lapply(compute_mean, function(f) f(x))
+
+call_fun <- function(f, ...) f(...)
+lapply(compute_mean, call_fun, x)
+```
+
+To time each function, we can combine `lapply()` and `system.time()`:
+
+```{r}
+lapply(compute_mean, function(f) system.time(f(x)))
+```
+
+Another use for a list of functions is to summarise an object in multiple ways. To do that, we could store each summary function in a list, and then run them all with `lapply()`:
+
+```{r}
+x <- 1:10
+funs <- list(
+  sum = sum,
+  mean = mean,
+  median = median
+)
+lapply(funs, function(f) f(x))
+```
+
+What if we wanted our summary functions to automatically remove missing values? One approach would be to make a list of anonymous functions that call our summary functions with the appropriate arguments:
+
+```{r}
+funs2 <- list(
+  sum = function(x, ...) sum(x, ..., na.rm = TRUE),
+  mean = function(x, ...) mean(x, ..., na.rm = TRUE),
+  median = function(x, ...) median(x, ..., na.rm = TRUE)
+)
+lapply(funs2, function(f) f(x))
+```
+
+This, however, leads to a lot of duplication. Apart from a different function name, each function is almost identical. A better approach would be to modify our `lapply()` call to include the extra argument:
 
 ```{r, eval = FALSE}
-Reduce(`+`, 1:3) # -> ((1 + 2) + 3)
-Reduce(sum, 1:3) # -> sum(sum(1, 2), 3)
+lapply(funs, function(f) f(x, na.rm = TRUE))
 ```
 
-The essence of `Reduce()` can be described by a simple for loop:
+### Moving lists of functions to the global environment
+
+From time to time you may create a list of functions that you want to be available without having to use a special syntax. For example, imagine you want to create HTML code by mapping each tag to an R function. The following example uses a function factory to create functions for the tags `<p>` (paragraph), `<b>` (bold), and `<i>` (italics).
 
 ```{r}
-Reduce2 <- function(f, x) {
-  out <- x[[1]]
-  for(i in seq(2, length(x))) {
-    out <- f(out, x[[i]])
+simple_tag <- function(tag) {
+  force(tag)
+  function(...) {
+    paste0("<", tag, ">", paste0(...), "</", tag, ">")
   }
-  out
 }
+tags <- c("p", "b", "i")
+html <- lapply(setNames(tags, tags), simple_tag)
 ```
 
-The real `Reduce()` is more complicated because it includes arguments to control whether the values are reduced from the left or from the right (`right`), an optional initial value (`init`), and an option to output intermediate results (`accumulate`).
-
-`Reduce()` is an elegant way of extending a function that works with two inputs into a function that can deal with any number of inputs. It's useful for implementing many types of recursive operations, like merges and intersections. (We'll see another use in the final case study.) Imagine you have a list of numeric vectors, and you want to find the values that occur in every element:
+I've put the functions in a list because I don't want them to be available all the time. The risk of a conflict between an existing R function and an HTML tag is high. But keeping them in a list makes code more verbose:
 
 ```{r}
-l <- replicate(5, sample(1:10, 15, replace = T), simplify = FALSE)
-str(l)
+html$p("This is ", html$b("bold"), " text.")
 ```
 
-You could do that by intersecting each element in turn:
+Depending on how long we want the effect to last, you have three options to eliminate the use of `html$`:
 
-```{r}
-intersect(intersect(intersect(intersect(l[[1]], l[[2]]),
-  l[[3]]), l[[4]]), l[[5]])
-```
+* For a very temporary effect, you can use `with()`: \indexc{with()}
 
-That's hard to read. With `Reduce()`, the equivalent is:
+    ```{r}
+    with(html, p("This is ", b("bold"), " text."))
+    ```
 
-```{r}
-Reduce(intersect, l)
-```
+* For a longer effect, you can `attach()` the functions to the search path, 
+  then `detach()` when you're done:
 
-### Predicate functionals
+    ```{r}
+    attach(html)
+    p("This is ", b("bold"), " text.")
+    detach(html)
+    ```
 
-A __predicate__ is a function that returns a single `TRUE` or `FALSE`, like `is.character`, `all`, or `is.NULL`. A predicate functional applies a predicate to each element of a list or data frame. There are three useful predicate functionals in base R: `Filter()`, `Find()`, and `Position()`. \index{predicates} \index{functions!predict|see{predicates}}
+* Finally, you could copy the functions to the global environment with 
+  `list2env()`. You can undo this by deleting the functions after you're done.
+  \indexc{list2env()}
 
-* `Filter()` selects only those elements which match the predicate.
-   \indexc{Filter()}
+    ```{r}
+    list2env(html, environment())
+    p("This is ", b("bold"), " text.")
+    rm(list = names(html), envir = environment())
+    ```
 
-* `Find()` returns the first element which matches the predicate (or the last 
-  element if `right = TRUE`).
-  \indexc{Find()}
-
-* `Position()` returns the position of the first element that matches the
-  predicate (or the last element if `right = TRUE`).
-  \indexc{Position()}
-
-Another useful predicate functional is `where()`, a custom functional that generates a logical vector from a list (or a data frame) and a predicate: \indexc{where()}
-
-```{r}
-where <- function(f, x) {
-  vapply(x, f, logical(1))
-}
-```
-
-The following example shows how you might use these functionals with a data frame:
-
-```{r}
-df <- data.frame(x = 1:3, y = c("a", "b", "c"))
-where(is.factor, df)
-str(Filter(is.factor, df))
-str(Find(is.factor, df))
-Position(is.factor, df)
-```
+I recommend the first option, using `with()`, because it makes it very clear when code is being executed in a special context and what that context is.
 
 ### Exercises
 
-1.  Why isn't `is.na()` a predicate function? What base R function is closest
-    to being a predicate version of `is.na()`?
+1.  Implement a summary function that works like `base::summary()`, but uses a 
+    list of functions. Modify the function so it returns a closure, making it 
+    possible to use it as a function factory.
 
-1.  Use `Filter()` and `vapply()` to create a function that applies a summary 
-    statistic to every numeric column in a data frame.
+1. Which of the following commands is equivalent to `with(x, f(z))`?
 
-1.  What's the relationship between `which()` and `Position()`? What's
-    the relationship between `where()` and `Filter()`?
+    (a) `x$f(x$z)`.
+    (b) `f(x$z)`.
+    (c) `x$f(z)`.
+    (d) `f(z)`.
+    (e) It depends.
 
-1.  Implement `Any()`, a function that takes a list and a predicate function, 
-    and returns `TRUE` if the predicate function returns `TRUE` for any of 
-    the inputs. Implement `All()` similarly.
-
-1.  Implement the `span()` function from Haskell: given a list `x` and a 
-    predicate function `f`, `span` returns the location of the longest 
-    sequential run of elements where the predicate is true. (Hint: you 
-    might find `rle()` helpful.)
 
 ## Mathematical functionals {#functionals-math}
 
@@ -775,38 +945,6 @@ str(uniroot(sin, pi * c(1 / 2, 3 / 2)))
 str(optimise(sin, c(0, 2 * pi)))
 str(optimise(sin, c(0, pi), maximum = TRUE))
 ```
-
-In statistics, optimisation is often used for maximum likelihood estimation (MLE). In MLE, we have two sets of parameters: the data, which is fixed for a given problem, and the parameters, which vary as we try to find the maximum. These two sets of parameters make the problem well suited for closures. Combining closures with optimisation gives rise to the following approach to solving MLE problems. \index{maximum likelihood}
-
-The following example shows how we might find the maximum likelihood estimate for $\lambda$, if our data come from a Poisson distribution. First, we create a function factory that, given a dataset, returns a function that computes the negative log likelihood (NLL) for parameter `lambda`. In R, it's common to work with the negative since `optimise()` defaults to finding the minimum. \index{closures!maximum likelihood}
-
-```{r}
-poisson_nll <- function(x) {
-  n <- length(x)
-  sum_x <- sum(x)
-  function(lambda) {
-    n * lambda - sum_x * log(lambda) # + terms not involving lambda
-  }
-}
-```
-
-Note how the closure allows us to precompute values that are constant with respect to the data.
-
-We can use this function factory to generate specific NLL functions for input data. Then `optimise()` allows us to find the best values (the maximum likelihood estimates), given a generous starting range.
-
-```{r}
-x1 <- c(41, 30, 31, 38, 29, 24, 30, 29, 31, 38)
-x2 <- c(6, 4, 7, 3, 3, 7, 5, 2, 2, 7, 5, 4, 12, 6, 9)
-nll1 <- poisson_nll(x1)
-nll2 <- poisson_nll(x2)
-
-optimise(nll1, c(0, 100))$minimum
-optimise(nll2, c(0, 100))$minimum
-```
-
-We can check that these values are correct by comparing them to the analytic solution: in this case, it's just the mean of the data, `r mean(x1)` and `r mean(x2)`.
-
-Another important mathematical functional is `optim()`. It is a generalisation of `optimise()` that works with more than one dimension. If you're interested in how it works, you might want to explore the `Rvmmin` package, which provides a pure-R implementation of `optim()`. Interestingly `Rvmmin` is no slower than `optim()`, even though it is written in R, not C. For this problem, the bottleneck lies not in controlling the optimisation but with having to evaluate the function multiple times. \indexc{optim()}
 
 ### Exercises
 
@@ -908,7 +1046,7 @@ while(TRUE) {
 
 This is a common problem when you're writing simulations.
 
-In this case we can remove the loop by recognising a special feature of the problem. Here we're counting the number of successes before Bernoulli trial with p = 0.1 fails. This is a geometric random variable, so you could replace the code with `i <- rgeom(1, 0.1)`. Reformulating the problem in this way is hard to do in general, but you'll benefit greatly if you can do it for your problem.
+In this case we can remove the loop by recognising a special feature of the problem. Here we're counting the number of failures before Bernoulli trial with p = 0.1 succeeds. This is a geometric random variable, so you could replace the code with `i <- rgeom(1, 0.1)`. Reformulating the problem in this way is hard to do in general, but you'll benefit greatly if you can do it for your problem.
 
 ## A family of functions {#function-family}
 

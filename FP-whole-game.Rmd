@@ -1,0 +1,185 @@
+# FP whole game
+
+Imagine you've loaded a data file, like the one below, that uses $-99$ to represent missing values. You want to replace all the $-99$s with `NA`s.
+
+```{r}
+# Generate a sample dataset
+set.seed(1014)
+df <- data.frame(replicate(6, sample(c(1:10, -99), 6, rep = TRUE)))
+names(df) <- letters[1:6]
+df
+```
+
+When you first started writing R code, you might have solved the problem with copy-and-paste:
+
+```{r, eval = FALSE}
+df$a[df$a == -99] <- NA
+df$b[df$b == -99] <- NA
+df$c[df$c == -98] <- NA
+df$d[df$d == -99] <- NA
+df$e[df$e == -99] <- NA
+df$f[df$g == -99] <- NA
+```
+
+One problem with copy-and-paste is that it's easy to make mistakes. Can you spot the two in the block above? These mistakes are inconsistencies that arose because we didn't have an authoritative description of the desired action (replace $-99$ with `NA`). Duplicating an action makes bugs more likely and makes it harder to change code. For example, if the code for a missing value changes from $-99$ to 9999, you'd need to make the change in multiple places.
+
+To prevent bugs and to make more flexible code, adopt the "do not repeat yourself", or DRY, principle. Popularised by the ["pragmatic programmers"](http://pragprog.com/about), Dave Thomas and Andy Hunt, this principle states: "every piece of knowledge must have a single, unambiguous, authoritative representation within a system". FP tools are valuable because they provide tools to reduce duplication.
+
+We can start applying FP ideas by writing a function that fixes the missing values in a single vector:
+
+```{r, eval = FALSE}
+fix_missing <- function(x) {
+  x[x == -99] <- NA
+  x
+}
+df$a <- fix_missing(df$a)
+df$b <- fix_missing(df$b)
+df$c <- fix_missing(df$c)
+df$d <- fix_missing(df$d)
+df$e <- fix_missing(df$e)
+df$f <- fix_missing(df$e)
+```
+
+This reduces the scope of possible mistakes, but it doesn't eliminate them: you can no longer accidentally type -98 instead of -99, but you can still mess up the name of variable. The next step is to remove this possible source of error by combining two functions. One function, `fix_missing()`, knows how to fix a single vector; the other, `lapply()`, knows how to do something to each column in a data frame.
+
+`lapply()` takes three inputs: `x`, a list; `f`, a function; and `...`, other arguments to pass to `f()`. It applies the function to each element of the list and returns a new list. `lapply(x, f, ...)` is equivalent to the following for loop:
+
+```{r, eval = FALSE}
+out <- vector("list", length(x))
+for (i in seq_along(x)) {
+  out[[i]] <- f(x[[i]], ...)
+}
+```
+
+The real `lapply()` is rather more complicated since it's implemented in C for efficiency, but the essence of the algorithm is the same. `lapply()` is called a __functional__, because it takes a function as an argument. Functionals are an important part of functional programming. You'll learn more about them in [functionals](#functionals).
+
+We can apply `lapply()` to this problem because data frames are lists. We just need a neat little trick to make sure we get back a data frame, not a list. Instead of assigning the results of `lapply()` to `df`, we'll assign them to `df[]`. R's usual rules ensure that we get a data frame, not a list. (If this comes as a surprise, you might want to read [subsetting and assignment](#subassignment).) Putting these pieces together gives us:
+
+```{r, eval = FALSE}
+fix_missing <- function(x) {
+  x[x == -99] <- NA
+  x
+}
+df[] <- lapply(df, fix_missing)
+```
+
+This code has five advantages over copy and paste:
+
+* It's more compact.
+
+* If the code for a missing value changes, it only needs to be updated in
+  one place.
+
+* It works for any number of columns. There is no way to accidentally miss a
+  column.
+
+* There is no way to accidentally treat one column differently than another.
+
+* It is easy to generalise this technique to a subset of columns:
+
+    ```{r, eval = FALSE}
+    df[1:5] <- lapply(df[1:5], fix_missing)
+    ```
+
+The key idea is function composition. Take two simple functions, one which does something to every column and one which fixes missing values, and combines them to fix missing values in every column. Writing simple functions that can be understood in isolation and then composed is a powerful technique.
+
+What if different columns used different codes for missing values? You might be tempted to copy-and-paste:
+
+```{r}
+fix_missing_99 <- function(x) {
+  x[x == -99] <- NA
+  x
+}
+fix_missing_999 <- function(x) {
+  x[x == -999] <- NA
+  x
+}
+fix_missing_9999 <- function(x) {
+  x[x == -999] <- NA
+  x
+}
+```
+
+As before, it's easy to create bugs. Instead we could use closures, functions that make and return functions. Closures allow us to make functions based on a template:
+
+```{r}
+missing_fixer <- function(na_value) {
+  function(x) {
+    x[x == na_value] <- NA
+    x
+  }
+}
+fix_missing_99 <- missing_fixer(-99)
+fix_missing_999 <- missing_fixer(-999)
+
+fix_missing_99(c(-99, -999))
+fix_missing_999(c(-99, -999))
+```
+
+:::sidebar
+In this case, you could argue that we should just add another argument:
+
+```{r}
+fix_missing <- function(x, na_value) {
+  x[x == na_value] <- NA
+  x
+}
+```
+
+That's a reasonable solution here, but it doesn't always work well in every situation. We'll see more compelling uses for closures in [MLE](#functionals-math).
+:::
+
+Now consider a related problem. Once you've cleaned up your data, you might want to compute the same set of numerical summaries for each variable. You could write code like this:
+
+```{r, eval = FALSE}
+mean(df$a)
+median(df$a)
+sd(df$a)
+mad(df$a)
+IQR(df$a)
+
+mean(df$b)
+median(df$b)
+sd(df$b)
+mad(df$b)
+IQR(df$b)
+```
+
+But again, you'd be better off identifying and removing duplicate items. Take a minute or two to think about how you might tackle this problem before reading on.
+
+One approach would be to write a summary function and then apply it to each column:
+
+```{r, eval = FALSE}
+summary <- function(x) {
+  c(mean(x), median(x), sd(x), mad(x), IQR(x))
+}
+lapply(df, summary)
+```
+
+That's a great start, but there's still some duplication. It's easier to see if we make the summary function more realistic:
+
+```{r, eval = FALSE}
+summary <- function(x) {
+ c(
+   mean(x, na.rm = TRUE),
+   median(x, na.rm = TRUE),
+   sd(x, na.rm = TRUE),
+   mad(x, na.rm = TRUE),
+   IQR(x, na.rm = TRUE)
+  )
+}
+```
+
+All five functions are called with the same arguments (`x` and `na.rm`) repeated five times. As always, duplication makes our code fragile: it's easier to introduce bugs and harder to adapt to changing requirements.
+
+To remove this source of duplication, you can take advantage of another functional programming technique: storing functions in lists.
+
+```{r, eval = FALSE}
+summary <- function(x) {
+  funs <- c(mean, median, sd, mad, IQR)
+  lapply(funs, function(f) f(x, na.rm = TRUE))
+}
+```
+
+This chapter discusses these techniques in more detail. But before you can start learning them, you need to learn the simplest FP tool, the anonymous function.
+

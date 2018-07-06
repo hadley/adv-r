@@ -1,0 +1,489 @@
+# Function factories
+\index{function factories}
+
+```{r, include = FALSE}
+source("common.R")
+```
+
+## Introduction
+
+A function factory is a function that makes functions. Here's a simple example: we use a function factory (`power()`) to make two child functions (`square()` and `cube()`):
+
+```{r}
+power1 <- function(exp) {
+  function(x) {
+    x ^ exp
+  }
+}
+
+square <- power1(2)
+cube <- power1(3)
+```
+
+These are regular functions so we can call them as usual:
+
+```{r}
+square(2)
+square(4)
+
+cube(2)
+cube(4)
+```
+
+Of the three main FP tools, function factories are probably the least useful. However, they do come in handy from time-to-time, and the examples in this chapter will show you when and why. A recurring theme is that function factories tend not to reduce overall complexity, but allow you to partition complexity into a small number of pieces that can be more easily understood.
+
+### Outline {-}
+
+* Section \@ref(factory-fundamentals) begins the chapter with a description
+  of how function factories work, pulling together ideas from scoping and 
+  environments.
+
+* Section \@ref(MLE) uses function factories to help solve maximum likelihood
+  problems where function factory has many arguments and you call the child
+  function many times. 
+  
+* Section \@ref(bootstrap-generators) uses boostrapping as motivation for
+  function factories that can do some work up front. The results are cached,
+  and then can be used again by the generated function.
+  
+* Section \@ref(mutable-state) shows how you can use `<<-` with function 
+  factories in order to preserve state across function calls. You'll learn 
+  a richer approach in [R6], but a function factory can be useful for simple 
+  cases, like capturing the number of times a function is called. 
+
+* Section \@ref(numerical-integration) explores numerical integration: 
+  starting with simple pieces like midpoint, trapezoid, Simpson, and Boole
+  and rules, and showing how they can all be generated with a single
+  function factory.
+
+* Section \@ref(functional-factories) shows how you can combine function
+  factories with functionals to rapidly generate a family of functions
+  from data.
+
+Function factories are an important building block for very useful function operators, which you'll learn about in the next chapter.
+
+### Prerequisites {-}
+
+```{r setup}
+library(rlang)
+```
+
+## Factory fundamentals
+\index{functions!closures|see{closures}}
+\index{closures}
+\index{environments!of a closure}
+
+> "An object is data with functions. A closure is a function with data."
+> --- John D. Cook
+
+Function factories work because functions keep a reference to the environment in which they are defined. Technically this is called __enclosing__ the environment, and hence functions in R are also known as closures.
+
+When you print a closure, you don't see anything terribly useful:
+
+```{r}
+square
+
+cube
+```
+
+That's because the function itself doesn't change. The difference is the enclosing environment, `environment(square)`.  That's easier to see if we draw a diagram:
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/function-factories/power-full.png", dpi = 300)
+```
+
+There's a lot going on this diagram, but we can simplify things with a couple of conventions:
+
+* Any free floating symbol lives in the global environment.
+* Any environment without an explicit parent inherits from the global 
+  environment.
+
+Those conventions allows me to redraw the diagram more simply:
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/function-factories/power-simple.png", dpi = 300)
+```
+
+We can verify the diagram with some code that looks at the environment of the function:
+
+```{r}
+square_env <- environment(square)
+
+square_env$exp
+env_parent(square_env)
+```
+
+The execution environment of a function is usually ephemeral. But functions bind their enclosing argument, and that reference will keep the execution environment alive until the child function is garbage collected. This property makes function factories work, but requires a little care when you have more complicated code. It's easy to keep variables alive that you don't care about, and this can chew up memory. In the following code, note that `f2()` is so large because it's environment contains the million element vector `x`:
+
+```{r}
+f1 <- function() {
+  x <- 1:1e6
+  function() 10
+}
+lobstr::obj_size(f1)
+
+f2 <- f1()
+lobstr::obj_size(f2)
+```
+
+### Exercises
+
+1.  Base R contains two function factories, `approxfun()` and `ecdf()`. 
+    Read their documentation and experiment to figure out what the functions 
+    do and what they return.
+
+1.  What does the following statistical function do? What would be a better 
+    name for it? (The existing name is a bit of a hint.)
+
+    ```{r}
+    bc <- function(lambda) {
+      if (lambda == 0) {
+        function(x) log(x)
+      } else {
+        function(x) (x ^ lambda - 1) / lambda
+      }
+    }
+    ```
+
+1.  Create a function that creates functions that compute the ith 
+    [central moment](http://en.wikipedia.org/wiki/Central_moment) of a numeric 
+    vector. You can test it by running the following code:
+
+    ```{r, eval = FALSE}
+    m1 <- moment(1)
+    m2 <- moment(2)
+
+    x <- runif(100)
+    stopifnot(all.equal(m1(x), 0))
+    stopifnot(all.equal(m2(x), var(x) * 99 / 100))
+    ```
+
+1.  Create a function `pick()` that takes an index, `i`, as an argument and 
+    returns a function with an argument `x` that subsets `x` with `i`.
+
+    ```{r, eval = FALSE}
+    lapply(mtcars, pick(5))
+    # should do the same as this
+    lapply(mtcars, function(x) x[[5]])
+    ```
+
+## Maximum likelihood estimation {#MLE}
+\index{maximum likelihood}
+\indexc{optimise()}
+\indexc{optim()}
+
+Our first motivating example for function factories comes from statistics. The goal of maximum likelihood estimation (MLE) is to find the "most likely" parameters of a distribution given a set. In MLE, we have two sets of parameters: the data, which is fixed for a given problem, and the parameters, which vary as we try to find the maximum. These two sets of parameters make the problem well suited for function factories: given a dataset we create a new function that returns the likelihood for specified parameters. 
+
+The following example shows how we might find the maximum likelihood estimate for $\lambda$, if our data come from a Poisson distribution. First, we create a function factory that, given a dataset, returns a function that computes the negative[^nll] log likelihood (NLL) for parameter `lambda`.
+
+[^nll]: In R, you usually use the __negative__ log-likelihood because `optimise()` defaults to finding the minimum, not the maximum. 
+
+```{r}
+nll_poisson <- function(x) {
+  n <- length(x)
+  sum_x <- sum(x)
+  
+  function(lambda) {
+    n * lambda - sum_x * log(lambda) # + terms not involving lambda
+  }
+}
+```
+
+Note how the closure allows us to precompute values that are constant with respect to the data.
+
+We can use this function factory to generate specific NLL functions for input data. Then `optimise()` allows us to find the best values (the maximum likelihood estimates), given a generous starting range.
+
+```{r}
+x1 <- c(41, 30, 31, 38, 29, 24, 30, 29, 31, 38)
+x2 <- c(6, 4, 7, 3, 3, 7, 5, 2, 2, 7, 5, 4, 12, 6, 9)
+nll1 <- nll_poisson(x1)
+nll2 <- nll_poisson(x2)
+
+optimise(nll1, c(0, 100))$minimum
+optimise(nll2, c(0, 100))$minimum
+```
+
+We can check that these values are correct by comparing them to the analytic solution: in this case, it's just the mean of the data, `r mean(x1)` and `r mean(x2)`.
+
+Things are slightly less elegant when we generalise to more parameters because `optim()`, the generalisation of `optimise()` calls the function with a single argument containing a vector of parameters.
+
+```{r}
+nll_normal <- function(x) {
+  n <- length(x)
+  
+  function(params) {
+    mu <- params[[1]]
+    sigma <- params[[2]]
+    
+    n * log(sigma) + sum((x - mu) ^ 2) / (2 * sigma ^ 2)
+  }
+}
+
+x3 <- c(10.1, 6.12, 8.48, 6.07, 5.27, 5.06, 6.51, 4.34, 3.68, 5.48)
+nll3 <- nll_normal(x1)
+optim(c(0, 1), nll3)$par
+```
+
+## Bootstrap generators
+
+Continuing with the statistical theme, bootstrapping is another place where function factories can be useful. 
+
+```{r}
+boot_permute <- function(df) {
+  n <- nrow(df)
+  
+  function() {
+    df[sample(n, n, replace = TRUE), ]
+  }
+}
+
+boot_mtcars <- boot_permute(mtcars)
+head(boot_mtcars())
+head(boot_mtcars())
+```
+
+You might worry that this produces a function that takes up a lot of memory:
+
+```{r}
+lobstr::obj_size(mtcars)
+lobstr::obj_size(boot_mtcars)
+```
+
+But `boot_mtcars()` doesn't make a copy of `df`, it just captures a reference to it. That means the size of `mtcars` and `boot_mtcars()` together is much smaller than you might expect:
+
+```{r}
+lobstr::obj_size(mtcars, boot_mtcars)
+```
+
+The advantage of a function factory is more clear with a parametric bootstrap where we have to first fit a model. This is a clear set up step that can be done once.
+
+```{r}
+boot_model <- function(df, formula) {
+  mod <- lm(formula, data = df)
+  fitted <- fitted(mod)
+  resid <- resid(mod)
+
+  function() {
+    fitted + sample(resid)
+  }
+} 
+```
+
+## Mutable state with `<<-` {#mutable-state}
+\indexc{<<-} 
+\index{copy-on-modify!exceptions}
+
+Having variables at two levels allows you to maintain state across function invocations. This is possible because while the execution environment is refreshed every time, the enclosing environment is constant. The key to managing variables at different levels is the double arrow assignment operator (`<<-`). Unlike the usual single arrow assignment (`<-`) that always assigns in the current environment, the double arrow operator will keep looking up the chain of parent environments until it finds a matching name. ([Binding names to values](#binding) has more details on how it works.)
+
+Together, a static parent environment and `<<-` make it possible to maintain state across function calls. The following example shows a counter that records how many times a function has been called. Each time `new_counter` is run, it creates an environment, initialises the counter `i` in this environment, and then creates a new function.
+
+```{r}
+new_counter <- function() {
+  i <- 0
+  function() {
+    i <<- i + 1
+    i
+  }
+}
+```
+
+The new function is a closure, and its enclosing environment is the environment created when `new_counter()` is run. Ordinarily, function execution environments are temporary, but a closure maintains access to the environment in which it was created. In the example below, closures `counter_one()` and `counter_two()` each get their own enclosing environments when run, so they can maintain different counts.
+
+```{r}
+counter_one <- new_counter()
+counter_two <- new_counter()
+
+counter_one()
+counter_one()
+counter_two()
+```
+
+The counters get around the "fresh start" limitation by not modifying variables in their local environment. Since the changes are made in the unchanging parent (or enclosing) environment, they are preserved across function calls.
+
+What happens if you don't use a closure? What happens if you use `<-` instead of `<<-`? Make predictions about what will happen if you replace `new_counter()` with the variants below, then run the code and check your predictions.
+
+```{r}
+i <- 0
+new_counter2 <- function() {
+  i <<- i + 1
+  i
+}
+new_counter3 <- function() {
+  i <- 0
+  function() {
+    i <- i + 1
+    i
+  }
+}
+```
+
+Modifying values in a parent environment is an important technique because it is one way to generate "mutable state" in R. Mutable state is normally hard because every time it looks like you're modifying an object, you're actually creating and then modifying a copy. However, if you do need mutable objects and your code is not very simple, it's usually better to use reference classes, as described in [RC](#rc).
+
+The power of closures is tightly coupled with the more advanced ideas in [functionals](#functionals) and [function operators](#function-operators). You'll see many more closures in those two chapters. The following section discusses the third technique of functional programming in R: the ability to store functions in a list.
+
+## Numerical integration {#numerical-integration}
+\index{integration}
+
+A powerful use case for functionals is when you have a family of functions with flexible parameters, and some of the members of the family have special, known, names. You can use the function factory to provide a general builder, and then use the factory to give interesting special cases names.
+
+The idea behind numerical integration is simple: find the area under a curve by approximating the curve with simpler components. The two simplest approaches are the __midpoint__ and __trapezoid__ rules. The midpoint rule approximates a curve with a rectangle. The trapezoid rule uses a trapezoid. Each takes the function we want to integrate, `f`, and a range of values, from `a` to `b`, to integrate over. 
+
+For this example, I'll try to integrate `sin x` from 0 to $\pi$. This is a good choice for testing because it has a simple answer: 2.
+
+```{r}
+midpoint <- function(f, a, b) {
+  (b - a) * f((a + b) / 2)
+}
+
+trapezoid <- function(f, a, b) {
+  (b - a) / 2 * (f(a) + f(b))
+}
+
+midpoint(sin, 0, pi)
+trapezoid(sin, 0, pi)
+```
+
+Neither of these functions gives a very good approximation. To make them more accurate using the idea that underlies calculus: we'll break up the range into smaller pieces and integrate each piece using one of the simple rules. This is called __composite integration__. I'll implement it using two new functions:
+
+```{r, mid-trap}
+midpoint_composite <- function(f, a, b, n = 10) {
+  points <- seq(a, b, length = n + 1)
+  h <- (b - a) / n
+
+  area <- 0
+  for (i in seq_len(n)) {
+    area <- area + h * f((points[i] + points[i + 1]) / 2)
+  }
+  area
+}
+
+trapezoid_composite <- function(f, a, b, n = 10) {
+  points <- seq(a, b, length = n + 1)
+  h <- (b - a) / n
+
+  area <- 0
+  for (i in seq_len(n)) {
+    area <- area + h / 2 * (f(points[i]) + f(points[i + 1]))
+  }
+  area
+}
+
+midpoint_composite(sin, 0, pi, n = 10)
+midpoint_composite(sin, 0, pi, n = 100)
+trapezoid_composite(sin, 0, pi, n = 10)
+trapezoid_composite(sin, 0, pi, n = 100)
+```
+
+```{r, echo = FALSE, eval = FALSE}
+mid <- sapply(1:20, function(n) midpoint_composite(sin, 0, pi, n))
+trap <- sapply(1:20, function(n) trapezoid_composite(sin, 0, pi, n))
+matplot(cbind(mid, trap), 
+  xlab = "Number of pieces", ylab = "Estimate of area")
+```
+
+You'll notice that there's a lot of duplication between `midpoint_composite()` and `trapezoid_composite()`. Apart from the internal rule used to integrate over a range, they are basically the same. From these specific functions you can extract a more general composite integration function:
+
+```{r}
+composite <- function(f, a, b, n = 10, rule) {
+  points <- seq(a, b, length = n + 1)
+
+  area <- 0
+  for (i in seq_len(n)) {
+    area <- area + rule(f, points[i], points[i + 1])
+  }
+
+  area
+}
+
+composite(sin, 0, pi, n = 10, rule = midpoint)
+composite(sin, 0, pi, n = 10, rule = trapezoid)
+```
+
+This function takes two functions as arguments: the function to integrate and the integration rule. We can now add even better rules for integrating over smaller ranges:
+
+```{r}
+simpson <- function(f, a, b) {
+  (b - a) / 6 * (f(a) + 4 * f((a + b) / 2) + f(b))
+}
+
+boole <- function(f, a, b) {
+  pos <- function(i) a + i * (b - a) / 4
+  fi <- function(i) f(pos(i))
+
+  (b - a) / 90 *
+    (7 * fi(0) + 32 * fi(1) + 12 * fi(2) + 32 * fi(3) + 7 * fi(4))
+}
+
+composite(sin, 0, pi, n = 10, rule = simpson)
+composite(sin, 0, pi, n = 10, rule = boole)
+```
+
+It turns out that the midpoint, trapezoid, Simpson, and Boole rules are all examples of a more general family called [Newton-Cotes rules](http://en.wikipedia.org/wiki/Newton%E2%80%93Cotes_formulas). (They are polynomials of increasing complexity.) We  can use this common structure to write a function that can generate any general Newton-Cotes rule:
+
+```{r}
+newton_cotes <- function(coef, open = FALSE) {
+  n <- length(coef) + open
+
+  function(f, a, b) {
+    pos <- function(i) a + i * (b - a) / n
+    points <- pos(seq.int(0, length(coef) - 1))
+
+    (b - a) / sum(coef) * sum(f(points) * coef)
+  }
+}
+
+boole <- newton_cotes(c(7, 32, 12, 32, 7))
+milne <- newton_cotes(c(2, -1, 2), open = TRUE)
+composite(sin, 0, pi, n = 10, rule = milne)
+```
+
+Mathematically, the next step in improving numerical integration is to move from a grid of evenly spaced points to a grid where the points are closer together near the end of the range, such as Gaussian quadrature. That's beyond the scope of this case study, but you could implement it with similar techniques.
+
+### Exercises
+
+1.  The trade-off between integration rules is that more complex rules are 
+    slower to compute, but need fewer pieces. For `sin()` in the range 
+    [0, $\pi$], determine the number of pieces needed so that each rule will 
+    be equally accurate. Illustrate your results with a graph. How do they
+    change for different functions? `sin(1 / x^2)` is particularly challenging.
+
+## Function factories + functionals {#functional-factories}
+
+Easily create a bunch of functions at once.
+
+```{r}
+names <- list(
+  square = 2, 
+  cube = 3, 
+  root = 1/2, 
+  cuberoot = 1/3, 
+  reciprocal = -1
+)
+funs <- purrr::map(names, power1)
+funs$root(64)
+
+funs$root
+```
+
+If the functional has two arguments, you could use `map2()`, and if it has 3 or more, you could use a data frame plus `pmap()`.
+
+See alternative approach in translation - uses quasiquotation so requires more knowledge, but has the advantage of generating functions with more readable bodies, and avoids accidentally capturing large objects in the enclosing scope. The following code is a quick preview of how we could rewrite `power1()` to use quasiquotation instead of a function factory. You'll learn more about this in Section \@ref(quasi-function).
+
+```{r}
+power3 <- function(exponent) {
+  new_function(exprs(x = ), expr({
+    x ^ !!exponent
+  }), env = caller_env())
+}
+
+funs <- purrr::map(names, power3)
+funs$root(64)
+funs$root
+```
+
+### Exercises
+
+1.  Instead of creating individual functions (e.g., `midpoint()`, 
+    `trapezoid()`, `simpson()`, etc.), we could store them in a list. If we 
+    did that, how would that change the code? Can you create the list of 
+    functions from a list of coefficients for the Newton-Cotes formulae?
