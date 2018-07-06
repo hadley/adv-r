@@ -936,7 +936,7 @@ Errors indicate that something has gone wrong, and force the user to handle them
 
 Sometimes a function needs to make a temporary change to global state and you want to ensure those changes are restored when the function completes. It's painful to make sure you cleanup before any explicit return, and what happens if there's an error? Instead, you can set up an __exiting handler__ that is called when the function terminates, regardless of whether it returns a value or throws an error.
 
-To setup an exiting handler, call `on.exit()` with the code to be run. It will execute when the function exits, regardless of what causes it to exit.
+To setup an exiting handler, call `on.exit()` with the code to be run. It will execute when the function exits, regardless of what causes it to exit:
 
 ```{r, error = TRUE}
 j06 <- function(x) {
@@ -987,6 +987,26 @@ with_dir("~", getwd())
 
 See the [withr package](http://withr.r-lib.org) for a collection of functions of this nature.
 
+In R 3.4 and prior, `on.exit()` expressions are always run in the order in which they are created:
+
+```{r}
+f <- function() {
+  on.exit(message("a"), add = TRUE)
+  on.exit(message("b"), add = TRUE)
+}
+f()
+```
+
+This can make cleanup a little tricky if some actions need to happen in a specific order; typically you want the most recent added expression to be run first. In R 3.5 and later, you can control this by setting `after = FALSE`:
+
+```{r, eval = getRversion() >= "3.5"}
+f <- function() {
+  on.exit(message("a"), add = TRUE, after = FALSE)
+  on.exit(message("b"), add = TRUE, after = FALSE)
+}
+f()
+```
+
 ### Exercises
 
 1.  What does `load()` return? Why don't you normally see these values?
@@ -1002,13 +1022,13 @@ See the [withr package](http://withr.r-lib.org) for a collection of functions of
 
 1.  We can use `on.exit()` to implement a simple version of `capture.output()`.
 
-    ```{r}
+    ```{r, eval = getRversion() >= "3.5"}
     capture.output2 <- function(code) {
       temp <- tempfile()
-      on.exit(file.remove(temp), add = TRUE)
+      on.exit(file.remove(temp), add = TRUE, after = TRUE)
 
       sink(temp)
-      on.exit(sink(), add = TRUE)
+      on.exit(sink(), add = TRUE, after = TRUE)
 
       force(code)
       readLines(temp)
