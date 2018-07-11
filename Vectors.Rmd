@@ -586,32 +586,30 @@ Because each element of the list has the same length, data frames have a rectang
 * A data frame has 1d `length()`, but also the 2d `ncol()` and `nrow()`.
   The `length()` is the number of columns.
 
-Data frames are one of the biggest and most powerful ideas of R, and one of the things that makes R different from other programming languages. However, in the over 20 years since their creation, the uses of R have considerably expanded. This means that data types have changed, and some of the design decision that made sense at the time now cause frustration.
+Data frames are one of the biggest and most powerful ideas of R, and one of the things that makes R different from other programming languages. However, in the over 20 years since their creation, the ways people use R have changed, and some of the design decision that made sense at the time now cause frustration.
 
-This frustration lead to the creation of the tibble, a modern reimagining of the data frame. Tibbles are drop-in replacements for data frames, but as you'll learn below have a number of important differences. A concise (but fun) way to summarise the main difference is that tibbles are lazy and surly: they tend to do less and complain more.
+This frustration lead to the creation of the tibble, a modern reimagining of the data frame. Tibbles have been designed to be (as much as possible) drop-in replacements for data frames, while still fixing the greatest frustrations. A concise (but fun) way to summarise the main difference is that tibbles are lazy and surly: they tend to do less and complain more. 
+
+Tibbles are provided by the tibble package and share the the same structure as a data frame:
 
 ```{r}
 library(tibble)
-```
 
-Tibbles share the same structure as a data frame:
-
-```{r}
 df2 <- tibble(x = 1:2, y = 2:1)
 typeof(df2)
 
 attributes(df2)
 ```
 
-Their class is a little more complicated, and includes `tbl_df`, which causes the behaviour of some functions to differ, in ways we'll discuss below.
+The only difference is that the class vector is longer, and includes `tbl_df`. This allows tibbles to behave differently in the key ways which we'll discuss below.
 
-When drawing data frames in this book, rather than focussing on the implementation details, i.e. the attributes:
+When drawing data frames and tibbles, rather than focussing on the implementation details, i.e. the attributes:
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/data-structures/data-frame-1.png", dpi = 300)
 ```
 
-I'll draw data frames and tibbles in the same way as a named list, but arranged to emphaised the columnar structure.
+I'll draw them in the same way as a named list, but arranged to emphasised their columnar structure.
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/data-structures/data-frame-2.png", dpi = 300)
@@ -620,7 +618,7 @@ knitr::include_graphics("diagrams/data-structures/data-frame-2.png", dpi = 300)
 ### Creating {#df-create}
 \indexc{stringsAsFactors}
  
-You create a data frame using `data.frame()`, which takes name-vectors pairs as input:
+You create a data frame by supplying name-vector pairs to `data.frame()`:
 
 ```{r}
 df <- data.frame(
@@ -659,7 +657,7 @@ names(data.frame(`1` = 1))
 names(tibble(`1` = 1))
 ```
 
-Data frames automatically recycle columns that are an integer multiple of the longest column; tibbles only ever recycle vectors of length 1.
+While every element of a data frame (or tibble) must have the same length, both `data.frame()` and `tibble()` can recycle their inputs. Data frames automatically recycle columns that are an integer multiple of the longest column; tibbles only ever recycle vectors of length 1.
 
 ```{r, error = TRUE}
 data.frame(x = 1:4, y = 1:2)
@@ -667,6 +665,51 @@ data.frame(x = 1:4, y = 1:3)
 
 tibble(x = 1:4, y = 1)
 tibble(x = 1:4, y = 1:2)
+```
+
+### Rownames
+
+Data frames allow you to optionally label each row with a "name":
+
+```{r}
+df3 <- data.frame(
+  age = c(35, 27, 18),
+  hair = c("blond", "brown", "black"),
+  row.names = c("Bob", "Susan", "Sam")
+)
+df3
+```
+
+You can get and set with `rownames()`, and use to subset rows:
+
+```{r}
+df3["Bob", ]
+```
+
+Tibbles do not support row names for three reasons:
+
+*  Storing metadata in a different way to data is fundamentally a bad idea. 
+   You have to learn different functions to get and set row names rather than
+   using the tools you already know to get and set other variables.
+
+*  Row names are poor abstraction for labelling rows because it requires that 
+   there be a single string that identifies a row; this is only true in a
+   minority of cases. Many times labelling a row is most naturally done with
+   multiple variables, or with non-character variables.
+   
+*  Rownames must be unique, so any replication of rows (e.g. during 
+   bootstrapping) will cause row names to be changed. If you want to match 
+   rows from before and after the transformation you'll need to perform
+   complicated string surgery.
+
+    ```{r}
+    df3[c(1, 1, 1), ]
+    ```
+
+The tibble package provides `rownames_to_column()`, and a `rownames` argument to `as_tibble()`:
+
+```{r}
+as_tibble(df3, rownames = "name")
 ```
 
 
@@ -678,39 +721,41 @@ One of the most obvious difference between tibbles and data frames is how they a
 dplyr::starwars
 ```
 
-* Only shows the first 10 rows and all the columns that will fit on screen.
+Tibbles:
+
+* Only show the first 10 rows and all the columns that will fit on screen.
   Additional columns are show at bottom.
 
-* Each column is accompanied by an abbrevaited type.
+* Each column is labelled with its type (abbreviated).
 
-* Wide columns are truncated to avoid a single long string 
-  (This is still a work in progress).
+* Wide columns are truncated to avoid a single long string occupying an entire
+  row. (This is still a work in progress: it's tricky to the get tradeoff 
+  right between showing many columns and showing one column fully).
     
-### Subsetting
+### Subsetting {#safe-subsetting}
 
 As you will learn in Chapter \@ref(subsetting), you can subset a data frame or a tibble like a 1d structure (where it behaves like a list), or a 2d structure (where it behaves like a matrix). 
 
-Data frames has three suboptimal behaviours when subsetting:
+In my opinion, data frames have two suboptimal subsetting behaviours:
 
-* When you subset columns with `df[, vars]`, you will get a data frame if 
-  `vars` selects two or more variables; if it selects one, you will get a 
-  vector. Unlesss you always remember to do `df[, vars, drop = FALSE]`
-  this is frequent source of bugs when using `[` in a function.
-
-* When you extract a single column with `$`, data frames will use partial 
-  matching. 
+* When you subset columns with `df[, vars]`, you will get a vector if `vars`
+  selects one variable, otherwise you'll get a data frame. This is a frequent 
+  source of bugs when using `[` in a function, unless you always remember to 
+  do `df[, vars, drop = FALSE]`.
   
-* When you extract a non-extistent column with `$`, a data frame returns `NULL`
-  with no warning. This can lead to confusing error messages in functions,
-  because a downstream error messages is typically less informative.
+* When you extract a single column with `df$x` and there is no column `x`,
+  a data frame will instead select any variable that starts with `x`.
+  If no variable starts with `x`, `df$x` will return a `NULL`. This makes
+  it easier to select the wrong variable, or to select a variable that 
+  doesn't exist.
 
-Tibbles tweak these behaviours:
+Tibbles tweak these behaviours so that `[` always returns a tibble, and `$` doesn't partial match, and warns if it can't find a variable.
 
-* `[` always returns a tibble
-* `$` never does partial matching
-* `$` warns if it can't find a variable
+```{r opts, include = FALSE}
+opts <- options(warnPartialMatchDollar = FALSE)
+```
 
-```{r}
+```{r, dependson="opts"}
 df1 <- data.frame(xyz = "a")
 df2 <- tibble(xyz = "a")
 
@@ -718,37 +763,36 @@ str(df1$x)
 str(df2$x)
 ```
 
-A tibble's insistence on returning a data frame with `[` can cause problems with legacy code, which often uses `df[, "col"]` to extract a single column. To fix this, switch `df[["col"]]`, this is more expressive (since `[[` always extracts a single element) and works with both data frames and tibbles.
+```{r, include = FALSE}
+options(opts)
+```
+
+A tibble's insistence on returning a data frame from `[` can cause problems with legacy code, which often uses `df[, "col"]` to extract a single column. To fix this, switch `df[["col"]]`, this is more expressive (since `[[` always extracts a single element) and works with both data frames and tibbles.
 
 ### Testing and coercing {#df-test-coerce}
 
-To check if an object is a data frame, use `is.data.frame()`:
+To check if an object is a data frame or tibble, use `is.data.frame()`:
 
 ```{r}
 is.data.frame(df1)
+is.data.frame(df2)
 ```
 
-You can coerce an object to a data frame with `as.data.frame()`, which basically follows the same rule as `data.frame()`.
-
-Tibbles are a data frame:
-
-```{r}
-is.data.frame(df1)
-```
-
-If you do need to distinguish between data frames and tibbles, use `is.tibble()`:
+Typically, it should not matter if you have a tibble or data frame, but if you do need to distinguish, use `is.tibble()`:
 
 ```{r}
 is.tibble(df1)
 is.tibble(df2)
 ```
 
+You can coerce an object to a data frame with `as.data.frame()` or to as tibble with `as_tibble()`
+
 ### List columns
 \index{data frames!list-column}
 \index{data frames!matrix-column}
 \indexc{I()}
 
-Since a data frame is a list of vectors, it is possible for a data frame to have a column that is a list. This is a powerful technique because a list can contain any other R object. This means that you can have a column of data frames or model object, allowing you to keep related objects together, no matter how complex. You can see an application of this in the Many Models chapter of "R for Data Sicence", <http://r4ds.had.co.nz/many-models.html>.
+Since a data frame is a list of vectors, it is possible for a data frame to have a column that is a list. This is a powerful technique because a list can contain any other R object, so you can have a column of data frames or models. This allows you to keep related objects together in a row, no matter how complex the individual objects are. You can see an application of this in the Many Models chapter of "R for Data Sicence", <http://r4ds.had.co.nz/many-models.html>.
 
 List-columns are possible in data frames but you have to do a little extra work, either adding the list-column after creation, or wrapping the list in `I()`.
 
@@ -784,7 +828,7 @@ dfm <- data.frame(
   x = 1:3 * 10, 
   y = I(matrix(1:9, nrow = 3)),
   z = I(data.frame(a = runif(3), b = letters[1:3]))
-  )
+)
 str(dfm)
 ```
 ```{r, echo = FALSE, out.width = NULL}
@@ -793,13 +837,13 @@ knitr::include_graphics("diagrams/data-structures/data-frame-matrix.png", dpi = 
 
 (This requires a slight extention to our definition of a data frame: it's not the `length()` of each column that must be equal; but the `NROW()`)
 
-Matrix and data frame columns require a little caution. Many functions that work with data frames assume that all columns are atomic vectors, and the printed display can be confusing.
+Matrix and data frame columns require a little caution. Many functions that work with data frames assume that all columns are vectors, and the printed display can be confusing.
 
 ```{r}
 dfm[2, ]
 ```
 
-At the time of writing, tibbles did not support matrix or data frame columns, but the tidyverse team is working on adding support, and hopefully they'll work by the time you read this!
+At the time of writing, tibbles did not support matrix or data frame columns, but the tidyverse team is working on adding support, and hopefully they'll work by the time you read this.
 
 ### Exercises
 
@@ -812,16 +856,32 @@ At the time of writing, tibbles did not support matrix or data frame columns, bu
 
 ## `NULL`
 
-Closely related to vectors is `NULL`, a singleton object often used to represent a vector of length 0. 
+To finish up the chapter, I wanted to talk about a final important data struture that's closely related to vectors: `NULL`. It's a little special: it has type `NULL`,  length 0, and can not have attributes:
 
 ```{r}
 typeof(NULL)
+
 length(NULL)
+
+structure(NULL, x = 1)
 ```
 
-Important to explain here because `c()` returns NULL.
+You can test for it with `is.null()`:
 
-`NULL` can not have attributes.
+```{r}
+is.null(NULL)
+is.null(FALSE)
+```
+
+`NULL` is often used to represent a vector of length 0. For example, if you use `c()` but don't include any arguments, you get `NULL`, and concatenating `NULL` to a vector leaves it unchange[^identity]:
+
+[^identity]: Technically, this makes `NULL` the identity element under vector concatenation.
+ 
+```{r}
+c()
+```
+
+`NULL` is often used as a way to explicitly say that an entire vector is absent. Contrast this with `NA` which is used to indicate that an _element_ of a vector is absent. For example, `NULL` is often used as a default function argument, when the argument is optional but the default value requires some computation.
 
 ## Answers {#data-structure-answers}
 
