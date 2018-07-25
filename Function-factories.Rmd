@@ -7,10 +7,12 @@ source("common.R")
 
 ## Introduction
 
-A function factory is a function that makes functions. Here's a simple example: we use a function factory (`power()`) to make two child functions (`square()` and `cube()`):
+A function factory is a function that makes functions. Here's a simple example: we use a function factory (`power1()`) to make two child functions (`square()` and `cube()`). You have seen all the components individual before; what's new is that we have a function that returns a function:
 
 ```{r}
 power1 <- function(exp) {
+  force(exp)
+  
   function(x) {
     x ^ exp
   }
@@ -20,7 +22,9 @@ square <- power1(2)
 cube <- power1(3)
 ```
 
-These are regular functions so we can call them as usual:
+Section \@ref(forcing-evaluation).
+
+`square()` and `cube()` are regular functions so we can call them as usual:
 
 ```{r}
 square(2)
@@ -30,7 +34,9 @@ cube(2)
 cube(4)
 ```
 
-Of the three main FP tools, function factories are probably the least useful. However, they do come in handy from time-to-time, and the examples in this chapter will show you when and why. A recurring theme is that function factories tend not to reduce overall complexity, but allow you to partition complexity into a small number of pieces that can be more easily understood.
+Function factories are useful not because they tend to reduce overall complexity,  but because they allow you to partition complexity into a small number of pieces that can be more easily understood.
+
+Of the three main FP tools, function factories are probably the least useful. However, they do come in handy every now and then, and the examples in this chapter will show you when and why. 
 
 ### Outline {-}
 
@@ -38,13 +44,10 @@ Of the three main FP tools, function factories are probably the least useful. Ho
   of how function factories work, pulling together ideas from scoping and 
   environments.
 
-* Section \@ref(MLE) uses function factories to help solve maximum likelihood
-  problems where function factory has many arguments and you call the child
-  function many times. 
-  
-* Section \@ref(bootstrap-generators) uses boostrapping as motivation for
-  function factories that can do some work up front. The results are cached,
-  and then can be used again by the generated function.
+* Section \@ref(stat-fact) uses function factories to help solve two statistical
+  challenge: maximum likelihood estimation and boostrapping. In both examples,
+  you'll see how function factories can partition work, in order to do some
+  upfront, and save time in the long-run.
   
 * Section \@ref(mutable-state) shows how you can use `<<-` with function 
   factories in order to preserve state across function calls. You'll learn 
@@ -64,19 +67,20 @@ Function factories are an important building block for very useful function oper
 
 ### Prerequisites {-}
 
+Function environments.
+
 ```{r setup}
 library(rlang)
 ```
 
 ## Factory fundamentals
-\index{functions!closures|see{closures}}
-\index{closures}
-\index{environments!of a closure}
+\index{closures|see{functions}}
 
-> "An object is data with functions. A closure is a function with data."
-> --- John D. Cook
+On the surface, a function factory is quite simple, and doesn't involve any new syntax: you just create a function inside another functon and return it. However, to understand function factories, you need to pull together some of the ideas we've touched on in earlier chapters, but not fully explored.
 
-When you print a closure, you don't see anything terribly useful:
+### Environments
+
+The key idea is that enclosing environment of function produced by the factory is the execution environment of the factory function. Here, the enclosing environment of `square()` and `cube()` are the execution environments of `power1()`. That means when you print a closure, you don't see anything terribly useful:
 
 ```{r}
 square
@@ -84,35 +88,37 @@ square
 cube
 ```
 
-That's because the function itself doesn't change. The difference is the enclosing environment, `environment(square)`.  That's easier to see if we draw a diagram:
+The body of the function is identical; the difference is the enclosing environment, `environment(square)` and `environment(cube)`, which contain the values bound to `exp`.  We can see that the value of `exp` in the two enclosing environments is different:
+
+```{r}
+environment(square)$exp
+environment(cube)$exp
+```
+
+### Diagram conventions
+
+It's a little easier to see what's going on with a diagram:
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/function-factories/power-full.png", dpi = 300)
 ```
 
-There's a lot going on this diagram, but we can simplify things with a couple of conventions:
+However, there's a lot going on this diagram, so we can simplify things with two conventions:
 
 * Any free floating symbol lives in the global environment.
 
 * Any environment without an explicit parent inherits from the global 
   environment.
 
-Those conventions allows me to redraw the diagram more simply:
+Those conventions make it possible to simplify:
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/function-factories/power-simple.png", dpi = 300)
 ```
 
-We can verify the diagram with some code that looks at the environment of the function:
+### Garbage collection
 
-```{r}
-square_env <- environment(square)
-
-square_env$exp
-env_parent(square_env)
-```
-
-The execution environment of a function is usually ephemeral. But functions bind their enclosing argument, and that reference will keep the execution environment alive until the child function is garbage collected. This property makes function factories work, but requires a little care when you have more complicated code. It's easy to keep variables alive that you don't care about, and this can chew up memory. In the following code, note that `f2()` is so large because it's environment contains the million element vector `x`:
+The execution environment is usually ephemeral, but because functions bind their enclosing argument, that reference will keep the execution environment alive until the child function is GC'd.  This property makes function factories work, but requires a little care when you have more complicated code, as it's easy to accidentally capture large variables that you don't actually care about. Fir example, in the following code, `f2()` is large because its environment contains the million element vector `x`, even though it's never actually used:
 
 ```{r}
 f1 <- function() {
@@ -130,6 +136,175 @@ lobstr::obj_size(f2)
 1.  Base R contains two function factories, `approxfun()` and `ecdf()`. 
     Read their documentation and experiment to figure out what the functions 
     do and what they return.
+
+1.  Create a function `pick()` that takes an index, `i`, as an argument and 
+    returns a function with an argument `x` that subsets `x` with `i`.
+
+    ```{r, eval = FALSE}
+    lapply(mtcars, pick(5))
+    # should do the same as this
+    lapply(mtcars, function(x) x[[5]])
+    ```
+
+## Statistical factories {#stat-fact}
+
+Our first motivating examples for function factories comes from statistics, as I think they're a good match for solving maximum likelihood problems, and working with bootstraps. In both cases, you can solve without function factories, but I think they're a good fit to the problems and lead to slightly more elegant solutions.
+
+### Maximum likelihood estimation {#MLE}
+\index{maximum likelihood}
+\indexc{optimise()}
+\indexc{optim()}
+
+The goal of maximum likelihood estimation (MLE) is to find the "most likely" parameters of a distribution given some data. To do MLE, you start with a probability function. Let's work through a simple example, using the Poisson distribution. For example, if we know $\lambda$ we can compute the probability of getting a vector of `x` values ($x_1$, $x_2$, ..., $x_n$) by multiplying the Poisson probability function as follows:
+
+\[ P(\lambda, \mathbf{x}) = \prod_{i=1}^{n} \frac{\lambda ^ {x_i} e^{-\lambda}}{x_i!} \]
+
+In statistics, we almost always work with the log of this function. The log is a monotonic transformation which preserves important properties (i.e. the maxima are in the same place), but has two important properties:
+
+* Logs turn products in to sums, which make it possible to radically simplify
+  the probability function.
+
+* Multiplying small numbers yields smaller numbers, which can cause numerical
+  complications when working with floating point math. Logged values are much
+  larger.
+
+Let's log transform this probability function and simplify it as much as possible:
+
+\[ \log(P(\lambda, \mathbf{x})) = \sum_{i=1}^{n} \log(\frac{\lambda ^ {x_i} e^{-\lambda}}{x_i!}) \]
+
+\[ \log(P(\lambda, \mathbf{x})) = \sum_{i=1}^{n} \left( x_i \log(\lambda) - \lambda - \log(x_i!) \right) \]
+
+\[ \log(P(\lambda, \mathbf{x})) = 
+     \sum_{i=1}^{n} x_i \log(\lambda)
+   - \sum_{i=1}^{n} \lambda 
+   - \sum_{i=1}^{n} \log(x_i!) \]
+
+\[ \log(P(\lambda, \mathbf{x})) = 
+   \log(\lambda) \sum_{i=1}^{n} x_i - n \lambda - \sum_{i=1}^{n} \log(x_i!) \]
+
+We can now turn this function into an R function. The R function is quite elegant because R is vectorised, and because it's a statistical programming language R comes with built in functions like the log-factorial (`lfactorial()`).
+
+```{r}
+lprob_poisson <- function(lambda, x) {
+  n <- length(x)
+  log(lambda) * sum(x) - n * lambda - sum(lfactorial(x))
+}
+```
+
+The key idea of maximum likelihood is to think about this function in a different way. So far we've been thinking of `lambda` as fixed and known, and the function tells us the probability of getting different `x` values. But in real-life, we have the `x` and we want to figure out the `lambda`. With MLE, we say, given `x`, what value of `lambda` gives us the highest value of `lprob_poisson()`? 
+
+For example take this vector:
+
+```{r}
+x1 <- c(41, 30, 31, 38, 29, 24, 30, 29, 31, 38)
+```
+
+We can try it out and see how likely it is to have come from different values of `lambda`. 
+
+```{r}
+lprob_poisson(10, x1)
+lprob_poisson(20, x1)
+lprob_poisson(30, x1)
+```
+
+The likelihood is the probability function, just seen through a different lens: we want to fix `x` and find the `lambda` that yields the highest result. In R, we can make this distinction more clear by using a function factory. We provide `x` and generate a function with a single parameter, `lambda`:
+
+```{r}
+ll_poisson <- function(x) {
+  n <- length(x)
+
+  function(lambda) {
+    log(lambda) * sum(x) - n * lambda - sum(lfactorial(x))
+  }
+}
+```
+
+One nice thing about this approach is we can do some precomputation: any term that only involves `x` can be computed once in the factory. This is useful, because we're going to need to call this function many times to find the best `lambda`.
+
+```{r}
+ll_poisson <- function(x) {
+  n <- length(x)
+  sum_x <- sum(x)
+  c <- sum(lfactorial(x))
+
+  function(lambda) {
+    log(lambda) * sum_x - n * lambda - c
+  }
+}
+```
+
+Now we can use this function to find the highest value of `lambda`:
+
+```{r}
+ll1 <- ll_poisson(x1)
+
+ll1(10)
+ll1(20)
+ll1(30)
+```
+
+Rather than trial and error, we can automate the process of finding the best value with `optimise()`. The results tells us that the highest value is `-30.27` which occurs when `lambda = 32.1`:
+
+```{r}
+optimise(ll1, c(0, 100), maximum = TRUE)
+```
+
+Now, we could have solved this problem without using a function factory because `optimise()` passes `...` on to the function being optimised. That means we could use the log-probability function directly:
+
+```{r}
+optimise(lprob_poisson, c(0, 100), x = x1, maximum = TRUE)$maximum
+```
+
+The advantage of using a function factory here is fairly small, but there are two niceties:
+
+* We can precompute some values in the factory itself, saving computation time
+  in each iteration.
+  
+* I think the two-level design better reflects the mathematical structure of 
+  the underlying problem.
+
+These advantages get bigger for more complex MLE where you have multiple parameters and multiple data vectors.
+
+### Bootstrap generators
+
+Another statistical application of function factories is bootstrapping. Function factories are useful because rather than thinking about a single bootstrap (as you always need more than one), you than think about a bootstrap __generator__, a function that yields a fresh boostrap every time it is called:
+
+```{r}
+boot_permute <- function(df, var) {
+  n <- nrow(df)
+  
+  function() {
+    df[[var]][sample(n, n, replace = TRUE)]
+  }
+}
+
+boot_mtcars1 <- boot_permute(mtcars, "mpg")
+head(boot_mtcars1())
+head(boot_mtcars1())
+```
+
+The advantage of a function factory is more clear with a parametric bootstrap where we have to first fit a model. We can do this setup step once, when the factory is called, rather than once every time we generate the bootstrap.
+
+```{r}
+boot_model <- function(df, formula) {
+  mod <- lm(formula, data = df)
+  fitted <- unname(fitted(mod))
+  resid <- unname(resid(mod))
+  rm(mod)
+
+  function() {
+    fitted + sample(resid)
+  }
+} 
+
+boot_mtcars2 <- boot_model(mtcars, mpg ~ wt)
+head(boot_mtcars2())
+head(boot_mtcars2())
+```
+
+I include `rm(mod)` because base linear model objects are quite large because they include complete copies of the model matrix, and the original data frame.
+
+### Exercises
 
 1.  What does the following statistical function do? What would be a better 
     name for it? (The existing name is a bit of a hint.)
@@ -157,122 +332,35 @@ lobstr::obj_size(f2)
     stopifnot(all.equal(m2(x), var(x) * 99 / 100))
     ```
 
-1.  Create a function `pick()` that takes an index, `i`, as an argument and 
-    returns a function with an argument `x` that subsets `x` with `i`.
+1.  Why don't you need to worry that `boot_permute()` stores a copy of the 
+    data inside the function that it generates?
 
-    ```{r, eval = FALSE}
-    lapply(mtcars, pick(5))
-    # should do the same as this
-    lapply(mtcars, function(x) x[[5]])
-    ```
+1.  Things are slightly less elegant when we generalise to more parameters 
+    because `optim()`, the n-d generalisation of `optimise()`, calls the 
+    function with a single argument containing a vector of parameters.
 
-## Maximum likelihood estimation {#MLE}
-\index{maximum likelihood}
-\indexc{optimise()}
-\indexc{optim()}
-
-Our first motivating example for function factories comes from statistics. The goal of maximum likelihood estimation (MLE) is to find the "most likely" parameters of a distribution given a set. In MLE, we have two sets of parameters: the data, which is fixed for a given problem, and the parameters, which vary as we try to find the maximum. These two sets of parameters make the problem well suited for function factories: given a dataset we create a new function that returns the likelihood for specified parameters. 
-
-The following example shows how we might find the maximum likelihood estimate for $\lambda$, if our data come from a Poisson distribution. First, we create a function factory that, given a dataset, returns a function that computes the negative[^nll] log likelihood (NLL) for parameter `lambda`.
-
-[^nll]: In R, you usually use the __negative__ log-likelihood because `optimise()` defaults to finding the minimum, not the maximum. 
-
-```{r}
-nll_poisson <- function(x) {
-  n <- length(x)
-  sum_x <- sum(x)
-  
-  function(lambda) {
-    n * lambda - sum_x * log(lambda) # + terms not involving lambda
-  }
-}
-```
-
-Note how the closure allows us to precompute values that are constant with respect to the data.
-
-We can use this function factory to generate specific NLL functions for input data. Then `optimise()` allows us to find the best values (the maximum likelihood estimates), given a generous starting range.
-
-```{r}
-x1 <- c(41, 30, 31, 38, 29, 24, 30, 29, 31, 38)
-x2 <- c(6, 4, 7, 3, 3, 7, 5, 2, 2, 7, 5, 4, 12, 6, 9)
-nll1 <- nll_poisson(x1)
-nll2 <- nll_poisson(x2)
-
-optimise(nll1, c(0, 100))$minimum
-optimise(nll2, c(0, 100))$minimum
-```
-
-We can check that these values are correct by comparing them to the analytic solution: in this case, it's just the mean of the data, `r mean(x1)` and `r mean(x2)`.
-
-Things are slightly less elegant when we generalise to more parameters because `optim()`, the generalisation of `optimise()` calls the function with a single argument containing a vector of parameters.
-
-```{r}
-nll_normal <- function(x) {
-  n <- length(x)
-  
-  function(params) {
-    mu <- params[[1]]
-    sigma <- params[[2]]
+    ```{r}
+    nll_normal <- function(x) {
+      n <- length(x)
+      
+      function(params) {
+        mu <- params[[1]]
+        sigma <- params[[2]]
+        
+        n * log(sigma) + sum((x - mu) ^ 2) / (2 * sigma ^ 2)
+      }
+    }
     
-    n * log(sigma) + sum((x - mu) ^ 2) / (2 * sigma ^ 2)
-  }
-}
-
-x3 <- c(10.1, 6.12, 8.48, 6.07, 5.27, 5.06, 6.51, 4.34, 3.68, 5.48)
-nll3 <- nll_normal(x1)
-optim(c(0, 1), nll3)$par
-```
-
-## Bootstrap generators
-
-Continuing with the statistical theme, bootstrapping is another place where function factories can be useful. 
-
-```{r}
-boot_permute <- function(df) {
-  n <- nrow(df)
-  
-  function() {
-    df[sample(n, n, replace = TRUE), ]
-  }
-}
-
-boot_mtcars <- boot_permute(mtcars)
-head(boot_mtcars())
-head(boot_mtcars())
-```
-
-You might worry that this produces a function that takes up a lot of memory:
-
-```{r}
-lobstr::obj_size(mtcars)
-lobstr::obj_size(boot_mtcars)
-```
-
-But `boot_mtcars()` doesn't make a copy of `df`, it just captures a reference to it. That means the size of `mtcars` and `boot_mtcars()` together is much smaller than you might expect:
-
-```{r}
-lobstr::obj_size(mtcars, boot_mtcars)
-```
-
-The advantage of a function factory is more clear with a parametric bootstrap where we have to first fit a model. This is a clear set up step that can be done once.
-
-```{r}
-boot_model <- function(df, formula) {
-  mod <- lm(formula, data = df)
-  fitted <- fitted(mod)
-  resid <- resid(mod)
-
-  function() {
-    fitted + sample(resid)
-  }
-} 
-```
+    x3 <- c(10.1, 6.12, 8.48, 6.07, 5.27, 5.06, 6.51, 4.34, 3.68, 5.48)
+    nll3 <- nll_normal(x1)
+    optim(c(0, 1), nll3)$par
+    ```
 
 ## Mutable state with `<<-` {#mutable-state}
 \indexc{<<-} 
 \index{copy-on-modify!exceptions}
 
-Having variables at two levels allows you to maintain state across function invocations. This is possible because while the execution environment is refreshed every time, the enclosing environment is constant. The key to managing variables at different levels is the double arrow assignment operator (`<<-`). Unlike the usual single arrow assignment (`<-`) that always assigns in the current environment, the double arrow operator will keep looking up the chain of parent environments until it finds a matching name. ([Binding names to values](#binding) has more details on how it works.)
+Having variables at two levels allows you to maintain state across function invocations. This is possible because while the execution environment is refreshed every time, the enclosing environment is constant. The key to managing variables at different levels is the double arrow assignment operator (`<<-`). Unlike the usual single arrow assignment (`<-`) that always assigns in the current environment, the double arrow operator will keep looking up the chain of parent environments until it finds a matching name. (Section \@label(binding) has more details on how it works.)
 
 Together, a static parent environment and `<<-` make it possible to maintain state across function calls. The following example shows a counter that records how many times a function has been called. Each time `new_counter` is run, it creates an environment, initialises the counter `i` in this environment, and then creates a new function.
 
@@ -284,41 +372,48 @@ new_counter <- function() {
     i
   }
 }
-```
 
-The new function is a closure, and its enclosing environment is the environment created when `new_counter()` is run. Ordinarily, function execution environments are temporary, but a closure maintains access to the environment in which it was created. In the example below, closures `counter_one()` and `counter_two()` each get their own enclosing environments when run, so they can maintain different counts.
-
-```{r}
 counter_one <- new_counter()
 counter_two <- new_counter()
+```
 
+The enclosing environments of `counter_one()` and `counter_two()` are indepedent because they are the execution environments of `new_counter()` (which is different each time it's called). Ordinarily, function execution environments are temporary, but a closure maintains access to the environment in which it was created. In the example below, closures `counter_one()` and `counter_two()` each get their own enclosing environments when run, so they can maintain different counts.
+
+```{r}
 counter_one()
 counter_one()
 counter_two()
 ```
 
-The counters get around the "fresh start" limitation by not modifying variables in their local environment. Since the changes are made in the unchanging parent (or enclosing) environment, they are preserved across function calls.
+The counters get around the "fresh start" limitation by not modifying variables in their execution environment, but in their enclosing environment.
 
-What happens if you don't use a closure? What happens if you use `<-` instead of `<<-`? Make predictions about what will happen if you replace `new_counter()` with the variants below, then run the code and check your predictions.
+Modifying values in a parent environment is an important technique because it is one way to generate "mutable state" in R. Mutable state is normally hard because every time it looks like you're modifying an object, you're actually creating and then modifying a copy. However, if you do need mutable objects and your code is not very simple, it's usually better to use R6, the topic of Chapter \@ref(R6).
 
-```{r}
-i <- 0
-new_counter2 <- function() {
-  i <<- i + 1
-  i
-}
-new_counter3 <- function() {
-  i <- 0
-  function() {
-    i <- i + 1
-    i
-  }
-}
-```
+### Exercises
 
-Modifying values in a parent environment is an important technique because it is one way to generate "mutable state" in R. Mutable state is normally hard because every time it looks like you're modifying an object, you're actually creating and then modifying a copy. However, if you do need mutable objects and your code is not very simple, it's usually better to use reference classes, as described in [RC](#rc).
+1.  What happens if you don't use a closure? Make predictions then verify with 
+    the code below.
 
-The power of closures is tightly coupled with the more advanced ideas in [functionals](#functionals) and [function operators](#function-operators). You'll see many more closures in those two chapters. The following section discusses the third technique of functional programming in R: the ability to store functions in a list.
+    ```{r}
+    i <- 0
+    new_counter2 <- function() {
+      i <<- i + 1
+      i
+    }
+    ```
+
+1.  What happens if you use `<-` instead of `<<-`? Make predictions then verify 
+    with the code below.
+
+    ```{r}
+    new_counter3 <- function() {
+      i <- 0
+      function() {
+        i <- i + 1
+        i
+      }
+    }
+    ```
 
 ## Numerical integration {#numerical-integration}
 \index{integration}
@@ -417,7 +512,7 @@ composite(sin, 0, pi, n = 10, rule = simpson)
 composite(sin, 0, pi, n = 10, rule = boole)
 ```
 
-It turns out that the midpoint, trapezoid, Simpson, and Boole rules are all examples of a more general family called [Newton-Cotes rules](http://en.wikipedia.org/wiki/Newton%E2%80%93Cotes_formulas). (They are polynomials of increasing complexity.) We  can use this common structure to write a function that can generate any general Newton-Cotes rule:
+It turns out that the midpoint, trapezoid, Simpson, and Boole rules are all examples of a more general family called [Newton-Cotes rules](http://en.wikipedia.org/wiki/Newton%E2%80%93Cotes_formulas). (They are polynomials of increasing complexity.) We  can use this common structure to write a function factory that can generate any general Newton-Cotes rule:
 
 ```{r}
 newton_cotes <- function(coef, open = FALSE) {
