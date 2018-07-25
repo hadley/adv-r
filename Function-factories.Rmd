@@ -148,25 +148,22 @@ lobstr::obj_size(f2)
 
 ## Statistical factories {#stat-fact}
 
-Our first motivating examples for function factories comes from statistics, as I think they're a good match for solving maximum likelihood problems, and working with bootstraps. In both cases, you can solve without function factories, but I think they're a good fit to the problems and lead to slightly more elegant solutions.
+Our first motivating examples for function factories come from statistics: solving maximum likelihood problems and working with bootstraps. In both cases, you can solve without function factories, but I think they're a good fit to the problems and lead to slightly more elegant solutions.
 
 ### Maximum likelihood estimation {#MLE}
 \index{maximum likelihood}
 \indexc{optimise()}
 \indexc{optim()}
 
-The goal of maximum likelihood estimation (MLE) is to find the "most likely" parameters of a distribution given some data. To do MLE, you start with a probability function. Let's work through a simple example, using the Poisson distribution. For example, if we know $\lambda$ we can compute the probability of getting a vector of `x` values ($x_1$, $x_2$, ..., $x_n$) by multiplying the Poisson probability function as follows:
+The goal of maximum likelihood estimation (MLE) is to find the parameter values for a distribution that make the observed data "most likely". To do MLE, you start with a probability function. Let's work through a simple example, using the Poisson distribution. For example, if we know $\lambda$, we can compute the probability of getting a vector $\mathbf{x}$ of values ($x_1$, $x_2$, ..., $x_n$) by multiplying the Poisson probability function as follows:
 
 \[ P(\lambda, \mathbf{x}) = \prod_{i=1}^{n} \frac{\lambda ^ {x_i} e^{-\lambda}}{x_i!} \]
 
-In statistics, we almost always work with the log of this function. The log is a monotonic transformation which preserves important properties (i.e. the maxima are in the same place), but has two important properties:
+In statistics, we almost always work with the log of this function. The log is a monotonic transformation which preserves important properties (i.e. the extrema occur in the same place), but has specific advantages:
 
-* Logs turn products in to sums, which make it possible to radically simplify
-  the probability function.
+* The log turns a product into a sum, which is easier to work with.
 
-* Multiplying small numbers yields smaller numbers, which can cause numerical
-  complications when working with floating point math. Logged values are much
-  larger.
+* Multiplying small numbers yields an even smaller number, which makes floating point math more challenging. Logged values are more numerically stable.
 
 Let's log transform this probability function and simplify it as much as possible:
 
@@ -182,7 +179,7 @@ Let's log transform this probability function and simplify it as much as possibl
 \[ \log(P(\lambda, \mathbf{x})) = 
    \log(\lambda) \sum_{i=1}^{n} x_i - n \lambda - \sum_{i=1}^{n} \log(x_i!) \]
 
-We can now turn this function into an R function. The R function is quite elegant because R is vectorised, and because it's a statistical programming language R comes with built in functions like the log-factorial (`lfactorial()`).
+We can now turn this function into an R function. The R function is quite elegant because R is vectorised and, because it's a statistical programming language, R comes with built-in functions like the log-factorial (`lfactorial()`).
 
 ```{r}
 lprob_poisson <- function(lambda, x) {
@@ -191,15 +188,13 @@ lprob_poisson <- function(lambda, x) {
 }
 ```
 
-The key idea of maximum likelihood is to think about this function in a different way. So far we've been thinking of `lambda` as fixed and known, and the function tells us the probability of getting different `x` values. But in real-life, we have the `x` and we want to figure out the `lambda`. With MLE, we say, given `x`, what value of `lambda` gives us the highest value of `lprob_poisson()`? 
-
-For example take this vector:
+Consider this vector of observations:
 
 ```{r}
 x1 <- c(41, 30, 31, 38, 29, 24, 30, 29, 31, 38)
 ```
 
-We can try it out and see how likely it is to have come from different values of `lambda`. 
+We can use `lprob_poisson()` to compute the (logged) probability of `x1` for different values of `lambda`. 
 
 ```{r}
 lprob_poisson(10, x1)
@@ -207,7 +202,9 @@ lprob_poisson(20, x1)
 lprob_poisson(30, x1)
 ```
 
-The likelihood is the probability function, just seen through a different lens: we want to fix `x` and find the `lambda` that yields the highest result. In R, we can make this distinction more clear by using a function factory. We provide `x` and generate a function with a single parameter, `lambda`:
+The key idea of maximum likelihood is to think about the probability function in a different way. So far we've been thinking of `lambda` as fixed and known and the function tells us the probability of getting different `x` values. But in real-life, we observe the `x` and it is `lambda` that is unknown. The likelihood is the probability function, seen through this lens: we want to find the `lambda` that makes the observed `x` the "most likely". That is, given `x`, what value of `lambda` gives us the highest value of `lprob_poisson()`? 
+
+In R, we can make this change in perspective more clear by using a function factory. We provide `x` and generate a function with a single parameter, `lambda`:
 
 ```{r}
 ll_poisson <- function(x) {
@@ -233,7 +230,7 @@ ll_poisson <- function(x) {
 }
 ```
 
-Now we can use this function to find the highest value of `lambda`:
+Now we can use this function to find the value of `lambda` that maximizes the (log) likelihood:
 
 ```{r}
 ll1 <- ll_poisson(x1)
@@ -243,7 +240,7 @@ ll1(20)
 ll1(30)
 ```
 
-Rather than trial and error, we can automate the process of finding the best value with `optimise()`. The results tells us that the highest value is `-30.27` which occurs when `lambda = 32.1`:
+Rather than trial and error, we can automate the process of finding the best value with `optimise()`. The results tell us that the highest value is `-30.27` which occurs when `lambda = 32.1`:
 
 ```{r}
 optimise(ll1, c(0, 100), maximum = TRUE)
@@ -263,7 +260,7 @@ The advantage of using a function factory here is fairly small, but there are tw
 * I think the two-level design better reflects the mathematical structure of 
   the underlying problem.
 
-These advantages get bigger for more complex MLE where you have multiple parameters and multiple data vectors.
+These advantages get bigger in more complex MLE problems, where you have multiple parameters and multiple data vectors.
 
 ### Bootstrap generators
 
