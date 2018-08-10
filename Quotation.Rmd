@@ -376,20 +376,29 @@ So far we have acted as if `!!` and `!!!` are regular prefix operators like `+` 
 
 You might wonder why rlang does not use a regular function call. Indeed, early versions of rlang provided `UQ()` and `UQS()` as alternatives to `!!` and `!!!`. However, these looked like regular function calls, rather than special syntactic operators, and evoked a misleading mental model, which made them harder to use correctly. In particular, function calls only happen (lazily) at evaluation time; unquoting always happens at quotation time. We adopted `!!` and `!!!` as the best compromise: they are strong visual symbols, don't look like existing syntax, and take over a rarely used piece of syntax. (And if for some reason you do need to doubly negate a value in a quasiquoting function, you can just add parentheses `!(!x)`.)
 
-One place where the illusion currently breaks down is `base::deparse()`:
+The biggest downside[^bang-bang-print] to using a fake operator is that you might get silent errors when misusing `!!` outside of quasiquoting functions. Most of the time this is not an issue because `!!` is typically used to unquote expressions or quosures. Since expressions are not supported by the negation operator, you will get an argument type error in this case:
 
-```{r}
-x <- quote(!!x + !!y)
-deparse(x)
+```{r, error = TRUE}
+x <- quote(variable)
+!!x
 ```
 
-Although the R parser can distinguish between `!(x)` and `!x`, the deparser currently does not. You are most likely to see this when printing the source for a function in another package, where the source references have been lost. `rlang::expr_deparse()` works around this problem if you need to manually deparse an expression, but often this does not help because the deparsing occurs outside of your control, as during debugging.
+However be extra careful when unquoting numeric values that can be negated silently:
 
 ```{r}
-expr_deparse(x)
+x <- 100
+with(mtcars, cyl + !!x)
 ```
 
-Hopefully this will be resolved in a future version of R, but for now, you'll need to watch out for this problem.
+Instead of adding the value of `x` to `cyl` as intended, we have in fact added the double negation of `x`:
+
+```{r}
+!x
+!!x
+```
+
+[^bang-bang-print]: Prior to R 3.5.1, there was another major downside: the R deparser was treating `!!x` as `!(!x)`. This is why in old versions of R you might see extra parentheses when printing tidyeval functions at the console. The good news is that these parentheses are not real and can be safely ignored most of the time. The bad news is that they will become real if you reparse that printed output to R code. These roundtripped functions will not work as expected since `!(!x)` does not unquote anything.
+
 
 ### With base R {#unquote-base}
 
