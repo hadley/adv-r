@@ -7,7 +7,7 @@ source("common.R")
 
 ## Introduction
 
-A function factory is a function that makes functions. Here's a simple example: we use a function factory (`power1()`) to make two child functions (`square()` and `cube()`). You have seen all the components individual before; what's new is that we have a function that returns a function:
+A __function factory__ is a function that creates functions. Here's a very simple example: we use a function factory (`power1()`) to make two child functions (`square()` and `cube()`):
 
 ```{r}
 power1 <- function(exp) {
@@ -22,21 +22,28 @@ square <- power1(2)
 cube <- power1(3)
 ```
 
-Section \@ref(forcing-evaluation).
-
-`square()` and `cube()` are regular functions so we can call them as usual:
+I'll call `square()` and `cube()` __manufactured functions__, but this is just a term to ease communication with other humans. From R's perspective they are no different to functions created any other way:
 
 ```{r}
-square(2)
-square(4)
-
-cube(2)
-cube(4)
+square(3)
+cube(3)
 ```
 
-Function factories are useful not because they tend to reduce overall complexity,  but because they allow you to partition complexity into a small number of pieces that can be more easily understood.
+You have already learned about the individual components that make function factories possible:
 
-Of the three main FP tools, function factories are probably the least useful. However, they do come in handy every now and then, and the examples in this chapter will show you when and why. 
+* In Section \@ref(first-class-functions), you learned about R's "first class" 
+  functions and how `<-` binds a function to a name in the same way as for 
+  other objects.
+
+* In Section \@ref(the-function-environment), you learned that a function
+  captures, or encloses, the environment it which it is created.
+
+* In Section \@ref(execution-environments), you learned that a function 
+  creates a new execution environment every time it is run. This environment
+  is usually ephemeral, but here it becomes the enclosing environment of 
+  the manufactured function.
+
+In this chapter, you'll learn the non-obvious combination of these three features that lead to function factory. Of the three main FP tools, function factories are the least useful. Generally, they don't tend to reduce overall code complexity. Instead, they provide a toolkit for breaking down a complex problem into smaller pieces that can be considered separately. They are also an important building block for the very useful function operators, which you'll learn about in the next chapter.
 
 ### Outline {-}
 
@@ -63,24 +70,33 @@ Of the three main FP tools, function factories are probably the least useful. Ho
   factories with functionals to rapidly generate a family of functions
   from data.
 
-Function factories are an important building block for very useful function operators, which you'll learn about in the next chapter.
-
 ### Prerequisites {-}
 
-Function environments.
+Make sure you're familiar with the contents of Sections \@ref(first-class-functions), \@ref(the-function-environment), and \@ref(execution-environments) mentioned above.
+
+Function factories rely on base R functionality, but we'll use a little rlang to more easily peek inside of them. You'll need the development version which includes some tweaks. We'll also use ggplot2 which has a number of components that pair well with function factories.
 
 ```{r setup}
+# devtools::install_github("r-lib/rlang")
 library(rlang)
+
+library(ggplot2)
+library(scales)
 ```
 
 ## Factory fundamentals
 \index{closures|see{functions}}
 
-On the surface, a function factory is quite simple, and doesn't involve any new syntax: you just create a function inside another functon and return it. However, to understand function factories, you need to pull together some of the ideas we've touched on in earlier chapters, but not fully explored.
+The key idea that makes function factories work can be expressed very concisely:
+
+> The enclosing environment of the manufactured function is the execution
+> environment of the function factory. 
+
+While it takes few words to express the big ideas, it takes quite a bit of thinking to fully understand what's going on. This section will help you put the pieces together with interactive exploration and some diagrams.
 
 ### Environments
 
-The key idea is that enclosing environment of function produced by the factory is the execution environment of the factory function. Here, the enclosing environment of `square()` and `cube()` are the execution environments of `power1()`. That means when you print a closure, you don't see anything terribly useful:
+Let's start by taking a look at `square()` and `cube()`:
 
 ```{r}
 square
@@ -88,47 +104,86 @@ square
 cube
 ```
 
-The body of the function is identical; the difference is the enclosing environment, `environment(square)` and `environment(cube)`, which contain the values bound to `exp`.  We can see that the value of `exp` in the two enclosing environments is different:
+Printing manufactured functions is not revealing because the bodies are identical, and the contents of the environments are not printed. We can get a little more insight by using `rlang::env_print()`. That shows us that we have two different environments, each of which was originally the execution environment of `power()`. The environments have the same parent, which is the enclosing environment of `power1()`, the global environment.
 
 ```{r}
-environment(square)$exp
-environment(cube)$exp
+env_print(square)
+
+env_print(cube)
+```
+
+While `env_print()` shows us that both environments have a binding to `exp`, to see key difference, we need to extract the value of `exp` (a future version of `env_print()` is likely to do better at summarising the contents so you don't need this step). That's easily done with `env_get()`:
+
+```{r}
+env_get(square, "exp")
+
+env_get(cube, "exp")
 ```
 
 ### Diagram conventions
 
-It's a little easier to see what's going on with a diagram:
+We can also show these relationships in a diagram:
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/function-factories/power-full.png", dpi = 300)
 ```
 
-However, there's a lot going on this diagram, so we can simplify things with two conventions:
+There's a lot going on this diagram and some of the details aren't that important. We can simplify considerably by using two conventions:
 
 * Any free floating symbol lives in the global environment.
 
 * Any environment without an explicit parent inherits from the global 
   environment.
 
-Those conventions make it possible to simplify:
-
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/function-factories/power-simple.png", dpi = 300)
 ```
 
-### Garbage collection
+This view, which focuses on the environments, doesn't show any direct link between `cube()` and `square()`. That's because the link is the through the body of the function, which is identical for both, but is not shown in this diagram.
 
-The execution environment is usually ephemeral, but because functions bind their enclosing argument, that reference will keep the execution environment alive until the child function is GC'd.  This property makes function factories work, but requires a little care when you have more complicated code, as it's easy to accidentally capture large variables that you don't actually care about. Fir example, in the following code, `f2()` is large because its environment contains the million element vector `x`, even though it's never actually used:
+### Potential pitfalls
+
+There are two potentail pitfalls you need to be aware of when creating your own function factories: lazy evaluation and accidental capture of large objects. 
+
+If you don't eagerly evaluate every argument to a function factory, it's possible to get confusing behaviour:
 
 ```{r}
-f1 <- function() {
-  x <- 1:1e6
-  function() 10
+power2 <- function(exp) {
+  function(x) {
+    x ^ exp
+  }
 }
-lobstr::obj_size(f1)
 
-f2 <- f1()
-lobstr::obj_size(f2)
+exp2 <- 2
+square2 <- power2(exp2)
+exp2 <- 3
+
+square2(2)
+```
+
+This is described in \@ref(forcing-evaluation), and happens when a binding changes in between calling the factory function and calling the manufactured function. This is likely to only happen rarely, but will lead to a real head-scratcher of a bug. Avoid future pain by ensuring every argument is evaluated, using `force()` where needed.
+
+You usually don't worry about creating large temporary objects inside a function because the execution environment is ephemeral, and all objects are unbound when function completes. However, manufactured functions hold on to the execution environment, so you'll need to explicitly unbind any large temporary objects with `rm()`. Compare the sizes of `g1()` and `g2()` in the example below:
+
+```{r}
+f1 <- function(n) {
+  x <- runif(n)
+  m <- mean(x)
+  function() m
+}
+
+g1 <- f1(1e6)
+lobstr::obj_size(g1)
+
+f2 <- function(n) {
+  x <- runif(n)
+  m <- mean(x)
+  rm(x)
+  function() m
+}
+
+g2 <- f2(1e6)
+lobstr::obj_size(g2)
 ```
 
 ### Exercises
@@ -141,14 +196,181 @@ lobstr::obj_size(f2)
     returns a function with an argument `x` that subsets `x` with `i`.
 
     ```{r, eval = FALSE}
+    pick(1)(x)
+    # should be equivalent to
+    x[[1]]
+    
     lapply(mtcars, pick(5))
-    # should do the same as this
+    # should be equivalent to
     lapply(mtcars, function(x) x[[5]])
     ```
 
+## Graphical factories {#graph-fact}
+
+ggplot2 provides a number of motivating examples
+
+### Labelling
+
+Axes: `scales::number_format()`
+
+Facets: `label_bquote()`
+
+### Histogram bins
+
+```{r}
+# construct some sample data with very different numbers in each cell
+n <- c(10, 100, 1000)
+```
+
+Same number of bins in each:
+
+```{r}
+binwidth_bins <- function(n) {
+  force(n)
+  
+  function(x) {
+    (max(x) - min(x)) / n
+  }
+}
+
+ggplot(mtcars, aes(disp)) +
+  geom_histogram(binwidth = binwidth_bins(5)) + 
+  facet_wrap(~ cyl)
+```
+
+```{r}
+base_bins <- function(type) {
+  fun <- switch(type,
+    Sturges = nclass.Sturges,
+    scott = nclass.scott,
+    FD = nclass.FD,
+    stop("Unknown type", call. = FALSE)
+  )
+  
+  function(x) {
+    (max(x) - min(x)) / fun(x)
+  }
+}
+
+ggplot(mtcars, aes(disp)) +
+  geom_histogram(binwidth = base_bins("FD")) + 
+  facet_wrap(~ cyl)
+```
+
+### ggsave
+
+`ggplot2:::plot_dev()`
+Simplified version below.
+Takes an extension and returns a function that opens a graphics device. It's designed to shim over minor differences in the device functions in base R: 
+
+* most have `filename` as first argument but some have `file`
+* dimensions of raster graphics are usually in pixels, where vector graphics
+  are in inches.
+* some file formats have multiple common extensions.
+
+```{r}
+plot_dev <- function(ext, dpi = 96) {
+  switch(ext,
+    eps =  ,
+    ps  =  function(filename, ...) {
+      grDevices::postscript(
+        file = filename, ..., onefile = FALSE, 
+        horizontal = FALSE, paper = "special"
+      )
+    },
+    tex =  function(filename, ...) grDevices::pictex(file = filename, ...),
+    pdf =  function(filename, ...) grDevices::pdf(file = filename, ...),
+    svg  = function(filename, ...) svglite::svglite(file = filename, ...),
+    emf  = ,
+    wmf  = function(...) grDevices::win.metafile(...),
+    png  = function(...) grDevices::png(..., res = dpi, units = "in"),
+    jpg  = ,
+    jpeg = function(...) grDevices::jpeg(..., res = dpi, units = "in"),
+    bmp  = function(...) grDevices::bmp(..., res = dpi, units = "in"),
+    tiff = function(...) grDevices::tiff(..., res = dpi, units = "in")
+  )
+}
+```
+
 ## Statistical factories {#stat-fact}
 
-Our first motivating examples for function factories come from statistics: solving maximum likelihood problems and working with bootstraps. In both cases, you can solve without function factories, but I think they're a good fit to the problems and lead to slightly more elegant solutions.
+Our first motivating examples for function factories come from statistics:
+
+* The Box-Cox transformation
+* Boostrapping 
+* Maximum likelihood estimation. 
+
+All these examples can be tackled without function factories, but I think they're a good fit for these problems and admit elegant solutions. These examples expect some statistical background, so feel free to skip if they don't make much sense to you.
+
+### Box-Cox transformation
+\index{Box-Cox transformation}
+
+The Box-Cox transformation is a flexible transformation often used to transform  data towards normality. It has a single parameter, $\lambda$ which controls the strength of the transformation:
+
+```{r}
+boxcox <- function(lambda) {
+  if (lambda == 0) {
+    function(x) log(x)
+  } else {
+    function(x) (x ^ lambda - 1) / lambda
+  }
+}
+```
+
+Formulating `boxcox()` as a function factory makes it easy to explore its behaviour with `stat_function()`:
+
+```{r}
+ggplot(data.frame(x = c(0, 5)), aes(x)) + 
+  stat_function(aes(colour = "1"), fun = boxcox(1)) + 
+  stat_function(aes(colour = "2"), fun = boxcox(2)) +
+  stat_function(aes(colour = "0.5"), fun = boxcox(0.5))
+
+ggplot(data.frame(x = c(0.01, 1)), aes(x)) + 
+  stat_function(aes(colour = "0.5"), fun = boxcox(0.5)) + 
+  stat_function(aes(colour = "0.25"), fun = boxcox(0.25)) +
+  stat_function(aes(colour = "0"), fun = boxcox(0))
+```
+
+### Bootstrap generators
+\index{boostraping generator}
+
+Function factories are a useful way for thinking about bootstrapping because instead of thinking about a single bootstrap (you always need more than one!), you than think about a bootstrap __generator__, a function that yields a fresh boostrap every time it is called:
+
+```{r}
+boot_permute <- function(df, var) {
+  n <- nrow(df)
+  force(var)
+  
+  function() {
+    df[[var]][sample(n, n, replace = TRUE)]
+  }
+}
+
+boot_mtcars1 <- boot_permute(mtcars, "mpg")
+head(boot_mtcars1())
+head(boot_mtcars1())
+```
+
+The advantage of a function factory is more clear with a parametric bootstrap where we have to first fit a model. We can do this setup step once, when the factory is called, rather than once every time we generate the bootstrap:
+
+```{r}
+boot_model <- function(df, formula) {
+  mod <- lm(formula, data = df)
+  fitted <- unname(fitted(mod))
+  resid <- unname(resid(mod))
+  rm(mod)
+
+  function() {
+    fitted + sample(resid)
+  }
+} 
+
+boot_mtcars2 <- boot_model(mtcars, mpg ~ wt)
+head(boot_mtcars2())
+head(boot_mtcars2())
+```
+
+I use `rm(mod)` because linear model objects are quite large (they include complete copies of the model matrix and input data) and I want to keep the generator function as small as possible.
 
 ### Maximum likelihood estimation {#MLE}
 \index{maximum likelihood}
@@ -262,59 +484,11 @@ The advantage of using a function factory here is fairly small, but there are tw
 
 These advantages get bigger in more complex MLE problems, where you have multiple parameters and multiple data vectors.
 
-### Bootstrap generators
-
-Another statistical application of function factories is bootstrapping. Function factories are useful because rather than thinking about a single bootstrap (as you always need more than one), you than think about a bootstrap __generator__, a function that yields a fresh boostrap every time it is called:
-
-```{r}
-boot_permute <- function(df, var) {
-  n <- nrow(df)
-  
-  function() {
-    df[[var]][sample(n, n, replace = TRUE)]
-  }
-}
-
-boot_mtcars1 <- boot_permute(mtcars, "mpg")
-head(boot_mtcars1())
-head(boot_mtcars1())
-```
-
-The advantage of a function factory is more clear with a parametric bootstrap where we have to first fit a model. We can do this setup step once, when the factory is called, rather than once every time we generate the bootstrap.
-
-```{r}
-boot_model <- function(df, formula) {
-  mod <- lm(formula, data = df)
-  fitted <- unname(fitted(mod))
-  resid <- unname(resid(mod))
-  rm(mod)
-
-  function() {
-    fitted + sample(resid)
-  }
-} 
-
-boot_mtcars2 <- boot_model(mtcars, mpg ~ wt)
-head(boot_mtcars2())
-head(boot_mtcars2())
-```
-
-I include `rm(mod)` because base linear model objects are quite large because they include complete copies of the model matrix, and the original data frame.
 
 ### Exercises
 
-1.  What does the following statistical function do? What would be a better 
-    name for it? (The existing name is a bit of a hint.)
-
-    ```{r}
-    bc <- function(lambda) {
-      if (lambda == 0) {
-        function(x) log(x)
-      } else {
-        function(x) (x ^ lambda - 1) / lambda
-      }
-    }
-    ```
+1.  In `boot_model()`, why don't I need to force the evaluation of `df` 
+    or `model`?
 
 1.  Create a function that creates functions that compute the ith 
     [central moment](http://en.wikipedia.org/wiki/Central_moment) of a numeric 
@@ -353,7 +527,7 @@ I include `rm(mod)` because base linear model objects are quite large because th
     optim(c(0, 1), nll3)$par
     ```
 
-## Mutable state with `<<-` {#mutable-state}
+## Mutable state {#mutable-state}
 \indexc{<<-} 
 \index{copy-on-modify!exceptions}
 
@@ -412,132 +586,6 @@ Modifying values in a parent environment is an important technique because it is
     }
     ```
 
-## Numerical integration {#numerical-integration}
-\index{integration}
-
-A powerful use case for functionals is when you have a family of functions with flexible parameters, and some of the members of the family have special, known, names. You can use the function factory to provide a general builder, and then use the factory to give interesting special cases names.
-
-The idea behind numerical integration is simple: find the area under a curve by approximating the curve with simpler components. The two simplest approaches are the __midpoint__ and __trapezoid__ rules. The midpoint rule approximates a curve with a rectangle. The trapezoid rule uses a trapezoid. Each takes the function we want to integrate, `f`, and a range of values, from `a` to `b`, to integrate over. 
-
-For this example, I'll try to integrate `sin x` from 0 to $\pi$. This is a good choice for testing because it has a simple answer: 2.
-
-```{r}
-midpoint <- function(f, a, b) {
-  (b - a) * f((a + b) / 2)
-}
-
-trapezoid <- function(f, a, b) {
-  (b - a) / 2 * (f(a) + f(b))
-}
-
-midpoint(sin, 0, pi)
-trapezoid(sin, 0, pi)
-```
-
-Neither of these functions gives a very good approximation. To make them more accurate using the idea that underlies calculus: we'll break up the range into smaller pieces and integrate each piece using one of the simple rules. This is called __composite integration__. I'll implement it using two new functions:
-
-```{r, mid-trap}
-midpoint_composite <- function(f, a, b, n = 10) {
-  points <- seq(a, b, length = n + 1)
-  h <- (b - a) / n
-
-  area <- 0
-  for (i in seq_len(n)) {
-    area <- area + h * f((points[i] + points[i + 1]) / 2)
-  }
-  area
-}
-
-trapezoid_composite <- function(f, a, b, n = 10) {
-  points <- seq(a, b, length = n + 1)
-  h <- (b - a) / n
-
-  area <- 0
-  for (i in seq_len(n)) {
-    area <- area + h / 2 * (f(points[i]) + f(points[i + 1]))
-  }
-  area
-}
-
-midpoint_composite(sin, 0, pi, n = 10)
-midpoint_composite(sin, 0, pi, n = 100)
-trapezoid_composite(sin, 0, pi, n = 10)
-trapezoid_composite(sin, 0, pi, n = 100)
-```
-
-```{r, echo = FALSE, eval = FALSE}
-mid <- sapply(1:20, function(n) midpoint_composite(sin, 0, pi, n))
-trap <- sapply(1:20, function(n) trapezoid_composite(sin, 0, pi, n))
-matplot(cbind(mid, trap), 
-  xlab = "Number of pieces", ylab = "Estimate of area")
-```
-
-You'll notice that there's a lot of duplication between `midpoint_composite()` and `trapezoid_composite()`. Apart from the internal rule used to integrate over a range, they are basically the same. From these specific functions you can extract a more general composite integration function:
-
-```{r}
-composite <- function(f, a, b, n = 10, rule) {
-  points <- seq(a, b, length = n + 1)
-
-  area <- 0
-  for (i in seq_len(n)) {
-    area <- area + rule(f, points[i], points[i + 1])
-  }
-
-  area
-}
-
-composite(sin, 0, pi, n = 10, rule = midpoint)
-composite(sin, 0, pi, n = 10, rule = trapezoid)
-```
-
-This function takes two functions as arguments: the function to integrate and the integration rule. We can now add even better rules for integrating over smaller ranges:
-
-```{r}
-simpson <- function(f, a, b) {
-  (b - a) / 6 * (f(a) + 4 * f((a + b) / 2) + f(b))
-}
-
-boole <- function(f, a, b) {
-  pos <- function(i) a + i * (b - a) / 4
-  fi <- function(i) f(pos(i))
-
-  (b - a) / 90 *
-    (7 * fi(0) + 32 * fi(1) + 12 * fi(2) + 32 * fi(3) + 7 * fi(4))
-}
-
-composite(sin, 0, pi, n = 10, rule = simpson)
-composite(sin, 0, pi, n = 10, rule = boole)
-```
-
-It turns out that the midpoint, trapezoid, Simpson, and Boole rules are all examples of a more general family called [Newton-Cotes rules](http://en.wikipedia.org/wiki/Newton%E2%80%93Cotes_formulas). (They are polynomials of increasing complexity.) We  can use this common structure to write a function factory that can generate any general Newton-Cotes rule:
-
-```{r}
-newton_cotes <- function(coef, open = FALSE) {
-  degree <- length(coef) + 2 * open - 1
-
-  function(f, a, b) {
-    pos <- function(i) a + i * (b - a) / degree
-    points <- pos(seq.int(open, degree - open))
-
-    (b - a) / sum(coef) * sum(f(points) * coef)
-  }
-}
-
-boole <- newton_cotes(c(7, 32, 12, 32, 7))
-milne <- newton_cotes(c(2, -1, 2), open = TRUE)
-composite(sin, 0, pi, n = 10, rule = milne)
-```
-
-Mathematically, the next step in improving numerical integration is to move from a grid of evenly spaced points to a grid where the points are closer together near the end of the range, such as Gaussian quadrature. That's beyond the scope of this case study, but you could implement it with similar techniques.
-
-### Exercises
-
-1.  The trade-off between integration rules is that more complex rules are 
-    slower to compute, but need fewer pieces. For `sin()` in the range 
-    [0, $\pi$], determine the number of pieces needed so that each rule will 
-    be equally accurate. Illustrate your results with a graph. How do they
-    change for different functions? `sin(1 / x^2)` is particularly challenging.
-
 ## Function factories + functionals {#functional-factories}
 
 Easily create a bunch of functions at once.
@@ -561,6 +609,7 @@ If the functional has two arguments, you could use `map2()`, and if it has 3 or 
 See alternative approach in translation - uses quasiquotation so requires more knowledge, but has the advantage of generating functions with more readable bodies, and avoids accidentally capturing large objects in the enclosing scope. The following code is a quick preview of how we could rewrite `power1()` to use quasiquotation instead of a function factory. You'll learn more about this in Section \@ref(quasi-function).
 
 ```{r}
+library(rlang)
 power3 <- function(exponent) {
   new_function(exprs(x = ), expr({
     x ^ !!exponent
@@ -578,3 +627,4 @@ funs$root
     `trapezoid()`, `simpson()`, etc.), we could store them in a list. If we 
     did that, how would that change the code? Can you create the list of 
     functions from a list of coefficients for the Newton-Cotes formulae?
+

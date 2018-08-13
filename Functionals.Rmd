@@ -927,37 +927,6 @@ I recommend the first option, using `with()`, because it makes it very clear whe
     (e) It depends.
 
 
-## Mathematical functionals {#functionals-math}
-
-Functionals are very common in mathematics. The limit, the maximum, the roots (the set of points where `f(x) = 0`), and the definite integral are all functionals: given a function, they return a single number (or vector of numbers). At first glance, these functions don't seem to fit in with the theme of eliminating loops, but if you dig deeper you'll find out that they are all implemented using an algorithm that involves iteration.
-
-In this section we'll use some of R's built-in mathematical functionals. There are three functionals that work with functions to return single numeric values: \indexc{integrate()} \indexc{uniroot()} \indexc{optimise()}
-
-* `integrate()` finds the area under the curve defined by `f()`
-* `uniroot()` finds where `f()` hits zero
-* `optimise()` finds the location of lowest (or highest) value of `f()`
-
-Let's explore how these are used with a simple function, `sin()`:
-
-```{r}
-integrate(sin, 0, pi)
-str(uniroot(sin, pi * c(1 / 2, 3 / 2)))
-str(optimise(sin, c(0, 2 * pi)))
-str(optimise(sin, c(0, pi), maximum = TRUE))
-```
-
-### Exercises
-
-1.  Implement `arg_max()`. It should take a function and a vector of inputs, 
-    and return the elements of the input where the function returns the highest 
-    value. For example, `arg_max(-10:5, function(x) x ^ 2)` should return -10.
-    `arg_max(-5:5, function(x) x ^ 2)` should return `c(-5, 5)`.
-    Also implement the matching `arg_min()` function.
-
-1.  Challenge: read about the 
-    [fixed point algorithm](http://mitpress.mit.edu/sicp/full-text/book/book-Z-H-12.html#%_sec_1.3). 
-    Complete the exercises using R.
-
 ## Loops that should be left as is {#functionals-not}
 
 Some loops have no natural functional equivalent. In this section you'll learn about three common cases: \index{loops!when to use}
@@ -1048,185 +1017,157 @@ This is a common problem when you're writing simulations.
 
 In this case we can remove the loop by recognising a special feature of the problem. Here we're counting the number of failures before Bernoulli trial with p = 0.1 succeeds. This is a geometric random variable, so you could replace the code with `i <- rgeom(1, 0.1)`. Reformulating the problem in this way is hard to do in general, but you'll benefit greatly if you can do it for your problem.
 
-## A family of functions {#function-family}
+## Mathematical functionals {#functionals-math}
 
-To finish off the chapter, this case study shows how you can use functionals to take a simple building block and make it powerful and general. I'll start with a simple idea, adding two numbers together, and use functionals to extend it to summing multiple numbers, computing parallel and cumulative sums, and summing across array dimensions. 
+Functionals are very common in mathematics. The limit, the maximum, the roots (the set of points where `f(x) = 0`), and the definite integral are all functionals: given a function, they return a single number (or vector of numbers). At first glance, these functions don't seem to fit in with the theme of eliminating loops, but if you dig deeper you'll find out that they are all implemented using an algorithm that involves iteration.
 
-We'll start by defining a very simple addition function, one which takes two scalar arguments:
+In this section we'll use some of R's built-in mathematical functionals. There are three functionals that work with functions to return single numeric values: \indexc{integrate()} \indexc{uniroot()} \indexc{optimise()}
+
+* `integrate()` finds the area under the curve defined by `f()`
+* `uniroot()` finds where `f()` hits zero
+* `optimise()` finds the location of lowest (or highest) value of `f()`
+
+Let's explore how these are used with a simple function, `sin()`:
 
 ```{r}
-add <- function(x, y) {
-  stopifnot(length(x) == 1, length(y) == 1,
-    is.numeric(x), is.numeric(y))
-  x + y
-}
+integrate(sin, 0, pi)
+str(uniroot(sin, pi * c(1 / 2, 3 / 2)))
+str(optimise(sin, c(0, 2 * pi)))
+str(optimise(sin, c(0, pi), maximum = TRUE))
 ```
 
-(We're using R's existing addition operator here, which does much more, but the focus here is on how we can take very simple building blocks and extend them to do more.)
+### Numerical integration {#numerical-integration}
+\index{integration}
 
-I'll also add an `na.rm` argument. A helper function will make this a bit easier: if `x` is missing it should return `y`, if `y` is missing it should return `x`, and if both `x` and `y` are missing then it should return another argument to the function: `identity`. This function is probably a bit more general than what we need now, but it's useful if we implement other binary operators.
+A powerful use case for functionals is when you have a family of functions with flexible parameters, and some of the members of the family have special, known, names. You can use the function factory to provide a general builder, and then use the factory to give interesting special cases names.
+
+The idea behind numerical integration is simple: find the area under a curve by approximating the curve with simpler components. The two simplest approaches are the __midpoint__ and __trapezoid__ rules. The midpoint rule approximates a curve with a rectangle. The trapezoid rule uses a trapezoid. Each takes the function we want to integrate, `f`, and a range of values, from `a` to `b`, to integrate over. 
+
+For this example, I'll try to integrate `sin x` from 0 to $\pi$. This is a good choice for testing because it has a simple answer: 2.
 
 ```{r}
-rm_na <- function(x, y, identity) {
-  if (is.na(x) && is.na(y)) {
-    identity
-  } else if (is.na(x)) {
-    y
-  } else {
-    x
+midpoint <- function(f, a, b) {
+  (b - a) * f((a + b) / 2)
+}
+
+trapezoid <- function(f, a, b) {
+  (b - a) / 2 * (f(a) + f(b))
+}
+
+midpoint(sin, 0, pi)
+trapezoid(sin, 0, pi)
+```
+
+Neither of these functions gives a very good approximation. To make them more accurate using the idea that underlies calculus: we'll break up the range into smaller pieces and integrate each piece using one of the simple rules. This is called __composite integration__. I'll implement it using two new functions:
+
+```{r, mid-trap}
+midpoint_composite <- function(f, a, b, n = 10) {
+  points <- seq(a, b, length = n + 1)
+  h <- (b - a) / n
+
+  area <- 0
+  for (i in seq_len(n)) {
+    area <- area + h * f((points[i] + points[i + 1]) / 2)
+  }
+  area
+}
+
+trapezoid_composite <- function(f, a, b, n = 10) {
+  points <- seq(a, b, length = n + 1)
+  h <- (b - a) / n
+
+  area <- 0
+  for (i in seq_len(n)) {
+    area <- area + h / 2 * (f(points[i]) + f(points[i + 1]))
+  }
+  area
+}
+
+midpoint_composite(sin, 0, pi, n = 10)
+midpoint_composite(sin, 0, pi, n = 100)
+trapezoid_composite(sin, 0, pi, n = 10)
+trapezoid_composite(sin, 0, pi, n = 100)
+```
+
+```{r, echo = FALSE, eval = FALSE}
+mid <- sapply(1:20, function(n) midpoint_composite(sin, 0, pi, n))
+trap <- sapply(1:20, function(n) trapezoid_composite(sin, 0, pi, n))
+matplot(cbind(mid, trap), 
+  xlab = "Number of pieces", ylab = "Estimate of area")
+```
+
+You'll notice that there's a lot of duplication between `midpoint_composite()` and `trapezoid_composite()`. Apart from the internal rule used to integrate over a range, they are basically the same. From these specific functions you can extract a more general composite integration function:
+
+```{r}
+composite <- function(f, a, b, n = 10, rule) {
+  points <- seq(a, b, length = n + 1)
+
+  area <- 0
+  for (i in seq_len(n)) {
+    area <- area + rule(f, points[i], points[i + 1])
+  }
+
+  area
+}
+
+composite(sin, 0, pi, n = 10, rule = midpoint)
+composite(sin, 0, pi, n = 10, rule = trapezoid)
+```
+
+This function takes two functions as arguments: the function to integrate and the integration rule. We can now add even better rules for integrating over smaller ranges:
+
+```{r}
+simpson <- function(f, a, b) {
+  (b - a) / 6 * (f(a) + 4 * f((a + b) / 2) + f(b))
+}
+
+boole <- function(f, a, b) {
+  pos <- function(i) a + i * (b - a) / 4
+  fi <- function(i) f(pos(i))
+
+  (b - a) / 90 *
+    (7 * fi(0) + 32 * fi(1) + 12 * fi(2) + 32 * fi(3) + 7 * fi(4))
+}
+
+composite(sin, 0, pi, n = 10, rule = simpson)
+composite(sin, 0, pi, n = 10, rule = boole)
+```
+
+It turns out that the midpoint, trapezoid, Simpson, and Boole rules are all examples of a more general family called [Newton-Cotes rules](http://en.wikipedia.org/wiki/Newton%E2%80%93Cotes_formulas). (They are polynomials of increasing complexity.) We  can use this common structure to write a function factory that can generate any general Newton-Cotes rule:
+
+```{r}
+newton_cotes <- function(coef, open = FALSE) {
+  degree <- length(coef) + 2 * open - 1
+
+  function(f, a, b) {
+    pos <- function(i) a + i * (b - a) / degree
+    points <- pos(seq.int(open, degree - open))
+
+    (b - a) / sum(coef) * sum(f(points) * coef)
   }
 }
-rm_na(NA, 10, 0)
-rm_na(10, NA, 0)
-rm_na(NA, NA, 0)
+
+boole <- newton_cotes(c(7, 32, 12, 32, 7))
+milne <- newton_cotes(c(2, -1, 2), open = TRUE)
+composite(sin, 0, pi, n = 10, rule = milne)
 ```
 
-This allows us to write a version of `add()` that can deal with missing values if needed:
-
-```{r}
-add <- function(x, y, na.rm = FALSE) {
-  if (na.rm && (is.na(x) || is.na(y))) rm_na(x, y, 0) else x + y
-}
-add(10, NA)
-add(10, NA, na.rm = TRUE)
-add(NA, NA)
-add(NA, NA, na.rm = TRUE)
-```
-
-Why did we pick an identity of `0`? Why should `add(NA, NA, na.rm = TRUE)` return 0? Well, for every other input it returns a number, so even if both arguments are `NA`, it should still do that. What number should it return? We can figure it out because addition is associative, which means that the order of addition doesn't matter. That means that the following two function calls should return the same value:
-
-```{r}
-add(add(3, NA, na.rm = TRUE), NA, na.rm = TRUE)
-add(3, add(NA, NA, na.rm = TRUE), na.rm = TRUE)
-```
-
-This implies that `add(NA, NA, na.rm = TRUE)` must be 0, and hence `identity = 0` is the correct default.
-
-Now that we have the basics working, we can extend the function to deal with more complicated inputs. One obvious generalisation is to add more than two numbers. We can do this by iteratively adding two numbers: if the input is `c(1, 2, 3)` we compute `add(add(1, 2), 3)`. This is a simple application of `Reduce()`:
-
-```{r}
-r_add <- function(xs, na.rm = TRUE) {
-  Reduce(function(x, y) add(x, y, na.rm = na.rm), xs)
-}
-r_add(c(1, 4, 10))
-```
-
-This looks good, but we need to test a few special cases:
-
-```{r}
-r_add(NA, na.rm = TRUE)
-r_add(numeric())
-```
-
-These are incorrect. In the first case, we get a missing value even though we've explicitly asked to ignore them. In the second case, we get `NULL` instead of a length one numeric vector (as we do for every other set of inputs).
-
-The two problems are related. If we give `Reduce()` a length one vector, it doesn't have anything to reduce, so it just returns the input. If we give it an input of length zero, it always returns `NULL`. The easiest way to fix this problem is to use the `init` argument of `Reduce()`. This is added to the start of every input vector:
-
-```{r}
-r_add <- function(xs, na.rm = TRUE) {
-  Reduce(function(x, y) add(x, y, na.rm = na.rm), xs, init = 0)
-}
-r_add(c(1, 4, 10))
-r_add(NA, na.rm = TRUE)
-r_add(numeric())
-```
-
-`r_add()` is equivalent to `sum()`.
-
-It would be nice to have a vectorised version of `add()` so that we can perform the addition of two vectors of numbers in element-wise fashion. We could use `Map()` or `vapply()` to implement this, but neither is perfect. `Map()` returns a list, instead of a numeric vector, so we need to use `simplify2array()`. `vapply()` returns a vector but it requires us to loop over a set of indices.
-
-```{r}
-v_add1 <- function(x, y, na.rm = FALSE) {
-  stopifnot(length(x) == length(y), is.numeric(x), is.numeric(y))
-  if (length(x) == 0) return(numeric())
-  simplify2array(
-    Map(function(x, y) add(x, y, na.rm = na.rm), x, y)
-  )
-}
-
-v_add2 <- function(x, y, na.rm = FALSE) {
-  stopifnot(length(x) == length(y), is.numeric(x), is.numeric(y))
-  vapply(seq_along(x), function(i) add(x[i], y[i], na.rm = na.rm),
-    numeric(1))
-}
-```
-
-A few test cases help to ensure that it behaves as we expect. We're a bit stricter than base R here because we don't do recycling. (You could add that if you wanted, but I find that recycling is a frequent source of silent bugs.)
-
-```{r}
-# Both versions give the same results
-v_add1(1:10, 1:10)
-v_add1(numeric(), numeric())
-v_add1(c(1, NA), c(1, NA))
-v_add1(c(1, NA), c(1, NA), na.rm = TRUE)
-```
-
-Another variant of `add()` is the cumulative sum. We can implement it with `Reduce()` by setting the `accumulate` argument to `TRUE`:
-
-```{r}
-c_add <- function(xs, na.rm = FALSE) {
-  Reduce(function(x, y) add(x, y, na.rm = na.rm), xs,
-    accumulate = TRUE)
-}
-c_add(1:10)
-c_add(10:1)
-```
-
-This is equivalent to `cumsum()`.
-
-Finally, we might want to define addition for more complicated data structures like matrices. We could create `row` and `col` variants that sum across rows and columns, respectively, or we could go the whole hog and define an array version that could sum across any arbitrary set of dimensions. These are easily implemented as combinations of `r_add()` and `apply()`.
-
-```{r}
-row_sum <- function(x, na.rm = FALSE) {
-  apply(x, 1, r_add, na.rm = na.rm)
-}
-col_sum <- function(x, na.rm = FALSE) {
-  apply(x, 2, r_add, na.rm = na.rm)
-}
-arr_sum <- function(x, dim, na.rm = FALSE) {
-  apply(x, dim, r_add, na.rm = na.rm)
-}
-```
-
-The first two are equivalent to `rowSums()` and `colSums()`.
-
-If every function we have created has an existing equivalent in base R, why did we bother? There are two main reasons:
-
-* Since all variants were implemented by combining a simple binary operator 
-  (`add()`) and a well-tested functional (`Reduce()`, `Map()`, `apply()`), 
-  we know that our variants will behave consistently.
-
-* We can apply the same infrastructure to other operators, especially those 
-  that might not have the full suite of variants in base R.
-
-The downside of this approach is that these implementations are not that efficient. (For example, `colSums(x)` is much faster than `apply(x, 2, sum)`.) However, even if they aren't that fast, simple implementations are still a good starting point because they're less likely to have bugs. When you create faster versions, you can compare the results to make sure your fast versions are still correct.
-
-If you enjoyed this section, you might also enjoy ["List out of lambda"](http://stevelosh.com/blog/2013/03/list-out-of-lambda/), a blog article by Steve Losh that shows how you can produce high level language structures (like lists) out of more primitive language features (like closures, aka lambdas).
+Mathematically, the next step in improving numerical integration is to move from a grid of evenly spaced points to a grid where the points are closer together near the end of the range, such as Gaussian quadrature. That's beyond the scope of this case study, but you could implement it with similar techniques.
 
 ### Exercises
 
-1.  Implement `smaller` and `larger` functions that, given two inputs, return 
-    either the smaller or the larger value. Implement `na.rm = TRUE`: what 
-    should the identity be? (Hint: 
-    `smaller(x, smaller(NA, NA, na.rm = TRUE), na.rm = TRUE)` must be `x`, so 
-    `smaller(NA, NA, na.rm = TRUE)` must be bigger than any other value of x.) 
-    Use `smaller` and `larger` to implement equivalents of `min()`, `max()`,
-    `pmin()`, `pmax()`, and new functions `row_min()` and `row_max()`.
+1.  The trade-off between integration rules is that more complex rules are 
+    slower to compute, but need fewer pieces. For `sin()` in the range 
+    [0, $\pi$], determine the number of pieces needed so that each rule will 
+    be equally accurate. Illustrate your results with a graph. How do they
+    change for different functions? `sin(1 / x^2)` is particularly challenging.
 
-1.  Create a table that has _and_, _or_, _add_, _multiply_, _smaller_, and 
-    _larger_ in the columns and _binary operator_, _reducing variant_, 
-    _vectorised variant_, and _array variants_ in the rows.
+1.  Implement `arg_max()`. It should take a function and a vector of inputs, 
+    and return the elements of the input where the function returns the highest 
+    value. For example, `arg_max(-10:5, function(x) x ^ 2)` should return -10.
+    `arg_max(-5:5, function(x) x ^ 2)` should return `c(-5, 5)`.
+    Also implement the matching `arg_min()` function.
 
-    a) Fill in the cells with the names of base R functions that perform each of
-       the roles.
-
-    a) Compare the names and arguments of the existing R functions. How
-       consistent are they? How could you improve them?
-
-    a) Complete the matrix by implementing any missing functions.
-
-1.  How does `paste()` fit into this structure? What is the scalar binary 
-    function that underlies `paste()`? What are the `sep` and `collapse` 
-    arguments to `paste()` equivalent to? Are there any `paste` variants 
-    that don't have existing R implementations?
-
+1.  Challenge: read about the 
+    [fixed point algorithm](http://mitpress.mit.edu/sicp/full-text/book/book-Z-H-12.html#%_sec_1.3). 
+    Complete the exercises using R.
