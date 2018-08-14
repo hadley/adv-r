@@ -32,8 +32,8 @@ cube(3)
 You have already learned about the individual components that make function factories possible:
 
 * In Section \@ref(first-class-functions), you learned about R's "first class" 
-  functions and how `<-` binds a function to a name in the same way as for 
-  other objects.
+  functions and how `<-` binds a function to a name no differently to any other
+  type of object.
 
 * In Section \@ref(the-function-environment), you learned that a function
   captures, or encloses, the environment it which it is created.
@@ -43,32 +43,33 @@ You have already learned about the individual components that make function fact
   is usually ephemeral, but here it becomes the enclosing environment of 
   the manufactured function.
 
-In this chapter, you'll learn the non-obvious combination of these three features that lead to function factory. Of the three main FP tools, function factories are the least useful. Generally, they don't tend to reduce overall code complexity. Instead, they provide a toolkit for breaking down a complex problem into smaller pieces that can be considered separately. They are also an important building block for the very useful function operators, which you'll learn about in the next chapter.
+In this chapter, you'll learn about the non-obvious combination of these three features that lead to the function factory. Of the three main FP tools, function factories are probably the least useful. Generally, they don't tend to reduce overall code complexity. Instead, they provide a toolkit for breaking down a complex problem into smaller pieces that can be considered separately. They are also an important building block for the very useful function operators, which you'll learn about in the next chapter.
 
 ### Outline {-}
 
 * Section \@ref(factory-fundamentals) begins the chapter with a description
   of how function factories work, pulling together ideas from scoping and 
-  environments.
+  environments. You'll also see how function factories can be used to implement
+  a "memory" for functions, allowing data to persist across calls.
 
-* Section \@ref(graph-fact) shows two examples of how ggplot2 works
-  with user supplied function factories, and one example of where it 
+* Section \@ref(graph-fact) motivates the use of function factories with 
+  examples from ggplot2. You'll see two examples of how ggplot2 works
+  with user supplied function factories, and one example of where ggplot2 
   uses a function factory internally.
 
-* Section \@ref(stat-fact) uses function factories to help solve two statistical
-  challenge: maximum likelihood estimation and boostrapping. In both examples,
-  you'll see how function factories can partition work, in order to do some
-  upfront, and save time in the long-run.
+* Section \@ref(stat-fact) uses function factories for three statistical 
+  challenges: the Box-Cox transformation, maximum likelihood estimation, and
+  boostrapping. Here you'll see how function factories can partition problems, 
+  doing some work up front in order to save time in the long-run.
 
-* Section \@ref(functional-factories) shows how you can combine function
-  factories with functionals to rapidly generate a family of functions
-  from data.
+* Section \@ref(functional-factories) shows how you can use function factories 
+  with functionals to rapidly generate a family of functions from data.
 
 ### Prerequisites {-}
 
 Make sure you're familiar with the contents of Sections \@ref(first-class-functions), \@ref(the-function-environment), and \@ref(execution-environments) mentioned above.
 
-Function factories rely on base R functionality, but we'll use a little rlang to more easily peek inside of them. We'll also use ggplot2 which has a number of components designed to work well with function factories.
+Function factories rely on base R functionality, but we'll use a little rlang to peek inside of them more easily. We'll also use ggplot2 and scales to explore the function factories in visualisation.
 
 ```{r setup}
 # The development version includes some printing tweaks that we need here
@@ -87,7 +88,7 @@ The key idea that makes function factories work can be expressed very concisely:
 > The enclosing environment of the manufactured function is the execution
 > environment of the function factory. 
 
-While it takes few words to express the big ideas, it takes quite a bit of thinking to fully understand what's going on. This section will help you put the pieces together with interactive exploration and some diagrams.
+It only takes few words to express these big ideas, but it takes a lot more work to really understand what this means. This section will help you put the pieces together with interactive exploration and some diagrams.
 
 ### Environments
 
@@ -99,7 +100,7 @@ square
 cube
 ```
 
-Printing manufactured functions is not revealing because the bodies are identical, and the contents of the environments are not printed. We can get a little more insight by using `rlang::env_print()`. That shows us that we have two different environments, each of which was originally the execution environment of `power()`. The environments have the same parent, which is the enclosing environment of `power1()`, the global environment.
+Printing manufactured functions is not revealing because the bodies are identical, and the contents of the environments are not printed. We can get a little more insight by using `rlang::env_print()`. That shows us that we have two different environments (each of which was originally an execution environment of `power()`). The environments have the same parent, which is the enclosing environment of `power1()`, the global environment.
 
 ```{r}
 env_print(square)
@@ -135,6 +136,46 @@ knitr::include_graphics("diagrams/function-factories/power-simple.png", dpi = 30
 ```
 
 This view, which focuses on the environments, doesn't show any direct link between `cube()` and `square()`. That's because the link is the through the body of the function, which is identical for both, but is not shown in this diagram.
+
+### Statefun functions {#stateful-funs}
+\indexc{<<-} 
+\index{copy-on-modify!exceptions}
+
+Function factories also allow you to maintain state across function invocations. This is possible because while the execution environment is refreshed every time, the enclosing environment is constant. The key to managing variables at different levels is the double arrow assignment operator (`<<-`). Unlike the usual single arrow assignment (`<-`) that always assigns in the current environment, the double arrow operator will keep looking up the chain of parent environments until it finds a existing binding, and will modify that.
+
+The following example shows a counter that records how many times a function has been called. Each time `new_counter` is run, it creates an environment, initialises the counter `i` in this environment, and then creates a new function.
+
+```{r}
+new_counter <- function() {
+  i <- 0
+  
+  function() {
+    i <<- i + 1
+    i
+  }
+}
+
+counter_one <- new_counter()
+counter_two <- new_counter()
+```
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/function-factories/counter-1.png", dpi = 300)
+```
+
+When the manufactured function is run, `i <<- i + 1` will modify `i` in the parent environment, the enclosing environment of the manufactured environment and an execution environment of the function factory. Because manufactured functions have independent enclosing environments, they have independent counts:
+
+```{r}
+counter_one()
+counter_one()
+counter_two()
+```
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/function-factories/counter-2.png", dpi = 300)
+```
+
+Stateful functions are best used in moderation. As soon as your function starts managing the state of multiple variables, it's better to switch to R6, the topic of Chapter \@ref(R6).
 
 ### Potential pitfalls
 
@@ -180,39 +221,6 @@ f2 <- function(n) {
 g2 <- f2(1e6)
 lobstr::obj_size(g2)
 ```
-
-### Mutable state {#mutable-state}
-\indexc{<<-} 
-\index{copy-on-modify!exceptions}
-
-Having variables at two levels allows you to maintain state across function invocations. This is possible because while the execution environment is refreshed every time, the enclosing environment is constant. The key to managing variables at different levels is the double arrow assignment operator (`<<-`). Unlike the usual single arrow assignment (`<-`) that always assigns in the current environment, the double arrow operator will keep looking up the chain of parent environments until it finds a matching name.
-
-Together, a static parent environment and `<<-` make it possible to maintain state across function calls. The following example shows a counter that records how many times a function has been called. Each time `new_counter` is run, it creates an environment, initialises the counter `i` in this environment, and then creates a new function.
-
-```{r}
-new_counter <- function() {
-  i <- 0
-  function() {
-    i <<- i + 1
-    i
-  }
-}
-
-counter_one <- new_counter()
-counter_two <- new_counter()
-```
-
-The enclosing environments of `counter_one()` and `counter_two()` are indepedent because they are the execution environments of `new_counter()` (which is different each time it's called). Ordinarily, function execution environments are temporary, but a closure maintains access to the environment in which it was created. In the example below, closures `counter_one()` and `counter_two()` each get their own enclosing environments when run, so they can maintain different counts.
-
-```{r}
-counter_one()
-counter_one()
-counter_two()
-```
-
-The counters get around the "fresh start" limitation by not modifying variables in their execution environment, but in their enclosing environment.
-
-Modifying values in a parent environment is an important technique because it is one way to generate "mutable state" in R. Mutable state is normally hard because every time it looks like you're modifying an object, you're actually creating and then modifying a copy. However, if you do need mutable objects and your code is not very simple, it's usually better to use R6, the topic of Chapter \@ref(R6).
 
 ### Exercises
 
@@ -412,31 +420,47 @@ All these examples can be tackled without function factories, but I think they'r
 ### Box-Cox transformation
 \index{Box-Cox transformation}
 
-The Box-Cox transformation is a flexible transformation often used to transform  data towards normality. It has a single parameter, $\lambda$ which controls the strength of the transformation:
+The Box-Cox transformation is a flexible transformation often used to transform  data towards normality. It has a single parameter, $\lambda$ which controls the strength of the transformation. We could express the transformation as simple two argument function:
 
 ```{r}
-boxcox <- function(lambda) {
+boxcox1 <- function(x, lambda) {
+  stopifnot(length(lambda) != 1)
+  
+  if (lambda == 0) {
+    log(x)
+  } else {
+    (x ^ lambda - 1) / lambda
+  }
+}
+```
+
+But re-formulating as a function factory makes it easy to explore its behaviour with `stat_function()`:
+
+```{r}
+boxcox2 <- function(lambda) {
   if (lambda == 0) {
     function(x) log(x)
   } else {
     function(x) (x ^ lambda - 1) / lambda
   }
 }
-```
 
-Formulating `boxcox()` as a function factory makes it easy to explore its behaviour with `stat_function()`:
-
-```{r}
 ggplot(data.frame(x = c(0, 5)), aes(x)) + 
-  stat_function(aes(colour = "1"), fun = boxcox(1)) + 
-  stat_function(aes(colour = "2"), fun = boxcox(2)) +
-  stat_function(aes(colour = "0.5"), fun = boxcox(0.5))
+  stat_function(aes(colour = 2), fun = boxcox2(2), size = 1) +
+  stat_function(aes(colour = 1), fun = boxcox2(1), size = 1) + 
+  stat_function(aes(colour = 0.5), fun = boxcox2(0.5), size = 1) +
+  scale_colour_viridis_c()
 
+# visually, log() does seem to make sense as the limit as lambda -> 0
 ggplot(data.frame(x = c(0.01, 1)), aes(x)) + 
-  stat_function(aes(colour = "0.5"), fun = boxcox(0.5)) + 
-  stat_function(aes(colour = "0.25"), fun = boxcox(0.25)) +
-  stat_function(aes(colour = "0"), fun = boxcox(0))
+  stat_function(aes(colour = 0.5), fun = boxcox2(0.5), size = 1) + 
+  stat_function(aes(colour = 0.25), fun = boxcox2(0.25), size = 1) +
+  stat_function(aes(colour = 0.1), fun = boxcox2(0.1), size = 1) +
+  stat_function(aes(colour = 0), fun = boxcox2(0), size = 1) +
+  scale_colour_viridis_c()
 ```
+
+In general, this allows you to use a Box-Cox transformation with any function that accepts a unary transformation function: you don't have to worry about that function providing `...` to pass along additional arguments. I also think that the partitioning of `lambda` and `x` into two different function arguments is natural since `lambda` plays quite a different role to `x`. 
 
 ### Bootstrap generators
 \index{boostraping generator}
@@ -477,7 +501,7 @@ head(boot_mtcars2())
 head(boot_mtcars2())
 ```
 
-I use `rm(mod)` because linear model objects are quite large (they include complete copies of the model matrix and input data) and I want to keep the generator function as small as possible.
+I use `rm(mod)` because linear model objects are quite large (they include complete copies of the model matrix and input data) and I want to keep the manufactured function as small as possible.
 
 ### Maximum likelihood estimation {#MLE}
 \index{maximum likelihood}
@@ -591,11 +615,24 @@ The advantage of using a function factory here is fairly small, but there are tw
 
 These advantages get bigger in more complex MLE problems, where you have multiple parameters and multiple data vectors.
 
-
 ### Exercises
 
 1.  In `boot_model()`, why don't I need to force the evaluation of `df` 
     or `model`?
+    
+1.  Why might you formulate the Box-Cox transformation like this?
+
+    ```{r}
+    boxcox3 <- function(x) {
+      function(lambda) {
+        if (lambda == 0) {
+          log(x)
+        } else {
+          (x ^ lambda - 1) / lambda
+        }
+      }  
+    }
+    ```
 
 1.  Create a function that creates functions that compute the ith 
     [central moment](http://en.wikipedia.org/wiki/Central_moment) of a numeric 
