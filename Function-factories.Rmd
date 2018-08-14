@@ -207,24 +207,62 @@ lobstr::obj_size(g2)
 
 ## Graphical factories {#graph-fact}
 
-ggplot2 provides a number of motivating examples
+We'll begin our exploration of useful function factories with a few examples from ggplot2. 
 
 ### Labelling
 
-Axes: `scales::number_format()`
+The one of the goals of the [scales](http://scales.r-lib.org) package is to make it easy to customise the labels on ggplot2. 
 
-Facets: `label_bquote()`
+At first glance the design of the scales package is a little odd. All the format functions[^suffix] return a function, and you then have to call that functon to format a number:
+
+[^suffix]: It's an unfortunate accident of history that scales uses function suffixes instead of function prefixes. That's because it was written before I understood the autocomplete advantages to using common prefixes instead of common suffixes.
+
+```{r}
+y <- c(12345, 123456, 1234567)
+comma_format()(y)
+
+number_format(scale = 1e-3, suffix = " K")(y)
+```
+
+In other words, the primary interface of scales is function factories. At first glance, this seems like this adds extra complexity for little gain. But this makes for a nice interface when used with ggplot2 scales, because they accept functions in the `label` argument:
+
+```{r, out.width = "25%", fig.align="default", fig.width = 2, fig.height = 4, fig.asp = NULL}
+df <- data.frame(x = 1, y = y)
+base <- ggplot(df, aes(x, y)) + 
+  geom_point() + 
+  scale_x_continuous(breaks = 1, labels = NULL) +
+  labs(x = NULL, y = NULL)
+  
+base
+base + scale_y_continuous(label = comma_format())
+base + scale_y_continuous(label = number_format(scale = 1e-3, suffix = " K"))
+base + scale_y_continuous(label = scientific_format())
+```
+
+The use of a function factory here allows for a flexible specification. The `xyz_format()` functions create an "object" that knows how to format a vector of breaks.
 
 ### Histogram bins
 
-```{r}
+A little known feature of `geom_histogram()` is that the `binwidth` argument can be a function. This is particularly useful because the function is executed once for each group, which means you can have different binwidths in different facets, which is otherwise not possible.
+
+To illustrate this idea, and see where variable binwidth might be useful, I'm going to construct an example where a fixed binwidth isn't great.
+
+```{r, fig.width = 6, fig.height = 2.5, fig.asp = NULL, out.width = "90%"}
 # construct some sample data with very different numbers in each cell
-n <- c(10, 100, 1000)
+sd <- c(1, 5, 10)
+n <- 100
+
+df <- data.frame(x = rnorm(3 * n, sd = sd), sd = rep(sd, n))
+
+ggplot(df, aes(x)) + 
+  geom_histogram(binwidth = 2) + 
+  facet_wrap(~ sd, scales = "free_x") + 
+  labs(x = NULL)
 ```
 
-Same number of bins in each:
+Here we have the same amount of data in each facet, but very different spreads. It would be nice if we could request that the binwidth vary. We can do that by constructing a function factory. Our factory will take the number of bins as a parameter, and create a function that gives takes a numeric vector and returns a binwidth:
 
-```{r}
+```{r, fig.width = 6, fig.height = 2.5, fig.asp = NULL, out.width = "90%"}
 binwidth_bins <- function(n) {
   force(n)
   
@@ -233,12 +271,15 @@ binwidth_bins <- function(n) {
   }
 }
 
-ggplot(mtcars, aes(disp)) +
-  geom_histogram(binwidth = binwidth_bins(5)) + 
-  facet_wrap(~ cyl)
+ggplot(df, aes(x)) + 
+  geom_histogram(binwidth = binwidth_bins(20)) + 
+  facet_wrap(~ sd, scales = "free_x") + 
+  labs(x = NULL)
 ```
 
-```{r}
+We could use this same pattern to wrap around the base R functions that automatically find the "optimal"[^optimal] binwidth:
+
+```{r, fig.width = 6, fig.height = 2.5, fig.asp = NULL, out.width = "90%"}
 base_bins <- function(type) {
   fun <- switch(type,
     Sturges = nclass.Sturges,
@@ -252,24 +293,29 @@ base_bins <- function(type) {
   }
 }
 
-ggplot(mtcars, aes(disp)) +
+ggplot(df, aes(x)) + 
   geom_histogram(binwidth = base_bins("FD")) + 
-  facet_wrap(~ cyl)
+  facet_wrap(~ sd, scales = "free_x") + 
+  labs(x = NULL)
 ```
+
+[^optimal]: ggplot2 doesn't expose these functions directly because I don't think the defintion of definition of optimality needed to make the problem mathematically tractable is a good match to the actual needs of data exploration.
 
 ### ggsave
 
-`ggplot2:::plot_dev()`
-Simplified version below.
-Takes an extension and returns a function that opens a graphics device. It's designed to shim over minor differences in the device functions in base R: 
+Finally, I want to show a function factory used internally by ggplot2. `ggplot2:::plot_dev()` is used by `ggsave()` to go from a file extension (e.g. `png`, `jpeg` etc) to a graphics device. There challenge here arises because the base graphics devices have some minor inconsistencies which we need to paper over:
 
-* most have `filename` as first argument but some have `file`
-* dimensions of raster graphics are usually in pixels, where vector graphics
-  are in inches.
-* some file formats have multiple common extensions.
+* Most have `filename` as first argument but some have `file`.
+
+* The `width` of `height` of raster graphic devices use pixels units
+  by default, but the vector graphics use inches.
+
+A mildly simplified version of `plot_dev()` is shown below:
 
 ```{r}
 plot_dev <- function(ext, dpi = 96) {
+  force(dpi)
+  
   switch(ext,
     eps =  ,
     ps  =  function(filename, ...) {
@@ -287,10 +333,19 @@ plot_dev <- function(ext, dpi = 96) {
     jpg  = ,
     jpeg = function(...) grDevices::jpeg(..., res = dpi, units = "in"),
     bmp  = function(...) grDevices::bmp(..., res = dpi, units = "in"),
-    tiff = function(...) grDevices::tiff(..., res = dpi, units = "in")
+    tiff = function(...) grDevices::tiff(..., res = dpi, units = "in"),
+    stop("Unknown graphics extension: ", ext, call. = FALSE)
   )
 }
+
+plot_dev("pdf")
+plot_dev("png")
 ```
+
+### Exercises
+
+1.  Compare and constrast `ggplot2::label_bquote()` with 
+    `scales::number_format()`
 
 ## Statistical factories {#stat-fact}
 
