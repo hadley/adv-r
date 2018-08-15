@@ -7,7 +7,7 @@ source("common.R")
 
 ## Introduction
 
-A __function factory__ is a function that creates functions. Here's a very simple example: we use a function factory (`power1()`) to make two child functions (`square()` and `cube()`):
+A __function factory__ is a function that makes functions. Here's a very simple example: we use a function factory (`power1()`) to make two child functions (`square()` and `cube()`):
 
 ```{r}
 power1 <- function(exp) {
@@ -22,7 +22,7 @@ square <- power1(2)
 cube <- power1(3)
 ```
 
-I'll call `square()` and `cube()` __manufactured functions__, but this is just a term to ease communication with other humans. From R's perspective they are no different to functions created any other way:
+I'll call `square()` and `cube()` __manufactured functions__, but this is just a term to ease communication with other humans: from R's perspective they are no different to functions created any other way. 
 
 ```{r}
 square(3)
@@ -32,8 +32,8 @@ cube(3)
 You have already learned about the individual components that make function factories possible:
 
 * In Section \@ref(first-class-functions), you learned about R's "first class" 
-  functions and how `<-` binds a function to a name no differently to any other
-  type of object.
+  functions. In R, you bind a function to name in the same way as you bind
+  any object to a name: with `<-`.
 
 * In Section \@ref(the-function-environment), you learned that a function
   captures, or encloses, the environment it which it is created.
@@ -43,11 +43,13 @@ You have already learned about the individual components that make function fact
   is usually ephemeral, but here it becomes the enclosing environment of 
   the manufactured function.
 
-In this chapter, you'll learn about the non-obvious combination of these three features that lead to the function factory. Of the three main FP tools, function factories are probably the least useful. Generally, they don't tend to reduce overall code complexity. Instead, they provide a toolkit for breaking down a complex problem into smaller pieces that can be considered separately. They are also an important building block for the very useful function operators, which you'll learn about in the next chapter.
+In this chapter, you'll learn how the non-obvious combination of these three features lead to the function factory. You'll also see examples of their usage in visualisation and statistics.
+
+Of the three main FP tools, function factories are probably the least useful. Generally, they don't tend to reduce overall code complexity. Instead, they tend to partition complexity into more easily digested chunks. Function factories are also an important building block for the very useful function operators, which you'll learn about in the next chapter.
 
 ### Outline {-}
 
-* Section \@ref(factory-fundamentals) begins the chapter with a description
+* Section \@ref(factory-fundamentals) begins the chapter with an explanation
   of how function factories work, pulling together ideas from scoping and 
   environments. You'll also see how function factories can be used to implement
   a "memory" for functions, allowing data to persist across calls.
@@ -57,19 +59,18 @@ In this chapter, you'll learn about the non-obvious combination of these three f
   with user supplied function factories, and one example of where ggplot2 
   uses a function factory internally.
 
-* Section \@ref(stat-fact) uses function factories for three statistical 
-  challenges: the Box-Cox transformation, maximum likelihood estimation, and
-  boostrapping. Here you'll see how function factories can partition problems, 
-  doing some work up front in order to save time in the long-run.
+* Section \@ref(stat-fact) uses function factories to tackle three challenges from
+  statistics: understanding the Box-Cox transform, solving maximum likelihood
+  problems, and drawing boostrap resamples. 
 
-* Section \@ref(functional-factories) shows how you can use function factories 
-  with functionals to rapidly generate a family of functions from data.
+* Section \@ref(functional-factories) shows how you can combine function 
+  factories and functionals to rapidly generate a family of functions from data.
 
 ### Prerequisites {-}
 
 Make sure you're familiar with the contents of Sections \@ref(first-class-functions), \@ref(the-function-environment), and \@ref(execution-environments) mentioned above.
 
-Function factories rely on base R functionality, but we'll use a little rlang to peek inside of them more easily. We'll also use ggplot2 and scales to explore the function factories in visualisation.
+Function factories only need base R. We'll use a little rlang to peek inside of them more easily, and we'll use ggplot2 and scales to explore the use of function factories in visualisation.
 
 ```{r setup}
 # The development version includes some printing tweaks that we need here
@@ -85,7 +86,7 @@ library(scales)
 
 The key idea that makes function factories work can be expressed very concisely:
 
-> The enclosing environment of the manufactured function is the execution
+> The enclosing environment of the manufactured function is an execution
 > environment of the function factory. 
 
 It only takes few words to express these big ideas, but it takes a lot more work to really understand what this means. This section will help you put the pieces together with interactive exploration and some diagrams.
@@ -100,7 +101,7 @@ square
 cube
 ```
 
-Printing manufactured functions is not revealing because the bodies are identical, and the contents of the environments are not printed. We can get a little more insight by using `rlang::env_print()`. That shows us that we have two different environments (each of which was originally an execution environment of `power()`). The environments have the same parent, which is the enclosing environment of `power1()`, the global environment.
+Printing manufactured functions is not revealing because the bodies are identical; its the contents of the enclosing environment that's important. We can get a little more insight by using `rlang::env_print()`. That shows us that we have two different environments (each of which was originally an execution environment of `power()`). The environments have the same parent, which is the enclosing environment of `power1()`, the global environment.
 
 ```{r}
 env_print(square)
@@ -108,13 +109,17 @@ env_print(square)
 env_print(cube)
 ```
 
-While `env_print()` shows us that both environments have a binding to `exp`, to see key difference, we need to extract the value of `exp` (a future version of `env_print()` is likely to do better at summarising the contents so you don't need this step). That's easily done with `env_get()`:
+`env_print()` shows us that both environments have a binding to `exp`, but we want to see its value[^env_print]. That's easily done with `env_get()`:
 
 ```{r}
 env_get(square, "exp")
 
 env_get(cube, "exp")
 ```
+
+This is what makes manufactured functions behave differently from one another: names in the enclosing environment are bound to different values.
+
+[^env_print]: A future version of `env_print()` is likely to do better at summarising the contents so you don't need this step.
 
 ### Diagram conventions
 
