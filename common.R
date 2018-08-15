@@ -42,28 +42,3 @@ knitr::knit_hooks$set(
   }
   # chunk = colourise_chunk
 )
-
-# Previously in oldbookdown -----------------------------------------------
-
-doc_type <- function() knitr::opts_knit$get('rmarkdown.pandoc.to')
-
-begin_sidebar <- function(title = NULL) {
-  if (identical(doc_type(), "latex")) {
-    # Suppress sidebars for now - pandoc doesn't convert markdown inside
-    # a latex environment, so this technique required post-processing,
-    # and I don't want to bother with that until I start building the
-    # final block
-
-    # knitr::asis_output(paste0("\\begin{SIDEBAR}", title, "\\end{SIDEBAR}\n"))
-  } else {
-    knitr::asis_output(paste0("<div class = 'sidebar'><h3>", title, "</h3>\n\n"))
-  }
-}
-
-end_sidebar <- function() {
-  if (identical(doc_type(), "latex")) {
-    # knitr::asis_output("\\begin{ENDSIDEBAR}\\end{ENDSIDEBAR}\n")
-  } else {
-    knitr::asis_output("</div>\n")
-  }
-}
