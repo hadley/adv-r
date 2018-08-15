@@ -7,7 +7,7 @@ knitr::opts_chunk$set(
   comment = "#>",
   collapse = TRUE,
   cache = TRUE,
-  fig.retina = 1,
+  fig.retina = 1, # figures are either vectors or 300 dpi diagrams
   dpi = 300,
   out.width = "70%",
   fig.align = 'center',
@@ -67,4 +67,3 @@ end_sidebar <- function() {
     knitr::asis_output("</div>\n")
   }
 }
-
