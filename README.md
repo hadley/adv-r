@@ -14,6 +14,8 @@ Omnigraffle:
   
 * Use inconsolata 10pt, and export at 300 dpi scaled to 100%.
 
+* Set grid to 1cm with 10 minor units. Default scalar size is 6mm x 6mm.
+
 Book:
 
 * Inconsolata scaled (by fontspec) to match main font is 9.42pt.
