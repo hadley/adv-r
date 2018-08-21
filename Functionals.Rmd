@@ -37,7 +37,7 @@ The chances are that you've already used a functional. You might have used for-l
 
 A common use of functionals is as an alternative to for loops. For loops have a bad rap in R. They have a reputation for being slow (although that reputation is only partly true, see Section \@ref(single-binding) for more details). But the real downside of for loops is that they're not very expressive. A for loop conveys that it's iterating over something, but doesn't clearly convey a high level goal. Instead of using a for loop, it's better to use a functional. Each functional is tailored for a specific task, so when you recognise the functional you immediately know why it's being used. Functionals play other roles as well as replacements for for-loops. They are useful for encapsulating common data manipulation tasks like split-apply-combine, for thinking "functionally", and for working with mathematical functions. 
 
-Functionals reduce bugs in your code by better communicating intent. Functionals implemented in base R are well tested (i.e., bug-free) and efficient, because they're used by so many people. Many are written in C, and use special tricks to enhance performance. That said, using functionals will not always produce the fastest code. Instead, it helps you clearly communicate and build tools that solve a wide range of problems. It's a mistake to focus on speed until you know it'll be a problem. Once you have clear, correct code you can make it fast using the techniques you'll learn in Section \@ref(profiling).
+Functionals reduce bugs in your code by better communicating intent. Functionals implemented in base R and purrr are well tested (i.e., bug-free) and efficient, because they're used by so many people. Many are written in C, and use special tricks to enhance performance. That said, using functionals will not always produce the fastest code. Instead, it helps you clearly communicate and build tools that solve a wide range of problems. It's a mistake to focus on speed until you know it'll be a problem. Once you have clear, correct code you can make it fast using the techniques you'll learn in Section \@ref(profiling).
 
 ### Outline {-}
 
@@ -80,7 +80,35 @@ This chapter will focus on functionals provided by the purrr package. These func
 library(purrr)
 ```
 
-Many R users feel guilty about using for loops instead of the apply functions that they know they should. It's natural to blame yourself for failing to understand and internalise these functions, but I think some blame goes to the falls to the design of the funtions as their lack of consistency makes them  ... Summarise: https://stackoverflow.com/a/47123420/16632
+### purrr vs base R
+
+Many R users feel guilty about using for loops instead of the apply functions. And it's natural to blame yourself for failing to understand and internalise the apply functions. However, I think this is analogous to trying to push open a door that needs to be pulled[^norman-door]. It's not actually your fault, because many people suffer the same problem; it's a failing of design. Similarly, I think the reason why the apply functions are so hard for so many people is because their design is suboptimal.
+
+[^norman-door]: These are sometimes called Norman doors after Don Norman who described them in his book, "The Design of Everyday Things". There's a nice video about them at <https://99percentinvisible.org/article/norman-doors/>.
+
+One problem with the apply family is their lack of consistency:
+
+-   The first argument to `lapply()`, `sapply()`, `vapply()` and `tapply()`, 
+    is the vector; the first argument to `mapply()` is the function.
+
+-   With `vapply()`, `sapply()`, and `mapply()` you can choose to
+    suppress names on the output with `USE.NAMES = FALSE`; but you can't
+    with `lapply()` or `tapply()`.
+
+-   There's no consistent way to pass non-vectorised arguments on to the mapper
+    function. Most functions use `...` but `mapply()` uses `MoreArgs` (which
+    you'd expect to be called `MORE.ARGS` to be consistent with `USE.NAMES`). 
+    The closely related  `Map()`, `Filter()` and `Reduce()` expect you to 
+    create a new anonymous function.
+
+-   `sapply()` and `mapply()` automatically simplify their output which
+    means that different input lengths will return different _types_ of 
+    output. `sapply()` has a variant that allows you to specify the desired 
+    type called `vapply()`, but `mapply()` does not. Additionally, the 
+    simplify argument to `sapply()` is called `simplify`; where for `mapply()`
+    it's called `SIMPLIFY`.
+
+Note that I don't mention `apply()` here; it has limited use because it works with matrices, which are rare in data analysis. You should never use `apply()` with a data frame because it turns it into a matrix, which is a slow operation.
 
 ## My first functional: `map()` {#map}
 \indexc{map()}
@@ -90,12 +118,6 @@ The simplest functional is `map()`, which you may already be familiar with. `map
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/functionals/map.png")
 ```
-
-::: sidebar
-
-You might be more familiar with the base R equivalent of `map()`, `lapply()`. The are only a couple of advantages of `map()` over `lapply()`, and these usually aren't strong it enough to make it worthwhile to a single `map()` instead of an isolated `lapply()`. The advantage of `map()` is that it's part of a consistent family of functions.
-
-:::
 
 ::: sidebar
 
@@ -136,9 +158,7 @@ out
 my_map_dbl(l, mean)
 ```
 
-(I'm using `unlist()` to convert the output from a list to a vector to make it more compact. We'll see other ways of making the output a vector shortly.)
-
-Since data frames are also lists, `map()` is also useful when you want to do something to each column of a data frame: \index{data frames!modifying each column}
+Since data frames are also lists, `map()` is also useful when you want to do something to each column of a data frame: 
 
 ```{r}
 # What class is each column?
@@ -162,7 +182,6 @@ map(x, 1)
 map(x, list("x", 1))
 ```
 
-
 ### Passing arguments {#passing-arguments}
 
 The pieces of `x` are always supplied as the first argument to `f`. If you want to vary a different argument, you can use an anonymous function. The following example varies the amount of trimming applied when computing the mean of a fixed `x`.
@@ -177,18 +196,19 @@ What if you want the constant to be the first argument?
 trims <- c(0, 0.1, 0.2, 0.5)
 x <- rcauchy(1000)
 
-unlist(map(trims, mean, x = x))
-unlist(map(trims, function(trim) mean(x, trim = trim)))
+map_dbl(trims, function(trim) mean(x, trim = trim))
+map_dbl(trims, ~ mean(x, trim = .x))
+map_dbl(trims, mean, x = x)
 ```
 
-Note that `map(x, f, y = y)` and `map(x, ~ f(x, y = y))` are not always identical. In the first form `y` is evaluated once, in the second form it's evaluated multiple times. Compare the following calls:
+Note that `map(x, f, y = y)` and `map(x, ~ f(x, y = y))` are not exactly. In the first form `y` is evaluated once, in the second form it's evaluated multiple times. Compare the following calls:
 
 ```{r}
-library(purrr)
 plus <- function(x, y) x + y
 
-map_dbl(rep(0, 3), plus, runif(1))
-map_dbl(rep(0, 3), ~ plus(.x, runif(1)))
+x <- c(0, 0, 0, 0)
+map_dbl(x, plus, runif(1))
+map_dbl(x, ~ plus(.x, runif(1)))
 ```
 
 ### `.x` vs `x`
@@ -223,20 +243,14 @@ If you writing your own functional that passes `...` along, it's good practice t
 
 ## Map variants {#functionals-loop}
 
-The key to using functionals in place of for loops is recognising that common looping patterns are already implemented in existing base functionals. Once you've mastered these existing functionals, the next step is to start writing your own: if you discover you're duplicating the same looping pattern in many places, you should extract it out into its own function.
 
-The following sections build on `map()` and discuss:
+|               | List     | Logical      | Double       | Character    | Nothing   |
+|---------------|----------|--------------|--------------|--------------|-----------|
+| One argument  | `map()`  | `map_lgl()`  | `map_dbl()`  | `map_chr()`  | `walk()`  |
+| Two arguments | `map2()` | `map2_lgl()` | `map2_dbl()` | `map2_chr()` | `walk2()` |
+| N arguments   | `pmap()` | `pmap_lgl()` | `pmap_dbl()` | `pmap_chr()` | `pwalk()` |
 
-* `map_lgl()`, `map_int()`, `map_dbl()`, and `map_chr()` variants of 
-  `map()` that produce atomic vectors of specified types.
-
-* `map2()` and `pmap()` which iterate over multiple __input__ vectors in 
-  parallel.
-
-* The furrr package, which provides equivalents to purrr functions that work 
-  across multiple backends.
-
-### Other outputs
+### Atomic vector outputs: `map_lgl()` and friends
 
 `sapply()` and `vapply()` are very similar to `map()` except they simplify their output to produce an atomic vector. While `sapply()` guesses, `vapply()` takes an additional argument specifying the output type. `sapply()` is great for interactive use because it saves typing, but if you use it inside your functions you'll get weird errors if you supply the wrong type of input. `vapply()` is more verbose, but gives more informative error messages and never fails silently. It is better suited for use inside other functions. \indexc{sapply()} \indexc{vapply()}
 
@@ -247,7 +261,7 @@ The following example illustrates these differences. When given a data frame, `s
 Why not `sapply()`? Or `vapply()`?
 :::
 
-### Two inputs
+### Two inputs: `map2()` and friends
 
 With `lapply()`, only one argument to the function varies; the others are fixed. This makes it poorly suited for some problems. For example, how would you find a weighted mean when you have two lists, one of observations and the other of weights? \indexc{Map()}
 
@@ -328,8 +342,15 @@ You may be more familiar with `mapply()` than `Map()`. I prefer `Map()` because:
 In brief, `mapply()` adds more complication for little gain. \indexc{mapply()}
 :::
 
-### Any number of inputs
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/functionals/map2-recycle.png")
+```
 
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/functionals/map2-arg.png")
+```
+
+### Any number of inputs: `pmap()` and friends
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/functionals/pmap.png")
@@ -339,7 +360,28 @@ knitr::include_graphics("diagrams/functionals/pmap.png")
 knitr::include_graphics("diagrams/functionals/pmap-3.png")
 ```
 
-### Modify
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/functionals/pmap-arg.png")
+```
+
+### No outputs: `walk()` and friends
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/functionals/walk.png")
+```
+
+## Map extensions
+
+As well as the basic variants of `map()` described enough, there are more extreme extensions that:
+
+* Modify objects "in place".
+
+* Allow you to work with list of functions.
+
+* Spread computation across multiple cores (or multiple computers).
+
+### Modify in place
+
 
 
 ### Lists of functions {#lists-of-functions}
@@ -363,6 +405,7 @@ compute_mean <- list(
 )
 ```
 
+
 Calling a function from a list is straightforward. You extract it then call it:
 
 ```{r}
@@ -374,24 +417,9 @@ system.time(compute_mean[["manual"]](x))
 
 To call each function (e.g., to check that they all return the same results), use `lapply()`. We'll need either an anonymous function or a new named function, since there isn't a built-in function to handle this situation.
 
-```{r}
-invoke_map(compute_mean, x = x)
-```
-
-Another use for a list of functions is to summarise an object in multiple ways. To do that, we could store each summary function in a list, and then run them all with `lapply()`:
-
-```{r}
-funs <- list(
-  sum = sum,
-  mean = mean,
-  median = median
-)
-invoke_map(funs, x = x)
-```
-
 ```{r, eval = FALSE}
-x <- c(1:10, NA)
-invoke_map(funs, x = x, na.rm = TRUE)
+map(compute_mean, function(f) f(x))
+map(compute_mean, ~ .x(x))
 ```
 
 ### Parallelisation
@@ -795,6 +823,8 @@ str(discard(df, is.factor))
 ```
 
 ### `map_if()` and `modify_if()`
+
+\index{data frames!modifying each column}
 
 Compare on data frame.
 
