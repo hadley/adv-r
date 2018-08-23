@@ -211,12 +211,6 @@ This is easiest to understand with a picture: any arguments that come after `f` 
 knitr::include_graphics("diagrams/functionals/map-arg.png")
 ```
 
-Note that `map()` is only vectorised over its first argument. That means if you supply a vector as an additional argument, it will be passed as is to `f()`. You'll learn how to split up other arguments in Sections \@ref(map2) and \@ref(pmap).
-
-```{r, echo = FALSE, out.width = NULL}
-knitr::include_graphics("diagrams/functionals/map-arg-recycle.png")
-```
-
 Just note that moviing arguments inside an anonymous function means that they will be evaluated every time, not once when you call `map()`. This is easiest to see if we make the additional argument random:
 
 ```{r}
@@ -225,6 +219,13 @@ plus <- function(x, y) x + y
 x <- c(0, 0, 0, 0)
 map_dbl(x, plus, runif(1))
 map_dbl(x, ~ plus(.x, runif(1)))
+```
+
+This gives a useful pattern for generating random data:
+
+```{r}
+x <- map(1:3, ~ runif(2))
+str(x)
 ```
 
 In the diagrams, I'm omitted argument names to focus on the big ideas. But I recommend writing out the full names in your code, as it makes it easier to read. `map(x, mean, 0.1)` is perfectly valid code, but it relies on the reader remembering that the second argument to `mean()` is `trim`; it's better to be explicit and write `map(x, mean, 0.1)`.
@@ -325,7 +326,7 @@ There are 14 more variations of `map()` that you should know about. This sounds 
 * Returning nothing: `walk()`
 * Iterating over any number of inputs: `pmap()`
 
-Because the design of purrr you can combine 
+The design of purrr makes the input and output orthogonal so combining `map()` with the four ideas above generates a large table of functions:
 
 |               | List     | Atomic                                                 | Nothing   |
 |---------------|----------|--------------------------------------------------------|-----------|
@@ -333,73 +334,92 @@ Because the design of purrr you can combine
 | Two arguments | `map2()` | `map2_lgl()`, `map2_int()`, `map2_dbl()`, `map2_chr()` | `walk2()` |
 | N arguments   | `pmap()` | `pmap_lgl()`, `pmap_int()`, `pmap_dbl()`, `pmap_chr()` | `pwalk()` |
 
-### Two inputs: `map2()` and friends {#map2}
+Mastering a column allows you to combine it with all the rows you all ready know and vice versa.
 
-With `lapply()`, only one argument to the function varies; the others are fixed. This makes it poorly suited for some problems. For example, how would you find a weighted mean when you have two lists, one of observations and the other of weights? \indexc{Map()}
+### Two inputs: `map2()` and friends {#map2}
+\indexc{map2()}
+
+`map()` is vectorsed over a single argument. This makes it poorly suited for some problems. For example, how would you find a weighted mean when you have two lists, one of observations and the other of weights?
 
 ```{r}
 # Generate some sample data
-xs <- replicate(5, runif(10), simplify = FALSE)
-ws <- replicate(5, rpois(10, 5) + 1, simplify = FALSE)
+xs <- map(1:8, ~ runif(10))
+ws <- map(1:8, ~ rpois(10, 5) + 1)
 ```
 
-It's easy to use `map_dbl()` to compute the unweighted means:
+You can use `map_dbl()` to compute the unweighted means:
 
 ```{r}
 map_dbl(xs, mean)
 ```
 
-But how could we supply the weights to `weighted.mean()`? `lapply(x, means, w)` won't work because the additional arguments to `lapply()` are passed to every call. We could change looping forms:
+But switching to  `ws` as an additional argument doesn't work:
 
-```{r}
-map_dbl(seq_along(xs), function(i) {
-  weighted.mean(xs[[i]], ws[[i]])
-})
+```{r, error = TRUE}
+map_dbl(xs, weighted.mean, w = ws)
 ```
 
-This works, but it's a little clumsy. A cleaner alternative is to use `map2()`, a variant of `map()` that iterates over two arguments:
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/functionals/map-arg-recycle.png")
+```
+
+We need a new tool: a `map2()`, which is vectorised over two arguments:
 
 ```{r}
 map2_dbl(xs, ws, weighted.mean)
 ```
-
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/functionals/map2.png")
 ```
 
-Note that the order of arguments is a little different: function is the first argument for `Map()` and the second for `lapply()`.
+Note that the argument list is a now little different: there are two vectors before the function, not just one. Additional arguments can still come after the function.
 
-This is equivalent to:
+```{r}
+map2_dbl(xs, ws, weighted.mean, na.rm = TRUE)
+```
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/functionals/map2-arg.png")
+```
 
-```{r, eval = FALSE}
-stopifnot(length(xs) == length(ws))
-out <- vector("list", length(xs))
-for (i in seq_along(xs)) {
-  out[[i]] <- weighted.mean(xs[[i]], ws[[i]])
+The basic implementation `map2()` is simple, and very similar to the basic imeplementation `map()`. The only difference is that we now subset two vectors, instead of one. This leads to the following basic implementation:
+
+```{r}
+simple_map2 <- function(x, y, f, ...) {
+  out <- vector("list", length(xs))
+  for (i in seq_along(x)) {
+    out[[i]] <- f(x[[i]], y[[i]], ...)
+  }
+  out
 }
 ```
 
-There's a natural equivalence between `Map()` and `lapply()` because you can always convert a `Map()` to an `lapply()` that iterates over indices. But using `Map()` is more concise, and more clearly indicates what you're trying to do.
+One of the big differences between `map2()` and the simple function above is that `map2()` recycles its inputs to make sure that they're the same length:
 
-`Map` is useful whenever you have two (or more) lists (or data frames) that you need to process in parallel. For example, another way of standardising columns is to first compute the means and then divide by them. We could do this with `lapply()`, but if we do it in two steps, we can more easily check the results at each step, which is particularly important if the first step is more complicated.
-
-```{r, eval = FALSE}
-mtmeans <- lapply(mtcars, mean)
-mtmeans[] <- Map(`/`, mtcars, mtmeans)
-
-# In this case, equivalent to
-mtcars[] <- lapply(mtcars, function(x) x / mean(x))
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/functionals/map2-recycle.png")
 ```
 
-If some of the arguments should be fixed and constant, use an anonymous function:
+In other words, `map2(x, y, f)` will automatically behave like `map(x, f, y)` when needed. This is helpful when writing functions; in scripts you'd just use the simpler form when possible.
 
-```{r, eval = FALSE}
-Map(function(x, w) weighted.mean(x, w, na.rm = TRUE), xs, ws)
+::: base 
+There is no base equivalent to `map2()`.
+:::
+
+### No outputs: `walk()` and friends
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/functionals/walk.png")
 ```
 
-We'll see a more compact way to express the same idea in the next chapter.
+One of the most useful `walk()` variants is `walk2()` because a very common side-effect is saving something to disk, so you end with a pair of values: the object and the file name to save it to.
 
-::: sidebar
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/functionals/walk2.png")
+```
+
+### Any number of inputs: `pmap()` and friends {#pmap}
+
+::: base
 
 You may be more familiar with `mapply()` than `Map()`. I prefer `Map()` because:
 
@@ -415,16 +435,6 @@ In brief, `mapply()` adds more complication for little gain. \indexc{mapply()}
 :::
 
 ```{r, echo = FALSE, out.width = NULL}
-knitr::include_graphics("diagrams/functionals/map2-recycle.png")
-```
-
-```{r, echo = FALSE, out.width = NULL}
-knitr::include_graphics("diagrams/functionals/map2-arg.png")
-```
-
-### Any number of inputs: `pmap()` and friends {#pmap}
-
-```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/functionals/pmap.png")
 ```
 
@@ -434,12 +444,6 @@ knitr::include_graphics("diagrams/functionals/pmap-3.png")
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/functionals/pmap-arg.png")
-```
-
-### No outputs: `walk()` and friends
-
-```{r, echo = FALSE, out.width = NULL}
-knitr::include_graphics("diagrams/functionals/walk.png")
 ```
 
 ## Map extensions
@@ -850,7 +854,7 @@ The real `Reduce()` is more complicated because it includes arguments to control
 `Reduce()` is an elegant way of extending a function that works with two inputs into a function that can deal with any number of inputs. It's useful for implementing many types of recursive operations, like merges and intersections. (We'll see another use in the final case study.) Imagine you have a list of numeric vectors, and you want to find the values that occur in every element:
 
 ```{r}
-l <- replicate(5, sample(1:10, 15, replace = T), simplify = FALSE)
+l <- map(1:5, ~ sample(1:10, 15, replace = T))
 str(l)
 ```
 
