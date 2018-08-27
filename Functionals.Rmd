@@ -93,7 +93,7 @@ The most fundamental functional is `purrr::map()`[^Map]. It takes a vector and a
 knitr::include_graphics("diagrams/functionals/map.png")
 ```
 
-[^Map]: Not to be confused with `base::Map()`, which is considerably more complex and we'll come back to in Section \ref(pmap).
+[^Map]: Not to be confused with `base::Map()`, which is considerably more complex and we'll come back to in Section \@ref(pmap).
 
 The implementation of `map()` is quite simple. We allocate a list the same length as the input, and then fill in the list with a for loop. The basic implementation is only a handful of lines of code:
 
@@ -138,6 +138,20 @@ pair <- function(x) c(x, x)
 map_dbl(1:4, pair)
 
 map(1:3, pair)
+```
+
+```{r}
+simple_map_dbl <- function(x, f, ...) {
+  out <- double(length(x))
+  for (i in seq_along(x)) {
+    val <- f(x[[i]], ...)
+    if (length(val) != 1 || !is.numeric(out)) {
+      stop("Result ", i, " is not a length 1 atomic vector", call. = FALSE)
+    }
+    out[[i]] <- val
+  }
+  out
+}
 ```
 
 ::: base
@@ -189,6 +203,12 @@ map_chr(x, "z")
 # Unless you supply a .default value
 map_chr(x, "z", .default = NA)
 ```
+
+::: base
+
+`lapply()` and friends you can supply the name of a function as a string.
+
+:::
 
 ### Passing arguments with `...` {#passing-arguments}
 
@@ -289,7 +309,40 @@ x <- rcauchy(1000)
 1.  Use `as_mapper()` to explore how purrr generates anonymous functions for
     the integer, character, and list helpers. What helper allows you to 
     extract attributes?
+
+1.  Use the appropriate `map()` function to:
     
+    a) Compute the standard deviation of every column in a numeric data frame.
+    
+    a) Compute the standard deviation of every numeric column in a mixed data
+       frame. (Hint: you'll need to use `vapply()` twice.)
+
+1.  The function below scales a vector so it falls in the range [0, 1]. How
+    would you apply it to every column of a data frame? How would you apply it 
+    to every numeric column in a data frame?
+
+    ```{r}
+    scale01 <- function(x) {
+      rng <- range(x, na.rm = TRUE)
+      (x - rng[1]) / (rng[2] - rng[1])
+    }
+    ```
+
+1.  The following code simulates the performance of a t-test for non-normal 
+    data. Use `sapply()` and an anonymous function to extract the p-value from 
+    every trial.
+
+    ```{r}
+    trials <- replicate(
+      100, 
+      t.test(rpois(10, 10), rpois(7, 10)),
+      simplify = FALSE
+    )
+    ```
+    
+    Extra challenge: get rid of the anonymous function by using `[[` directly.
+  
+
 1.  The following code uses a map nested inside another map to apply a
     function to every element of a nested list. Why does it fail, and 
     what do you need to do to make it work?
@@ -305,6 +358,47 @@ x <- rcauchy(1000)
     map(x, map, .f = triple)
     ```
 
+1.  Why are the following two invocations of `lapply()` equivalent?
+
+    ```{r, eval = FALSE}
+    trims <- c(0, 0.1, 0.2, 0.5)
+    x <- rcauchy(100)
+    
+    map_dbl(trims, function(trim) mean(x, trim = trim))
+    map_dbl(trims, mean, x = x)
+    ```
+
+1.  Use both for loops and `map()` to fit linear models to the
+    `mtcars` using the formulas stored in this list:
+
+    ```{r}
+    formulas <- list(
+      mpg ~ disp,
+      mpg ~ I(1 / disp),
+      mpg ~ disp + wt,
+      mpg ~ I(1 / disp) + wt
+    )
+    ```
+
+1.  Fit the model `mpg ~ disp` to each of the bootstrap replicates of `mtcars` 
+    in the list below by using both a for loop and `map()`. Can you do it 
+    without an anonymous function? Should you?
+
+    ```{r}
+    bootstraps <- lapply(1:10, function(i) {
+      rows <- sample(1:nrow(mtcars), rep = TRUE)
+      mtcars[rows, ]
+    })
+    ```
+
+1.  For each model in the previous two exercises, extract $R^2$ using the
+    function below.
+
+    ```{r}
+    rsq <- function(mod) summary(mod)$r.squared
+    ```
+
+<!--
 ## Purrr vs. base R
 
 ```{r}
@@ -320,324 +414,15 @@ vapply(models, function(x) coef(x)[[1]], double(1))
 
 sapply(split(mtcars, mtcars$cyl), function(x) coef(lm(mpg ~ wt, x))[[1]])
 ```
-
-## Map variants {#functionals-loop}
-
-There are 14 more variations of `map()` that you should know about. This sounds like a lot (!) but fortunately you only need to learn four new ideas:
-
-* Returning atomic vectors `_lgl`, `_int`, `_dbl` and `_chr` suffixes
-* Iteration over two inputs: `map2()`
-* Returning nothing: `walk()`
-* Iterating over any number of inputs: `pmap()`
-
-The design of purrr makes the input and output orthogonal so combining `map()` with the four ideas above generates a large table of functions:
-
-|               | List     | Atomic                                                 | Nothing   |
-|---------------|----------|--------------------------------------------------------|-----------|
-| One argument  | `map()`  | `map_lgl()`, `map_int()`, `map_dbl()`, `map_chr()`     | `walk()`  |
-| Two arguments | `map2()` | `map2_lgl()`, `map2_int()`, `map2_dbl()`, `map2_chr()` | `walk2()` |
-| N arguments   | `pmap()` | `pmap_lgl()`, `pmap_int()`, `pmap_dbl()`, `pmap_chr()` | `pwalk()` |
-
-Mastering a column allows you to combine it with all the rows you all ready know and vice versa.
-
-### Two inputs: `map2()` and friends {#map2}
-\indexc{map2()}
-
-`map()` is vectorsed over a single argument. This makes it poorly suited for some problems. For example, how would you find a weighted mean when you have two lists, one of observations and the other of weights?
-
-```{r}
-# Generate some sample data
-xs <- map(1:8, ~ runif(10))
-ws <- map(1:8, ~ rpois(10, 5) + 1)
-```
-
-You can use `map_dbl()` to compute the unweighted means:
-
-```{r}
-map_dbl(xs, mean)
-```
-
-But switching to  `ws` as an additional argument doesn't work:
-
-```{r, error = TRUE}
-map_dbl(xs, weighted.mean, w = ws)
-```
-
-```{r, echo = FALSE, out.width = NULL}
-knitr::include_graphics("diagrams/functionals/map-arg-recycle.png")
-```
-
-We need a new tool: a `map2()`, which is vectorised over two arguments:
-
-```{r}
-map2_dbl(xs, ws, weighted.mean)
-```
-```{r, echo = FALSE, out.width = NULL}
-knitr::include_graphics("diagrams/functionals/map2.png")
-```
-
-Note that the argument list is a now little different: there are two vectors before the function, not just one. Additional arguments can still come after the function.
-
-```{r}
-map2_dbl(xs, ws, weighted.mean, na.rm = TRUE)
-```
-```{r, echo = FALSE, out.width = NULL}
-knitr::include_graphics("diagrams/functionals/map2-arg.png")
-```
-
-The basic implementation `map2()` is simple, and very similar to the basic imeplementation `map()`. The only difference is that we now subset two vectors, instead of one. This leads to the following basic implementation:
-
-```{r}
-simple_map2 <- function(x, y, f, ...) {
-  out <- vector("list", length(xs))
-  for (i in seq_along(x)) {
-    out[[i]] <- f(x[[i]], y[[i]], ...)
-  }
-  out
-}
-```
-
-One of the big differences between `map2()` and the simple function above is that `map2()` recycles its inputs to make sure that they're the same length:
-
-```{r, echo = FALSE, out.width = NULL}
-knitr::include_graphics("diagrams/functionals/map2-recycle.png")
-```
-
-In other words, `map2(x, y, f)` will automatically behave like `map(x, f, y)` when needed. This is helpful when writing functions; in scripts you'd just use the simpler form when possible.
-
-::: base 
-There is no base equivalent to `map2()`.
-:::
-
-### No outputs: `walk()` and friends
-
-```{r, echo = FALSE, out.width = NULL}
-knitr::include_graphics("diagrams/functionals/walk.png")
-```
-
-One of the most useful `walk()` variants is `walk2()` because a very common side-effect is saving something to disk, so you end with a pair of values: the object and the file name to save it to.
-
-```{r, echo = FALSE, out.width = NULL}
-knitr::include_graphics("diagrams/functionals/walk2.png")
-```
-
-### Any number of inputs: `pmap()` and friends {#pmap}
-
-::: base
-
-You may be more familiar with `mapply()` than `Map()`. I prefer `Map()` because:
-
-* It's equivalent to `mapply` with `simplify = FALSE`, which is almost always 
-  what you want.
-
-* Instead of using an anonymous function to provide constant inputs, `mapply` 
-  has the `MoreArgs` argument that takes a list of extra arguments that will 
-  be supplied, as is, to each call. This breaks R's usual lazy evaluation 
-  semantics, and is inconsistent with other functions.
-
-In brief, `mapply()` adds more complication for little gain. \indexc{mapply()}
-:::
-
-```{r, echo = FALSE, out.width = NULL}
-knitr::include_graphics("diagrams/functionals/pmap.png")
-```
-
-```{r, echo = FALSE, out.width = NULL}
-knitr::include_graphics("diagrams/functionals/pmap-3.png")
-```
-
-```{r, echo = FALSE, out.width = NULL}
-knitr::include_graphics("diagrams/functionals/pmap-arg.png")
-```
-
-## Map extensions
-
-As well as the basic variants of `map()` described enough, there are more extreme extensions that:
-
-* Modify objects "in place".
-
-* Allow you to work with list of functions.
-
-* Spread computation across multiple cores (or multiple computers).
-
-### Modify in place
-
-
-
-### Lists of functions {#lists-of-functions}
-
-In R, functions can be stored in lists. This makes it easier to work with groups of related functions, in the same way a data frame makes it easier to work with groups of related vectors. \index{lists!of functions}
-
-We'll start with a simple benchmarking example. Imagine you are comparing the performance of multiple ways of computing the arithmetic mean. You could do this by storing each approach (function) in a list:
-
-```{r}
-compute_mean <- list(
-  base = function(x) mean(x),
-  sum = function(x) sum(x) / length(x),
-  manual = function(x) {
-    total <- 0
-    n <- length(x)
-    for (i in seq_along(x)) {
-      total <- total + x[i] / n
-    }
-    total
-  }
-)
-```
-
-
-Calling a function from a list is straightforward. You extract it then call it:
-
-```{r}
-x <- runif(1e5)
-system.time(compute_mean$base(x))
-system.time(compute_mean[[2]](x))
-system.time(compute_mean[["manual"]](x))
-```
-
-To call each function (e.g., to check that they all return the same results), use `lapply()`. We'll need either an anonymous function or a new named function, since there isn't a built-in function to handle this situation.
-
-```{r, eval = FALSE}
-map(compute_mean, function(f) f(x))
-map(compute_mean, ~ .x(x))
-```
-
-### Parallelisation
-\index{parallel computing} 
-\index{multicore}
-\index{bootstrapping}
-
-One interesting thing about the implementation of `map()` is that because each iteration is isolated from all others, the order in which they are computed doesn't matter. This has a very important consequence: since we can compute each element in any order, it's easy to dispatch the tasks to different cores, and compute them in parallel. This is the idea behind the furrr package which combines the interface of purrr with the backends of future.
-
-```{r}
-library(furrr)
-future::plan(multiprocess)
-```
-
-```{r, cache = TRUE}
-boot_df <- function(x) x[sample(nrow(x), replace = T), ]
-rsquared <- function(mod) summary(mod)$r.squared
-boot_lm <- function(i) {
-  rsquared(lm(mpg ~ wt + disp, data = boot_df(mtcars)))
-}
-
-system.time(lapply(1:500, boot_lm))
-system.time(parallel::mclapply(1:500, boot_lm, mc.cores = 4))
-system.time(future_map(1:500, boot_lm))
-```
-
-While increasing the number of cores will not always lead to linear improvement, switching from `lapply()` or `Map()` to its parallelised forms can dramatically improve computational performance.
-
-### Exercises
-
-1.  Use `vapply()` to:
-    
-    a) Compute the standard deviation of every column in a numeric data frame.
-    
-    a) Compute the standard deviation of every numeric column in a mixed data
-       frame. (Hint: you'll need to use `vapply()` twice.)
-
-1.  The following code simulates the performance of a t-test for non-normal 
-    data. Use `sapply()` and an anonymous function to extract the p-value from 
-    every trial.
-
-    ```{r}
-    trials <- replicate(
-      100, 
-      t.test(rpois(10, 10), rpois(7, 10)),
-      simplify = FALSE
-    )
-    ```
-    
-    Extra challenge: get rid of the anonymous function by using `[[` directly.
-
-1.  What does `replicate()` do? What sort of for loop does it eliminate? Why 
-    do its arguments differ from `lapply()` and friends?
-
-1.  Implement a version of `lapply()` that supplies `FUN` with both the name 
-    and the value of each component.
-
-1.  Implement a combination of `Map()` and `vapply()` to create an `lapply()`
-    variant that iterates in parallel over all of its inputs and stores its 
-    outputs in a vector (or a matrix). What arguments should the function 
-    take?
-
-1.  Implement `mcsapply()`, a multicore version of `sapply()`. Can you
-    implement `mcvapply()`, a parallel version of `vapply()`? Why or why not?
-
-## Creating your own functional: rolling computations
-
-What if you need a for loop replacement that doesn't exist in base R? You can often create your own by recognising common looping structures and implementing your own wrapper. For example, you might be interested in smoothing your data using a rolling (or running) mean function: \index{rolling calculation}
-
-```{r roll-mean, small_mar = TRUE, fig.width = 3, fig.height = 2}
-rollmean <- function(x, n) {
-  out <- rep(NA, length(x))
-
-  offset <- trunc(n / 2)
-  for (i in (offset + 1):(length(x) - n + offset + 1)) {
-    out[i] <- mean(x[(i - offset):(i + offset - 1)])
-  }
-  out
-}
-x <- seq(1, 3, length = 1e2) + runif(1e2)
-plot(x)
-lines(rollmean(x, 5), col = "blue", lwd = 2)
-lines(rollmean(x, 10), col = "red", lwd = 2)
-```
-
-But if the noise was more variable (i.e., it has a longer tail), you might worry that your rolling mean was too sensitive to outliers. Instead, you might want to compute a rolling median.
-
-```{r outliers, small_mar = TRUE, fig.width = 3, fig.height = 2}
-x <- seq(1, 3, length = 1e2) + rt(1e2, df = 2) / 3
-plot(x)
-lines(rollmean(x, 5), col = "red", lwd = 2)
-```
-
-To change `rollmean()` to `rollmedian()`, all you need to do is replace `mean` with `median` inside the loop. But instead of copying and pasting to create a new function, we could extract the idea of computing a rolling summary into its own function: \indexc{rollapply()}
-
-```{r roll-apply, small_mar = TRUE, fig.width = 3, fig.height = 2}
-rollapply <- function(x, n, f, ...) {
-  out <- rep(NA, length(x))
-
-  offset <- trunc(n / 2)
-  for (i in (offset + 1):(length(x) - n + offset + 1)) {
-    out[i] <- f(x[(i - offset):(i + offset - 1)], ...)
-  }
-  out
-}
-plot(x)
-lines(rollapply(x, 5, median), col = "red", lwd = 2)
-```
-
-You might notice that the internal loop looks pretty similar to a `vapply()` loop, so we could rewrite the function as:
-
-```{r roll-apply-2}
-rollapply <- function(x, n, f, ...) {
-  offset <- trunc(n / 2)
-  locs <- (offset + 1):(length(x) - n + offset + 1)
-  num <- vapply(
-    locs, 
-    function(i) f(x[(i - offset):(i + offset)], ...),
-    numeric(1)
-  )
-
-  c(rep(NA, offset), num)
-}
-```
-
-This is effectively the same as the implementation in `zoo::rollapply()`, which provides many more features and much more error checking.
+-->
 
 ## Looping patterns
 \index{loops!common patterns}
 \index{loops!when to use}
 
-It's useful to remember that there are three basic ways to loop over a vector: 
 
-* Loop over the elements: `for (x in xs)`
-* Loop over the numeric indices: `for (i in seq_along(xs))`
-* Loop over the names: `for (nm in names(xs))`
 
-And each has a direct analog with a functional.
+## When not to use a functional
 
 These are also three common looping patterns that _don't_ have a functional equivalent: 
 
@@ -646,50 +431,6 @@ These are also three common looping patterns that _don't_ have a functional equi
 * While loops.
 
 It's possible to torture these problems to use a functional, but it's not a good idea. You'll create code that is harder to understand, eliminating the main reason for using functionals in the first case.
-
-### Looping patterns
-
-The first form is usually not a good choice for a for loop because it leads to inefficient ways of saving output. With this form it's very natural to save the output by extending a data structure, like in this example:
-
-```{r, eval = FALSE}
-xs <- runif(1e3)
-res <- c()
-for (x in xs) {
-  # This is slow!
-  res <- c(res, sqrt(x))
-}
-```
-
-This is slow because each time you extend the vector, R has to copy all of the existing elements. [Avoid copies](#avoid-copies) discusses this problem in more depth. Instead, it's much better to create the space you'll need for the output and then fill it in. This is easiest with the second form: \index{avoiding copies}
-
-```{r, eval = FALSE}
-res <- numeric(length(xs))
-for (i in seq_along(xs)) {
-  res[i] <- sqrt(xs[i])
-}
-```
-
-Just as there are three basic ways to use a for loop, there are three basic ways to use `lapply()`:
-
-```{r, eval = FALSE}
-lapply(xs, function(x) {})
-lapply(seq_along(xs), function(i) {})
-lapply(names(xs), function(nm) {})
-```
-
-Typically you'd use the first form because `lapply()` takes care of saving the output for you. However, if you need to know the position or name of the element you're working with, you should use the second or third form. Both give you an element's position (`i`, `nm`) and value (`xs[[i]]`, `xs[[nm]]`). If you're struggling to solve a problem using one form, you might find it easier with another.
-
-::: sidebar
-
-Note that you can get the same effect by passing the name of the function as a string, rather than the function itself:
-
-```{r}
-sapply(1:5, "+", 3)
-```
-
-This works because because `sapply` can be given the name of a function instead of the function itself: if you read the source of `sapply()`, you'll see the first line uses `match.fun()` to find functions given their names. Functions in the purrr package don't do this, instead using character inputs as a shortcut for subsetting.
-
-:::
 
 ### Modifying in place
 
@@ -771,59 +512,277 @@ This is a common problem when you're writing simulations.
 
 In this case we can remove the loop by recognising a special feature of the problem. Here we're counting the number of failures before Bernoulli trial with p = 0.1 succeeds. This is a geometric random variable, so you could replace the code with `i <- rgeom(1, 0.1)`. Reformulating the problem in this way is hard to do in general, but you'll benefit greatly if you can do it for your problem.
 
+### Exercises
+
+1.  Implement a version of `lapply()` that supplies `FUN` with both the name 
+    and the value of each component.
+
+
+## Map variants {#functionals-loop}
+
+There are 17 primary variants of `map()`. Apart from `map()` you've already learned about `map_lgl()`, `map_int()`, `map_dbl()` and `map_chr()`. This section will introduce to 12 (!!) more. That sounds like a lot but fortunately you only need to learn three new pieces:
+
+* Output same type as input: `modify()`
+* Iteration over two inputs: `map2()`.
+* Iterating with index: `imap()`
+* Returning nothing: `walk()`.
+* Iterating over any number of inputs: `pmap()`.
+
+The design of purrr makes the input and output orthogonal so combining `map()` with the four ideas above generates a matrix of 15 functions. Once you've mastered the idea in a row, you can combine it with any column; once you've mastered the idea in column, you can combine it with any row.
+
+|                       | List     | Atomic                          | Same type   | Nothing   |
+|-----------------------|----------|---------------------------------|-------------|-----------|
+| One argument          | `map()`  | `map_lgl()`, ..., `map_chr()`   | `modify()`  | `walk()`  |
+| Two arguments         | `map2()` | `map2_lgl()`, ..., `map2_chr()` | `imodify()` | `walk2()` |
+| One argument + index  | `imap()` | `imap_lgl()`, ..., `imap_chr()` | ---         | `iwalk()` |
+| N arguments           | `pmap()` | `pmap_lgl()`, ..., `pmap_chr()` | ---         | `pwalk()` |
+
+
+### Same type of output as input: `modify()` {#modify}
+
+What if you wanted to double every column in a data frame? As you'd expect, `map()` returns a list:
+
+```{r}
+df <- data.frame(
+  x = 1:3,
+  y = 6:4
+)
+
+map(df, ~ .x * 2)
+```
+
+`modify()` always returns the same type of output as input:
+
+```{r}
+modify(df, ~ .x * 2)
+```
+
+```{r}
+simple_modify <- function(x, f, ...) {
+  for (i in seq_along(x)) {
+    x[[i]] <- f(x[[i]], ...)
+  }
+  x
+}
+```
+
+
+### Two inputs: `map2()` and friends {#map2}
+\indexc{map2()}
+
+`map()` is vectorsed over a single argument. This makes it poorly suited for some problems. For example, how would you find a weighted mean when you have a list of observations and a list of weights? Imagine we have the following data:
+
+```{r}
+xs <- map(1:8, ~ runif(10))
+xs[[1]][[1]] <- NA
+ws <- map(1:8, ~ rpois(10, 5) + 1)
+```
+
+You can use `map_dbl()` to compute the unweighted means:
+
+```{r}
+map_dbl(xs, mean)
+```
+
+But switching to  `ws` as an additional argument doesn't work because arguments after `.f` are passed as is.
+
+```{r, error = TRUE}
+map_dbl(xs, weighted.mean, w = ws)
+```
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/functionals/map-arg-recycle.png")
+```
+
+We need a new tool: a `map2()`, which is vectorised over two arguments:
+
+```{r}
+map2_dbl(xs, ws, weighted.mean)
+```
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/functionals/map2.png")
+```
+
+The arguments to `map2()` are slightly different to the argument to `map()` as there are two vectors that come before the function. Additional arguments can still come afterwards:
+
+```{r}
+map2_dbl(xs, ws, weighted.mean, na.rm = TRUE)
+```
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/functionals/map2-arg.png")
+```
+
+The basic implementation of `map2()` is simple, and quite similar to that of `map()`. Now, instead of iterating over one vector, we iterate over two in parallel:
+
+```{r}
+simple_map2 <- function(x, y, f, ...) {
+  out <- vector("list", length(xs))
+  for (i in seq_along(x)) {
+    out[[i]] <- f(x[[i]], y[[i]], ...)
+  }
+  out
+}
+```
+
+One of the big differences between `map2()` and the simple function above is that `map2()` recycles its inputs to make sure that they're the same length:
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/functionals/map2-recycle.png")
+```
+
+In other words, `map2(x, y, f)` will automatically behave like `map(x, f, y)` when needed. This is helpful when writing functions; in scripts you'd generally just use the simpler form directly.
+
+::: base 
+There is no base equivalent to `map2()`.
+:::
+
+### No outputs: `walk()` and friends
+
+Usually you call a function for its return value. But there are some functions that you call primarily for their side-effects, like `cat()`, `write.csv()`, or `ggsave()`. You can use these functions with a `map()` function, but it's a little inelegant because you have to save the result to avoid printing a list of things that you don't care about. Take this simple example that displays a welcome message using `cat()`. `cat()` returns `NULL`, so while map works (in the sense that it generates the desired welcomes), it also returns `list(NULL, NULL)`. 
+
+```{r}
+welcome <- function(x) {
+  cat("Welcome ", x, "!\n", sep = "")
+}
+names <- c("Hadley", "Jenny")
+
+# As well as generate the welcomes, it also shows 
+# the return value of cat()
+map(names, welcome)
+```
+
+You could avoid this problem by assigning the results of `map()` to a variable that you never use, but that would muddy the intent of the code. Instead, purrr provides the walk family of functions that ignore the return values of the `.f` and instead return `.x` invisibly[^invisible].
+
+```{r}
+walk(names, welcome)
+```
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/functionals/walk.png")
+```
+
+[^invisible]: In brief, invisible values are only printed if you explicitly request them. It's a good idea to return them from functions called primarily for their side-effects because it makes easier to compose, if desired. See Section \@ref(invisible-values) for more details.
+
+One of the most useful `walk()` variants is `walk2()` because a very common side-effect is saving something to disk. When saving something to disk you almost always have a pair of values: the object and the path that you want to save it to.
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/functionals/walk2.png")
+```
+
+For example, imagine you have a list of data frames (which I've created here using split), and you'd like to save each one to a separate csv file. That's easy with `walk2()`:
+
+```{r}
+temp <- tempfile()
+dir.create(temp)
+
+cyls <- split(mtcars, mtcars$cyl)
+paths <- file.path(temp, paste0("cyl-", names(cyls), ".csv"))
+walk2(cyls, paths, write.csv)
+
+dir(temp)
+```
+
+Here the `walk2()` is equivalent to `write.csv(cyl[[1]], paths[[1]])`, `write.csv(cyl[[2]], paths[[2]])`, `write.csv(cyl[[3]], paths[[3]])`.
+
+::: base 
+There is no base equivalent to `walk()`.
+:::
+
+### Alternative indices
+
+It's useful to remember that there are three basic ways to loop over a vector: 
+
+* Loop over the elements: `for (x in xs)`
+* Loop over the numeric indices: `for (i in seq_along(xs))`
+* Loop over the names: `for (nm in names(xs))`
+
+And each has a direct analog with a functional.
+
+The first form is usually not a good choice for a for loop because it leads to inefficient ways of saving output. With this form it's very natural to save the output by extending a data structure, like in this example:
+
+```{r, eval = FALSE}
+xs <- runif(1e3)
+res <- c()
+for (x in xs) {
+  # This is slow!
+  res <- c(res, sqrt(x))
+}
+```
+
+This is slow because each time you extend the vector, R has to copy all of the existing elements. [Avoid copies](#avoid-copies) discusses this problem in more depth. Instead, it's much better to create the space you'll need for the output and then fill it in. This is easiest with the second form: \index{avoiding copies}
+
+```{r, eval = FALSE}
+res <- numeric(length(xs))
+for (i in seq_along(xs)) {
+  res[i] <- sqrt(xs[i])
+}
+```
+
+Just as there are three basic ways to use a for loop, there are three basic ways to use `map()`:
+
+```{r, eval = FALSE}
+map(xs, function(x) {})
+map(seq_along(xs), function(i) {})
+map(names(xs), function(nm) {})
+```
+
+Typically you'd use the first form because `lapply()` takes care of saving the output for you. However, if you need to know the position or name of the element you're working with, you should use the second or third form. Both give you an element's position (`i`, `nm`) and value (`xs[[i]]`, `xs[[nm]]`). If you're struggling to solve a problem using one form, you might find it easier with another.
+
+
+### Any number of inputs: `pmap()` and friends {#pmap}
+
+Since there's `map()` and `map2()`, you might expect that there's `map3()`, `map4()` and so one. But where would you stop? Instead of generalisating to an arbitrary number of arguments, purrr takes a slightly different tack with `pmap()`: you supply it with a list of arguments.
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/functionals/pmap.png")
+```
+
+Previously, we used `map2_dbl(xs, ws, weighted.mean)`: the `pmap()` equivalent is:
+
+```{r}
+pmap_dbl(list(xs, ws), weighted.mean)
+```
+
+As before, the varying arguments come before `.f`, and and the constant arguments come afterwards.
+
+```{r}
+pmap_dbl(list(xs, ws), weighted.mean, na.rm = TRUE)
+```
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/functionals/pmap-3.png")
+```
+
+The first argument should be a list of vectors, where every vector is the same length. But that's just a data frame!
+
+A handy way to create that data frame is with `tibble::tribble()`, which allows you to describe a data frame row-by-row (rather than column-by-column, as usual).  The following example shows how you might draw random uniform numbers with varying parameters:
+
+```{r}
+params <- tibble::tribble(
+  ~ n, ~ min, ~ max,
+   1L,     0,     1,
+   2L,    10,   100,
+   3L,   100,  1000
+)
+
+pmap(params, runif)
+```
+
+Here, the column names are critical: I've carefully chosen to match them to the arguments to `runif()`, so the `pmap(params, runif)` is equivalent to `runif(n = 1L, min = 0, max = 1)`, `runif(n = 2, min = 10, max = 100)`, `runif(n = 3L, min = 100, max = 1000)`.
+
+::: base
+
+There are two base equivalents to the `pmap()` family: `Map()` and `mapply()`. `Map()` is most similar to `pmap()` but it doesn't provide any way to pass constant arguments. `mapply()` is the multidimensional version of `sapply()`; concetually it takes the output of `Map()` and simplifies it if possible. `mapply()` provides the `MoreArgs` argument which allows you to pass additional constant arguments.
+
+:::
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/functionals/pmap-arg.png")
+```
+
 
 ### Exercises
 
-1.  Why are the following two invocations of `lapply()` equivalent?
-
-    ```{r, eval = FALSE}
-    trims <- c(0, 0.1, 0.2, 0.5)
-    x <- rcauchy(100)
-    
-    lapply(trims, function(trim) mean(x, trim = trim))
-    lapply(trims, mean, x = x)
-    ```
-
-1.  The function below scales a vector so it falls in the range [0, 1]. How
-    would you apply it to every column of a data frame? How would you apply it 
-    to every numeric column in a data frame?
-
-    ```{r}
-    scale01 <- function(x) {
-      rng <- range(x, na.rm = TRUE)
-      (x - rng[1]) / (rng[2] - rng[1])
-    }
-    ```
-
-1.  Use both for loops and `lapply()` to fit linear models to the
-    `mtcars` using the formulas stored in this list:
-
-    ```{r}
-    formulas <- list(
-      mpg ~ disp,
-      mpg ~ I(1 / disp),
-      mpg ~ disp + wt,
-      mpg ~ I(1 / disp) + wt
-    )
-    ```
-
-1.  Fit the model `mpg ~ disp` to each of the bootstrap replicates of `mtcars` 
-    in the list below by using a for loop and `lapply()`. Can you do it 
-    without an anonymous function?
-
-    ```{r}
-    bootstraps <- lapply(1:10, function(i) {
-      rows <- sample(1:nrow(mtcars), rep = TRUE)
-      mtcars[rows, ]
-    })
-    ```
-
-1.  For each model in the previous two exercises, extract $R^2$ using the
-    function below.
-
-    ```{r}
-    rsq <- function(mod) summary(mod)$r.squared
-    ```
+1.  What does `write.csv()` return? i.e. what happens if you use it with 
+    `map2()` instead of `walk2()`?
 
 
 ## Vector functionals {#functionals-fp}
@@ -833,6 +792,8 @@ Another way of thinking about functionals is as a set of general tools for alter
 ### Reduce
 
 `Reduce()` reduces a vector, `x`, to a single value by recursively calling a function, `f`, two arguments at a time. It combines the first two elements with `f`, then combines the result of that call with the third element, and so on. Calling `Reduce(f, 1:3)` is equivalent to `f(f(1, 2), 3)`. Reduce is also known as fold, because it folds together adjacent elements in the list. \indexc{Reduce()} \index{fold}
+
+Useful way to take a function that works with two elements, and generalise it to work with `n` elements.
 
 The following two examples show what `Reduce` does with an infix and prefix function:
 
@@ -846,7 +807,7 @@ The essence of `Reduce()` can be described by a simple for loop:
 ```{r}
 Reduce2 <- function(f, x) {
   out <- x[[1]]
-  for(i in seq(2, length(x))) {
+  for (i in seq(2, length(x))) {
     out <- f(out, x[[i]])
   }
   out
@@ -876,6 +837,8 @@ Reduce(intersect, l)
 ```
 
 Map-reduce
+
+Mention accumulate.
 
 ### Predicate functionals
 \index{predicates} 
