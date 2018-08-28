@@ -28,3 +28,19 @@ knitr::knit_hooks$set(
     }
   }
 )
+
+# Make error messages closer to base R
+registerS3method("wrap", "error", envir = asNamespace("knitr"),
+  function(x, options) {
+    call <- conditionCall(x)
+    message <- conditionMessage(x)
+
+    if (is.null(call)) {
+      msg <- paste0("Error: ", message)
+    } else {
+      msg <- paste0("Error in ", deparse(call), ":\n  ", message)
+    }
+
+    knitr:::msg_wrap(msg, "error", options)
+  }
+)
