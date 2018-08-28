@@ -39,6 +39,10 @@ A common use of functionals is as an alternative to for loops. For loops have a 
 
 Functionals reduce bugs in your code by better communicating intent. Functionals implemented in base R and purrr are well tested (i.e., bug-free) and efficient, because they're used by so many people. Many are written in C, and use special tricks to enhance performance. That said, using functionals will not always produce the fastest code. Instead, it helps you clearly communicate and build tools that solve a wide range of problems. It's a mistake to focus on speed until you know it'll be a problem. Once you have clear, correct code you can make it fast using the techniques you'll learn in Section \@ref(profiling).
 
+Using functionals is a pattern matching exercise. You look at the for loop, and find a functional that matches the basic form. If one doesn't exist, don't try and torture an existing functional to fit the form you need. Instead, just leave it as a for loop!
+
+It's not about eliminating for loops. It's about having someone else write them for you!
+
 ### Outline {-}
 
 <!--
@@ -121,7 +125,7 @@ The base equivalent to `map()` is `lapply()`. The only difference is that `lappy
 
 ### Producing atomic vectors
 
-`map()` returns a list which makes it very general because you can put anything in a list. But what if you want something simpler? There are four variatns, `map_lgl()`, `map_int()`, `map_dbl()` and `map_chr()`, that return atomic vectors:
+`map()` returns a list which makes it very general because you can put anything in a list. But what if you want something simpler? There are four variants, `map_lgl()`, `map_int()`, `map_dbl()` and `map_chr()`, that return atomic vectors:
 
 ```{r}
 map_chr(mtcars, typeof)
@@ -130,6 +134,8 @@ map_dbl(mtcars, mean)
 n_unique <- function(x) length(unique(x))
 map_int(mtcars, n_unique)
 ```
+
+(This example relies on the fact that data frames are lists, and lists are vectors. See Section \@ref(tibbles) if you need to jog your memory.)
 
 Like `map()`, the input and the output must be the same length, so you can not return multiple values:
 
@@ -398,126 +404,6 @@ x <- rcauchy(1000)
     rsq <- function(mod) summary(mod)$r.squared
     ```
 
-<!--
-## Purrr vs. base R
-
-```{r}
-mtcars %>% 
-  split(mtcars$cyl) %>% 
-  map(~ lm(mpg ~ wt, data = .x)) %>% 
-  map(coef) %>% 
-  map_dbl(1)
-
-by_cyl <- split(mtcars, mtcars$cyl)
-models <- lapply(by_cyl, function(data) lm(mpg ~ wt, data = data))
-vapply(models, function(x) coef(x)[[1]], double(1))
-
-sapply(split(mtcars, mtcars$cyl), function(x) coef(lm(mpg ~ wt, x))[[1]])
-```
--->
-
-## Looping patterns
-\index{loops!common patterns}
-\index{loops!when to use}
-
-
-
-## When not to use a functional
-
-These are also three common looping patterns that _don't_ have a functional equivalent: 
-
-* Modifying in place.
-* Recursive functions.
-* While loops.
-
-It's possible to torture these problems to use a functional, but it's not a good idea. You'll create code that is harder to understand, eliminating the main reason for using functionals in the first case.
-
-### Modifying in place
-
-If you need to modify part of an existing data frame, it's often better to use a for loop. For example, the following code performs a variable-by-variable transformation by matching the names of a list of functions to the names of variables in a data frame.
-
-```{r}
-trans <- list(
-  disp = function(x) x * 0.0163871,
-  am = function(x) factor(x, labels = c("auto", "manual"))
-)
-for(var in names(trans)) {
-  mtcars[[var]] <- trans[[var]](mtcars[[var]])
-}
-```
-
-We wouldn't normally use `lapply()` to replace this loop directly, but it is _possible_. Just replace the loop with `lapply()` by using `<<-`: \indexc{<<-}
-
-```{r, eval = FALSE}
-lapply(names(trans), function(var) {
-  mtcars[[var]] <<- trans[[var]](mtcars[[var]])
-})
-```
-
-The for loop is gone, but the code is longer and much harder to understand. The reader needs to understand `<<-` and how `x[[y]] <<- z` works (it's not simple!). In short, we've taken a simple, easily understood for loop, and turned it into something few people will understand: not a good idea!
-
-### Recursive relationships
-
-It's hard to convert a for loop into a functional when the relationship between elements is not independent, or is defined recursively. For example, exponential smoothing works by taking a weighted average of the current and previous data points. The `exps()` function below implements exponential smoothing with a for loop. \index{recurrence relations}
-
-```{r}
-exps <- function(x, alpha) {
-  s <- numeric(length(x) + 1)
-  for (i in seq_along(s)) {
-    if (i == 1) {
-      s[i] <- x[i]
-    } else {
-      s[i] <- alpha * x[i] + (1 - alpha) * s[i - 1]
-    }
-  }
-  s
-}
-x <- runif(6)
-exps(x, 0.5)
-```
-
-We can't eliminate the for loop because none of the functionals we've seen allow the output at position `i` to depend on both the input and output at position `i - 1`.
-
-One way to eliminate the for loop in this case is to [solve the recurrence relation](http://en.wikipedia.org/wiki/Recurrence_relation#Solving) by removing the recursion and replacing it with explicit references. This requires a new set of mathematical tools, and is challenging, but it can pay off by producing a simpler function.
-
-### While loops
-
-Another type of looping construct in R is the `while` loop. It keeps running until some condition is met. `while` loops are more general than `for` loops: you can rewrite every for loop as a while loop, but you can't do the reverse.  For example, we could turn this for loop: \index{loops!while} \indexc{while}
-
-```{r, eval = FALSE}
-for (i in 1:10) print(i)
-```
-
-into this while loop:
-
-```{r, eval = FALSE}
-i <- 1
-while(i <= 10) {
-  print(i)
-  i <- i + 1
-}
-```
-
-Not every while loop can be turned into a for loop because many while loops don't know in advance how many times they will be run:
-
-```{r, eval = FALSE}
-i <- 0
-while(TRUE) {
-  if (runif(1) > 0.9) break
-  i <- i + 1
-}
-```
-
-This is a common problem when you're writing simulations.
-
-In this case we can remove the loop by recognising a special feature of the problem. Here we're counting the number of failures before Bernoulli trial with p = 0.1 succeeds. This is a geometric random variable, so you could replace the code with `i <- rgeom(1, 0.1)`. Reformulating the problem in this way is hard to do in general, but you'll benefit greatly if you can do it for your problem.
-
-### Exercises
-
-1.  Implement a version of `lapply()` that supplies `FUN` with both the name 
-    and the value of each component.
-
-
 ## Map variants {#functionals-loop}
 
 There are 17 primary variants of `map()`. Apart from `map()` you've already learned about `map_lgl()`, `map_int()`, `map_dbl()` and `map_chr()`. This section will introduce to 12 (!!) more. That sounds like a lot but fortunately you only need to learn three new pieces:
@@ -530,12 +416,12 @@ There are 17 primary variants of `map()`. Apart from `map()` you've already lear
 
 The design of purrr makes the input and output orthogonal so combining `map()` with the four ideas above generates a matrix of 15 functions. Once you've mastered the idea in a row, you can combine it with any column; once you've mastered the idea in column, you can combine it with any row.
 
-|                       | List     | Atomic                          | Same type   | Nothing   |
-|-----------------------|----------|---------------------------------|-------------|-----------|
-| One argument          | `map()`  | `map_lgl()`, ..., `map_chr()`   | `modify()`  | `walk()`  |
-| Two arguments         | `map2()` | `map2_lgl()`, ..., `map2_chr()` | `imodify()` | `walk2()` |
-| One argument + index  | `imap()` | `imap_lgl()`, ..., `imap_chr()` | ---         | `iwalk()` |
-| N arguments           | `pmap()` | `pmap_lgl()`, ..., `pmap_chr()` | ---         | `pwalk()` |
+|                       | List     | Atomic            | Same type   | Nothing   |
+|-----------------------|----------|-------------------|-------------|-----------|
+| One argument          | `map()`  | `map_lgl()`, ...  | `modify()`  | `walk()`  |
+| Two arguments         | `map2()` | `map2_lgl()`, ... | `modify2()` | `walk2()` |
+| One argument + index  | `imap()` | `imap_lgl()`, ... | `imodify()` | `iwalk()` |
+| N arguments           | `pmap()` | `pmap_lgl()`, ... | ---         | `pwalk()` |
 
 
 ### Same type of output as input: `modify()` {#modify}
@@ -556,6 +442,8 @@ map(df, ~ .x * 2)
 ```{r}
 modify(df, ~ .x * 2)
 ```
+
+Again, the basic implementation of `
 
 ```{r}
 simple_modify <- function(x, f, ...) {
@@ -635,6 +523,16 @@ In other words, `map2(x, y, f)` will automatically behave like `map(x, f, y)` wh
 There is no base equivalent to `map2()`.
 :::
 
+```{r}
+trans <- list(
+  disp = function(x) x * 0.0163871,
+  am = function(x) factor(x, labels = c("auto", "manual"))
+)
+
+vars <- names(trans)
+mtcars[vars] <- map2(trans, mtcars[vars], rlang::exec)
+```
+
 ### No outputs: `walk()` and friends
 
 Usually you call a function for its return value. But there are some functions that you call primarily for their side-effects, like `cat()`, `write.csv()`, or `ggsave()`. You can use these functions with a `map()` function, but it's a little inelegant because you have to save the result to avoid printing a list of things that you don't care about. Take this simple example that displays a welcome message using `cat()`. `cat()` returns `NULL`, so while map works (in the sense that it generates the desired welcomes), it also returns `list(NULL, NULL)`. 
@@ -688,6 +586,7 @@ There is no base equivalent to `walk()`.
 :::
 
 ### Alternative indices
+\index{loops!common patterns}
 
 It's useful to remember that there are three basic ways to loop over a vector: 
 
@@ -695,37 +594,12 @@ It's useful to remember that there are three basic ways to loop over a vector:
 * Loop over the numeric indices: `for (i in seq_along(xs))`
 * Loop over the names: `for (nm in names(xs))`
 
-And each has a direct analog with a functional.
+The first form is analogous to the `map()` family. The second and third forms are equivalent to the `imap()` family. `imap()` is like `map2()` in the sense that `.f` gets called with two arguments. `imap(x, f)` is equivalent to `map2(x, names(x), f)` if x has names, and `map2(x, seq_along(x), f)` if it does not.
 
-The first form is usually not a good choice for a for loop because it leads to inefficient ways of saving output. With this form it's very natural to save the output by extending a data structure, like in this example:
-
-```{r, eval = FALSE}
-xs <- runif(1e3)
-res <- c()
-for (x in xs) {
-  # This is slow!
-  res <- c(res, sqrt(x))
-}
+```{r}
+x <- sample(100, 5)
+str(imap(x, ~ c(.x, .y)))
 ```
-
-This is slow because each time you extend the vector, R has to copy all of the existing elements. [Avoid copies](#avoid-copies) discusses this problem in more depth. Instead, it's much better to create the space you'll need for the output and then fill it in. This is easiest with the second form: \index{avoiding copies}
-
-```{r, eval = FALSE}
-res <- numeric(length(xs))
-for (i in seq_along(xs)) {
-  res[i] <- sqrt(xs[i])
-}
-```
-
-Just as there are three basic ways to use a for loop, there are three basic ways to use `map()`:
-
-```{r, eval = FALSE}
-map(xs, function(x) {})
-map(seq_along(xs), function(i) {})
-map(names(xs), function(nm) {})
-```
-
-Typically you'd use the first form because `lapply()` takes care of saving the output for you. However, if you need to know the position or name of the element you're working with, you should use the second or third form. Both give you an element's position (`i`, `nm`) and value (`xs[[i]]`, `xs[[nm]]`). If you're struggling to solve a problem using one form, you might find it easier with another.
 
 
 ### Any number of inputs: `pmap()` and friends {#pmap}
@@ -785,27 +659,18 @@ knitr::include_graphics("diagrams/functionals/pmap-arg.png")
     `map2()` instead of `walk2()`?
 
 
-## Vector functionals {#functionals-fp}
-
-Another way of thinking about functionals is as a set of general tools for altering, subsetting, and collapsing vectors. Every functional programming language has three tools for this: `Map()`, `Reduce()`, and `Filter()`. We've seen `Map()` already, and the following sections describe `Reduce()`, a powerful tool for extending two-argument functions, and `Filter()`, a member of an important class of functionals that work with predicates, functions that return a single `TRUE` or `FALSE`.
+## Other important purrr functionals {#functionals-fp}
 
 ### Reduce
+\indexc{reduce()} 
+\index{fold}
 
-`Reduce()` reduces a vector, `x`, to a single value by recursively calling a function, `f`, two arguments at a time. It combines the first two elements with `f`, then combines the result of that call with the third element, and so on. Calling `Reduce(f, 1:3)` is equivalent to `f(f(1, 2), 3)`. Reduce is also known as fold, because it folds together adjacent elements in the list. \indexc{Reduce()} \index{fold}
+`reduce()` reduces a vector, `x`, to a single value by recursively calling a function, `f`, two arguments at a time. It combines the first two elements with `f`, then combines the result of that call with the third element, and so on. Calling `reduce(1:3, f)` is equivalent to `f(f(1, 2), 3)`. Reduce is also known as fold, because it folds together adjacent elements in the list.
 
-Useful way to take a function that works with two elements, and generalise it to work with `n` elements.
-
-The following two examples show what `Reduce` does with an infix and prefix function:
-
-```{r, eval = FALSE}
-Reduce(`+`, 1:3) # -> ((1 + 2) + 3)
-Reduce(sum, 1:3) # -> sum(sum(1, 2), 3)
-```
-
-The essence of `Reduce()` can be described by a simple for loop:
+As usual, the essence of `reduce()` can reduced to a simple wrapper around a for loop:
 
 ```{r}
-Reduce2 <- function(f, x) {
+simple_reduce <- function(x, f) {
   out <- x[[1]]
   for (i in seq(2, length(x))) {
     out <- f(out, x[[i]])
@@ -814,9 +679,7 @@ Reduce2 <- function(f, x) {
 }
 ```
 
-The real `Reduce()` is more complicated because it includes arguments to control whether the values are reduced from the left or from the right (`right`), an optional initial value (`init`), and an option to output intermediate results (`accumulate`).
-
-`Reduce()` is an elegant way of extending a function that works with two inputs into a function that can deal with any number of inputs. It's useful for implementing many types of recursive operations, like merges and intersections. (We'll see another use in the final case study.) Imagine you have a list of numeric vectors, and you want to find the values that occur in every element:
+`reduce()` is a useful way to generalise a function that works with two inputs (a __binary__ function) to work with any number of inputs. Imagine you have a list of numeric vectors, and you want to find the values that occur in every element:
 
 ```{r}
 l <- map(1:5, ~ sample(1:10, 15, replace = T))
@@ -826,33 +689,51 @@ str(l)
 You could do that by intersecting each element in turn:
 
 ```{r}
-intersect(intersect(intersect(intersect(l[[1]], l[[2]]),
-  l[[3]]), l[[4]]), l[[5]])
+intersect(
+  intersect(
+    intersect(
+      intersect(l[[1]], l[[2]]),
+      l[[3]]
+    ), 
+    l[[4]]
+  ), 
+  l[[5]]
+)
 ```
 
 That's hard to read. With `Reduce()`, the equivalent is:
 
 ```{r}
-Reduce(intersect, l)
+reduce(l, intersect)
 ```
 
-Map-reduce
+To see how `reduce()` works, it's useful to use a variant: `accumulate()`. As well as returning the final result, `accumulate()` also returns all intermediate results. 
 
-Mention accumulate.
+```{r}
+accumulate(l, intersect)
+```
+
+
+::: base 
+
+The base equivalent is `Reduce()`. It takes the function as the first argument and the vector as second; there is no way to supply additional constant arguments.
+
+:::
 
 ### Predicate functionals
 \index{predicates} 
 \index{functions!predicate|see{predicates}}
 
-A __predicate__ is a function that returns a single `TRUE` or `FALSE`, like `is.character`, `all`, or `is.NULL`. A predicate functional applies a predicate to each element of a list or data frame. There are three useful predicate functionals in base R: `Filter()`, `Find()`, and `Position()`. 
+A __predicate__ is a function that returns a single `TRUE` or `FALSE`, like `is.character()`, `is.null()`, or `all()`, and we say a predicate __matches__ a vector if it returns `TRUE`. A __predicate functional__ applies a predicate to each element of a vector.  purrr proivdes six useful functions which come in three pairs:
 
-* `Filter()` selects only those elements which match the predicate.
+* `some(.x, .p)` returns `TRUE` if _any_ element matches;
+  `every(.x,, .p)` returns `TRUE` if _all_ elements match.
 
-* `Find()` returns the first element which matches the predicate (or the last 
-  element if `right = TRUE`).
-
-* `Position()` returns the position of the first element that matches the
-  predicate (or the last element if `right = TRUE`).
+* `detect(.x, .p)` returns the _value_ of the first match;
+  `detect_index(.x, .p)` returns the _location_ of the first match.
+  
+* `keep(.x, .p)` _keeps_ all matching elements;
+  `discard(.x, .p)` _drops_ all matching elements.
 
 The following example shows how you might use these functionals with a data frame:
 
@@ -865,19 +746,23 @@ str(keep(df, is.factor))
 str(discard(df, is.factor))
 ```
 
+All of these functions could be implemented by first computing a logical vector, e.g. `map_lgl(.x, .p)`, and then computing on that. However, that is a little inefficient because you can often exit early. For example, in
+
 ### `map_if()` and `modify_if()`
 
-\index{data frames!modifying each column}
+`map()` and `modify()` come in variants that also take predicate functions, transforming only the elements of `.x` with `.p` is `TRUE`.
 
-Compare on data frame.
+```{r}
+str(map_if(iris, is.numeric, mean))
+str(modify_if(iris, is.numeric, mean))
+str(map(keep(iris, is.numeric), mean))
+```
+
 
 ### Exercises
 
 1.  Why isn't `is.na()` a predicate function? What base R function is closest
     to being a predicate version of `is.na()`?
-
-1.  Use `Filter()` and `vapply()` to create a function that applies a summary 
-    statistic to every numeric column in a data frame.
 
 1.  What's the relationship between `which()` and `Position()`? What's
     the relationship between `where()` and `Filter()`?
@@ -1018,10 +903,6 @@ str(optimise(sin, c(0, pi), maximum = TRUE))
 1.  Implement a pure R version of `split()`. (Hint: use `unique()` and 
     subsetting.) Can you do it without a for loop?
 
-1.  What other types of input and output are missing? Brainstorm before you 
-    look up some answers in the [plyr paper](http://www.jstatsoft.org/v40/i01/).
-
 1.  Challenge: read about the 
     [fixed point algorithm](http://mitpress.mit.edu/sicp/full-text/book/book-Z-H-12.html#%_sec_1.3). 
     Complete the exercises using R.
-
