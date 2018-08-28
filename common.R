@@ -13,9 +13,13 @@ knitr::opts_chunk$set(
   fig.align = 'center',
   fig.width = 6,
   fig.asp = 0.618,  # 1 / phi
-  fig.show = "hold",
-  width = 70
+  fig.show = "hold"
 )
+
+if (knitr::is_latex_output()) {
+  knitr::opts_chunk$set(width = 69)
+  options(width = 69)
+}
 
 knitr::knit_hooks$set(
   small_mar = function(before, options, envir) {
@@ -23,5 +27,4 @@ knitr::knit_hooks$set(
       par(mar = c(4.1, 4.1, 0.5, 0.5))
     }
   }
-  # chunk = colourise_chunk
 )
