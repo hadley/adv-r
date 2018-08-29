@@ -91,13 +91,24 @@ Many R users feel guilty about using for loops instead of apply functions. It's 
 ## My first functional: `map()` {#map}
 \indexc{map()}
 
-The most fundamental functional is `purrr::map()`[^Map]. It takes a vector and a function, applies the function individually to each element in the vector, and returns the results in a list. In other words, `map(1:4, f)` yields `list(f(x[[1]]), f(x[[2]]), f(x[[3]]), f(x[[4]]))`. Or, graphically:
+The most fundamental functional is `purrr::map()`[^Map]. It takes a vector and a function, calls the function once for each element of the vector, and returns the results in a list. In other words, `map(1:3, f)` yields `list(f(x[[1]]), f(x[[2]]), f(x[[3]]))`. 
+
+```{r}
+triple <- function(x) x * 3
+map(1:3, triple)
+```
+
+Or, graphically:
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/functionals/map.png")
 ```
 
-[^Map]: Not to be confused with `base::Map()`, which is considerably more complex and we'll come back to in Section \@ref(pmap).
+::: sidebar
+You might wonder why this function is called `map()`. What does it have to do with depicting physical features of land or sea `r emo::ji("world_map")`? In fact, the meaning comes from mathematics where map refers to "an operation that associates each element of a given set with one or more elements of a second set". This makes sense here because `map()` defines a mapping from one vector to another. ("Map" also has the nice property of being short, which useful for such a fundamental building block.)
+:::
+
+[^Map]: Not to be confused with `base::Map()`, which is considerably more complex, and we'll come back to in Section \@ref(pmap).
 
 The implementation of `map()` is quite simple. We allocate a list the same length as the input, and then fill in the list with a for loop. The basic implementation is only a handful of lines of code:
 
@@ -111,37 +122,34 @@ simple_map <- function(x, f, ...) {
 }
 ```
 
-The real `purrr::map()` function has a few differences: its written in C to eke out every last iota of performance, preserves names, and has a few helpers that you'll learn about shortly.
-
-::: sidebar
-You might wonder why this function is called `map()`. What does it have to do with depicting physical features of land or sea `r emo::ji("world_map")`? In fact, the meaning comes from mathematics where map refers to "an operation that associates each element of a given set with one or more elements of a second set". This makes sense here because `map()` defines a mapping from one vector to another. ("Map" also has the nice property of being short, which useful for such a fundamental building block.)
-:::
+The real `purrr::map()` function has a few differences: it is written in C to eke out every last iota of performance, preserves names, and supports a few shortcuts that you'll learn about shortly.
 
 ::: base
-
-The base equivalent to `map()` is `lapply()`. The only difference is that `lappy()` does not support the helpers that you'll learn about below, so if you're only using `map()` from purrr, you might as well skip the additional package and use `base::lapply()`.
-
+The base equivalent to `map()` is `lapply()`. The only difference is that `lappy()` does not support the helpers that you'll learn about below, so if you're only using `map()` from purrr, you can skip the additional package and use `base::lapply()` directly.
 :::
 
 ### Producing atomic vectors
 
-`map()` returns a list which makes it very general because you can put anything in a list. But what if you want something simpler? There are four variants, `map_lgl()`, `map_int()`, `map_dbl()` and `map_chr()`, that return atomic vectors:
+`map()` returns a list. This makes `map()` the most general of the "map" family because you can put anything in a list. There are four more specific variants, `map_lgl()`, `map_int()`, `map_dbl()` and `map_chr()`, that return atomic vectors:
 
 ```{r}
 map_chr(mtcars, typeof)
+
 map_lgl(mtcars, is.double)
+
 map_dbl(mtcars, mean)
+
 n_unique <- function(x) length(unique(x))
 map_int(mtcars, n_unique)
 ```
 
 (This example relies on the fact that data frames are lists, and lists are vectors. See Section \@ref(tibbles) if you need to jog your memory.)
 
-Like `map()`, the input and the output must be the same length, so you can not return multiple values:
+Like `map()`, the input and the output must be the same length, so you can not return multiple values. When debugging problems like this, it's often useful to switch back to `map()` so you can see what the problematic output is.
 
 ```{r, error = TRUE}
 pair <- function(x) c(x, x)
-map_dbl(1:4, pair)
+map_dbl(1:3, pair)
 
 map(1:3, pair)
 ```
@@ -161,7 +169,11 @@ simple_map_dbl <- function(x, f, ...) {
 ```
 
 ::: base
-Base R has two functions similar to these variants: `sapply()` and `vapply()`. `sapply()` tries to simplify the result to an atomic vector, whereever possible. But this simplifiation depends on the input, so sometimes you'll get a list, sometimes a vector, and sometimes a matrix. This makes it difficult to program with. `vapply()` allows you to provide a template that describes the output shape. If you want to stick to with base R code you should always use `vapply()` in your functions, not `sapply()`. The primary downside of `vapply()` is its vebosity: the equivalent to `map_dbl(x, mean, na.rm = TRUE)` is `vapply(x, mean, na.rm = TRUE, FUN.VALUE = double())`.
+Base R has two similar functions: `sapply()` and `vapply()`. 
+
+`sapply()` tries to simplify the result to an atomic vector, whereever possible. But this simplifiation depends on the input, so sometimes you'll get a list, sometimes a vector, and sometimes a matrix. This makes it difficult to program with. 
+
+`vapply()` allows you to provide a template that describes the output shape. If you want to stick to with base R code you should always use `vapply()` in your functions, not `sapply()`. The primary downside of `vapply()` is its vebosity: the equivalent to `map_dbl(x, mean, na.rm = TRUE)` is `vapply(x, mean, na.rm = TRUE, FUN.VALUE = double())`.
 :::
 
 ### Anonymous functions and helpers
@@ -178,15 +190,22 @@ Anonymous functions are very useful, but the syntax is verbose. So purrr offers 
 map_dbl(mtcars, ~ length(unique(.x)))
 ```
 
-Inside all purrr functions you can create an anonymous function using a `~` (the usual formula operator, pronouned "twiddle"). You can see what happens by calling `as_mapper()` explicitly (this is usually done automatically):
+That also makes for a handy way of generating random data:
+
+```{r}
+x <- map(1:3, ~ runif(2))
+str(x)
+```
+
+Inside all purrr functions you can create an anonymous function using a `~` (the usual formula operator, pronouned "twiddle"). You can see what happens by calling `as_mapper()`: the map functions normally do that for you, but it's useful to do it "by hand" to see what's going on:
 
 ```{r}
 as_mapper(~ length(unique(.x)))
 ```
 
-The function arguments are a little quirky but allow you to refer to `.`, `.x` and `.y.` or `..1`, `..2`, `..3`, etc.
+The function arguments look a little quirky but allow you to refer to `.` for one argument functions, `.x` and `.y.` for two argument functions, and `..1`, `..2`, `..3`, etc, for functions with an arbitrary number of arguments.
 
-purrr also provides helpers for extracting elements from a vector, powered by  `purrr::pluck()`. Use a character vector to select elements by name, an integer vector to select by position, or a list to select by both name and position. These are very useful for working with deeply nested lists as often arises when working with data stored in JSON.
+purrr also provides helpers for extracting elements from a vector, powered by  `purrr::pluck()`. You can use a character vector to select elements by name, an integer vector to select by position, or a list to select by both name and position. These are very useful for working with deeply nested lists, which often arise when working with JSON. 
 
 ```{r, error = TRUE}
 x <- list(
@@ -211,14 +230,12 @@ map_chr(x, "z", .default = NA)
 ```
 
 ::: base
-
-`lapply()` and friends you can supply the name of a function as a string.
-
+In base R functions, like `lapply()`, you can provide the name of the function as a string. This isn't tremendously useful as most of the time `lapply(x, "f")` is exactly equivalent to `lapply(x, f)`, just more typing.
 :::
 
 ### Passing arguments with `...` {#passing-arguments}
 
-It's often necessary to pass on along additional constant arguments to the function that you're calling. For example, you might want to pass `na.rm = TRUE` along to `mean()`. One way to do that is with an anonymous function:
+It's often convenient to pass on along additional arguments to the function that you're calling. For example, you might want to pass `na.rm = TRUE` along to `mean()`. One way to do that is with an anonymous function:
 
 ```{r}
 x <- list(1:5, c(1:10, NA))
@@ -231,13 +248,19 @@ But because the map functions pass `...` along, there's a simpler form available
 map_dbl(x, mean, na.rm = TRUE)
 ```
 
-This is easiest to understand with a picture: any arguments that come after `f` in the call to `map()` after inserted after the data in individual calls to `f()`:
+This is easiest to understand with a picture: any arguments that come after `f` in the call to `map()` are inserted _after_ the data in individual calls to `f()`:
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/functionals/map-arg.png")
 ```
 
-Just note that moviing arguments inside an anonymous function means that they will be evaluated every time, not once when you call `map()`. This is easiest to see if we make the additional argument random:
+It's important to note that these arguments are not decomposed; or said another way, `map()` is only vectorised over its first argument. If an argument after `f` is a vector, it will be passed along as is, not decomposed like the first argument:
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/functionals/map-arg-recycle.png")
+```
+
+Note there's a subtle difference between placing extra arguments inside an anonymous function compared with passing them to `map()`. Putting them in anonymous function means that they will be evaluated every time `f()` is executed, not just once when you call `map()`. This is easiest to see if we make the additional argument random:
 
 ```{r}
 plus <- function(x, y) x + y
@@ -247,16 +270,13 @@ map_dbl(x, plus, runif(1))
 map_dbl(x, ~ plus(.x, runif(1)))
 ```
 
-This gives a useful pattern for generating random data:
+### Argument names
 
-```{r}
-x <- map(1:3, ~ runif(2))
-str(x)
-```
+In the diagrams, I've omitted argument names to focus on the overall structure. But I recommend writing out the full names in your code, as it makes it easier to read. `map(x, mean, 0.1)` is perfectly valid code, but it generates `mean(x[[1]], 0.1)` so it relies on the reader remembering that the second argument to `mean()` is `trim`.  To avoid unnecesary burden on the brain of the reader[^future-you], be kind, and write `map(x, mean, trim = 0.1)`.
 
-In the diagrams, I'm omitted argument names to focus on the big ideas. But I recommend writing out the full names in your code, as it makes it easier to read. `map(x, mean, 0.1)` is perfectly valid code, but it relies on the reader remembering that the second argument to `mean()` is `trim`; it's better to be explicit and write `map(x, mean, 0.1)`.
+[^future-you]: Who is highly likely to be future you!
 
-This is the reason why the arguments to `map()` are a little odd: instead of being `x` and `f`, they are `.x` and `.f`. It's easiest to see why this is a problem using `simple_map()` defined above. `simple_map()` has arguments `x` and `f` so you'll have problems:
+This is the reason why the arguments to `map()` are a little odd: instead of being `x` and `f`, they are `.x` and `.f`. It's easiest to the problem that leads to these names using `simple_map()` defined above. `simple_map()` has arguments `x` and `f` so you'll have problems whenever the function you are calling has arguments `x` or `f`:
 
 ```{r, error = TRUE}
 boostrap_summary <- function(x, f) {
@@ -266,23 +286,34 @@ boostrap_summary <- function(x, f) {
 simple_map(mtcars, boostrap_summary, f = mean)
 ```
 
-The error is a little bewildering until you remember that the call to `simple_map()` is equivalent to `simple_map(x = mtcars, f = mean, bootstrap_summary)` because named matching beats positional matching. purrr functions reduce the likelihood of this occuring by using `.f` and `.x` instead of the more common `f` and `x`. Of course this technique isn't perfect, but it avoids 99% of issues, and you can still always use an anonymous function if it's causes a problem.
+The error is a little bewildering until you remember that the call to `simple_map()` is equivalent to `simple_map(x = mtcars, f = mean, bootstrap_summary)` because named matching beats positional matching. 
+
+purrr functions reduce the likelihood of such a clash by using `.f` and `.x` instead of the more common `f` and `x`. Of course this technique isn't perfect (because the function you are calling might still use `.f` and `.x`), but it avoids 99% of issues. The remaining 1% of the time, use an anonymous function.
 
 ::: base
+Base functions that pass along `...` use a variety of naming conventions to prevent undesired argument matching:
 
-Base functions that pass `...` use a variety of naming conventions to prevent undesired argument matching. The apply family mostly uses capital letters (e.g `X` and `FUN`). `transform()` uses more exotic prefix `_`: this makes the name non-syntactic so it must always be surrounded in `` ` ``, as described in Section \@ref(non-syntactic).
+* The apply family mostly uses capital letters (e.g `X` and `FUN`). 
 
+* `transform()` uses more exotic prefix `_`: this makes the name non-syntactic 
+  so it must always be surrounded in `` ` ``, as described in 
+  Section \@ref(non-syntactic). This makes undesired matches extremely 
+  unlikely.
+  
+* Other functional like `uniroot()` and `optim()` make no effort to avoid 
+  clashes; but they tend to be used with specially created funtions so
+  clashes are less likely.
 :::
 
 ### Varying another argument
 
-So far the first argument to `map()` has always become the first argument to the function. But what happens if the first argument should be constant, and you want to vary a different argument? How do I get the resutlt in this picture?
+So far the first argument to `map()` has always become the first argument to the function. But what happens if the first argument should be constant, and you want to vary a different argument? How do you get the result in this picture?
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/functionals/map-arg-flipped.png")
 ```
 
-There's no way to do it directly with an existing purrr function, but there are two tricks you can use. To illustrate them, imagine I have a vector that contains a few unusual values, and I want to explore the effective of different amounts of trimming when computing the mean.
+It turns out that there's no way to do it directly, but there are two tricks you can use. To illustrate them, imagine I have a vector that contains a few unusual values, and I want to explore the effective of different amounts of trimming when computing the mean. In this case, the first argument to `mean()` will be constant, and I want to vary the second argument, `trim`.
 
 ```{r}
 trims <- c(0, 0.1, 0.2, 0.5)
@@ -298,9 +329,9 @@ x <- rcauchy(1000)
 
 *   Sometimes, if you want to be (too) clever, you can take advantage of R's 
     flexible argument matching rules (as described in Section 
-    \ref(prefix-form)). For example, in this case `trim` is the second 
-    argument to `mean()`, so you can rewrite `mean(x, trim = 0.1)` as
-    `mean(0.1, x = x)` which leads to:
+    \@ref(prefix-form)). For example, in this example you can rewrite 
+    `mean(x, trim = 0.1)` as `mean(0.1, x = x)`, so you could write the 
+    call to `map_dbl()` as:
 
     ```{r}
     map_dbl(trims, mean, x = x)
@@ -314,46 +345,30 @@ x <- rcauchy(1000)
 
 1.  Use `as_mapper()` to explore how purrr generates anonymous functions for
     the integer, character, and list helpers. What helper allows you to 
-    extract attributes?
+    extract attributes? Read the documentation to find out.
+
+1.  Why isn't `map(1:3, runif(2))` a useful pattern for generating random
+    numbers? Can you explain why it returns the result that it does?
 
 1.  Use the appropriate `map()` function to:
     
     a) Compute the standard deviation of every column in a numeric data frame.
     
     a) Compute the standard deviation of every numeric column in a mixed data
-       frame. (Hint: you'll need to use `vapply()` twice.)
-
-1.  The function below scales a vector so it falls in the range [0, 1]. How
-    would you apply it to every column of a data frame? How would you apply it 
-    to every numeric column in a data frame?
-
-    ```{r}
-    scale01 <- function(x) {
-      rng <- range(x, na.rm = TRUE)
-      (x - rng[1]) / (rng[2] - rng[1])
-    }
-    ```
+       frame.
 
 1.  The following code simulates the performance of a t-test for non-normal 
-    data. Use `sapply()` and an anonymous function to extract the p-value from 
-    every trial.
+    data. How can you extract only the p-value from each test?
 
     ```{r}
-    trials <- replicate(
-      100, 
-      t.test(rpois(10, 10), rpois(7, 10)),
-      simplify = FALSE
-    )
+    trials <- map(1:100, ~ t.test(rpois(10, 10), rpois(7, 10)))
     ```
-    
-    Extra challenge: get rid of the anonymous function by using `[[` directly.
-  
 
 1.  The following code uses a map nested inside another map to apply a
     function to every element of a nested list. Why does it fail, and 
     what do you need to do to make it work?
 
-    ```{r, eval = FALSE}
+    ```{r, error = TRUE}
     x <- list(
       list(1, c(3, 9)),
       list(c(3, 6), 7, c(4, 7, 6))
@@ -364,18 +379,8 @@ x <- rcauchy(1000)
     map(x, map, .f = triple)
     ```
 
-1.  Why are the following two invocations of `lapply()` equivalent?
-
-    ```{r, eval = FALSE}
-    trims <- c(0, 0.1, 0.2, 0.5)
-    x <- rcauchy(100)
-    
-    map_dbl(trims, function(trim) mean(x, trim = trim))
-    map_dbl(trims, mean, x = x)
-    ```
-
-1.  Use both for loops and `map()` to fit linear models to the
-    `mtcars` using the formulas stored in this list:
+1.  Use `map()` to fit linear models to the `mtcars` using the formulas stored 
+    in this list:
 
     ```{r}
     formulas <- list(
@@ -387,22 +392,17 @@ x <- rcauchy(1000)
     ```
 
 1.  Fit the model `mpg ~ disp` to each of the bootstrap replicates of `mtcars` 
-    in the list below by using both a for loop and `map()`. Can you do it 
-    without an anonymous function? Should you?
+    in the list below, then extract the $R^2$ of the model fit (Hint: you can
+    compute the $R^2$ with `summary()`)
 
     ```{r}
-    bootstraps <- lapply(1:10, function(i) {
-      rows <- sample(1:nrow(mtcars), rep = TRUE)
-      mtcars[rows, ]
-    })
+    bootstrap <- function(df) {
+      df[sample(nrow(df), replace = TRUE), , drop = FALSE]
+    }
+    
+    bootstraps <- map(1:10, ~ bootstrap(mtcars))
     ```
 
-1.  For each model in the previous two exercises, extract $R^2$ using the
-    function below.
-
-    ```{r}
-    rsq <- function(mod) summary(mod)$r.squared
-    ```
 
 ## Map variants {#functionals-loop}
 
@@ -658,6 +658,17 @@ knitr::include_graphics("diagrams/functionals/pmap-arg.png")
 1.  What does `write.csv()` return? i.e. what happens if you use it with 
     `map2()` instead of `walk2()`?
 
+
+1.  The function below scales a vector so it falls in the range [0, 1]. How
+    would you apply it to every column of a data frame? How would you apply it 
+    to every numeric column in a data frame?
+
+    ```{r}
+    scale01 <- function(x) {
+      rng <- range(x, na.rm = TRUE)
+      (x - rng[1]) / (rng[2] - rng[1])
+    }
+    ```
 
 ## Other important purrr functionals {#functionals-fp}
 
