@@ -734,18 +734,51 @@ There are two base equivalents to the `pmap()` family: `Map()` and `mapply()`. B
 
 ## Reduce
 
-There are three other particularly families of functionals provided by purrr. You will use them less regularly than the map family and its variants, but they are handy to have in your backpocket.
+After the map family, the next most important family of functions is the reduce family. This family is much smaller, with only two main variants, and used less commonly, but it's a powerful idea, gives us the opportunity to discuss some useful algebra, and powers the map-reduce framework frequently used when working with large data.
 
 ### Basics
 \indexc{reduce()} 
 \index{fold}
 
-`reduce()` reduces a vector, `x`, to a single value by iteratively calling a function, `f`, two arguments at a time. `reduce(1:3, f)` is equivalent to `f(f(1, 2), 3)`. 
-
-It's a little harder to capture reduce in a diagram:
+`reduce()` takes a vector of length n, and produces a vector of length one, by calling a function with a pair of values at a time. In other words, `reduce(1:4, f)` is equivalent to `f(f(f(1, 2), 3), 4)`. 
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/functionals/reduce.png")
+```
+
+`reduce()` is a useful way to generalise a function that works with two inputs (a __binary__ function) to work with any number of inputs. Imagine you have a list of numeric vectors, and you want to find the values that occur in every element:
+
+```{r}
+l <- map(1:4, ~ sample(1:10, 15, replace = T))
+str(l)
+```
+
+To solve this challenge we need to use `intersect()` repeatedly:
+
+```{r}
+out <- l[[1]]
+out <- intersect(out, l[[2]])
+out <- intersect(out, l[[3]])
+out <- intersect(out, l[[4]])
+out
+```
+
+`reduce()` automates this solution for us, so we can write:
+
+```{r}
+reduce(l, intersect)
+```
+
+We could apply the same idea if we wanted to list all the elements that appear in at least one entry. All we have to do is switch from `intersect()` to `union()`:
+
+```{r}
+reduce(l, union)
+```
+
+Like the map family, you can also pass additional arguments. `intersect()` and `union()` don't take an extra arguments so I can't demonstrate them here, but the principle is straight forward and I drew you a picture.
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/functionals/reduce-arg.png")
 ```
 
 As usual, the essence of `reduce()` can reduced to a simple wrapper around a for loop:
@@ -760,86 +793,87 @@ simple_reduce <- function(x, f) {
 }
 ```
 
-`reduce()` is a useful way to generalise a function that works with two inputs (a __binary__ function) to work with any number of inputs. Imagine you have a list of numeric vectors, and you want to find the values that occur in every element:
-
-```{r}
-l <- map(1:5, ~ sample(1:10, 15, replace = T))
-str(l)
-```
-
-You could do that by intersecting each element in turn:
-
-```{r}
-intersect(
-  intersect(
-    intersect(
-      intersect(
-        l[[1]], 
-        l[[2]]
-      ),
-      l[[3]]
-    ), 
-    l[[4]]
-  ), 
-  l[[5]]
-)
-```
-
-But that's hard to read, and doesn't generalise well if the list grows in size. But the problem is easy to solve with `reduce()`:
-
-```{r}
-reduce(l, intersect)
-```
-
 ::: base 
-
-The base equivalent is `Reduce()`. It takes the function as the first argument and the vector as second; there is no way to supply additional constant arguments.
-
+The base equivalent is `Reduce()`. Note that the argument order is different: the function comes first, followed by the vector; there is no way to supply additional arguments.
 :::
 
+### Accumulate
 
-```{r, echo = FALSE, out.width = NULL}
-knitr::include_graphics("diagrams/functionals/reduce-arg.png")
+The first `reduce()` variant, `accumulate()`, is useful for understand how reduce works, because instead of return just the final result, it returns all the intermediate results as well:
+
+```{r}
+accumulate(l, intersect)
 ```
 
-### Algebra
+Another useful way to understand reduce is to think about `sum()`: `sum(x)` is equivalent to `x[[1]] + x[[2]] + x[[3]] + ...`.  And then `accumulate()` gives you the cumulative sum:
 
-Associative, commutative, identity element.
+```{r}
+x <- c(4, 3, 10)
+reduce(x, `+`)
 
-* `x * y`: 1
-* `x + y`: 0
-* `min(x, y)`: Inf
-* `max(x, y)`: -Inf
-* `c()`, `union(x, y)`: NULL
-* `intersect(x, y)`: no way to express
+accumulate(x, `+`)
+```
 
-`mean()` -> `sum()` + `length()`
-`sd()` -> `sum(x ^2)` + `sum(x)` + `length()`
-`median()` -> not possible (although can approximate)
+### Output types
 
-Linear models. 
+In the above example using `+`, what should `reduce()` return when `x` is short, i.e. length 1 or 0? When `x` is length 1, reduce just returns it without applying the reduce function:
 
-### Initialise
+```{r}
+reduce(1, `+`)
+```
 
-What happens if `reduce()` is called with zero arguments or one arguments?
+This means that `reduce()` has no way to check that the input is valid:
+
+```{r}
+reduce("a", `+`)
+```
+
+What if it's length 0? We get an error that suggest we need to use the `.init` argument:
+
+```{r, error = TRUE}
+reduce(integer(), `+`)
+```
+
+What should `.init` be here? To figure that out, we need to see what happens when `.init` supplied:
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/functionals/reduce-init.png")
 ```
 
-### reduce2
+So if we call `reduce(1, `+`, init)` the result will be `1 + init`. Now we know that the result should be just `1` one, so that suggests that `.init` should be 0:
+
+```{r}
+reduce(integer(), `+`, .init = 0)
+```
+
+This also ensures that `reduce()` checks that length 1 inputs are valid for the function that you're calling:
+
+```{r, error = TRUE}
+reduce("a", `+`, .init = 0)
+```
+
+If you want to get algebraic about it, 0 is called the __identity__ of the numbers under the operation of addition: if you add a 0 to any number, you get the same number back. R applies the same principle to determine what a summary function with a zero length input should return:
+
+```{r, warning = FALSE}
+sum(integer())  # x + 0 = x
+prod(integer()) # x * 1 = x
+min(integer())  # min(x, Inf) = x
+max(integer())  # max(x, -Inf) = x
+```
+
+If you're using `reduce()` in a function, you should always supply `.init`. Think carefully about what you function should return when passed a vector of length zero or one, and make sure to test your implementation.
+
+### Multiple inputs
+
+Very occassionally you need to two arguments to the function that you're reducing. For example, you might have a list of data frames that you want to join together, and the variables that you are joining by vary from element to element. This is a very specialised scenario, so I don't want to spend much time on it, except to know that it exists.
+
+Note that the length of the second argument varies based on whether or not `.init` is supplied: if you have four elements of `x`, `f` will only be called three times. If you supply init, `f` will be called four times.
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/functionals/reduce2.png")
 ```
-
-
-### Accumulate
-
-To see how `reduce()` works, it's useful to use a variant: `accumulate()`. As well as returning the final result, `accumulate()` also returns all intermediate results. 
-
-```{r}
-accumulate(l, intersect)
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/functionals/reduce2-init.png")
 ```
 
 ### Map-reduce
@@ -887,7 +921,6 @@ str(map_if(iris, is.numeric, mean))
 str(modify_if(iris, is.numeric, mean))
 str(map(keep(iris, is.numeric), mean))
 ```
-
 
 ### Exercises
 
