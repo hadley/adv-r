@@ -1,7 +1,7 @@
 library(methods)
 
 set.seed(1014)
-options(digits = 3)
+options(digits = 3, str = strOptions(strict.width = "cut"))
 
 knitr::opts_chunk$set(
   comment = "#>",
