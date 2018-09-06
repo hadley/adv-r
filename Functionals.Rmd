@@ -967,17 +967,18 @@ str(map(keep(iris, is.numeric), mean))
 
 ## Base functionals {#functionals-math}
 
-Base R functionals have more of a mathematical/statistical flavour.
+To finish up the chapter, here I provide a survey of important base functions that are not members of the map, reduce, or predicate families, and hence have no equivalent in purrr. This is not to say that they're not important, but they have more of a mathematical/statistical flavour, so they are generally less useful in data analyses.
 
-### Matrices and array operations
+### Matrices and arrays
+\indexc{apply()}
 
-So far, all the functionals we've seen work with 1d input structures. The three functionals in this section provide useful tools for working with higher-dimensional data structures. `apply()` is a variant of `sapply()` that works with matrices and arrays. You can think of it as an operation that summarises a matrix or array by collapsing each row or column to a single number. It has four arguments: \indexc{apply()}
+`map()` and friends are specialised to work with 1d vectors. `base::apply()` is specialised to work with 2d and higher vectors, i.e. matrices and arrays. You can think of `apply()` as an operation that summarises a matrix or array by collapsing each row or column to a single value. It has four arguments: 
 
-* `X`, the matrix or array to summarise
+* `X`, the matrix or array to summarise.
 * `MARGIN`, an integer vector giving the dimensions to summarise over, 
   1 = rows, 2 = columns, etc.
-* `FUN`, a summary function
-* `...` other arguments passed on to `FUN`
+* `FUN`, a summary function.
+* `...` other arguments passed on to `FUN`.
 
 A typical example of `apply()` looks like this
 
@@ -987,47 +988,49 @@ apply(a, 1, mean)
 apply(a, 2, mean)
 ```
 
-There are a few caveats to using `apply()`. It doesn't have a simplify argument, so you can never be completely sure what type of output you'll get. This  means that `apply()` is not safe to use inside a function unless you carefully check the inputs. `apply()` is also not idempotent in the sense that if the summary function is the identity operator, the output is not always the same as the input:
+You can specify multiple dimensions to `MARGINS`, which is useful for high-d arrays:
 
 ```{r}
-a1 <- apply(a, 1, identity)
-identical(a, a1)
-identical(a, t(a1))
-a2 <- apply(a, 2, identity)
-identical(a, a2)
+a <- array(1:24, c(2, 3, 4))
+apply(a, 1, mean)
+apply(a, c(1, 2), mean)
 ```
 
-(You can put high-dimensional arrays back in the right order using `aperm()`, or use `plyr::aaply()`, which is idempotent.)
+There are a two caveats to using `apply()`: 
 
-`sweep()` allows you to "sweep" out the values of a summary statistic. It is often used with `apply()` to standardise arrays. The following example scales the rows of a matrix so that all values lie between 0 and 1. \indexc{sweep()}
+*    Like `base::sapply()`, you have no control over the output type; it 
+     will automatically be simplified to a list, matrix, or vector. However, 
+     generally, you used `apply()` with a numeric arrays and numeric summary
+     function so you are less likely to encounter a problem that with 
+     `sapply()`.
 
-```{r}
-x <- matrix(rnorm(20, 0, 10), nrow = 4)
-x1 <- sweep(x, 1, apply(x, 1, min), `-`)
-x2 <- sweep(x1, 1, apply(x1, 1, max), `/`)
-```
+*   `apply()` is also not idempotent in the sense that if the summary 
+    function is the identity operator, the output is not always the same as 
+    the input. 
 
-The final matrix functional is `outer()`. It's a little different in that it takes multiple vector inputs and creates a matrix or array output where the input function is run over every combination of the inputs: \indexc{outer()}
+    ```{r}
+    a1 <- apply(a, 1, identity)
+    identical(a, a1)
+    identical(a, t(a1))
+    
+    a2 <- apply(a, 2, identity)
+    identical(a, a2)
+    ```
 
-```{r}
-# Create a times table
-outer(1:3, 1:10, "*")
-```
+*   Never use `apply()` with a data frame. It always coerces `X` to a matrix,
+    which will lead to undesirable results if your data frame contains anything
+    other than numbers.
+    
+    ```{r}
+    df <- data.frame(x = 1:3, y = c("a", "b", "c"))
+    apply(df, 2, mean)
+    ```
 
-Good places to learn more about `apply()` and friends are:
-
-* ["Using apply, sapply, lapply in R"](http://petewerner.blogspot.com/2012/12/using-apply-sapply-lapply-in-r.html) by Peter Werner.
-
-* ["The infamous apply function"](http://rforpublichealth.blogspot.no/2012/09/the-infamous-apply-function.html) by Slawa Rokicki.
-
-* ["The R apply function - a tutorial with examples"](http://forgetfulfunctor.blogspot.com/2011/07/r-apply-function-tutorial-with-examples.html) by axiomOfChoice.
-
-* The stackoverflow question ["R Grouping functions: `sapply` vs. `lapply` vs. `apply` vs. `tapply` vs. `by` vs. `aggregate`"](http://stackoverflow.com/questions/3505701).
-
-### `tapply()`
+### "Ragged" arrays 
 \indexc{split()}
+\indexc{tapply()}
 
-You can think about `tapply()` as a generalisation to `apply()` that allows for "ragged" arrays, arrays where each row can have a different number of columns. This is often needed when you're trying to summarise a data set. For example, imagine you've collected pulse rate data from a medical trial, and you want to compare the two groups: \indexc{tapply()}
+You can think about `tapply()` as a generalisation to `apply()` that allows for "ragged" arrays, arrays where each row can have a different number of columns. This is often needed when you're trying to summarise a data set. For example, imagine you've collected pulse rate data from a medical trial, and you want to compare the two groups: 
 
 ```{r}
 pulse <- round(rnorm(22, 70, 10 / 3)) + rep(c(0, 5), c(10, 12))
@@ -1037,36 +1040,28 @@ tapply(pulse, group, length)
 tapply(pulse, group, mean)
 ```
 
-`tapply()` works by creating a "ragged" data structure from a set of inputs, and then applying a function to the individual elements of that structure. The first task is actually what the `split()` function does. It takes two inputs and returns a list which groups elements together from the first vector according to elements, or categories, from the second vector:
+`tapply()` works by creating a "ragged" data structure from a set of inputs, and then applying a function to the individual elements of that structure. The first task is actually performed by `split()` function does. It takes two inputs and returns a list which groups elements together from the first vector according to elements, or categories, from the second vector:
 
 ```{r}
 split(pulse, group)
 ```
 
-Then `tapply()` is just the combination of `split()` and `sapply()`:
+Then `tapply()` is just the combination of `split()` and `sapply()`.
 
-```{r}
-tapply2 <- function(x, group, f, ..., simplify = TRUE) {
-  pieces <- split(x, group)
-  sapply(pieces, f, simplify = simplify)
-}
-tapply2(pulse, group, length)
-tapply2(pulse, group, mean)
-```
-
-Being able to rewrite `tapply()` as a combination of `split()` and `sapply()` is a good indication that we've identified some useful building blocks. 
-
-### Mathmatical
+### Mathematical
+\indexc{integrate()} 
+\indexc{uniroot()} 
+\indexc{optimise()}
 
 Functionals are very common in mathematics. The limit, the maximum, the roots (the set of points where `f(x) = 0`), and the definite integral are all functionals: given a function, they return a single number (or vector of numbers). At first glance, these functions don't seem to fit in with the theme of eliminating loops, but if you dig deeper you'll find out that they are all implemented using an algorithm that involves iteration.
 
-In this section we'll use some of R's built-in mathematical functionals. There are three functionals that work with functions to return single numeric values: \indexc{integrate()} \indexc{uniroot()} \indexc{optimise()}
+Base R provides a useful set:
 
 * `integrate()` finds the area under the curve defined by `f()`
 * `uniroot()` finds where `f()` hits zero
 * `optimise()` finds the location of lowest (or highest) value of `f()`
 
-Let's explore how these are used with a simple function, `sin()`:
+The following example shows how they might be used with a simple function, `sin()`:
 
 ```{r}
 integrate(sin, 0, pi)
