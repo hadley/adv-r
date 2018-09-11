@@ -9,7 +9,7 @@ source("common.R")
 
 In this chapter, you'll learn about function operators (FOs). A function operator is a function that takes one (or more) functions as input and returns a function as output. In some ways, function operators are similar to functionals: there's nothing you can't do without them, but they can make your code more readable and expressive, and they can help you write code faster. The main difference is that functionals extract common patterns of loop use, where function operators extract common patterns of anonymous function use. 
 
-The following code shows a simple function operator, `chatty()`. It wraps a function, making a new function that prints out its first argument. It's useful because it gives you a window to see how functionals, like `map_int()`, work.
+The following code shows a simple function operator, `chatty()`. It wraps a function, making a new function that prints out its first argument. You might create a function like this because it gives you a window to see how functionals, like `map_int()`, work.
 
 ```{r, eval = TRUE}
 chatty <- function(f) {
@@ -28,30 +28,17 @@ chatty(f)(1)
 purrr::map_dbl(s, chatty(f))
 ```
 
-Chapter divided into two main sections. First I'll show you a selection of useful existing operators, or function operators that you can easily create. Second, I'll work through two case studies of using FOs to solve a problem instead of other approaches.
+The chapter is divided into two main sections. First, I'll show you a three useful existing operators FO, and show you how use them to solve real problems. Second, I'll work through two case studies of using FOs to solve a problem instead of other approaches.
 
 ### Outline {-}
 
-* [Behavioural FOs](#behavioural-fos) introduces you to FOs that change the
-  behaviour of a function like automatically logging usage to disk or ensuring 
-  that a function is run only once.
-
-* [Output FOs](#output-fos) shows you how to write FOs that manipulate the
-  output of a function. These can do simple things like capturing errors, or
-  fundamentally change what the function does.
-
-* [Input FOs](#input-fos) describes how to modify the inputs to a function using
-  a FO like `Vectorize()` or `partial()`.
-
-* [Combining FOs](#combining-fos) shows the power of FOs that combine multiple
-  functions with function composition and logical operations.
-
 ### Prerequisites {-}
 
-Function operators are a type of function factory, so make sure you're familiar with Sections ...
+Function operators are a type of function factory, so make sure you're familiar with Section \@ref(function-fundamentals) before you go on. We'll use a couple of functionals from purrr that you learned about in Chapter \@ref(functionals), as well as some function operators that you'll learn about below. We'll use the memoise package for a useful FO.
 
 ```{r setup}
 library(purrr)
+library(memoise)
 ```
 
 <!--
@@ -62,98 +49,161 @@ Function operators are used extensively in FP languages like Haskell, and common
 
 ## Existing FOs
 
-The next step up in complexity is to modify the output of a function. This could be quite simple, or it could fundamentally change the operation of the function by returning something completely different to its usual output. In this section you'll learn about two simple modifications, `Negate()` and `failwith()`, and two fundamental modifications, `capture_it()` and `time_it()`.
+There are two extremely useful function operators that will both help you solve common recurring problems, and give you a sense for what FOs can do: `purrr::safely()` and `memoise::memoise()`.
 
-### Capturing errors 
+### Capturing errors with `purrr::safely()` {#safely}
+\indexc{safely()}
 
+One advantage of a for-loops is that if one of the iterations fails in a for-loop you can still access all the previous results:
 
-(If you haven't seen `tryCatch()` before, it's discussed in more detail in Section \@ref(handling-conditions).)
+```{r, error = TRUE}
+x <- list(
+  c(0.512, 0.165, 0.717),
+  c(0.064, 0.781, 0.427),
+  c(0.890, 0.785, 0.495),
+  "oops"
+)
 
-`failwith()` is very useful in conjunction with functionals: instead of the failure propagating and terminating the higher-level loop, you can complete the iteration and then find out what went wrong. For example, imagine you're fitting a set of generalised linear models (GLMs) to a list of data frames. While GLMs can sometimes fail because of optimisation problems, you'd still want to be able to try to fit all the models, and later look back at those that failed: \index{fitting many models}
+out <- rep(NA_real_, length(x))
+for (i in seq_along(x)) {
+  out[[i]] <- sum(x[[i]])
+}
+out
+```
+
+If you run the same code with a functional, you get no output and it can be hard to figure out where the problem lies:
+
+```{r, error = TRUE}
+map_dbl(x, sum)
+```
+
+`purrr::safely()` provides a tool to help with this problem. `safely()` is a function operator that transforms a function to turn errors into data. (You can learn the basic idea that makes it work in Section \@ref(try-success-failure)). Let's start by taking a look at it outside of `map_dbl()`:
+
+```{r}
+safe_sum <- safely(sum)
+str(safe_sum(x[[1]]))
+str(safe_sum(x[[4]]))
+```
+
+A function transformed by `safely()` always returns a list with two elements, `result` and `error`. If the function runs successfully, `error` is `NULL` and `result` contains the result; if the function fails, `result` is `NULL` and `error` contains the error.
+
+```{r}
+out <- map(x, safely(sum))
+str(out)
+```
+
+The output is in a slightly inconveient form, since we have four lists each containing a list containing the result and the error. We can make it more convenient by using `purrr::transpose()` to turn it "inside-out" so that we get a list of result and a list of errors:
+
+```{r}
+out <- transpose(map(x, safely(sum)))
+str(out)
+```
+
+Now we can easily find the results the worked, or the inputs that failed:
+
+```{r}
+ok <- map_lgl(out$error, is.null)
+ok
+
+x[!ok]
+
+out$result[ok]
+```
+
+You can use this same technique in many different situtations. For example, imagine you're fitting a set of generalised linear models (GLMs) to a list of data frames. While GLMs can sometimes fail because of optimisation problems, you'd still want to be able to try to fit all the models, and later look back at those that failed: \index{fitting many models}
 
 ```{r, eval = FALSE}
-# If any model fails, all models fail to fit:
 fit_model <- function(df) {
   glm(y ~ x1 + x2 * x3, data = df)
 }
-models <- map(datasets, fit_model)
-# If a model fails, it will get a NULL value
-models <- map(datasets, safely(fit_model))
 
+models <- transpose(map(datasets, safely(fit_model)))
+ok <- map_lgl(models$error, is.null)
+
+# which data failed to converge?
+datasets[!ok]
+
+# which models were successful?
+models[ok]
 ```
 
-I think this is a great example of the power of combining functionals and function operators: it lets you succinctly express what you need to solve a common data analysis problem.
+I think this is a great example of the power of combining functionals and function operators: it lets you succinctly express what you need to solve a common data analysis problem. 
 
-### Caching computations
+purrr comes with three other function operators in a similar vein:
+
+* `possibly()`: returns a default value when there's an error.
+
+* `quietly()`: turns output, messages, and warning side-effects in to
+  `output`, `message`, and `warning` components of the output.
+
+* `auto_browser()`: automatically executes `browser()` inside the 
+  function when there's an error.
+
+See their documentation for more details.
+
+### Caching computations with `memoise::memoise()` {#memoise}
 \index{memoisation}
+\indexc{memoise()}
+\index{Fibonacci series}
 
-An alternative approach is to use memoisation: modify a function to automatically cache its results. 
+An extremely handy FO is `memoise::memoise()`. It __memoises__ a function, meaning that the function will remember previous inputs and return a cache results. Memoisation is an example of the classic computer science tradeoff of memory versus speed. A memoised function can run much faster because it stores all of the previous inputs and outputs, using more memory.
+
+Let's explore this idea with a toy function that simulates an expensive operation:
 
 ```{r, cache = TRUE}
-slow_function <- function() {
+slow_function <- function(x) {
   Sys.sleep(1)
-  10
+  x * 10 * runif(1)
 }
-system.time(slow_function())
-system.time(slow_function())
-fast_function <- memoise::memoise(slow_function)
-system.time(fast_function())
-system.time(fast_function())
+system.time(print(slow_function(1)))
+
+system.time(print(slow_function(1)))
 ```
 
-Memoisation is an example of the classic computer science tradeoff of memory versus speed. A memoised function can run much faster because it stores all of the previous inputs and outputs, using more memory.
-
-A realistic use of memoisation is computing the Fibonacci series. The Fibonacci series is defined recursively: the first two values are 1 and 1, then f(n) = f(n - 1) + f(n - 2). A naive version implemented in R would be very slow because, for example, `fib(10)` computes `fib(9)` and `fib(8)`, and `fib(9)` computes `fib(8)` and `fib(7)`, and so on. As a result, the value for each value in the series gets computed many, many times. Memoising `fib()` makes the implementation much faster because each value is computed only once. \index{Fibonacci series}
+When we memoise this function, it's slow when we call it with new arguments. But when we call it with arguments that it's seen before it's instanteous: it retrieves the previous value of the computation.
 
 ```{r, cache = TRUE}
+fast_function <- memoise::memoise(slow_function)
+system.time(print(fast_function(1)))
+
+system.time(print(fast_function(1)))
+```
+
+A relatively realistic use of memoisation is computing the Fibonacci series. The Fibonacci series is defined recursively: the first two values are defined by convention, $f(0) = 0$, $f(n) = 1$, and then $f(n) = f(n - 1) + f(n - 2)$ (for any positive integer). A naive version is slow because, for example, `fib(10)` computes `fib(9)` and `fib(8)`, and `fib(9)` computes `fib(8)` and `fib(7)`, and so on. 
+
+```{r}
 fib <- function(n) {
   if (n < 2) return(1)
   fib(n - 2) + fib(n - 1)
 }
 system.time(fib(23))
 system.time(fib(24))
+```
 
+Memoising `fib()` makes the implementation much faster because each value is computed only once:
+
+```{r}
 fib2 <- memoise::memoise(function(n) {
   if (n < 2) return(1)
   fib2(n - 2) + fib2(n - 1)
 })
 system.time(fib2(23))
+```
+
+And future calls can rely on previous computations:
+
+```{r}
 system.time(fib2(24))
 ```
 
-It doesn't make sense to memoise all functions. For example, a memoised random number generator is no longer random:
+This is an example of __dynamic programming__, where a complex problem can be broken down into many overlapping subproblems, and remembering the results of a subproblem considerably improves performance. 
 
-```{r}
-runifm <- memoise::memoise(runif)
-runifm(5)
-runifm(5)
-```
-
-### Vectorising a function
-
-`base::Vectorize()` converts a scalar function to a vector function. It takes a non-vectorised function and vectorises it with respect to the arguments specified in the vectorize.args argument. This doesn’t give you any magical performance improvements, but it’s useful if you want a quick and dirty way of making a vectorised function.
-
-A mildly useful extension to sample() would be to vectorize it with respect to size. Doing so would allow you to generate multiple samples in one call.
-
-```{r}
-sample2 <- Vectorize(sample, "size", SIMPLIFY = FALSE)
-str(sample2(1:5, c(1, 1, 3)))
-
-str(sample2(1:5, 5:3))
-```
-
-In this example we have used `SIMPLIFY = FALSE` to ensure that our newly vectorised function always returns a list. This is usually what you want.
-
-Note that `Vectorise()` is most useful for quick and dirty throw away functions. It's not terribly much better than doing it by hand with purrr functions:
-
-```{r}
-sample3 <- function(x, size, replace = FALSE, prob = NULL) {
-  map(size, sample, ~ sample(x, .x, replace = replace, prob = prob))
-  # pmap(list(size = size), sample, replace = replace, prob = prob))
-}
-```
+Think carefully before memoising a function. If the function is not __pure__, i.e. the output does not depend only on the input, you will get misleading and confusing results. I created a subtle bug in devtools because I memoised the results of `available.package()`, which is rather slow because it has to download a large file from CRAN. The available packages don't change that frequently, but if you have an R process that's been running for a few days, the changes can become important, and because the problem only arose in long-running R process, the bug was very painful to find.
 
 ### Exercises
+
+1.  Base R provides a function operator in the form of `Vectorize()`. 
+    What does it do? When might you use it?
 
 ## Creating your own FOs
 \indexc{delay\_by()}
@@ -338,63 +388,6 @@ plot(x, type = "b"); abline(h = 0.739, col = "grey50")
 plot(error, type = "b"); abline(h = 0, col = "grey50")
 ```
 
-### A family of function operators
-\index{predicate functions}
-\index{Boolean algebra}
-\indexc{Negate()} 
-
-`Negate()` takes a function that returns a logical vector (a predicate function), and returns the negation of that function. This can be a useful shortcut when a function returns the opposite of what you need. The essence of `Negate()` is very simple:
-
-```{r}
-Negate <- function(f) {
-  force(f)
-  function(...) !f(...)
-}
-(Negate(is.null))(NULL)
-```
-
-`purrr::possibly()` turns a function that throws an error into a function that returns a default value when there's an error. Again, the essence of `failwith()` is simple; it's just a wrapper around `try()`, the function that captures errors and allows execution to continue. \indexc{try()}
-
-
-When I use `Filter()` and other functionals that work with logical predicates, I often find myself using anonymous functions to combine multiple conditions: 
-
-```{r, eval = FALSE}
-keep(iris, ~ is.character(.x) || is.factor(.x))
-```
-
-As an alternative, we could define function operators that combine logical predicates:
-
-```{r}
-and <- function(f1, f2) {
-  force(f1); force(f2)
-  function(...) {
-    f1(...) && f2(...)
-  }
-}
-
-or <- function(f1, f2) {
-  force(f1); force(f2)
-  function(...) {
-    f1(...) || f2(...)
-  }
-}
-
-not <- function(f) {
-  force(f)
-  function(...) {
-    !f(...)
-  }
-}
-```
-
-This would allow us to write:
-
-```{r, eval = FALSE}
-keep(iris, or(is.character, is.factor))
-keep(iris, not(is.numeric))
-```
-
-And we now have a boolean algebra on functions, not on the results of functions.
 
 ### Exercises
 
