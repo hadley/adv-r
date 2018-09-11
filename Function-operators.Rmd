@@ -209,28 +209,33 @@ Think carefully before memoising a function. If the function is not __pure__, i.
 \indexc{delay\_by()}
 \indexc{dot\_every()}
 
+In the following two case studies we'll tackle two problems using function operators: downloading files from the internet, and understanding what a mathematical functional is doing.
+
 ### Downloading files
 
-To motivate these behaviours, imagine we want to download a long vector of URLs. That's pretty simple with `map()` and `download_file()`:
+Imagine you have long vector of URLs and you want to download them all.
+That's pretty simple with `walk2()` and `file.download()`:
 
-```{r, eval = FALSE}
-download_file <- function(url, ...) {
-  download.file(url, basename(url), ...)
-}
-map(urls, download_file)
+```{r}
+urls <- c(
+  "adv-r" = "https://adv-r.hadley.nz", 
+  "r4ds" = "http://r4ds.had.co.nz/"
+  # and many many more
+)
+path <- paste(tempdir(), names(urls))
+
+walk2(urls, path, download.file, quiet = TRUE)
 ```
-
-(`download_file()` is a simple wrapper around `utils::download.file()` which provides a reasonable default for the file name.)
 
 There are a number of useful behaviours we might want to add to this function:
 
-* If the list was long, we might want to print a `.` every ten URLs 
-  so we know that the function is still working. 
+* If we're downloading many pages, it would be nice to print a `.` every 
+  few URLs so that we know that the function is still working. 
   
 * If we're downloading files over the internet, we might want to add 
   a small delay between each request to avoid hammering the server.
   
-Implementing these behaviours requires a little work, and unfortunately we can no longer use `map()` because we need an external counter:
+Implementing these behaviours requires a little work, and unfortunately we can no longer use `walk2()` because we need an external counter:
 
 ```{r, eval = FALSE}
 i <- 1
@@ -238,17 +243,11 @@ for(url in urls) {
   i <- i + 1
   if (i %% 10 == 0) cat(".")
   Sys.sleep(1)
-  download_file(url)
+  file.path(url)
 }
 ```
 
-Understanding this code is hard because different concerns (iteration, printing, and downloading) are interleaved. That also makes the components difficult to reuse in a new situation
-
-In the remainder of this section we'll create FOs that encapsulate each behaviour and allow us to write code like this:
-
-```{r, eval = FALSE}
-map(urls, download_file %>% delay_by(1) %>% dot_every(10))
-```
+Understanding this code is hard because different concerns (iteration, printing, and downloading) are interleaved. That also makes the components difficult to reuse in a new situation. Instead, let's make two new functions that encapsulate the parts of the problem.
 
 Implementing `delay_by()` is straightforward, and follows the same basic template that we'll see for the majority of FOs in this chapter: 
 
@@ -300,9 +299,7 @@ download <- download_file %>%
   dot_every(10)
 ```
 
-I've also tried to give the FOs descriptive names: delay by 1 (second), (print a) dot every 10 (invocations). The more clearly the function names used in your code express your intent, the easier it will be for others (including future you) to read and understand the code.
-
-Another thing you might worry about when downloading multiple files is accidentally downloading the same file multiple times. You could avoid this by calling `unique()` on the list of input URLs, or manually managing a data structure that mapped the URL to the result.
+I've also tried to give the FOs readable names: delay by 1 (second), (print a) dot every 10 (invocations). The more clearly the function names used in your code express your intent, the easier it will be for others (including future you) to read and understand the code.
 
 Once we understand `memoise()`, it's straightforward to apply to our problem:
 
@@ -313,81 +310,77 @@ download <- download_file %>%
   dot_every(10)
 ```
 
-This gives a function that we can easily use with `map()`. However, if something goes wrong with the loop inside `map()`, it can be difficult to tell what's going on. The next section will show how we can use FOs to pull back the curtain and look inside.
-
 ### Understanding functionals
 \indexc{tee()}
 
-One challenge with functionals is that it can be hard to see what's going on inside of them. It's not easy to pry open their internals like it is with a for loop. Fortunately we can use FOs to peer behind the curtain with `tee()`.  
-
-`tee()`, defined below, has three arguments, all functions: `f`, the function to modify; `on_input`, a function that's called with the inputs to `f`; and `on_output`, a function that's called with the output from `f`.
+One challenge with functionals is that it can be hard to see what's going on inside of them. It's not easy to pry open their internals like it is with a for loop. For example, imagine we want to figure out the location where these two functions intersect:
 
 ```{r}
-ignore <- function(...) NULL
+f1 <- function(x) cos(x)
+f2 <- function(x) (x - 2) * x * (x + 1) / 3
 
-tee <- function(f, on_input = ignore, on_output = ignore) {
-  force(f)
-  force(on_input)
-  force(on_output)
-  
-  function(...) {
-    on_input(...)
-    output <- f(...)
-    on_output(output)
-    output
-  }
-}
+grid <- seq(-3, 3, length = 500)
+plot(grid, f1(grid), type = "l", lwd = 2)
+lines(grid, f2(grid), col = "red", lwd = 2)
 ```
 
-(The function is inspired by the unix shell command `tee`, which is used to split up streams of file operations so that you can both display what's happening and save intermediate results to a file.)
-
-We can use `tee()` to look inside the `uniroot()` functional, and see how it iterates its way to a solution. The following example finds where `x` and `cos(x)` intersect: \indexc{uniroot()}
+We can do that using the `uniroot()` functional which finds the place where a function equals zero:
 
 ```{r}
-g <- function(x) cos(x) - x
+g <- function(x) f1(x) - f2(x)
 zero <- uniroot(g, c(-5, 5))
-show_x <- function(x, ...) cat(sprintf("%+.08f", x), "\n")
+zero$root
 
-# The location where the function is evaluated:
-zero <- uniroot(tee(g, on_input = show_x), c(-5, 5))
-# The value of the function:
-zero <- uniroot(tee(g, on_output = show_x), c(-5, 5))
+plot(grid, f1(grid), type = "l", lwd = 2)
+lines(grid, f2(grid), col = "red", lwd = 2)
+abline(v = zero$root, col = "grey50")
 ```
 
-`cat()` allows us to see what's happening as the function runs, but it doesn't give us a way to work with the values after the function as completed. To do that, we could capture the sequence of calls by creating a function, `remember()`, that records every argument called and retrieves them when coerced into a list. The small amount of S3 code needed is explained in [S3](#s3). \indexc{remember()}
+But how does `uniroot()` work? It would be neat if we could capture the sequence of function calls that
 
 ```{r}
-remember <- function() {
-  memory <- list()
-  f <- function(...) {
-    # This is inefficient!
-    memory <<- append(memory, list(...))
-    invisible()
+remember_input <- function(f) {
+  force(f)
+  
+  memory <- double()
+  function(x, ...) {
+    memory <<- append(memory, x)
+    f(x, ...)
   }
+}
 
-  structure(f, class = "remember")
-}
-as.list.remember <- function(x, ...) {
-  environment(x)$memory
-}
-print.remember <- function(x, ...) {
-  cat("Remembering...\n")
-  str(as.list(x))
-}
+g_mem <- remember_input(g)
+zero <- uniroot(g_mem, c(-2, 2))
+zero$root
 ```
 
-Now we can draw a picture showing how uniroot zeroes in on the final answer:
+Now we need some way to get the values out. We can hack this by reaching inside the function environment
 
-```{r, uniroot-explore, small_mar = TRUE, fig.width = 3, fig.height = 2}
-locs <- remember()
-vals <- remember()
-zero <- uniroot(tee(g, locs, vals), c(-5, 5))
-x <- unlist(as.list(locs))
-error <- unlist(as.list(vals))
-plot(x, type = "b"); abline(h = 0.739, col = "grey50")
-plot(error, type = "b"); abline(h = 0, col = "grey50")
+```{r}
+x <- environment(g_mem)$memory
+
+plot(grid, f1(grid), type = "l", lwd = 2, xlim = range(x))
+lines(grid, f2(grid), col = "red", lwd = 2)
+points(x, f1(x))
+points(x, f2(x), col = "red")
+segments(x, f1(x), x, f2(x))
+text(x, f1(x) + 0.15 * sign(f1(x) - f2(x)) , seq_along(x), cex = 0.9)
+
+plot(grid, f1(grid), type = "l", lwd = 2, xlim = range(x[-(1:3)]))
+lines(grid, f2(grid), col = "red", lwd = 2)
+points(x, f1(x))
+points(x, f2(x), col = "red")
+segments(x, f1(x), x, f2(x))
+text(x, f1(x) + 0.15 * sign(f1(x) - f2(x)) , seq_along(x), cex = 0.9)
+
+plot(grid, f1(grid), type = "l", lwd = 2, xlim = range(x[-(1:4)]))
+lines(grid, f2(grid), col = "red", lwd = 2)
+points(x, f1(x))
+points(x, f2(x), col = "red")
+segments(x, f1(x), x, f2(x))
+text(x, f1(x) + 0.15 * sign(f1(x) - f2(x)) , seq_along(x), cex = 0.9)
+
 ```
-
 
 ### Exercises
 
@@ -403,31 +396,11 @@ plot(error, type = "b"); abline(h = 0, col = "grey50")
 1.  Write a FO that logs a time stamp and message to a file every time a 
     function is run.
 
-1.  What does the following function do? What would be a good name for it?
-
-    ```{r}
-    f <- function(g) {
-      force(g)
-      result <- NULL
-      function(...) {
-        if (is.null(result)) {
-          result <<- g(...)
-        }
-        result
-      }
-    }
-    runif2 <- f(runif)
-    runif2(5)
-    runif2(10)
-    ```
-
 1.  Modify `delay_by()` so that instead of delaying by a fixed amount of time, 
     it ensures that a certain amount of time has elapsed since the function 
     was last called. That is, if you called 
     `g <- delay_by(1, f); g(); Sys.sleep(2); g()` there shouldn't be an 
     extra delay.
-
-1.  Write `wait_until()` which delays execution until a specific time.
 
 1.  There are three places we could have added a memoise call: why did we 
     choose the one we did?
@@ -438,21 +411,4 @@ plot(error, type = "b"); abline(h = 0, col = "grey50")
     download <- dot_every(10, delay_by(1, memoise(download_file)))
     ```
 
-1.  Make infix versions of the functions so you can write 
-    `keep(iris, is.character %or% is.factor))`
-
-1.  Extend `and()` and `or()` to deal with any number of input functions. Can 
-    you do it with `reduce()`? Can you keep them lazy (e.g., for `and()`, the 
-    function returns once it sees the first `FALSE`)?
-
-1.  Implement the `xor()` binary operator. Implement it using the existing 
-    `xor()` function. Implement it as a combination of `and()` and `or()`. What 
-    are the advantages and disadvantages of each approach? Also think about 
-    what you'll call the resulting function to avoid a clash with the existing
-    `xor()` function, and how you might change the names of `and()`, `not()`, 
-    and `or()` to keep them consistent.
-
-1.  Above, we implemented boolean algebra for functions that return a logical 
-    function. Implement elementary algebra (`plus()`, `minus()`, `multiply()`, 
-    `divide()`, `exponentiate()`, `log()`) for functions that return numeric 
-    vectors.
+1.  Use progress pacakge and make functional given length.
