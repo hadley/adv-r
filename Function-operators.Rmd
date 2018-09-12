@@ -7,9 +7,7 @@ source("common.R")
 ## Introduction
 \index{function operators}
 
-In this chapter, you'll learn about function operators (FOs). A function operator is a function that takes one (or more) functions as input and returns a function as output. In some ways, function operators are similar to functionals: there's nothing you can't do without them, but they can make your code more readable and expressive, and they can help you write code faster. The main difference is that functionals extract common patterns of loop use, where function operators extract common patterns of anonymous function use. 
-
-The following code shows a simple function operator, `chatty()`. It wraps a function, making a new function that prints out its first argument. You might create a function like this because it gives you a window to see how functionals, like `map_int()`, work.
+In this chapter, you'll learn about function operators (FOs). A function operator is a function that takes one (or more) functions as input and returns a function as output. The following code shows a simple function operator, `chatty()`. It wraps a function, making a new function that prints out its first argument. You might create a function like this because it gives you a window to see how functionals, like `map_int()`, work.
 
 ```{r, eval = TRUE}
 chatty <- function(f) {
@@ -23,18 +21,25 @@ chatty <- function(f) {
 }
 f <- function(x) x ^ 2
 s <- c(3, 2, 1)
-chatty(f)(1)
 
 purrr::map_dbl(s, chatty(f))
 ```
 
-The chapter is divided into two main sections. First, I'll show you a three useful existing operators FO, and show you how use them to solve real problems. Second, I'll work through two case studies of using FOs to solve a problem instead of other approaches.
+Function operators are closely related to function factories; indeed they're just a function factory that takes a function as a input. As well a being built from the same building blocks, there's nothing you can't do without them, but they often allow you to factor out complexity in order to make your code more readable and resuable. Function operators are typically paired with functionals. If you're using a for-loop, there's rarely a reason to use a FO, as it will make your code more complex for little gain.
 
 ### Outline {-}
 
+* Section \@ref(existing-fos) introduces you to two useful extremely existing 
+  FOs, and show you how use them to solve real problems.
+  
+* Section \@ref(fo-case-study) works through a case study where work through
+  a problem amenable to function operators: downloading many web pages.
+
 ### Prerequisites {-}
 
-Function operators are a type of function factory, so make sure you're familiar with Section \@ref(function-fundamentals) before you go on. We'll use a couple of functionals from purrr that you learned about in Chapter \@ref(functionals), as well as some function operators that you'll learn about below. We'll use the memoise package for a useful FO.
+Function operators are a type of function factory, so make sure you're familiar with Section \@ref(function-fundamentals) before you go on. 
+
+We'll use a couple of functionals from purrr that you learned about in Chapter \@ref(functionals), as well as some function operators that you'll learn about below. We'll use the memoise package for a useful FO.
 
 ```{r setup}
 library(purrr)
@@ -205,15 +210,11 @@ Think carefully before memoising a function. If the function is not __pure__, i.
 1.  Base R provides a function operator in the form of `Vectorize()`. 
     What does it do? When might you use it?
 
-## Creating your own FOs
+## Case study: creating your own FOs {#fo-case-study}
 \indexc{delay\_by()}
 \indexc{dot\_every()}
 
-In the following two case studies we'll tackle two problems using function operators: downloading files from the internet, and understanding what a mathematical functional is doing.
-
-### Downloading files
-
-Imagine you have long vector of URLs and you want to download them all.
+Imagine you have named vector of URLs and you'd like to download each one to disk.
 That's pretty simple with `walk2()` and `file.download()`:
 
 ```{r}
@@ -222,42 +223,39 @@ urls <- c(
   "r4ds" = "http://r4ds.had.co.nz/"
   # and many many more
 )
-path <- paste(tempdir(), names(urls))
+path <- paste(tempdir(), names(urls), ".html")
 
 walk2(urls, path, download.file, quiet = TRUE)
 ```
 
-There are a number of useful behaviours we might want to add to this function:
+This approach is fine for a handful of URLs, but as the vector gets longer, it'd be nice to add a couple more features:
 
-* If we're downloading many pages, it would be nice to print a `.` every 
-  few URLs so that we know that the function is still working. 
-  
-* If we're downloading files over the internet, we might want to add 
-  a small delay between each request to avoid hammering the server.
-  
-Implementing these behaviours requires a little work, and unfortunately we can no longer use `walk2()` because we need an external counter:
+* Add a small delay between each request to avoid hammering the server.
+
+* Display a `.` every few URLs so that we know that the function is still 
+  working. 
+
+It's relatively easy to add these extra features if we're using a for loop:
 
 ```{r, eval = FALSE}
-i <- 1
-for(url in urls) {
-  i <- i + 1
+for(i in seq_along(urls)) {
+  Sys.sleep(0.1)
   if (i %% 10 == 0) cat(".")
-  Sys.sleep(1)
-  file.path(url)
+  download.file(urls[[i]], paths[[i]])
 }
 ```
 
-Understanding this code is hard because different concerns (iteration, printing, and downloading) are interleaved. That also makes the components difficult to reuse in a new situation. Instead, let's make two new functions that encapsulate the parts of the problem.
+But I think this for loop is suboptimal because it interleaves different concerns (iteration, printing, and downloading). This makes the code harder to read, and it makes the harder to components reuse in new situations. Instead, let's see if we can use function operators to extract out the two ideas and make them reusable.
 
-Implementing `delay_by()` is straightforward, and follows the same basic template that we'll see for the majority of FOs in this chapter: 
+First, lets write make an FO that adds a small delay. I'm going to call it `delay_by()` for reasons that will be clear more shortly, and it has two arguments: the function to wrap, and the amount of delay to add. The actual implementation is quite simple. The main trick is forcing evaluation of all arguments as described in Section \@ref(factory-pitfalls), because function operators are a special type of function factory:
 
 ```{r}
-delay_by <- function(f, delay) {
+delay_by <- function(f, amount) {
   force(f)
-  force(delay)
+  force(amount)
   
   function(...) {
-    Sys.sleep(delay)
+    Sys.sleep(amount)
     f(...)
   }
 }
@@ -265,9 +263,13 @@ system.time(runif(100))
 system.time(delay_by(runif, 0.1)(100))
 ```
 
-Because function operator are just a special type of function factory, we need to ensure that all arguments are evaluated, as in Section \@ref(factory-pitfalls).
+And we can use it with the original `walk2()`:
 
-`dot_every()` is a little bit more complicated because it needs to manage a counter. Fortunately, we saw how to do that in Section \@ref(stateful-funs). 
+```{r, eval = FALSE}
+walk2(urls, path, delay_by(download.file, 0.1), quiet = TRUE)
+```
+
+Creating a function to display the occassional dot is a little harder, because we can no longer rely on the index from the loop. We could pass the index along as another argument, but that breaks encapsulation: now a concern of the progress function becomes a problem that the higher level wrapper needs to deal instead. Instead, we'll use another function factory trick (from Section \@ref(stateful-funs)), so that the progress wrapper can manage its own internal counter:
 
 ```{r}
 dot_every <- function(f, n) {
@@ -281,117 +283,53 @@ dot_every <- function(f, n) {
     f(...)
   }
 }
-x <- lapply(1:100, runif)
-x <- lapply(1:100, dot_every(runif, 10))
+walk(1:100, runif)
+walk(1:100, dot_every(runif, 10))
 ```
 
-Code gets a little hard to read if when start to chain many function operators together.
+Now we can express our original goal as:
 
 ```{r, eval = FALSE}
-download <- dot_every(delay_by(download_file, 1), 10)
+walk2(urls, path, dot_every(delay_by(download.file, 0.1), 10), quiet = TRUE)
 ```
 
-Fortunately we can use the pipe:
+This is starting to get a little hard to read because we are composing many function calls, and the arguments are getting spread out. One way to resolve that is to use the pipe:
 
 ```{r, eval = FALSE}
-download <- download_file %>% 
-  delay_by(1) %>% 
-  dot_every(10)
+walk2(
+  urls, path, 
+  download.file %>% dot_every(10) %>% delay_by(0.1), 
+  quiet = TRUE
+)
 ```
 
-I've also tried to give the FOs readable names: delay by 1 (second), (print a) dot every 10 (invocations). The more clearly the function names used in your code express your intent, the easier it will be for others (including future you) to read and understand the code.
-
-Once we understand `memoise()`, it's straightforward to apply to our problem:
-
-```{r, eval = FALSE}
-download <- download_file %>% 
-  delay_by(1) %>% 
-  memoise() %>% 
-  dot_every(10)
-```
-
-### Understanding functionals
-\indexc{tee()}
-
-One challenge with functionals is that it can be hard to see what's going on inside of them. It's not easy to pry open their internals like it is with a for loop. For example, imagine we want to figure out the location where these two functions intersect:
-
-```{r}
-f1 <- function(x) cos(x)
-f2 <- function(x) (x - 2) * x * (x + 1) / 3
-
-grid <- seq(-3, 3, length = 500)
-plot(grid, f1(grid), type = "l", lwd = 2)
-lines(grid, f2(grid), col = "red", lwd = 2)
-```
-
-We can do that using the `uniroot()` functional which finds the place where a function equals zero:
-
-```{r}
-g <- function(x) f1(x) - f2(x)
-zero <- uniroot(g, c(-5, 5))
-zero$root
-
-plot(grid, f1(grid), type = "l", lwd = 2)
-lines(grid, f2(grid), col = "red", lwd = 2)
-abline(v = zero$root, col = "grey50")
-```
-
-But how does `uniroot()` work? It would be neat if we could capture the sequence of function calls that
-
-```{r}
-remember_input <- function(f) {
-  force(f)
-  
-  memory <- double()
-  function(x, ...) {
-    memory <<- append(memory, x)
-    f(x, ...)
-  }
-}
-
-g_mem <- remember_input(g)
-zero <- uniroot(g_mem, c(-2, 2))
-zero$root
-```
-
-Now we need some way to get the values out. We can hack this by reaching inside the function environment
-
-```{r}
-x <- environment(g_mem)$memory
-
-plot(grid, f1(grid), type = "l", lwd = 2, xlim = range(x))
-lines(grid, f2(grid), col = "red", lwd = 2)
-points(x, f1(x))
-points(x, f2(x), col = "red")
-segments(x, f1(x), x, f2(x))
-text(x, f1(x) + 0.15 * sign(f1(x) - f2(x)) , seq_along(x), cex = 0.9)
-
-plot(grid, f1(grid), type = "l", lwd = 2, xlim = range(x[-(1:3)]))
-lines(grid, f2(grid), col = "red", lwd = 2)
-points(x, f1(x))
-points(x, f2(x), col = "red")
-segments(x, f1(x), x, f2(x))
-text(x, f1(x) + 0.15 * sign(f1(x) - f2(x)) , seq_along(x), cex = 0.9)
-
-plot(grid, f1(grid), type = "l", lwd = 2, xlim = range(x[-(1:4)]))
-lines(grid, f2(grid), col = "red", lwd = 2)
-points(x, f1(x))
-points(x, f2(x), col = "red")
-segments(x, f1(x), x, f2(x))
-text(x, f1(x) + 0.15 * sign(f1(x) - f2(x)) , seq_along(x), cex = 0.9)
-
-```
+The pipe works well here because I've carefully chosen the function names to yield an (almost) readable sentence: take `download.file` then (add) a dot every 10 iterations, then delay by 0.1s. The more clearly you can express the intent of your code through function names, the more easily others (including future you!) can read and understand the code.
 
 ### Exercises
 
-1.  The `evaluate` package makes it easy to capture all the outputs (results, 
-    text, messages, warnings, errors, and plots) from an expression. Create a 
-    function like `capture_it()` that also captures the warnings and errors 
-    generated by a function.
+1.  Compare and contrast the for loop and `walk2()` approaches to downloading
+    many urls. Which makes it easier to see the core objects and functions?
+    Which requires more background knowledge? What are the advantages and
+    disadvantages in factoring out components of the problem into independent
+    functions?
 
-1.  Create a FO that tracks files created or deleted in the working directory 
-    (Hint: use `dir()` and `setdiff()`.) What other global effects of 
-    functions might you want to track?
+    ```{r, eval = FALSE}
+    for (i in seq_along(urls)) {
+      Sys.sleep(0.1)
+      if (i %% 10 == 0) cat(".")
+      download.file(urls[[i]], paths[[i]])
+    }
+    
+    walk2(
+      urls, path, 
+      download.file %>% dot_every(10) %>% delay_by(0.1), 
+      quiet = TRUE
+    )
+    ```
+
+1.  Create a FO that reports whenever a file is created or deleted in the 
+    working directory, using `dir()` and `setdiff()`. What other global 
+    function effects might you want to track?
 
 1.  Write a FO that logs a time stamp and message to a file every time a 
     function is run.
@@ -401,14 +339,3 @@ text(x, f1(x) + 0.15 * sign(f1(x) - f2(x)) , seq_along(x), cex = 0.9)
     was last called. That is, if you called 
     `g <- delay_by(1, f); g(); Sys.sleep(2); g()` there shouldn't be an 
     extra delay.
-
-1.  There are three places we could have added a memoise call: why did we 
-    choose the one we did?
-
-    ```{r, eval = FALSE}
-    download <- memoise(dot_every(10, delay_by(1, download_file)))
-    download <- dot_every(10, memoise(delay_by(1, download_file)))
-    download <- dot_every(10, delay_by(1, memoise(download_file)))
-    ```
-
-1.  Use progress pacakge and make functional given length.
