@@ -414,6 +414,58 @@ You'll see one more approach to this problem that in Section \@ref(pmap).
     bootstraps <- map(1:10, ~ bootstrap(mtcars))
     ```
 
+## Purrr style
+
+Before we go on to take to explore more map variants, lets take a quick look at how you tend to use multiple purrr functions to solve a moderately realistic problem: fitting a model to each subgroups and extracting a coefficient of the model. 
+
+For this toy example, I'm going to break the `mtcars` data set down into groups defined by the number of cylinders, using the base `split` function:
+
+```{r}
+by_cyl <- split(mtcars, mtcars$cyl)
+```
+
+Now imagine we want to fit a linear model, then extract the second coefficient (i.e. the intern). The following code shows how you might do that with purrr:
+
+```{r}
+by_cyl %>% 
+  map(~ lm(mpg ~ wt, data = .x)) %>% 
+  map(coef) %>% 
+  map_dbl(2)
+```
+
+(If you haven't seen `%>%`, the pipe, before, it's described in Section \@ref(function-composition).)
+
+I think this code is easy to read because each line encapsulates a single step, you can easily distinguish the functional from what it does, and the purrr helpers allow us to very concisely describe what to do in each step.
+
+How would you attack this problem with base R? You certainly _could_ replace each purrr function with the equivalent base function:
+
+```{r}
+by_cyl %>% 
+  lapply(function(data) lm(mpg ~ wt, data = data)) %>% 
+  lapply(coef) %>% 
+  vapply(function(x) x[[2]], double(1))
+```
+
+But this isn't really base R since we're using the pipe. To tackle purely in base I think you'd use an intermediate variable, and do more in each step:
+
+```{r}
+models <- lapply(by_cyl, function(data) lm(mpg ~ wt, data = data))
+vapply(models, function(x) coef(x)[[2]], double(1))
+```
+
+Or, of course, you could you use a for loop:
+
+```{r}
+intercepts <- double(length(by_cyl))
+for (i in seq_along(by_cyl)) {
+  model <- lm(mpg ~ wt, data = by_cyl[[i]])
+  intercepts[[i]] <- coef(model)[[2]]
+}
+intercepts
+```
+
+It's interesting to note that as you move from purrr to base apply functions to for loops you tend to do more and more in each iteration. In purrr we iterate 3 times (`map()`, `map()`, `map_dbl()`), with apply functions we iterate twice (`lapply()`, `vapply()`), and with a for loop we iterate once. The advantage of breaking the problem into smaller steps is that it's easier to understand and later modify as needs change.
+
 ## Map variants {#functionals-loop}
 
 There are 23 primary variants of `map()`. So far, you've learned about five (`map()`, `map_lgl()`, `map_int()`, `map_dbl()` and `map_chr()`). That means that you've got 18 (!!) more to learn. That sounds like a lot, but fortunately the design of purrr means that you only need to learn five new ideas:
