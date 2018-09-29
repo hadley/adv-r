@@ -3,6 +3,8 @@ library(methods)
 set.seed(1014)
 options(digits = 3, str = strOptions(strict.width = "cut"))
 
+options(crayon.enabled = FALSE)
+
 knitr::opts_chunk$set(
   comment = "#>",
   collapse = TRUE,
