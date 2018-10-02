@@ -1,9 +1,5 @@
 library(methods)
-
 set.seed(1014)
-options(digits = 3, str = strOptions(strict.width = "cut"))
-
-options(crayon.enabled = FALSE)
 
 knitr::opts_chunk$set(
   comment = "#>",
@@ -18,9 +14,15 @@ knitr::opts_chunk$set(
   fig.show = "hold"
 )
 
+options(
+  digits = 3,
+  str = strOptions(strict.width = "cut")
+)
+
 if (knitr::is_latex_output()) {
   knitr::opts_chunk$set(width = 69)
   options(width = 69)
+  options(crayon.enabled = FALSE)
 }
 
 knitr::knit_hooks$set(
