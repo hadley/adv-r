@@ -11,7 +11,7 @@ To talk about objects and OOP in R we first need to clear up a fundamental confu
 Most of the time, the distinction between objects and object-oriented objects is not important. But here we need to get into the nitty gritty details so we'll use the terms __base objects__ and __OO objects__ to distinguish them.
 
 ```{r, out.width = NULL, echo = FALSE}
-knitr::include_graphics("diagrams/oo-venn.png", dpi = 300)
+knitr::include_graphics("diagrams/oo-venn.png")
 ```
 
 ### Outline {-} 
@@ -26,21 +26,15 @@ knitr::include_graphics("diagrams/oo-venn.png", dpi = 300)
 \indexc{mode()}
 \index{attributes!class}
 
-To tell the difference between a base and OO object, use `is.object()`:
+To tell the difference between a base and OO object, use `is.object()` or `sloop::otype()`:
 
 ```{r}
 # A base object:
 is.object(1:10)
+sloop::otype(1:10)
 
 # An OO object
 is.object(mtcars)
-```
-
-Or `sloop::otype()`:
-
-```{r}
-sloop::otype(1:10)
-
 sloop::otype(mtcars)
 ```
 
@@ -52,7 +46,13 @@ attr(1:10, "class")
 attr(mtcars, "class")
 ```
 
-In the next chapter you'll also learn about the `class()` function. For S3 objects, `class()` returns the class attribute. For base objects, `class()` returns the first element of its __implicit__ class, which you'll learn more about in Section \@ref(implicit-class).
+You may already be familiar with the `class()` function. This function is safe to apply to S3 and S4 objects, but it returns misleading results when applied to base objects. It's safer to use `sloop::s3_class()`, which returns the implicit class that the S3 and S4 systems will use to pick methods. You'll learn more about `s3_class()` in Section \@ref(implicit-class).
+
+```{r}
+x <- matrix(1:4, nrow = 2)
+class(x)
+sloop::s3_class(x)
+```
 
 ## Base types {#base-types-2}
 \indexc{mode()}
@@ -73,10 +73,11 @@ Base types do not form an OOP system because functions that behave differently f
 <!-- 
 https://github.com/wch/r-source/blob/f5bb85782509ddadbcec94ab7648886c2d008bda/src/main/util.c#L185-L211-->
 
-In total, there are 25 different base types. They are listed below, loosely grouped according to where they're discussed in this book.
+In total, there are 25 different base types. They are listed below, loosely grouped according to where they're discussed in this book. These types are most important in C code, so you'll often see them called by their C type names. I've included those in parentheses.
 
-*   Vectors, Chapter \@ref(vectors-chap), include types `NULL`, `logical`, 
-    `integer`, `double`, `complex`, `character`, `list`, and `raw`.
+*   Vectors, Chapter \@ref(vectors-chap), include types `NULL` (`NULLSXP`), 
+    `logical` (`LGLSXP`), `integer` (`INTSXP`), `double` (`REALSXP`), `complex`
+    (`CPLSXP`), `character` (`STRSXP`), `list` (`VECSXP`), and `raw` (`RAWSXP`).
     
     ```{r}
     typeof(NULL)
@@ -85,8 +86,8 @@ In total, there are 25 different base types. They are listed below, loosely grou
     ```
 
 *   Functions, Chapter \@ref(functions), include types `closure` (regular R 
-    functions), `special` (internal functions), and `builtin` (primitive 
-    functions).
+    functions, `CLOSXP`), `special` (internal functions, `SPECIALSXP`), and 
+    `builtin` (primitive functions, `BUILTINSXP`).
     
     ```{r}
     typeof(mean)
@@ -97,15 +98,16 @@ In total, there are 25 different base types. They are listed below, loosely grou
     Internal and primitive functions are described in Section 
     \@ref(primitive-functions).
 
-*   Environments, Chapter \@ref(environments), have type `environment`.
+*   Environments, Chapter \@ref(environments), have type `environment` 
+    (`ENVSXP`).
 
     ```{r}
     typeof(globalenv())
     ```
 
 *   Language components, Chapter \@ref(expressions), include `symbol` (aka 
-    name), `language` (usually called "calls"), and `pairlist` (used for function 
-    arguments) types.
+    name, `SYMSXP`), `language` (usually called calls, `LANGSXP`), and 
+    `pairlist` (used for function arguments, `LISTSXP`) types.
 
     ```{r}
     typeof(quote(a))
@@ -113,11 +115,12 @@ In total, there are 25 different base types. They are listed below, loosely grou
     typeof(formals(mean))
     ```
  
-    `expression` is a special purpose type that's only returned by  `parse()` 
-    and `expression()`. Expressions are generally not needed in user code.
+    `expression` (`EXPRSXP`) is a special purpose type that's only returned by
+    `parse()` and `expression()`. Expressions are generally not needed in user 
+    code.
 
-*   The `S4` type, Chapter \@ref(s4), is used for S4 classes that don't inherit 
-    from an existing base type.
+*   The `S4` type (`S4SXP`), Chapter \@ref(s4), is used for S4 classes that 
+    don't inherit from an existing base type.
    
     ```{r}
     mle_obj <- stats4::mle(function(x = 1) (x - 2) ^ 2)
@@ -125,36 +128,39 @@ In total, there are 25 different base types. They are listed below, loosely grou
     ```
  
 *   The remaining types are esoteric and rarely seen in R. They are important 
-    primarily for C code: `externalptr`, `weakref`, `bytecode`, `promise`, 
-    `...`, and `any`.
+    primarily for C code: `externalptr` (`EXTPTRSXP`), `weakref` (`WEAKREFSXP`), 
+    `bytecode` (`BCODESXP`), `promise` (`PROMSXP`), `...` (`DOTSXP`), and 
+    `any` (`ANYSXP`).
 
-You may have heard of `mode()` and `storage.mode()`. I recommend avoiding these functions because they just provide S-compatible aliases of `typeof()`. Read their source code if you want to understand exactly what they do.
+You may have heard of `mode()` and `storage.mode()`. I recommend avoiding these functions because their purpose is to provide compatibility with S. Read their source code if you want to understand exactly what they do.
 
 ### Numeric type {#numeric-type}
 
-Note that R uses "numeric" to mean three slightly different things:
+Be careful when talking about the "numeric" type, because R uses "numeric" to mean three slightly different things:
 
-1.  In some places it's used as an alias for "double".  For example
-    `as.numeric()` is identical to `as.double()`, and `numeric()` is
+1.  In some places numeric is used as an alias for the "double" type. For 
+    example `as.numeric()` is identical to `as.double()`, and `numeric()` is
     identical to `double()`.
     
-    R also occasionally uses "real" instead of double; `NA_real_` is the one 
-    place that you're likely to encounter this in practice.
+    (R also occasionally uses "real" instead of double; `NA_real_` is the one 
+    place that you're likely to encounter this in practice.)
     
-1.  In S3 and S4 it is used to mean either integer or double. We'll
-    talk about `s3_class()` in the next chapter:
+1.  In the S3 and S4 systems, numeric is used as a shorthand for either 
+    integer or double type, and is used when picking methods:
 
     ```{r}
     sloop::s3_class(1)
     sloop::s3_class(1L)
     ```
 
-1.  In `is.numeric()` it means an object built on a base type of integer or 
-    double that is not a factor, i.e., an object that behaves like a number.
-    
+1.  In `is.numeric()`, it means an object that behaves like a number. For 
+    example, factors are have type "integer", so they built using integers, but
+    don't behave like numbers (i.e. it doesn't make sense to take the mean of
+    factor).
+
     ```{r}
-    is.numeric(1)
-    is.numeric(1L)
+    typeof(factor("x"))
     is.numeric(factor("x"))
     ```
 
+In this book, I consistently use numeric to mean an object that has type integer or double.
