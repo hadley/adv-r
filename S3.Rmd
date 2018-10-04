@@ -8,9 +8,9 @@ source("common.R")
 \index{S3} 
 \index{objects!S3|see{S3}} 
 
-S3 is R's first and simplest OO system. S3 is informal and ad hoc, but it has a certain elegance in its minimalism: you can't take away any part of it and still have a useful OO system. Because of these reasons, I believe that S3 should be your default choice for OO programming: you should use it unless you have a compelling reason otherwise. S3 is the only OO system used in the base and stats packages, and it's the most commonly used system in CRAN packages. 
+S3 is R's first and simplest OO system. S3 is informal and ad hoc, but there is a certain elegance in its minimalism: you can't take away any part of it and still have a useful OO system. For these reasons, you should use it unless you have a compelling reason to do otherwise. S3 is the only OO system used in the base and stats packages, and it's the most commonly used system in CRAN packages. \index{S3} \index{objects!S3|see{S3}}
 
-S3 is a very flexible system: it allows you to do a lot of things that are quite ill-advised. If you're coming from a strict environment like Java, this will seem pretty frightening (and it is!) but it does give R programmers a tremendous amount of freedom. While it's very difficult to prevent someone from doing something you don't want them to do, your users will never be held back because there is something you haven't implemented yet. Since S3 has few built-in constraints, the key to using it successfully is constraining yourself. This chapter will teach you the conventions you should (almost) always adhere to in order to use S3 safely.
+S3 is very flexible, which means it allows you to do things that are quite ill-advised. If you're coming from a strict environment like Java this will seem pretty frightening, but it gives R programmers a tremendous amount of freedom.  It may be very difficult to prevent someone from doing something you don't want them to do, but your users will never be held back because there is something you haven't implemented yet. Since S3 has few built-in constraints, the key to its successful use is applying the constraints yourself. This chapter will therefore teach you the conventions you should (almost) always adhere to.
 
 The goal of this chapter is to show you how the S3 OOP system works, not how to use it effectively to solve data science problems. I'd recommend coupling the theoretical knoweledge from this chapter with the practical knowledge encoded in the [vctrs](https://vctrs.r-lib.org) package. The vctrs package makes it easier to create new classes by providing thoughtfully organised default methods.
 
@@ -19,6 +19,8 @@ The goal of this chapter is to show you how the S3 OOP system works, not how to 
 ### Prerequisites {-}
 
 We'll use the sloop package to explore method dispatch, and the vctrs package for some niceties for creating new S3 classes.
+
+<!-- GVW: I prefer the original "fill in some missing pieces" because I don't think the term "method dispatch" has been introduced yet. -->
 
 ```{r setup, messages = FALSE}
 # install_github("r-lib/sloop")
@@ -29,7 +31,7 @@ library(sloop)
 
 ## Basics {#s3-basics}
 
-An S3 object is a base type with a "class" attribute, and potential other data stored in attributes. For example, take the factor. Its base type is the integer vector, and it the value of the class attribute is "factor". It stores information about the "levels" in another attribute:
+An S3 object is a base type with a "class" attribute, and potential other data stored in attributes. For example, take the factor. Its base type is the integer vector, and the value of the class attribute is "factor". It stores information about the "levels" in another attribute:
 
 ```{r}
 f <- factor(c("a", "b", "c"))
@@ -51,7 +53,10 @@ print(f)
 print(unclass(f))
 ```
 
-And `mean()`:
+The output from the first call shows how `print()` behaves when given something whose "class" attribute is set.
+The output from the second call shows how it behaves when given exactly the same data without a "class" attribute.
+(`unclass()` strips the class attribute from its input, so it is a useful tool for seeing what special behaviour an S3 class adds.)
+`mean()` shows the same behavior:
 
 ```{r, error = TRUE}
 mean(f)
@@ -69,6 +74,8 @@ sloop::ftype(str)
 
 Note that `str()` is generic, and some S3 classes use that generic to hide the internal details. For example, the `POSIXlt` class used to represent date-time data is actually built on top of a list, a fact which is hidden by its `str()` method:
 
+<!-- GVW: why shorten the output of str(unclass(time)) to just 5 items? I think the use of list.len distracts from the main point. -->
+
 ```{r}
 time <- strptime("2017-01-01", "%Y-%m-%d")
 str(time)
@@ -76,7 +83,7 @@ str(time)
 str(unclass(time), list.len = 5)
 ```
 
-The differences in behaviour is mediated through __methods__, functions that are called for specific classes on input. The generic is a middleman: its role is to find the right method for the job, the process of __method dispatch__.  The method is the function that implements the desired behaviour for a specific class. In other words the job of the generic is to find the right method; the job of the method is to do the work.
+The differences in behaviour are implemented by __methods__, which are functions that are called for specific classes on input. The generic is a middleman: its role is to find the right method for the job, which is called __method dispatch__.  The method then implements the desired behaviour for a specific class.
 
 S3 methods are functions with a special naming scheme, `generic.class()`. For example, the Date method for the `mean()` generic is called `mean.Date()`, and the factor method for `print()` is called `print.factor()`. Generally, you can identify a method by the presence of `.` in the function name, but there are a number of important functions in base R that were written before S3, and use `.` to join words. Again, you can always check with `sloop::ftype()`:
 
@@ -111,7 +118,7 @@ s3_get_method(weighted.mean.Date)
     ```{r}
     set.seed(1014)
     some_days <- as.Date("2017-01-31") + sample(10, 5)
-    
+
     mean(some_days)
     mean(unclass(some_days))
     ```
@@ -122,7 +129,7 @@ s3_get_method(weighted.mean.Date)
 
 1.  What does the following code return? What base type is it built on?
     What attributes does it use?
-    
+
     ```{r}
     x <- ecdf(rpois(100, 10))
     x
@@ -133,8 +140,8 @@ s3_get_method(weighted.mean.Date)
 \index{classes!S3}
 \indexc{class()}
 \index{attributes!class}
- 
-S3 is a simple and ad hoc system, and has no formal definition of a class: to make an object an instance of a class, you simply set the __class attribute__. You can do that during creation with `structure()`, or after the fact with `class<-()`: 
+
+If you have done OOP in other languages, you may be surprised to learn that S3 has no formal definition of a class: to make an object an instance of a class, you simply set the __class attribute__. You can do that during creation with `structure()`, or after the fact with `class<-()`: 
 
 ```{r}
 # Create and assign class in one step
@@ -145,6 +152,8 @@ x <- list()
 class(x) <- "my_class"
 ```
 
+<!-- GVW: haven't introduced inheritance at this point, so move the call to `inherits` down to that section. -->
+
 You can determine the class of an S3 object with `class(x)`, and see if an object inherits from a specific class using `inherits(x, "classname")`.
 
 ```{r}
@@ -152,9 +161,9 @@ class(x)
 inherits(x, "my_class")
 ```
 
-The class name can be any character vector, but I recommend using only letters and `_`. Avoid `.` because it makes life very confusing for reasons you'll learn shortly. When using a class in a package, I recommend including the package name in the class name. That ensures you won't accidental clash with a class defined by another package.
+The class name can be any character vector, but I recommend using only letters and `_`. Avoid `.` because (as mentioned earlier) it can be confused with the `.` separator between a generic name and a class name. When using a class in a package, I recommend including the package name in the class name. That ensures you won't accidental clash with a class defined by another package.
 
-S3 has no checks for correctness which that means you can change the class of existing objects:
+S3 has no checks for correctness which means you can change the class of existing objects:
 
 ```{r, error = TRUE}
 # Create a linear model
@@ -169,7 +178,7 @@ class(mod) <- "data.frame"
 print(mod)
 ```
 
-If you've used other OO languages, this might make you feel queasy. Surprisingly, however, this flexibility causes few problems: while you _can_ change the type of an object, you never _should_. R doesn't protect you from yourself: you can easily shoot yourself in the foot. As long as you don't aim the gun at your foot and pull the trigger, you won't have a problem.
+If you've used other OO languages, this might make you feel queasy, but in practice this flexibility causes few problems.  R doesn't stop you from shooting yourself in the foot, but as long as you don't aim the gun at your toes and pull the trigger, you won't have a problem.
 
 To avoid foot-bullet intersections when creating your own class, I recommend that you provide:
 
@@ -177,18 +186,18 @@ To avoid foot-bullet intersections when creating your own class, I recommend tha
   with the correct structure.
   
 For more complicated classes, you may also want to provide:
-  
-* A __validator__, `validate_x()`, that performs more expensive checks that the 
+
+* A __validator__, `validate_x()`, that performs more expensive checks to ensure that the
   object has correct values.
-   
+
 * A __helper__, `x()`, that provides a convenient and neatly parameterised way 
   for others to create (construct and validate) objects of this class.
 
 ### Constructors
 
-S3 doesn't provide a formal definition of a class, so it has no built-in way to ensure that all objects of a given class have the same structure (i.e. the same base and the same attributes with the same types). Instead, you should enforce a consistent structure yourself by using a __constructor__. A constructor is a function whose job is to construct objects of a given class, ensuring that they always have the same structure. 
+S3 doesn't provide a formal definition of a class, so it has no built-in way to ensure that all objects of a given class have the same structure (i.e. the same base and the same attributes with the same types). Instead, you should enforce a consistent structure yourself by using a __constructor__, which is a function that constructs objects of a given class, ensuring that they always have the same structure. 
 
-There are three rules that a constructor should follow. It should:
+A constructor should:
 
 1.  Be called `new_class_name()`.
 
@@ -198,7 +207,7 @@ There are three rules that a constructor should follow. It should:
 
 Base R generally does not provide constructors (three exceptions are the internal `.difftime()`, `.POSIXct()`, and `.POSIXlt()`) so we'll demonstrate these ideas by creating constructors for base classes. (If you want to use these constructors in your own code, please use use the versions exported by the vctrs package. They complete a few details that we skip here in order to focus on the core issues.)
 
-We'll start with one of the simplest S3 classes in base R: Date, which is just a double with a class attribute. The constructor rules lead to the slightly awkward name `new_Date()`, because the existing base class uses a capital letter. I recommend using lower case class names to avoid this problem. 
+We'll start with one of the simplest S3 classes in base R: Date, which is just a double with a class attribute. The constructor rules lead to the slightly awkward name `new_Date()`, because the existing base class uses a capital letter; I recommend using lower case class names to avoid this problem.
 
 ```{r}
 new_Date <- function(x = double()) {
@@ -209,16 +218,16 @@ new_Date <- function(x = double()) {
 new_Date(c(-1, 0, 1))
 ```
 
-The purpose of the constructor is to help the developer (you). That means you can keep them simple, and you don't need to optimise the error messages for user friendliness. If you expect others to create your objects, you should also create a friendly helper function, called `class_name()`, that we'll describe shortly.
+The purpose of the constructor is to help the developer, i.e., you. That means you can keep them simple, and you don't need to optimise the error messages for user friendliness. If you expect others to create your objects, you should also create a friendly helper function, called `class_name()`, that we'll describe shortly.
 
-A slightly more complicated example is `POSIXct`, which is used to represent date-times. It is again built on a double, but has an attribute that specifies the time zone, a length 1 character vector. R defaults to using the local time zone, which is represented by the empty string. To create the constructor, we need to make sure each attribute of the class gets an argument to the constructor. This gives us:
+A slightly more complicated example of a constructor is `POSIXct`, which is used to represent date-times. It is again built on a double, but has an attribute that specifies the time zone as a length 1 character vector. R defaults to using the local time zone, which is represented by the empty string. To create the constructor, we need to make sure each attribute of the class has a corresponding argument. This gives us:
 
 ```{r}
 new_POSIXct <- function(x = double(), tzone = "") {
   stopifnot(is.double(x))
   stopifnot(is.character(tzone), length(tzone) == 1)
-  
-  structure(x, 
+
+  structure(x,
     class = c("POSIXct", "POSIXt"),
     tzone = tzone
   )
@@ -228,9 +237,11 @@ new_POSIXct(1)
 new_POSIXct(1, tzone = "UTC")
 ```
 
-The constructor checks that `x` is a double, and that `tzone` is a length 1 character vector. Note that POSIXct uses a class _vector_; we'll come back to that in Section \@ref(inheritance).
+The constructor checks that `x` is a double, and that `tzone` is a length 1 character vector. Note that POSIXct uses a class _vector_; we'll come back to that in Section \@ref(inheritance). Again, we use `stopifnot()` since the constructor is a developer-focussed function not meant for the average user.
 
-Generally, the constructor should not check that the values are valid because such checks are often expensive. For example, our `new_POSIXct()` constructor does not check that `tzone` is a valid value, and we get a warning when the object is printed.
+<!-- GVW: possible to choose a different example so that vectors of classes don't need to be introduced until the section on inheritance? -->
+
+Generally, the constructor should not check that the values are valid because such checks can be expensive. For example, our `new_POSIXct()` constructor does not check that `tzone` is a valid value, and we get a warning when the object is printed:
 
 ```{r, eval = FALSE}
 x <- new_POSIXct(1, "Auckland NZ")
@@ -242,13 +253,13 @@ x
 
 ### Validators
 
-More complicated classes will require more complicated checks for validity. Take factors, for example. Since a constructor only checks that types are correct, it's possible to create malformed factors:
+More complicated classes require more complicated checks for validity. Take factors, for example. Since a constructor only checks that types are correct, it's possible to create malformed factors:
 
 ```{r, error = TRUE}
 new_factor <- function(x, levels) {
   stopifnot(is.integer(x))
   stopifnot(is.character(levels))
-  
+
   structure(
     x,
     levels = levels,
@@ -260,27 +271,27 @@ new_factor(1:5, "a")
 new_factor(0:1, "a")
 ```
 
-Rather than encumbering the constructor with complicated checks, it's better to put them in a separate function. This is a good idea because it allows you to cheaply create new objects when you know that the values are correct, and to re-use the checks in other places.
+Rather than encumbering the constructor with complicated checks, it's better to put them in a separate function. Doing this allows you to cheaply create new objects when you know that the values are correct, and to re-use the checks in other places.
 
 ```{r, error = TRUE}
 validate_factor <- function(x) {
   values <- unclass(x)
   levels <- attr(x, "levels")
-  
+
   if (!all(!is.na(values) & values > 0)) {
     stop(
       "All `x` values must be non-missing and greater than zero",
       call. = FALSE
     )
   }
-  
+
   if (length(levels) < max(values)) {
     stop(
       "There must at least as many `levels` as possible values in `x`",
       call. = FALSE
     )
   }
-  
+
   x
 }
 
@@ -301,6 +312,7 @@ factor <- function(x, levels = unique(x)) {
   ind <- match(x, levels)
   validate_factor(new_factor(ind, levels))
 }
+
 factor(c("a", "a", "b"))
 
 factor(c("a", "a", "b"), levels = "a")
@@ -320,14 +332,16 @@ POSIXct <- function(year, month, day, hour, minute, sec, tzone = "") {
 
 These helpers fill a useful hole, but are not computationally efficient: behind the scenes `ISODatetime()` works by pasting the components into a string and then using `strptime()`. More efficient equivalents are `lubridate::make_datetime()` and `lubridate::make_date()`.
 
+<!-- GVW: +1 on moving the scalar-style/record-style discussion later. -->
+
 ### Exercises
 
 1.  Write a constructor for `difftime` objects. What base type are they
     built on? What attributes do they use? You'll need to consult the
     documentation, read some code, and perform some experiments.
 
-1.  Write a constructor for `data.frame` objects. What base type is a data 
-    frame built on? What attributes does it use? What are the restrictions 
+1.  Write a constructor for `data.frame` objects. What base type is a data
+    frame built on? What attributes does it use? What are the restrictions
     placed on the individual elements? What about the names?
 
 1.  Enhance our `factor()` helper to have better behaviour when one or
@@ -393,7 +407,6 @@ s3_methods_class("ordered")
 ### Example
 
 
-
 ### Arguments {#s3-arguments}
 
 Methods must always have the same arguments as their generics. This is enforced in packages by `R CMD check`, but it's good practice anyway. There is one exception to this rule: if the generic has `...`, the method must still have all the same arguments (including `...`), but can also have its own additional arguments. This allows methods to take additional arguments, which is important because you don't know what additional arguments that a method for someone else's class might need. The downside of using `...`, however, is that any misspelled arguments will be silently swallowed[^ellipsis].
@@ -402,10 +415,10 @@ Methods must always have the same arguments as their generics. This is enforced 
 
 ### Exercises
 
-1.  Read the source code for `t()` and `t.test()` and confirm that 
-    `t.test()` is an S3 generic and not an S3 method. What happens if 
+1.  Read the source code for `t()` and `t.test()` and confirm that
+    `t.test()` is an S3 generic and not an S3 method. What happens if
     you create an object with class `test` and call `t()` with it? Why?
-    
+
     ```{r}
     x <- structure(1:10, class = "test")
     t(x)
@@ -414,7 +427,7 @@ Methods must always have the same arguments as their generics. This is enforced 
 1.  Carefully read the documentation for `UseMethod()` and explain why the
     following code returns the results that it does. What two usual rules
     of function evaluation does `UseMethod()` violate?
-    
+
     ```{r}
     g <- function(x) {
       x <- 10
@@ -422,7 +435,7 @@ Methods must always have the same arguments as their generics. This is enforced 
       UseMethod("g")
     }
     g.default <- function(x) c(x = x, y = y)
-    
+
     x <- 1
     y <- 1
     g(x)
@@ -472,8 +485,6 @@ names(mod)
 
 The __record-style__ is a list of equal length vectors, which behaves like a regular vector. In base R, the most important example of this style is `POSIXlt()`. It behaves like a vector of length `n`, but is actually a list of nine vectors each of which is length `n`.
 
-I'll use __fields__ to collectively refer to the names of a record-style or list-style class and the attributes of a 
-
 Collectively, we'll call the attributes of a vector-style the names of a list-style class the __fields__ of an object.
 
 When creating your own classes, you should pick the vector style if your class closely resembles an existing vector type. Otherwise, use a scalar (list) style. The scalar type is generally easier to work with because implementing a full range of convenient vectorised methods is usually a lot of work. It's typically obvious when you need to use a data-frame-style.
@@ -489,14 +500,16 @@ When creating your own classes, you should pick the vector style if your class c
 
 ## Inheritance
 
+<!-- GVW: Need to define inheritance and subclass here. -->
+
 The class attribute is not limited to a single string, but can be a character vector. This, along with S3 method dispatch and `NextMethod()`, gives a surprising amount of flexibility that can be used creatively to reduce code duplication. However, this flexibility can also lead to code that is hard to understand or reason about, so you are best constraining yourself to simple styles of inheritance. Here we will focus on defining subclasses that inherit their fields, and some behaviour, from a parent class.
 
-Subclasses use a character __vector__ for the class attribute. There are two subclasses that you might have come across in base R:
+Subclasses use a character __vector__ for the class attribute. There are two examples of subclasses that you might have come across in base R:
 
 * Generalised linear models are a generalisation of linear models that allow
   the error term to belong to a richer set of distributions, not just the normal
-  distribution like the linear model. This is a natural case for the use of 
-  inheritance and indeed, in R, `glm()` returns objects of class 
+  distribution like the linear model. This is a natural case for the use of
+  inheritance and indeed, in R, `glm()` returns objects of class
   `c("glm", "lm")`.
 
 * Ordered factors are used when the levels of a factor have some intrinsic
@@ -521,8 +534,6 @@ s3_dispatch(Sys.Date()[1])
 ```
 
 ### `NextMethod()`
-
-Method dispatch usually terminates as soon as a matching method is found. However, methods can explicitly choose to call the next available method using `NextMethod()`, making it possible to inherit behaviour from the "parent" class. Like `UseMethod()`, you generally call `NextMethod()` without any arguments (any arguments will be passed on to the next method, as if they'd been supplied to the generic).
 
 The most common use case of `NextMethod()` is `[`: how do you implement a subsetting method for your own class, without using `[`? `NextMethod()` resolves the issue by allowing you to use the underlying C code. You can see that the base `[.POSIXct` and `[.Date` methods use `NextMethod()` by looking at the output of `s3_dispatch()`:
 
@@ -571,6 +582,8 @@ x[1]
 Like `UseMethod()`, the precise semantics of `NextMethod()` are complex. It doesn't modify the class attribute of the object, but instead uses a special global variable (`.Class`) to keep track of which method to call next. This means that modifying the object being dispatched on will have no impact on the method call.
 
 ### Allowing subclassing
+
+<!-- GVW: explain why there has to be a way to convert the subclass back to the parent class.  (If someone needed polymorphism explained in OO.Rmd, they're going to need this explained here.) -->
 
 When you create a class, you need to decide if you want to allow subclasses, because it requires changes to the constructor and careful thought in your methods. To allow subclasses, the parent constructor needs to have `...` and `class` arguments:
 
@@ -678,10 +691,10 @@ If your subclass is more complicated, you'd also provide validator and helper fu
 1.  The `ordered` class is a subclass of `factor`, but it's implemented in
     a very ad hoc way in base R. Implement it in a principled way by
     building a constructor and an `as_ordered` generic.
-    
+
     ```{r}
     f1 <- factor("a", c("a", "b"))
-    as.factor(f1)  
+    as.factor(f1)
     as.ordered(f1) # loses levels
     ```
 
@@ -702,17 +715,17 @@ If your subclass is more complicated, you'd also provide validator and helper fu
     generic2(structure(list(), class = c("b", "a2")))
     ```
 
-1.  What classes have a method for the `Math` group generic in base R? Read 
+1.  What classes have a method for the `Math` group generic in base R? Read
     the source code. How do the methods work?
 
-1.  R has two classes for representing date time data, `POSIXct` and 
-    `POSIXlt`, which both inherit from `POSIXt`. Which generics have 
+1.  R has two classes for representing date time data, `POSIXct` and
+    `POSIXlt`, which both inherit from `POSIXt`. Which generics have
     different behaviours for the two classes? Which generics share the same
     behaviour?
 
 ## Dispatch details
 
-This chapter concludes with a few additional details about method dispatch that is not well documented elsewhere. It is safe to skip these details if you're new to S3.
+This chapter concludes with a few additional details about method dispatch that are not well documented elsewhere. It is safe to skip these details if you're new to S3.
 
 ### Environments and namespaces
 
@@ -720,7 +733,7 @@ The precise rules for where a generic looks for the methods are a little complic
 
 1. In the calling environment of the function that called the generic.
 
-1. In the special `.__S3MethodsTable__.` object in the function environment of 
+1. In the special `.__S3MethodsTable__.` object in the function environment of
    the generic. Every package has an `.__S3MethodsTable__` which lists all
    the S3 methods exported by the package.
 
@@ -768,13 +781,13 @@ s3_dispatch(mean(x2))
 
 Some S3 generics, like `[`, `sum()`, and `cbind()`, don't call `UseMethod()` because they are implemented in C. Instead, they call the C functions `DispatchGroup()` or `DispatchOrEval()`. These functions are called __internal generics__, because they do dispatch internally, in C code. Internal generics only exist in base R, so you cannot create an internal generic in a package.
 
-`s3_dispatch()` shows internal generics by including the name of the generic at the bottom of the method class. If this method is called, all the work happens in C code, typically using [switchpatch].
+`s3_dispatch()` shows internal generics by including the name of the generic at the bottom of the method class. If this method is called, all the work happens in C, typically using [switchpatch].
 
 ```{r}
 s3_dispatch(Sys.time()[1])
 ```
 
-For performance reasons, internal generics do not dispatch to methods unless the class attribute has been set (`is.object()` is true). This means that internal generics do not use the implicit class. Again, if you're confused, rely on `s3_dispatch()` to show you the difference.
+For performance reasons, internal generics do not dispatch to methods unless the class attribute has been set (i.e., unless `is.object()` is true). This means that internal generics do not use the implicit class. Again, if you're confused, rely on `s3_dispatch()` to show you the difference.
 
 ```{r}
 x <- sample(10)
@@ -785,7 +798,6 @@ class(mtcars)
 s3_dispatch(mtcars[1])
 ```
 
-
 ### Group generics
 
 Group generics are the most complicated part of S3 method dispatch because they involve both `NextMethod()` and internal generics. Group generics are worth learning about, however, because they allow you to implement a whole swath of methods with one function. Like internal generics, they only exist in base R, and you cannot define your own group generic.
@@ -794,7 +806,7 @@ Base R has four group generics, which are made up of the following generics: \in
 
 * __Math__: `abs`, `sign`, `sqrt`, `floor`, `cos`, `sin`, `log`, `exp`, ...
 
-* __Ops__: `+`, `-`, `*`, `/`, `^`, `%%`, `%/%`, `&`, `|`, `!`, `==`, `!=`, `<`, 
+* __Ops__: `+`, `-`, `*`, `/`, `^`, `%%`, `%/%`, `&`, `|`, `!`, `==`, `!=`, `<`,
   `<=`, `>=`, `>`
 
 * __Summary__: `all`, `any`, `sum`, `prod`, `min`, `max`, `range`
@@ -828,7 +840,7 @@ Note that inside a group generic function a special variable `.Generic` provides
 
 ### Double dispatch
 
-Generics in the "Ops" group, which includes the two-argument mathematical and logical operators like `-` and `&`, implement a special type of method dispatch. They dispatch on the type of _both_ of the arguments, so called __double dispatch__. This is necessary to preserve the commutative property of many operators, i.e. `a + b` should equal `b + a`. Take the following simple example:
+Generics in the "Ops" group, which includes the two-argument mathematical and logical operators like `-` and `&`, implement a special type of method dispatch. They dispatch on the type of _both_ of the arguments, which is called __double dispatch__. This is necessary to preserve the commutative property of many operators, i.e. `a + b` should equal `b + a`. Take the following simple example:
 
 ```{r}
 date <- as.Date("2017-01-01")
