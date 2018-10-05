@@ -15,6 +15,8 @@ This chapter describes the R6 object system. Unlike S3 and S4, it provides encap
 
 These properties make R6 objects behave more like objects in programming languages such as Python, Ruby and Java. This does not mean that R6 is good, and S3 and S4 are bad, it just means that R has a different heritage than most modern mainstream programming languages.
 
+<!-- GVW: disclaimer above may be redundant by the time readers get here. -->
+
 R6 is very similar to a built-in OO system called __reference classes__, or RC for short. I'm going to teach you R6 instead of RC for four reasons:
 
 * R6 is much simpler. Both R6 and RC are built on top of environments, but
@@ -29,6 +31,8 @@ R6 is very similar to a built-in OO system called __reference classes__, or RC f
   (`self$field <- value`) with a prefix. The R6 approach is more verbose but is
   worth the tradeoff because it makes code easier to understand. It also makes 
   inheritance across packages simpler and more robust.
+
+<!-- GVW: I completely missed `<<-` instead of `<-` on first reading - worth drawing attention to? -->
 
 * R6 is much faster than RC. Generally, the speed of method dispatch is not 
   important outside of microbenchmarks but R6 is substantially better than
@@ -63,6 +67,8 @@ R6 only needs a single function call to create both the class and its methods: `
   By convention, methods and fields use snake_case. Methods can access
   the methods and fields of the current object via `self$`.
 
+<!-- GVW: add a note saying that `self` is created by RC and doesn't need to be defined by the user (unlike `this` in Python). -->
+
 ```{r}
 Accumulator <- R6Class("Accumulator", list(
   sum = 0,
@@ -91,6 +97,8 @@ You can then call methods and access fields with `$`:
 x$add(4) 
 x$sum
 ```
+
+<!-- GVW: this is looking very familiar - maybe introduce RC *before* S4? -->
 
 In this class, the fields and methods are public which means that you can get or set the value of any field. Later, we'll see how to use private fields and methods to prevent casual access to the internals of your class.
 
@@ -181,6 +189,8 @@ hadley
 
 Indeed, from the perspective of R6, there is no relationship between `hadley` and `hadley2`. This can make interactive experimentation with R6 confusing. If you're changing the code and can't figure out why the results of method calls aren't changed, make sure you've re-constructed R6 objects with the new class.
 
+<!-- GVW: is there an easy way to re-cast objects already created to the newly-redefined class? -->
+
 There's a useful alternative to `$print()`: implement `$format()`, which should return a character vector. This will automatically be used by both `print()` and `format()` S3 generics. 
 
 ```{r}
@@ -225,6 +235,8 @@ Accumulator$set("public", "add", function(x = 1) {
 
 `$set()` will not overwrite an existing method unless you explicitly ask for it:
 
+<!-- GVW: maybe overwrite `add` instead of `sum`, since you're saying "method"? -->
+
 ```{r, error = TRUE}
 Accumulator$set("public", "sum", 1)
 Accumulator$set("public", "sum", 1, overwrite = TRUE)
@@ -263,6 +275,8 @@ x2$add(10)$add(1)$sum
 Note that `$add()` overrides the implementation in the superclass, but we can access the previous implementation through `super$`. Any methods which are overridden will automatically call the implementation in the parent class.
 
 Like S3, R6 only supports single inheritance: you cannot supply a vector of classes to inherit.
+
+<!-- GVW: OK, I'm increasingly inclined to ask that RC be explained before S4... -->
 
 ### Introspection
 
@@ -326,6 +340,8 @@ hadley4$name
 
 The distinction between public and private fields is important when you create complex networks of classes, and you want to make it as clear as possible what it's ok for others to access. Anything that's private can be more easily refactored because you know others aren't relying on it. Private methods tend to be less important in R compared to other programming languages because the object hierarchies in R tend to be simpler.
 
+<!-- GVW: interesting - is that somehow intrinsic to R6/RC or are R programmers pushing other boundaries than complex OO architectures? -->
+
 ### Active fields
 
 Active fields may allow you to define components that look like fields from the outside, but are defined with functions, like methods. For example, we can define an active field `x`  that returns a different value every time you access it:
@@ -343,6 +359,8 @@ x$random
 ```
 
 Active fields are particularly useful in conjunction with privacy, because they make it possible to implement components that work like fields from the outside but provide additional checks. For example, you can use them to implement read-only fields or fields that validate their inputs. 
+
+<!-- GVW: please bold __active bindings__ below. -->
 
 Active fields are implemented using active bindings from base R. Each active binding is a function that takes a single argument: `value`. If the argument is `missing()`, the value is being retrieved; otherwise it's being modified. We can use that idea to make a read-only `age` field, and to ensure that `name` is a length 1 character vector.
 
@@ -390,12 +408,16 @@ hadley5$age <- 20
 
 1.  How would you define a write-only field?
 
+<!-- GVW: and *why*? -->
+
 1.  Can subclasses access private fields/methods from their parent? Perform
     an experiment to find out.
 
 ## Reference semantics
 
 One of the big differences between R6 and most other objects in R is that they have reference semantics. This is because they are S3 objects built on top of environments:
+
+<!-- GVW: the explanation in the second sentence doesn't actually clarify things for me at this point... -->
 
 ```{r}
 typeof(x2)
@@ -460,6 +482,8 @@ z <- f(x, y)
 
 The final line is much harder to reason about - it's completely possible that `f()` calls methods of `x` or `y`, modifying them in place. This is the biggest potential downside of R6. The best way to ameliorate this problem is to avoid writing functions that both return a value and modify R6 inputs. 
 
+<!-- GVW: I was expecting the words "functional programming" in the above... -->
+
 That said, modifying R6 inputs can lead to substantially simpler code in some cases. One challenge of working with immutable data is known as __threading state__: if you want to return a value that's modified in a deeply nested function, you need to return the modified value up through every function. This can complicate code, particularly if you need to modify multiple values. For example, ggplot2 uses R6 objects for scales. Scales are complex because they need to combine data across every facet and every layer. Using R6 makes the code substantially simpler, at the cost of introducing subtle bugs. Fixing those bugs required careful placement of calls to `$clone()` to ensure that independent plots didn't accidentally share scale data. We'll come back to this idea in [oo-tradeoffs].
 
 ### Finalizer
@@ -470,6 +494,8 @@ One useful property of reference semantics is that it makes sense to think about
 x <- factor(c("a", "b", "c"))
 levels(x) <- c("c", "b", "a")
 ```
+
+<!-- GVW: as written, the first phrase below makes me wonder if other R objects are deleted many times... -->
 
 Since R6 objects are not copied-on-modify they will only get deleted once, and it makes sense to think about `$finalize()` as a complement to `$initialize()`. Finalizers usually play a similar role to `on.exit()`, cleaning up any resources created by the initializer. For example, the following class wraps up a temporary file, automatically deleting it when the class is finalised.
 
