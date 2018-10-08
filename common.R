@@ -42,7 +42,7 @@ registerS3method("wrap", "error", envir = asNamespace("knitr"),
     if (is.null(call)) {
       msg <- paste0("Error: ", message)
     } else {
-      msg <- paste0("Error in ", deparse(call), ":\n  ", message)
+      msg <- paste0("Error in ", deparse(call)[[1]], ":\n  ", message)
     }
 
     knitr:::msg_wrap(msg, "error", options)
