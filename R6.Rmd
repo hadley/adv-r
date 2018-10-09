@@ -1,48 +1,66 @@
-# R6 {#R6}
+# R6 {#r6}
 
-```{r setup, include = FALSE}
+```{r, include = FALSE}
 source("common.R")
-library(R6)
 ```
 
 ## Introduction
 
-This chapter describes the R6 object system. Unlike S3 and S4, it provides encapsulated OO, which means that:
+This chapter describes the R6 object system, which is built on top of environments and S3.
+R6 is an encapsulated OOP system which means that methods belong to objects, not generics, and you call them like `object$method()`. R6 objects are also __mutable__, which means that they are modified in place, and hence have reference semantics.
 
-* R6 methods belong to objects, not generics.
+If you've learned OOP in another programming language, it's likely that R6 will feel very natural, and you'll be inclined to prefer it over S3. Resist the temptation to follow the path of least resistance: as in most cases R6 will lead you to non-idiomatic R code. We'll come back to this theme in Section \@ref(s3-r6).
 
-* R6 objects are mutable: the usual copy-on-modify semantics do not apply.
-
-R6 is very similar to a base OOP system called __reference classes__, or RC for short. I describe why I teach R6 here in Section \@ref(why-r6).
-
-If you've learned OOP in another programming language, it's likely that R6 will feel natural, and you'll be inclined to prefer it over S3. Resist the temptation to follow the path of least resistance: in most cases R6 will lead you to non-idiomatic R code. 
+R6 is very similar to a base OOP system called __reference classes__, or RC for short. I describe why I teach R6 and not RC in Section \@ref(why-r6).
 
 ### Outline {-} 
 
-### Prequisites {-} 
+* Section \@ref(r6-classes) introduces `R6::R6class()`, the one function that 
+  you need to know to create R6 classes. You'll learn about the constructor
+  method, `$new()`, which allows you to create R6 objects, and important
+  R6 methods `$initialize()` and `$print()`.
+  
+* Section \@ref(r6-access) discusses the access mechanisms of R6: private and
+  active fields. Together, these allow you to hide data from the user, or
+  expose private data for reading but not writing.
+  
+* Section \@ref(r6-semantics) explores the consequnces of R6's reference 
+  semantics. You'll learn about the use of finalizers to automatically
+  clean up any operations performed in the intializer, and a common gotcha
+  if you use an R6 object as a field in another R6 object.
 
-Because R6 is not built into base R, you'll need to install and load a package in order to use it:
+* Section \@ref(why-r6) describes why I cover R6, rather than the base RC
+  system.
 
-```{r}
+### Prerequisites {-} 
+
+Because R6 is not built into base R, you'll need to install and load the R6 package to use it:
+
+```{r setup}
+# install.packages("R6")
 library(R6)
 ```
 
-If you'd like to learn more about R6 after reading this chapter, the best place to start is the vignettes included in the package. You can list them by calling `browseVignettes(package = "R6")`.
+R6 objects have reference semantics which means that they are modified in-place, not copied-on-modify. Make sure you're familiar with these distinctions as described in Section \@ref(modify-in-place).
 
-## Classes and methods
+## Classes and methods {#r6-classes}
 
-R6 only needs a single function call to create both the class and its methods: `R6::R6Class()`. And this is the only function from the package that you'll ever use! The following example shows the two most important arguments:
+R6 only needs a single function call to create both the class and its methods: `R6::R6Class()`. This is the only function from the package that you'll ever use![^package]
+
+[^package]: That means if you're creating R6 in a package, you only need to make sure it's listed in the `Imports` field of the `DESCRIPTION`. There's no need to import the package into the `NAMESPACE`.
+
+The following example shows the two most important arguments to `R6Class():
 
 * The first argument is the `classname`. It's not strictly needed, but it
-  improves error messages and makes it possible to also use R6 objects
-  with S3 generics. By convention, R6 classes use UpperCamelCase.
+  improves error messages and makes it possible to use R6 objects with S3
+  generics. By convention, R6 classes have UpperCamelCase names.
   
 * The second argument, `public`, supplies a list of methods (functions) and 
   fields (anything else) that make up the public interface of the object. 
   By convention, methods and fields use snake_case. Methods can access
-  the methods and fields of the current object via `self$`.
+  the methods and fields of the current object via `self$`.[^python]
 
-<!-- GVW: add a note saying that `self` is created by RC and doesn't need to be defined by the user (unlike `this` in Python). -->
+[^python]: Unlike in `this` in python, the `self` variable is automatically provided by R6, and does not form part of the method signature.
 
 ```{r}
 Accumulator <- R6Class("Accumulator", list(
@@ -54,13 +72,13 @@ Accumulator <- R6Class("Accumulator", list(
 )
 ```
 
-You should always assign the result of `R6Class()` into a variable with the same name as the class. This creates an R6 object that defines the R6 class:
+You should always assign the result of `R6Class()` into a variable with the same name as the class, because `R6Class()` returns an R6 object that defines the class:
 
 ```{r}
 Accumulator
 ```
 
-You construct a new object from the class by calling the `new()` method. Methods belong to R6 objects so you use `$` to access `new()`:
+You construct a new object from the class by calling the `new()` method. In R6, methods belong to objects, so you use `$` to access `new()`:
 
 ```{r}
 x <- Accumulator$new() 
@@ -73,11 +91,9 @@ x$add(4)
 x$sum
 ```
 
-<!-- GVW: this is looking very familiar - maybe introduce RC *before* S4? -->
+In this class, the fields and methods are public, which means that you can get or set the value of any field. Later, we'll see how to use private fields and methods to prevent casual access to the internals of your class.
 
-In this class, the fields and methods are public which means that you can get or set the value of any field. Later, we'll see how to use private fields and methods to prevent casual access to the internals of your class.
-
-To make it clear when we're talking about fields and methods as opposed to variables and functions, when referring to them in text, we'll prefix with `$`. For example, the `Accumulate` class has field `$sum` and method `$add()`.
+To make it clear when we're talking about fields and methods as opposed to variables and functions, I'll prefix their names with `$`. For example, the `Accumulate` class has field `$sum` and method `$add()`.
 
 ### Method chaining
 
@@ -99,7 +115,7 @@ Side-effect R6 methods should always return `self` invisibly. This returns the "
 x$add(10)$add(10)$sum
 ```
 
-Alternatively, for long chains, you can spread the call over multiple lines:
+For, readability, you might put one method call on each line:
 
 ```{r}
 x$
@@ -108,15 +124,15 @@ x$
   sum
 ```
 
-This technique is called __method chaining__ and is commonly used in encapsulated OO languages (like Python and JavaScript) to create fluent interfaces. Method chaining is deeply related to the pipe, and we'll discuss the pros and cons of each approach in [pipe vs method-chaining tradeoffs](#tradeoffs-pipe).
+This technique is called __method chaining__ and is commonly used in languages like Python and JavaScript. Method chaining is deeply related to the pipe, and we'll discuss the pros and cons of each approach in Section \@ref(tradeoffs-pipe).
 
 ### Important methods
 
-There are two important methods that will be defined for most classes: `$initialize()` and `$print()`. You don't have to provide them, but it's a good idea to do so because they will make your class easier to use.
+There are two important methods that will be defined for most classes: `$initialize()` and `$print()`. They're not required, but providing them will make your class easier to use.
 
-`$initialize()` overrides the default behaviour of `$new()`. For example, the following code defines an R6 Person class, similar to the S4 equivalent in [S4]. Unlike S4, R6 provides no checks for object type by default. `$initialize()` is a good place to check that `name` and `age` are the correct types.
+`$initialize()` overrides the default behaviour of `$new()`. For example, the following code defines an Person class with fields `$name` and `$age`. To ensure that that `$name` is always a single string, and `$age` is always a single number, I added checks in `$initialize()`.
 
-```{r}
+```{r, error = TRUE}
 Person <- R6Class("Person", list(
   name = NULL,
   age = NA,
@@ -129,7 +145,9 @@ Person <- R6Class("Person", list(
   }
 ))
 
-hadley <- Person$new("Hadley", age = 37)
+hadley <- Person$new("Hadley", age = "thirty-eight")
+
+hadley <- Person$new("Hadley", age = 38)
 ```
 
 If you have more expensive validation requirements, implement them in a separate `$validate()` and only call when needed.
@@ -156,77 +174,29 @@ hadley2 <- Person$new("Hadley")
 hadley2
 ```
 
-This code illustrates an important aspect of R6. Because methods are bound to individual objects, the previously created `hadley` does not get this new method:
+This code illustrates an important aspect of R6. Because methods are bound to individual objects, the previously created `hadley` object does not get this new method:
 
 ```{r}
 hadley
+
+hadley$print
 ```
 
-Indeed, from the perspective of R6, there is no relationship between `hadley` and `hadley2`. This can make interactive experimentation with R6 confusing. If you're changing the code and can't figure out why the results of method calls aren't changed, make sure you've re-constructed R6 objects with the new class.
-
-<!-- GVW: is there an easy way to re-cast objects already created to the newly-redefined class? -->
-
-There's a useful alternative to `$print()`: implement `$format()`, which should return a character vector. This will automatically be used by both `print()` and `format()` S3 generics. 
-
-```{r}
-Person <- R6Class("Person", list(
-  age = NA,
-  name = NULL,
-  initialize = function(name, age = NA) {
-    self$name <- name
-    self$age <- age
-  },
-  format = function(...) {
-    # The first `paste0()` is not necessary but it lines up
-    # with the subsequent lines making it easier to see how
-    # it will print
-    c(
-      paste0("Person:"),
-      paste0("  Name: ", self$name),
-      paste0("  Age:  ", self$age)
-    )
-  }
-))
-
-hadley3 <- Person$new("Hadley")
-format(hadley3)
-hadley3
-```
+From the perspective of R6, there is no relationship between `hadley` and `hadley2`; they just coincidentally share the same class name. This doesn't cause problems when using already developed R6 problems but can make interactive experimentation confusing. If you're changing the code and can't figure out why the results of method calls aren't changed, make sure you've re-constructed R6 objects with the new class.
 
 ### Adding methods after creation
 
-Instead of continuously creating new classes, it's also possible to modify the methods of an existing class. This is useful when exploring interactively, and when you have a class with many functions that you'd like to break up into pieces.
+Instead of continuously creating new classes, it's also possible to modify the fields and methods of an existing class. This is useful when exploring interactively, or when you have a class with many functions that you'd like to break up into pieces. Add new elements to an existing class with `$set()`, supplying the visibility (more on in Section \@ref(r6-access)), the name, and the component.
 
-Once the class has been defined, you can add elements to it with `$set()`, supplying the visibility (more on that below), the name, and the component.
-
-```{r}
+```{r, eval = FALSE}
 Accumulator <- R6Class("Accumulator")
 Accumulator$set("public", "sum", 0)
 Accumulator$set("public", "add", function(x = 1) {
   self$sum <- self$sum + x 
-  invisible(self)
 })
 ```
 
-`$set()` will not overwrite an existing method unless you explicitly ask for it:
-
-<!-- GVW: maybe overwrite `add` instead of `sum`, since you're saying "method"? -->
-
-```{r, error = TRUE}
-Accumulator$set("public", "sum", 1)
-Accumulator$set("public", "sum", 1, overwrite = TRUE)
-```
-
-Also note that adding methods will only affect new objects generated from the class. It does not retrospectively apply to existing objects:
-
-```{r, error = TRUE}
-x1 <- Accumulator$new()
-Accumulator$set("public", "hello", function() message("Hi!"))
-x1$hello()
-
-x2 <- Accumulator$new()
-x2$hello()
-```
+As above, new methods and fields are only available to new objects; they are not retrospectively added to existing objects.
 
 ### Inheritance
 
@@ -247,45 +217,81 @@ x2 <- AccumulatorChatty$new()
 x2$add(10)$add(1)$sum
 ```
 
-Note that `$add()` overrides the implementation in the superclass, but we can access the previous implementation through `super$`. Any methods which are overridden will automatically call the implementation in the parent class.
-
-Like S3, R6 only supports single inheritance: you cannot supply a vector of classes to inherit.
-
-<!-- GVW: OK, I'm increasingly inclined to ask that RC be explained before S4... -->
+Note that `$add()` overrides the implementation in the superclass, but we can delegate to the superclass implementation through `super$`. (This is analagous to `NextMethod()` in S3, as discussed in Section \@ref(s3-inheritance).) Any methods which are overridden will automatically call the implementation in the parent class.
 
 ### Introspection
 
-Every R6 object has an S3 class that reflects the hierarchy of R6 classes. This means that the easiest way to determine the class (and all classes it inherits from) is to use `class()`:
+Every R6 object has an S3 class that reflects its hierarchy of R6 classes. This means that the easiest way to determine the class (and all classes it inherits from) is to use `class()`:
 
 ```{r}
-class(hadley3)
+class(hadley2)
 ```
 
-The S3 hierarchy includes the base "R6" class. This provides common behaviour, including a `print.R6()` method which calls `$print()` or `$format()`, as described above.
+The S3 hierarchy includes the base "R6" class. This provides common behaviour, including a `print.R6()` method which calls `$print()`, as described above.
 
 You can list all methods and fields with `names()`:
 
 ```{r}
-names(hadley3)
+names(hadley2)
 ```
 
-There's one method that we haven't defined: `$clone()`. It's provided by R6 and we'll come back to it in [reference semantics].
+We defined `$name`, `$age`, `$print`, and `$initialize`. As suggested by the name `.__enclos_env__` is an internal implementation detail that you shouldn't touch; we'll come to `$clone()` in Section \@ref(reference-semantics).
 
 ### Exercises
 
-## Controlling access
+1.  Create a bank account R6 class that stores a balance and allows you to 
+    deposit and withdraw money. Create a subclass that throws an error 
+    if you attempt to go into overdraft. Create another subclass that allows
+    you to go into overdraft, but charges you a fee.
 
-`R6Class()` has two other arguments that work similarly to `public`: `private` and `active`. `private` allows you to create components that the user cannot easily access, and `active` allows you to use accessor functions to define dynamic, or active, fields.
+1.  Create an R6 class that represents a shuffled deck of cards. You should be
+    able to draw cards from the deck with `$draw(n)`, and return all cards to 
+    the deck and reshuffle with `$reshuffle()`. Use the following code to make 
+    a vector of cards.
+    
+    ```{r}
+    suit <- c("♠", "♥", "♦", "♣")
+    value <- c("A", 2:10, "J", "Q", "K")
+    cards <- paste0(rep(value, 4), suit)
+    ```
+
+1.  Why can't you model a bank account or a deck of cards with an S3 class?
+    
+1.  Create an R6 class that allows you to get and set the current timezone. 
+    You can access the current timezone with `Sys.timezone()` and set it 
+    with `Sys.setenv(TZ = "newtimezone")`. When setting the time zone, make
+    sure the new time zone is in the list provided by `OlsonNames()`.
+
+1.  Create an R6 class that manages the current working directory.
+    It should have `$get()` and `$set()` methods.
+    
+1.  Why can't you model the time zone or current working directory with an S3
+    class?
+
+## Controlling access {#r6-access}
+
+`R6Class()` has two other arguments that work similarly to `public`:
+
+* `private` allows you to create fields and methods that are only available 
+  from within the class, not outside of it.
+  
+* `active` allows you to use accessor functions to define dynamic, or 
+  active, fields.
+
+These are described in the following sections.
 
 ### Privacy
 
-With R6 you can define __private__ fields and methods, elements that can only be accessed from within the class, not from the outside. There are two things that you need to know to take advantage of private elements:
+With R6 you can define __private__ fields and methods, elements that can only be accessed from within the class, not from the outside[^try-hard]. There are two things that you need to know to take advantage of private elements:
 
-* The `private` argument works in the same way as the `public` argument:
-  you give it a named list of methods (functions) and fields (everything else).
+[^try-hard]: Because R is such a flexible language, it's technically still possible to access private values, but you have to try much harder and spelunk in to the details of R6's implementation.
+
+* The `private` argument to `R6Class` works in the same way as the `public`
+  argument: you give it a named list of methods (functions) and fields 
+  (everything else).
   
 * Fields and methods defined in `private` are available within the methods
-  with `private$` instead of `self$`. You cannot access private fields or
+  using `private$` instead of `self$`. You cannot access private fields or
   methods outside of the class.
   
 To make this concrete, we could make `$age` and `$name` fields of the Person class private. With this definition of `Person` we can only set `$age` and `$name` during object creation, and we cannot access their values from outside of the class.
@@ -309,22 +315,26 @@ Person <- R6Class("Person",
   )
 )
 
-hadley4 <- Person$new("Hadley")
-hadley4$name
+hadley3 <- Person$new("Hadley")
+hadley3$name
 ```
 
 The distinction between public and private fields is important when you create complex networks of classes, and you want to make it as clear as possible what it's ok for others to access. Anything that's private can be more easily refactored because you know others aren't relying on it. Private methods tend to be less important in R compared to other programming languages because the object hierarchies in R tend to be simpler.
 
-<!-- GVW: interesting - is that somehow intrinsic to R6/RC or are R programmers pushing other boundaries than complex OO architectures? -->
-
 ### Active fields
 
-Active fields may allow you to define components that look like fields from the outside, but are defined with functions, like methods. For example, we can define an active field `x`  that returns a different value every time you access it:
+Active fields allow you to define components that look like fields from the outside, but are defined with functions, like methods. Active fields are implemented using __active bindings__ (see Section \@ref(advanced-bindings) for details). Each active binding must be a function that takes a single argument: `value`. If the argument is `missing()`, the value is being retrieved; otherwise it's being modified. 
+
+For example, you could make an active field `random` that returns a different value every time you access it:
 
 ```{r}
 Rando <- R6::R6Class("Rando", active = list(
   random = function(value) {
-    runif(1)
+    if (missing(value)) {
+      runif(1)  
+    } else {
+      stop("Can't set `$random`", call. = FALSE)
+    }
   }
 ))
 x <- Rando$new()
@@ -333,11 +343,7 @@ x$random
 x$random
 ```
 
-Active fields are particularly useful in conjunction with privacy, because they make it possible to implement components that work like fields from the outside but provide additional checks. For example, you can use them to implement read-only fields or fields that validate their inputs. 
-
-<!-- GVW: please bold __active bindings__ below. -->
-
-Active fields are implemented using active bindings from base R. Each active binding is a function that takes a single argument: `value`. If the argument is `missing()`, the value is being retrieved; otherwise it's being modified. We can use that idea to make a read-only `age` field, and to ensure that `name` is a length 1 character vector.
+Active fields are particularly useful in conjunction with private fields, because they make it possible to implement components that look like fields from the outside but provide additional checks. For example, we can use then make a read-only `age` field, and to ensure that `name` is a length 1 character vector.
 
 ```{r, error = TRUE}
 Person <- R6Class("Person", 
@@ -371,28 +377,31 @@ Person <- R6Class("Person",
   )
 )
 
-hadley5 <- Person$new("Hadley")
-hadley5$name
-hadley5$name <- 10
-
-hadley5$age
-hadley5$age <- 20
+hadley4 <- Person$new("Hadley", age = 38)
+hadley4$name
+hadley4$name <- 10
+hadley4$age <- 20
 ```
 
 ### Exercises
 
-1.  How would you define a write-only field?
+1.  Create a bank account class that you can withdraw from and deposit to, but 
+    prevents you from directly setting the account balance.
+    
+1.  Create an class with a write-only `$password` field. It should have 
+    `$check_password(password)` method that returns `TRUE` or `FALSE`, but 
+    there should be no way to view the complete password.
 
-<!-- GVW: and *why*? -->
+1.  Extend the `Rando` class with another active binding that allows you to 
+    access the previous random value. Ensure that active binding is the only
+    way to access the value.
 
 1.  Can subclasses access private fields/methods from their parent? Perform
     an experiment to find out.
 
-## Reference semantics
+## Reference semantics {#r6-semantics}
 
-One of the big differences between R6 and most other objects in R is that they have reference semantics. This is because they are S3 objects built on top of environments:
-
-<!-- GVW: the explanation in the second sentence doesn't actually clarify things for me at this point... -->
+One of the big differences between R6 and most other objects is that they have reference semantics. They inherit this behaviour from environments, the base type that they are built from:
 
 ```{r}
 typeof(x2)
@@ -418,7 +427,7 @@ y1$add(10)
 c(y1 = y1$sum, y2 = y2$sum)
 ```
 
-(Note that `$clone()` does not recursively clone nested R6 objects. If you want that, you'll need to use `$clone(deep = TRUE)`. Note that this only clones R6 objects: if you have other fields with reference semantics (e.g. environments) you'll need to define your own `$clone()`.)
+(Note that `$clone()` does not recursively clone nested R6 objects. If you want that, you'll need to use `$clone(deep = TRUE)`. This this only clones R6 objects: you'll need to provide your own `$clone()` if your class contains environments.)
 
 There are three other less obvious consequences:
 
@@ -426,12 +435,12 @@ There are three other less obvious consequences:
   understand more context.
   
 * It makes sense to think about when an R6 object is deleted, and you
-  can write a `finalizer()` to complement the `initializer()`.
+  can write a `$finalize()` to complement the `$initialize()`.
   
-* If one of the fields is an R6 class, you must call `$new()` inside
-  `$initialize()` not inside `R6Class()`.
+* If one of the fields is an R6 object, you must create it inside 
+  `$initialize()`, not `R6Class()`.
   
-These are described in more detail below.
+These consequences are described in more detail below.
 
 ### Reasoning
 
@@ -455,24 +464,20 @@ y <- List$new(b = 2)
 z <- f(x, y)
 ```
 
-The final line is much harder to reason about - it's completely possible that `f()` calls methods of `x` or `y`, modifying them in place. This is the biggest potential downside of R6. The best way to ameliorate this problem is to avoid writing functions that both return a value and modify R6 inputs. 
+The final line is much harder to reason about:  if `f()` calls methods of `x` or `y`, it might modify them as well as `z`. This is the biggest potential downside of R6 and you should take care to avoid it by writing functions that either return a value, or modify their R6 inputs, but not both. 
 
-<!-- GVW: I was expecting the words "functional programming" in the above... -->
-
-That said, modifying R6 inputs can lead to substantially simpler code in some cases. One challenge of working with immutable data is known as __threading state__: if you want to return a value that's modified in a deeply nested function, you need to return the modified value up through every function. This can complicate code, particularly if you need to modify multiple values. For example, ggplot2 uses R6 objects for scales. Scales are complex because they need to combine data across every facet and every layer. Using R6 makes the code substantially simpler, at the cost of introducing subtle bugs. Fixing those bugs required careful placement of calls to `$clone()` to ensure that independent plots didn't accidentally share scale data. We'll come back to this idea in [oo-tradeoffs].
+That said, modifying R6 inputs can lead to substantially simpler code in some cases. One challenge of working with immutable data is known as __threading state__: if you want to return a modified value from a deeply nested function, you need to return the modified value up through every function. This can complicate code, particularly if you need to modify multiple values. We'll come back to this problem in Section \@ref(threading-state).
 
 ### Finalizer
 
-One useful property of reference semantics is that it makes sense to think about when an R6 object is __finalised__, i.e. when it's deleted. This doesn't make sense for S3 and S4 objects because copy-on-modify semantics mean that there may be many transient versions of an object. For example, in the following code, there are actually two factor objects: the second is created when the levels are modified, leaving the first to be destroyed at the next garbage collection.
+One useful property of reference semantics is that it makes sense to think about when an R6 object is __finalized__, i.e. when it's deleted. This doesn't make sense for most objects because copy-on-modify semantics mean that there may be many transient versions of an object, as eluded to in Section \@ref(gc). For example, the following creates two two factor objects: the second is created when the levels are modified, leaving the first to be destroyed by the garbage collector.
 
 ```{r}
 x <- factor(c("a", "b", "c"))
 levels(x) <- c("c", "b", "a")
 ```
 
-<!-- GVW: as written, the first phrase below makes me wonder if other R objects are deleted many times... -->
-
-Since R6 objects are not copied-on-modify they will only get deleted once, and it makes sense to think about `$finalize()` as a complement to `$initialize()`. Finalizers usually play a similar role to `on.exit()`, cleaning up any resources created by the initializer. For example, the following class wraps up a temporary file, automatically deleting it when the class is finalised.
+Since R6 objects are not copied-on-modify they are only deleted once, and it makes sense to think about `$finalize()` as a complement to `$initialize()`. Finalizers usually play a similar role to `on.exit()` (as described in Section \@ref(on-exit)), cleaning up any resources created by the initializer. For example, the following class wraps up a temporary file, automatically deleting it when the class is finalized.
 
 ```{r}
 TemporaryFile <- R6Class("TemporaryFile", list(
@@ -489,23 +494,28 @@ TemporaryFile <- R6Class("TemporaryFile", list(
 tf <- TemporaryFile$new()
 ```
 
-The finalise method will be run when R exits, or by the first garbage collection after the object has been removed. Generally, this will happen when it happens, but it can occasionally be useful to force a run with an explicit call to `gc()`.
+The finalize method will be run when the object is deleted (or more precisely, by by the first garbage collection after the object has been unbound from all names) or when R exits.
 
 ```{r}
 rm(tf)
 invisible(gc())
 ```
 
+Forcing garbage collection here is useful, as it allows you to see the finalisation message.
+
 ### R6 fields
 
-A final consequence of reference semantics can crop up where you don't expect it. Beware of setting a default value to an R6 class: it will be shared across all instances of the object. This is because the child object is only initialized once, when you defined the class, not each time you call new.
+A final consequence of reference semantics can crop up where you don't expect it: never use a R6 class as the default value of a field. It will be shared across all instances of the object because it's is only initialized once, when you define the class, not each time you call `$new()`.
 
 ```{r}
 TemporaryDatabase <- R6Class("TemporaryDatabase", list(
   con = NULL,
   file = TemporaryFile$new(),
   initialize = function() {
-    DBI::dbConnect(RSQLite::SQLite(), path = file$path)
+    self$con <- DBI::dbConnect(RSQLite::SQLite(), path = file$path)
+  },
+  finalize = function() {
+    DBI::dbDisconnect(self$con)
   }
 ))
 
@@ -515,6 +525,8 @@ db_b <- TemporaryDatabase$new()
 db_a$file$path == db_b$file$path
 ```
 
+(If you're familiar with Python, this is very similar to the "mutable default argument" problem.)
+
 You can fix this by creating the object in `$initialize()`:
 
 ```{r}
@@ -523,7 +535,10 @@ TemporaryDatabase <- R6Class("TemporaryDatabase", list(
   file = NULL,
   initialize = function() {
     self$file <- TemporaryFile$new()
-    DBI::dbConnect(RSQLite::SQLite(), path = file$path)
+    self$con <- DBI::dbConnect(RSQLite::SQLite(), path = file$path)
+  },
+  finalize = function() {
+    DBI::dbDisconnect(self$con)
   }
 ))
 
@@ -535,29 +550,40 @@ db_a$file$path == db_b$file$path
 
 ### Exercises
 
+1.  Create a class that allows you to write a line to a specified file. 
+    You should open a connection to the file in `$initialize()`, append a
+    line using `cat()` in `$append_line()`, and close the connection in
+    `$finalize()`.
+
 ## Why R6? {#why-r6}
 
-R6 is very similar to a built-in OO system called __reference classes__, or RC for short. I'm going to teach you R6 instead of RC for four reasons:
+R6 is very similar to a built-in OO system called __reference classes__, or RC for short. I prefer R6 over RC for a few reasons:
 
 * R6 is much simpler. Both R6 and RC are built on top of environments, but
-  while R6 uses S3, RC uses S4. R6 is only ~500 lines of R code (and ~1700 
-  lines of tests!). We're not going to discuss the implementation in depth
-  here, but if you've mastered the contents of this book, you should be able
-  to read the source code and figure out how it works.
+  while R6 uses S3, RC uses S4. This means to fully understand RC, you need
+  to understand how the more complicated S4 works.
+  
+* R6 has comprehensive online documentation at <https://r6.r-lib.org>.
+
+* R6 has a simpler mechnaism for cross-package subclassing, which just 
+  works without you having to think about. For RC, read the details in the 
+  "External Methods; Inter-Package Superclasses" section of `?setRefClass`.
 
 * RC mingles variables and fields in the same stack of environments so that you
   get (`field`) and set (`field <<- value`) fields like regular values. R6 puts 
   fields in a separate environment so you get (`self$field`) and set 
-  (`self$field <- value`) with a prefix. The R6 approach is more verbose but is
-  worth the tradeoff because it makes code easier to understand. It also makes 
-  inheritance across packages simpler and more robust.
-
-<!-- GVW: I completely missed `<<-` instead of `<-` on first reading - worth drawing attention to? -->
+  (`self$field <- value`) with a prefix. The R6 approach is more verbose but 
+  I like it because I think it makes the code easier to read.
 
 * R6 is much faster than RC. Generally, the speed of method dispatch is not 
-  important outside of microbenchmarks but R6 is substantially better than
-  RC. Switching from RC to R6 yielded substantial performance improvements in shiny. 
-  `vignette("Performance", "R6")` provides more details on the performance.
+  important outside of microbenchmarks, but R6 is substantially more performant.
+  Switching from RC to R6 yielded substantial performance improvements in shiny. 
+  `vignette("Performance", "R6")` provides more details.
+
+* RC is tied to R version. That means if any bugs are fixed, you can only
+  take advantage of the fixes by requiring a newer version of R. This makes it
+  difficult for packages (like those in the tidyverse) that need to work across
+  many R versions.
 
 * Because the ideas that underlie R6 and RC are similar, it will only require 
   a small amount of additional effort to learn RC if you need to.
