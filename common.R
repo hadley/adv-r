@@ -39,6 +39,11 @@ registerS3method("wrap", "error", envir = asNamespace("knitr"),
     call <- conditionCall(x)
     message <- conditionMessage(x)
 
+    width <- getOption("width")
+    if (nchar(message) > width && !grepl("\n", message)) {
+      message <- paste(strwrap(x, width = width, exdent = 2), collapse = "\n")
+    }
+
     if (is.null(call)) {
       msg <- paste0("Error: ", message)
     } else {
