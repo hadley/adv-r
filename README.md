@@ -17,6 +17,7 @@ Omnigraffle:
 
 * Conventions:
     * Text is set in inconsolata 10pt, with text padding set to 3. 
+    * Emoji set in "Apple Color Emoji" 8pt.
     * Default scalar size is 6mm x 6mm.
     * Symbols have 4pt rounded corners and plum border.
     * Arrow heads should be set to 75%.
