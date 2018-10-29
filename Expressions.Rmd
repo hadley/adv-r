@@ -6,6 +6,8 @@ source("common.R")
 
 ## Introduction
 
+<!-- GVW: "compute _on_ the language" sounds odd to me -->
+
 To compute on the language, we first need to understand its structure. That requires some new vocabulary, some new tools, and some new ways of thinking about R code. The first thing you'll need to understand is the distinction between an operation and its result. Take this code, which takes a variable `x`, multiplies it by 10, and saves the result to a new variable called `y`. It doesn't work because we haven't defined a variable called `x`:
 
 ```{r, error = TRUE}
@@ -18,6 +20,8 @@ It would be nice if we could capture the intent of the code, without executing t
 z <- rlang::expr(y <- x * 10)
 z
 ```
+
+<!-- GVW: the word "quoted" suggests "converted to string" (at least it did to my younger self, who was very confused by the term).  Clarify this up front? -->
 
 `expr()` returns a quoted __expression__: the R code that captures our intent. We'll com back to discussion `expr()` in depth in Section \@ref(quotation). In this chapter, you'll learn about the underlying data structure, which will also help you understand how R executes code. Later, in Section \@ref(eval), you'll learn about `eval()` which allows you to take such an expression and perform, or __evaluate__, it:
 
@@ -40,8 +44,12 @@ library(rlang)
 library(lobstr)
 ```
 
+<!-- GVW: is GitHub-based installation still going to be necessary by the time this is out, or will packages be on CRAN? -->
+
 ## Abstract syntax trees
 \index{abstract syntax tree}
+
+<!-- GVW: first sentence below explains the "tree" part of "abstract syntax tree" but not "abstract syntax" (which will probably be less familiar to readers) -->
 
 Quoted expressions are also called __abstract syntax trees__ (ASTs) because the structure of code is hierarchical and can be naturally represented as a tree. To make that more obvious we're going to introduce some graphical conventions, illustrated with the very simple call `f(x, "y", 1)`. 
 
@@ -75,6 +83,8 @@ lobstr::ast(f(x, "y", 1))
 Calls get an orange square, symbols are bold and purple, and strings are surrounded by quote marks. (The colours are not shown in the book, but you'll see it if you run the code yourself.)
 
 `ast()` supports "unquoting" with `!!` (pronounced bang-bang). We'll talk about unquoting in detail in the next chapter; for now note that you'll need it if you want to see the structure of an expression that you've already captured with `expr()`.
+
+<!-- GVW: anyone who isn't already familiar with quoting and unquoting is going to be pretty confused at this point -->
 
 ```{r}
 x <- expr(f(x, "y", 1))
@@ -211,6 +221,8 @@ lobstr::ast(!x %in% y)
 
 R has over 30 infix operators divided into 18 precedence groups. While the details are described in `?Syntax`, very few people have memorised the complete ordering. Indeed, if there's any confusion, use parentheses! These also appear in the AST, like all other special forms:
 
+<!-- GVW: maybe show `lobstr::ast((1 + 2) * 3)` to show how parens override precedence? -->
+
 ```{r}
 lobstr::ast(1 + (2 + 3))
 ```
@@ -218,6 +230,8 @@ lobstr::ast(1 + (2 + 3))
 ### Associativity
 
 Another source of ambiguity is introduced by repeated usage of the same infix function. For example, is `1 + 2 + 3` equivalent to `(1 + 2) + 3` or to `1 + (2 + 3)`?  This normally doesn't matter because `x + (y + z) == (x + y) + z`, i.e. addition is associative, but is needed because some S3 classes define `+` in a non-associative way. For example, ggplot2 overloads `+` to build up a complex plot from simple pieces; this usage is non-associative because earlier layers are drawn underneath later layers.
+
+<!-- GVW: err... really? I've never thought of ggplot that way -->
 
 In R, most operators are __left-associative__, i.e. the operations on the left are evaluated first:
 
@@ -294,8 +308,12 @@ There are two other common sources of confusion in base R documentation:
   `is.symbol()`). I prefer symbol because "name" has other common meanings 
   (e.g. the name of a variable).
 
+<!-- GVW: a table here would be very helpful -->
+
 ### Constants
 \index{constants}
+
+<!-- GVW: "occur", not "occurred" -->
 
 Constants occurred in the leaves of the AST. They are the simplest data structure found in the AST because they are atomic vectors of length 1. Constants are "self-quoting" in the sense that the expression used to represent a constant is the constant itself:
 
@@ -318,6 +336,8 @@ Symbols represent variable names. They are basically a string stored in a specia
 sym("x")
 as_string(sym("x"))
 ```
+
+<!-- GVW: by "scalar", do you mean "vector of length 1"? -->
 
 Symbols are scalars: if you want multiple symbols, you'll need to put them in a list. This is what `syms()` does:
 
@@ -370,6 +390,8 @@ You only need to care about the missing symbol if you're programmatically creati
 
 ### Calls
 \index{calls}
+
+<!-- GVW: in _the_ AST.  Also, can we refer to these as "call objects" rather than "calls"? The latter is confusing me... -->
 
 Calls define the tree in AST. A call behaves similarly to a list:
 
@@ -432,6 +454,8 @@ x$header <- TRUE
 x
 ```
 
+<!-- GVW: maybe "The first argument should identify the function to be called" - again, trying to distinguish this from a mode in which a defined function is passed as a first-class object -->
+
 You can construct a call from its children by using `rlang::call2()`. The first argument should be the function to be called (supplied either as a string or a symbol), and the subsequent arguments are the call to that function:
 
 ```{r}
@@ -448,6 +472,8 @@ There is one data structure we need to discuss for completeness: the pairlist. P
 f <- function(x = 10) x + 1
 typeof(formals(f))
 ```
+
+<!-- GVW: in the below, do you mean objects-that-represent-calls or actual-calls-on-the-stack-at-runtime? -->
 
 [^pairlists-c]: If you're working in C, you'll encounter pairlists more often. For example, calls are also implemented using pairlists.
  
@@ -488,7 +514,6 @@ exp1[[1]]
 ```
 
 Conceptually, an expression object is just a list of expressions. The only difference is that calling `eval()` on an expression evaluates each individual expression. We don't believe this advantage merits introducing a new data structure, so instead of expression objects we always use regular lists of expressions.
-
 
 ### Exercises
 
@@ -629,6 +654,8 @@ To conclude the chapter I'm going to pull together everything that you've learne
   unused local variables, unused parameters, and the use of partial
   argument matching.
 
+<!-- GVW: maybe use a word other than "expression" in the first sentence? :-) -->
+
 Getting all of the details of these functions correct is fiddly, so we won't explore their full expression. Instead we'll focus on the big underlying idea: recursion on the AST. Recursive functions are a natural fit to tree-like data structures because a recursive function is made up of two parts that correspond to the two parts of the tree:
 
 * The __recursive case__ handles the nodes in the tree. Typically, you'll
@@ -675,6 +702,8 @@ switch_expr <- function(x, ...) {
 
 With these two functions in hand, the basic template for any function that walks the AST is as follows:
 
+<!-- GVW: I don't understand what's going on here with `symbol = ,` - is something supposed to come before the `,`? I realize it's all being spliced into switch_expr, but... -->
+
 ```{r}
 recurse_call <- function(x) {
   switch_expr(x, 
@@ -688,6 +717,8 @@ recurse_call <- function(x) {
   )
 }
 ```
+
+<!-- GVW: whoops - what's with the sudden introduction of purrr? -->
 
 Typically, solving the base case is easy, so we'll do that first, then check the results. The recursive cases are a little more tricky. Typically you'll think about the structure of final output and then find the correct purrr function to produce it. To that end, make sure you're familiar with [Functionals] before continuing.
 
@@ -717,6 +748,8 @@ logical_abbr_rec(expr(T))
 ```
 
 I've written `logical_abbr_rec()` function assuming that the input will be an expression as this will make the recursive operation simpler. However, when writing a recursive function it's common to write a wrapper that provides defaults or makes the function a little easier to use. Here we'll typically make a wrapper that quotes its input (we'll learn more about that in the next chapter), so we don't need to use `expr()` every time.
+
+<!-- GVW: since I haven't yet seen quoting, I'm struggling to follow this example. -->
 
 ```{r}
 logical_abbr <- function(x) {
