@@ -15,7 +15,7 @@ code <- function(...) paste0("`", ..., "`")
 
 S4 provides a formal approach to functional OOP. The underlying ideas are similar to S3 (the topic of Chapter \@ref(s3)), but implementation is much stricter and makes use of specialised functions for creating classes (`setClass()`), generics (`setGeneric()`), and methods (`setMethod()`). Additionally, S4 provides both multiple inheritance (i.e. a class can have multiple parents) and multiple dispatch (i.e. method dispatch can use the class of multiple arguments).
 
-An important new component in S4 the __slot__, a named component of the object that is accessed using the specialised subsetting operator `@` (pronounced at). The set of slots, and their classes, forms an important part of the definition of an S4 class.
+An important new component of S4 is the __slot__, a named component of the object that is accessed using the specialised subsetting operator `@` (pronounced at). The set of slots, and their classes, forms an important part of the definition of an S4 class.
 
 Like the other OO chapters, the focus here will be on S4 works, not how to deploy it most effectively. 
 
@@ -23,20 +23,22 @@ Like the other OO chapters, the focus here will be on S4 works, not how to deplo
 
 There are two main challenges when learning S4:
 
-* There is no one single S4 reference that will answer all your questions.
+* There is no one reference that will answer all your questions
+  about S4.
 
-* The built-in documentation sometimes clashes with community best practices.
+* R's built-in documentation sometimes clashes with community best practices.
 
-As you move towards more advanced usage, you will need to piece together needed information by carefully reading the documentation, asking questions on StackOverflow, and performing experiments. Some good places to start are:
+As you move towards more advanced usage, you will need to piece together needed information by carefully reading the documentation, asking questions on StackOverflow, and performing experiments. Some recommendations:
 
-*   The Bioconductor community is a long-term user and have produced much of
-    best material about effect use of S4. Start with [S4 classes and
-    methods][bioc-s4-class] (2017) taught by Martin Morgan and Hervé Pagès, 
-    checking for newer editions at [Bioconductor course materials][bioc-courses].
+*   The Bioconductor community is a long-term user S4 and have produced much of
+    best material about its effective use. Start with [S4 classes and
+    methods][bioc-s4-class] taught by Martin Morgan and Hervé Pagès, or
+    check for a newer version at [Bioconductor course materials][bioc-courses].
   
-    Martin Morgan, an R-core and Bioconductor-core developer, and a world 
-    expert in practical use of S4. I strongly recommend reading the questions
-    about S4 that he has answered on [stackoverflow][SO-Morgan].
+    Martin Morgan is a member of R-core and the project lead of Bioconductor.
+    He's a world expert on the practical use of S4, and I recommend reading
+    anything he has written about it, starting with the questions he has 
+    answered on [stackoverflow][SO-Morgan].
 
 *   John Chambers is the author of the S4 system, and provides an overview      
     of its motivation and historical context in "Object-oriented programming,
@@ -45,30 +47,29 @@ As you move towards more advanced usage, you will need to piece together needed 
 
 ### Outline {-}
 
-* Section \@ref(s4-basics) gives a rapid tour of the main components of S4:
+* Section \@ref(s4-basics) gives a quick overview of the main components of S4:
   classes, generics, and methods.
   
-* Section \@ref(s4-classes) dives into the details of S4 classes. You'll
-  learn about the important helper function that should accompany most
-  S4 classes, and how to set up a validator where needed.
+* Section \@ref(s4-classes) dives into the details of S4 classes, including
+  prototypes, constructors, helpers, and validators.
   
 * Section \@ref(s4-generics) shows you how to create new S4 generics, and 
   how to supply those generics with methods. You'll also learn about
-  accessor functions which are designed to allow users to safely get and set
-  object slots.
+  accessor functions which are designed to allow users to safely inspect and 
+  modify object slots.
   
 * Section \@ref(s4-dispatch) dives into the full details of method dispatch
-  in S4. This gets quite complicated with the combination of multiple 
-  inheritance and multiple dispatch.
+  in S4. The basic idea is simple, the it rapidly gets more complex once
+  multiple inheritance and multiple dispatch are combined.
   
 * Section \@ref(s4-s3) discusses the interaction between S4 and S3, showing
   you how to use them together.
 
 ### Prerequisites {-}
 
-All functions related to S4 live in the methods package. This package is always available when you're running R interactively, but may not be available when running R in batch mode, from `Rscript`[^Rscript]. For this reason, it's a good idea to call `library(methods)` whenever you use S4. This also signals to the reader that you'll be using the S4 object system.
+All functions related to S4 live in the methods package. This package is always available when you're running R interactively, but may not be available when running R in batch mode, i.e. from `Rscript`[^Rscript]. For this reason, it's a good idea to call `library(methods)` whenever you use S4. This also signals to the reader that you'll be using the S4 object system.
 
-[^Rscript]: This is a historical oddity introduced because the methods package used to take a long time to load and `Rscript` is optimised for fast command line invocation.
+[^Rscript]: This is a historical quirk introduced because the methods package used to take a long time to load and `Rscript` is optimised for fast command line invocation.
 
 ```{r}
 library(methods)
@@ -76,7 +77,7 @@ library(methods)
 
 ## Basics {#s4-basics}
 
-We'll start with a quick overview of the main components of S4 and then dive into the details below. You define a S4 class by calling `setClass()` with the class name and a definition of its slots, the names and classes of the class data.
+We'll start with a quick overview of the main components of S4. You define a S4 class by calling `setClass()` with the class name and a definition of its slots, the names and classes of the class data:
 
 ```{r}
 setClass("Person", 
@@ -87,22 +88,23 @@ setClass("Person",
 )
 ```
 
-Can construct new objects from a class by calling `new()` and providing values for the slots:
+Once the class is defined, you can construct new objects from it by calling `new()` with the name of the class and a value for each slot:
 
 ```{r}
 john <- new("Person", name = "John Smith", age = NA_real_)
 ```
 
-Access the slot values with `@` (equivalent to `$`) or `slot()` (equivalent to `[[`):
+Given an S4 object you can see it's class with `is()` and access slots with `@` (equivalent to `$`) and `slot()` (equivalent to `[[`):
 
 ```{r}
+is(john)
 john@name
 slot(john, "age")
 ```
 
-Generally, you should only use `@` in methods. If you're working for with someone elses class, look for __accessor__ functions that allow you to safely set and get slot values. As the developer of a class, you should also provide your own accessor functions. Accessors are typically S4 generics allowing multiple classes to have the same external interface.
+Generally, you should only use `@` in your methods. If you're working with someone else's class, look for __accessor__ functions that allow you to safely set and get slot values. As the developer of a class, you should also provide your own accessor functions. Accessors are typically S4 generics allowing multiple classes to share the same external interface.
 
-Here we'll create a set and getter for the `age` slot by firsting creating generics with `setGeneric()`:
+Here we'll create a setter and getter for the `age` slot by first creating generics with `setGeneric()`:
 
 ```{r}
 setGeneric("age", function(x) standardGeneric("age"))
@@ -114,18 +116,17 @@ And then defining methods with `setMethod()`:
 ```{r}
 setMethod("age", "Person", function(x) x@age)
 setMethod("age<-", "Person", function(x, value) {
-  stop("`@age` is readonly", call. = FALSE)
+  x@age <- value
+  x
 })
-```
 
-```{r, error = TRUE}
-age(john)
 age(john) <- 50
+age(john)
 ```
 
-If you're using an S4 class defined in a package, you can get help on it with `class?Person`. To get help for a method, put `?` in front of a call: `?age(john)`. `?` will use the class of the arguments to figure out which help file you need.
+If you're using an S4 class defined in a package, you can get help on it with `class?Person`. To get help for a method, put `?` in front of a call (e.g. `?age(john)`) and  `?` will use the class of the arguments to figure out which help file you need.
 
-Use sloop functions to identify S4 objects and generics found in the wild:
+Finally, you can use sloop functions to identify S4 objects and generics found in the wild:
 
 ```{r}
 sloop::otype(john)
@@ -145,18 +146,17 @@ sloop::ftype(age)
 
 To define an S4 class, call `setClass()` with three arguments:
 
-* The class __name__. By convention, S4 class names use UpperCamelCase.
+* The class __name__. By convention, S4 class names use `UpperCamelCase`.
 
 * A named character vector that describes the names and classes of the 
   __slots__ (fields). For example, a person might be represented by a character 
   name and a numeric  age: `c(name = "character", age = "numeric")`. The 
-  pseudo-class "ANY" allows a slot to accept objects of any type.
+  pseudo-class `ANY` allows a slot to accept objects of any type.
 
 * A __prototype__, a list of default values for each slot. Technically,
-  the prototype is optional[^prototype-docs], but it's strongly recommended as 
-  it makes use of the class much easier.
+  the prototype is optional[^prototype-docs], but you should always provide it.
 
-[prototype-docs]: Note that `?setClass` recommends that you avoid the the `prototype` argument, but this is generally considered to be bad advice.
+[^prototype-docs]: Note that `?setClass` recommends that you avoid the the `prototype` argument, but this is generally considered to be bad advice.
 
 The code below illustrates the three arguments by creating a `Person` class with character `name` and numeric `age` slots.
 
@@ -173,12 +173,12 @@ setClass("Person",
 )
 
 me <- new("Person", name = "Hadley")
-me
+str(me)
 ```
 
 ### Inheritance
 
-There is one other important argument to `setClass()`: `contains`. This defines a class (or classes) to inherit behaviour from. For example, we can create an `Employee` class that inherits slots and behaviour from the `Person` class, but additionally contains a slot that desribes their boss.
+There is one other important argument to `setClass()`: `contains`. This specifies a class (or classes) to inherit slots and behaviour from. For example, we can create an `Employee` class that inherits from the `Person` class, adding an extra slot desribes their `boss`.
 
 ```{r}
 setClass("Employee", 
@@ -191,10 +191,25 @@ setClass("Employee",
   )
 )
 
-new("Employee")
+str(new("Employee"))
 ```
 
-`setClass()` has 9 other arguments but they are either deprecated or not recommended. If you have existing S4 code that uses them, I'd recommend carefully reading the documentation and upgrading to modern practice. 
+`setClass()` has 9 other arguments but they are either deprecated or not recommended.
+
+### Introspection
+
+To determine what classes an object inherits from, use `is()`:
+
+```{r}
+is(new("Person"))
+is(new("Employee"))
+```
+
+To test if an object inherits from a specific class, use the second argument of `is()`:
+
+```{r}
+is(john, "person")
+```
 
 ### Redefinition
 
@@ -208,7 +223,7 @@ setClass("A", slots = c(a_different_slot = "numeric"))
 a
 ```
 
-This can cause confusion during interactive creation of new classes.
+This can cause confusion during interactive creation of new classes. (R6 classes have the same problem, as described in Section \@ref(r6-important-methods).)
 
 ### Helper
 
@@ -221,9 +236,9 @@ This can cause confusion during interactive creation of new classes.
 
 * Create carefully crafted error messages tailored towards an end-user.
 
-* Finish by calling by calling `methods::new()`
+* Finish by calling by calling `methods::new()`.
 
-The `Person` class is so simple so a helper is almost superfluous, but we can use it to clearly define the contract: `age` is optional but `name` is required.
+The `Person` class is so simple so a helper is almost superfluous, but we can use it to clearly define the contract: `age` is optional but `name` is required. We'll also coerce age to a dobule so the helper also works when passed an integer.
 
 ```{r}
 Person <- function(name, age = NA) {
@@ -243,7 +258,7 @@ The constructor automatically checks that the slots have correct classes:
 Person(mtcars)
 ```
 
-But you will need to implement more complicated checks (i.e. checks that involve lengths, or multiple slots) yourself. For example, we might want to make it clear that the Person class is a vector class, and can store data about multiple people. That's not currently clear because `@name` and `@age` can be different lengths:
+You will need to implement more complicated checks (i.e. checks that involve lengths, or multiple slots) yourself. For example, we might want to make it clear that the Person class is a vector class, and can store data about multiple people. That's not currently clear because `@name` and `@age` can be different lengths:
 
 ```{r}
 Person("Hadley", age = c(30, 37))
@@ -270,42 +285,28 @@ Person("Hadley", age = c(30, 37))
 Note that the validity method is only called automatically by `new()`, so you can still create an invalid object by modifying it:
 
 ```{r}
-john <- Person("John", age = 30)
-john@age <- 1:10
+alex <- Person("Alex", age = 30)
+alex@age <- 1:10
 ```
 
 You can explicitly check the validity yourself by calling `validObject()`:
 
 ```{r, error = TRUE}
-validObject(john)
+validObject(alex)
 ```
 
-In Section \@ref(accessors), we'll use `validObject()` to create accessor functions that always return valid objects.
-
-### Introspection
-
-To determine what classes an object inherits from, use `is()`:
-
-```{r}
-is(john)
-```
-
-To test if an object inherits from a specific class, use the second argument of `is()`:
-
-```{r}
-is(john, "person")
-```
+In Section \@ref(accessors), we'll use `validObject()` to create accessors can not create invalid objects.
 
 ### Exercises
 
 1.  Extend the Person class with fields to match `utils::person()`.
-    Think about what slots you will need, and what you'll need to check in
-    your validity method.
+    Think about what slots you will need, what class each slot should have,
+    and what you'll need to check in your validity method.
 
 1.  What happens if you define a new S4 class that doesn't have any slots?
     (Hint: read about virtual classes in `?setClass`.)
 
-1.  Imagine you were going to reimplement factors, dates, and, data frames in 
+1.  Imagine you were going to reimplement factors, dates, and data frames in 
     S4. Sketch out the `setClass()` calls that you would use to define the 
     classes. Think about appropriate `slots` and `prototype`.
 
@@ -317,13 +318,15 @@ is(john, "person")
 \indexc{setGeneric()}
 \indexc{standardGeneric()}
 
-The job of a generic is to perform method dispatch, i.e. find the method designed to handle the combination of classes passed to the generic. Here you'll learn how to define S4 generics and methods, then in the next section we'll explore precisely how S4 method dispatch works.
+The job of a generic is to perform method dispatch, i.e. find the specific implementation for the combination of classes passed to the generic. Here you'll learn how to define S4 generics and methods, then in the next section we'll explore precisely how S4 method dispatch works.
 
-S4 generics have a similar structure to S3 generics, but are a little more formal. To create a new S4 generic, you call `setGeneric()` with a function that calls `standardGeneric()`. 
+To create a new S4 generic, call `setGeneric()` with a function that calls `standardGeneric()`:
 
 ```{r}
 setGeneric("myGeneric", function(x) standardGeneric("myGeneric"))
 ```
+
+By convention, new S4 generics should use `lowerCamelCase`.
 
 It is bad practice to use `{}` in the generic as it triggers a special case that is more expensive, and generally best avoided.
 
@@ -348,7 +351,7 @@ setGeneric("myGeneric",
 ### Methods
 \indexc{setMethod()}
 
-A generic isn't useful without some methods, and in S4 you add methods with `setMethod()`. There are three important arguments: the name of the generic, the name of the class, and the method itself. 
+A generic isn't useful without some methods, and in S4 you define methods with `setMethod()`. There are three important arguments: the name of the generic, the name of the class, and the method itself. 
 
 ```{r}
 setMethod("myGeneric", "Person", function(x) {
@@ -356,13 +359,13 @@ setMethod("myGeneric", "Person", function(x) {
 })
 ```
 
-More formally, the second argument to `setMethod()` is called the __signature__. In S4, unlike S3, the signature can include multiple arguments. This makes method dispatch in S4 substantially more complicated, but avoids having to implement double-dispatch as a special case. We'll talk more about multiple dispatch in the next section.
+More formally, the second argument to `setMethod()` is called the __signature__. In S4, unlike S3, the signature can include multiple arguments. This makes method dispatch in S4 substantially more complicated, but avoids having to implement double-dispatch as specially. We'll talk more about multiple dispatch in the next section. `setMethod()` has other arguments, but you should never use them.
 
-`setMethod()` has other arguments, but you should never use them, just like `setClass()` and `setGeneric()`.
+To list all the methods that belong to a generic, or that are associated with a class, use `methods("generic")` or `methods(class = "class")`; to find the implementation of a specific method, use `selectMethod("generic", "class")`.
 
 ### Show method
 
-As with S3, the most commonly defined S4 method controls printing, but in S4 we use a different generic: `show()`. When defining a method for an existing generic, you need to first determine the arguments. You can get those from the documentation or by looking at the `args()` of the generic:
+The most commonly defined S4 method controls printing is `show()`, which controls how the object appears when it is printed. To define a method for an existing generic, you must first determine the arguments. You can get those from the documentation or by looking at the `args()` of the generic:
 
 ```{r}
 args(getGeneric("show"))
@@ -383,7 +386,7 @@ john
 
 ### Accessors
 
-Slots are generally considered to be an internal implementation detail: they can change without warning and user code should avoid accessing them directly. Instead, all user-accessible slots should get an __accessor__. If the slot is unique to the class, this can just be a function:
+Slots should be considered an internal implementation detail: they can change without warning and user code should avoid accessing them directly. Instead, all user-accessible slots should be accompanied by a pair of __accessors__. If the slot is unique to the class, this can just be a function:
 
 ```{r}
 person_name <- function(x) x@name
@@ -398,7 +401,7 @@ setMethod("name", "Person", function(x) x@name)
 name(john)
 ```
 
-If the slot is also writeable, you should provide a setter function. This will be slightly more complicated than the getter because you should always call `validObject()` to check that the new object is still valid.
+If the slot is also writeable, you should provide a setter function. You should always `validObject()` in the setter to prevent the user from creating invalid objects.
 
 ```{r, error = TRUE}
 setGeneric("name<-", function(x, value) standardGeneric("name<-"))
@@ -407,27 +410,14 @@ setMethod("name<-", "Person", function(x, value) {
   validObject(x)
   x
 })
-  
-name(hadley) <- "Johnathan Smythe"
-name(hadley)
+
+name(john) <- "Jon Smythe"
+name(john)
+
+name(john) <- letters
 ```
 
-(If the `name<-` notation is unfamiliar, check out Section \@ref(function-forms).)
-
-### Introspection
-
-To list all the methods that belong to a generic, or that are associated with a class, use `.S4methods()`:
-
-```{r}
-.S4methods("initialize")
-.S4methods(class = "Person")
-```
-
-If you're looking for the implementation of a specific method, you can use `selectMethod()`. You give it the name of the generic and the class (or classes) that it's called with:
-
-```{r}
-selectMethod("show", "Person")
-```
+(If the `name<-` notation is unfamiliar, review Section \@ref(function-forms).)
 
 ### Exercises
 
@@ -435,19 +425,12 @@ selectMethod("show", "Person")
 
 1.  In the definition of the generic, why is it necessary to repeat the
     name of the generic twice?
- 
-1.  What's the difference between the generics generated by these two calls?
     
-    ```{r, eval = FALSE}
-    setGeneric("myGeneric", function(x) standardGeneric("myGeneric"))
-    setGeneric("myGeneric", function(x) {
-      standardGeneric("myGeneric")
-    })
-    ```
-   
+1.  Why does the `show()` method defined in Section \@ref(show-method) use
+    `is(object)[[1]]`. (Hint: try printing the employee subclass.)
+
 1.  What happens if you define a method with different argument names to
     the generic?
-
 
 ## Method dispatch {#s4-dispatch}
 
@@ -456,7 +439,7 @@ S4 dispatch is complicated because S4 has two important features:
 * Multiple inheritance, i.e. a class can have multiple parents, 
 * Multiple dispatch, i.e. a generic can use multiple arguments to pick a method. 
 
-These features make S4 very powerful, but can also make it hard to understand which method will get selected for a given combination of inputs. In practice, you should keep method dispatch as simple as possible by avoiding multiple inheritance, and reserving multiple dispatch for only where it is absolutely necessary.
+These features make S4 very powerful, but can also make it hard to understand which method will get selected for a given combination of inputs. In practice, keep method dispatch as simple as possible by avoiding multiple inheritance, and reserving multiple dispatch only for where it is absolutely necessary.
 
 But it's important to describe the full details, so here we'll start simple with single inheritance and single dispatch, and work our way up to the more complicated cases. To illustrate the ideas without getting bogged down in the details, we'll use an imaginary __class graph__ based on emoji:
 
@@ -481,18 +464,20 @@ There are two parts to this diagram:
   deep.
   
 * The bottom part is the __method graph__ and  displays all the possible methods 
-  that could be defined. Methods that have been defined 
-  (i.e. with `setMethod()`) have a grey background. 
+  that could be defined. Methods that exist, i.e. that have been defined with 
+  `setMethod()`, have a grey background. 
 
-To find the method that gets called, you start with the class of the actual arguments, then follow the arrows until you find a method that exists. For example, if you called the function with an object of class `r emoji("wink")` you would follow the arrow right to find the method defined for the more general `r emoji("no_mouth")` class. If no method is found, method dispatch has failed and you get an error. In practice this means that you should alway define methods defined for the terminal nodes, i.e. those on the far right. 
+To find the method that gets called, you start with the most specific class of the actual arguments, then follow the arrows until you find a method that exists. For example, if you called the function with an object of class `r emoji("wink")` you would follow the arrow right to find the method defined for the more general `r emoji("no_mouth")` class. If no method is found, method dispatch has failed and an error is thrown. In practice, this means that you should alway define methods defined for the terminal nodes, i.e. those on the far right. 
 
-There are two __pseudo-classes__ that you can define methods for. These are called pseudo-classes because they don't actually exist, but allow you to define useful behaviours. The first pseudo-class is "ANY". This matches any class, and plays the same role as the `default` pseudo-class in S3. For technical reasons that we'll get to later, the link to the "ANY" method is longer than the links between the other classes:
+There are two __pseudo-classes__ that you can define methods for. These are called pseudo-classes because they don't actually exist, but allow you to define useful behaviours. The first pseudo-class is `ANY` which matches any class[^s3-default]. For technical reasons that we'll get to later, the link to the `ANY` method is longer than the links between the other classes:
+
+[^s3-default] The S4 `ANY` pseudoclass plays the same same role as the S3 `default` pseudo-class.
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/s4/single-any.png")
 ```
 
-The second pseudo-class is "MISSING". If you define a method for this "class", it will match whenever the argument is missing. It'snot useful for single dispatch, but is important for functions like `+` and `-` that use double dispatch and behave differently depending on whether they have one or two arguments.
+The second pseudo-class is `MISSING`. If you define a method for this pesudo-class, it will match whenever the argument is missing. It'snot useful for single dispatch, but is important for functions like `+` and `-` that use double dispatch and behave differently depending on whether they have one or two arguments.
 
 ### Multiple inheritance
 
@@ -504,27 +489,27 @@ knitr::include_graphics("diagrams/s4/multiple.png")
 
 The basic process remains the same: you start from the actual class supplied to the generic, then follow the arrows until you find a defined method. The wrinkle is that now there are multiple arrows to follow, so you might find multiple methods. If that happens, you pick the method that is closest, i.e. requires travelling the fewest arrows. 
 
-(The method graph is a powerful metaphor that helps you understand how method dispatch works. However, implementing method dispatch in this way would be rather inefficient so the actual approach that S4 uses is somewhat different. You can read the details in `?Methods_Details`)
+NB: while the method graph is a powerful metaphor for understanding method dispatch, implementing it in this way would be rather inefficient, so the actual approach that S4 uses is somewhat different. You can read the details in `?Methods_Details`
 
-What happens if methods are the same distance? For example, imagine we've defined methods for `r emoji("dark_sunglasses")` and `r emoji("slightly_smiling_face")`, and we call the generic with `r emoji("sunglasses")`. Note that there's no implementation for the `r emoji("no_mouth")` class, as indicated by the red double outline.
+What happens if methods are the same distance? For example, imagine we've defined methods for `r emoji("dark_sunglasses")` and `r emoji("slightly_smiling_face")`, and we call the generic with `r emoji("sunglasses")`. Note that no method can be found for the `r emoji("no_mouth")` class, which I'll highlight with a red double outline.
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/s4/multiple-ambig.png")
 ```
 
-This is called an __ambiguous__ method, and in diagrams I'll illustrate it with a thick dotted border. When this happens in R, you'll get a warning, and one of the two methods is basically picked at random (it uses the method that comes first in the alphabet). When you discover ambiguity you should always resolve it by providing a more precise method:
+This is called an __ambiguous__ method, and in diagrams I'll illustrate it with a thick dotted border. When this happens in R, you'll get a warning, and the method for the class that comes earlier in the alphabet will be picked (this is effectively random and should not be relied upon). When you discover ambiguity you should always resolve it by providing a more precise method:
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/s4/multiple-ambig-2.png")
 ```
 
-The fallback "ANY" method still exists but the rules are little more complex. As indicated by the wavy dotted lines, the "ANY" method is always considered further away than a method for a real class. This means that it will never contribute to ambiguity.
+The fallback `ANY` method still exists but the rules are little more complex. As indicated by the wavy dotted lines, the `ANY` method is always considered further away than a method for a real class. This means that it will never contribute to ambiguity.
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/s4/multiple-any.png")
 ```
 
-It is hard to simultaneously prevent ambiguity, ensure that every terminal method has an implementation, and minimise the number of defined methods (in order to benefit from OOP). For example, of the six ways to define only two methods for this call, only one is free from problems. For this reason, I recommend using multiple inheritance with extreme care: you will need to carefully think about the method graph and plan accordingly.
+With multiple inheritances it is hard to simultaneously prevent ambiguity, ensure that every terminal method has an implementation, and minimise the number of defined methods (in order to benefit from OOP). For example, of the six ways to define only two methods for this call, only one is free from problems. For this reason, I recommend using multiple inheritance with extreme care: you will need to carefully think about the method graph and plan accordingly.
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/s4/multiple-all.png")
@@ -562,15 +547,15 @@ A still more complicated case dispatches on two classes, both of which have mult
 knitr::include_graphics("diagrams/s4/multiple-multiple.png")
 ```
 
-However, as the method graph gets more and more complicated it gets harder and harder to predict which actual method will get called given a combination of inputs, and it gets harder and harder to make sure that you haven't introduced ambiguity. If you have to draw diagrams to figure out what method is actually going to be called, it's a strong sign you  should go back simplify your design.
+As the method graph gets more and more complicated it gets harder and harder to predict which method will get called given a combination of inputs, and it gets harder and harder to make sure that you haven't introduced ambiguity. If you have to draw diagrams to figure out what method is actually going to be called, it's a strong indication that you should go back and simplify your design.
 
 ### Exercises
 
 1.  Draw the method graph for 
-    `r code("f(", emoji("sweat_smile"), ", ", emoji("kissing_cat"), ")")`
+    `r paste0(code("f("), emoji("sweat_smile"), ", ", emoji("kissing_cat"), code(")"))`.
 
 1.  Draw the method graph for 
-    `r code("f(", emoji("smiley"), ", ", emoji("wink"), ", ", emoji("kissing_smiling_eyes"), ")")`
+    `r paste0(code("f("), emoji("smiley"), ", ", emoji("wink"), ", ", emoji("kissing_smiling_eyes"), code(")"))`.
 
 1.  Take the last example which shows multiple dispatch over two classes that
     use multiple inheritance. What happens if you define a method for all
@@ -578,11 +563,11 @@ However, as the method graph gets more and more complicated it gets harder and h
 
 ## S4 and S3 {#s4-s3}
 
-Even when writing new S4 code, you'll still need to interact with existing S3 classes and functions, including existing S3 generics. This section describes how S4 classes, methods, and generics interact with existing code.
+When writing S4 code, you'll often need to interact with existing S3 classes and generics. This section describes how S4 classes, methods, and generics interact with existing code.
 
 ### Classes
 
-In `slots` and `contains` you can use S4 classes, S3 classes, or the implicit class of a base type.  To use an S3 class, you must first register it with `setOldClass()`. You call this function once for each S3 class, giving it the class attribute. For example, the following definitions are already provided by base R:
+In `slots` and `contains` you can use S4 classes, S3 classes, or the implicit class (Section \@ref(implicit-class)) of a base type.  To use an S3 class, you must first register it with `setOldClass()`. You call this function once for each S3 class, giving it the class attribute. For example, the following definitions are already provided by base R:
 
 ```{r, eval = FALSE}
 setOldClass("data.frame")
@@ -590,7 +575,7 @@ setOldClass(c("ordered", "factor"))
 setOldClass(c("glm", "lm"))
 ```
 
-However, it's generally better to be a little more specific and provide a full S4 definition with `slots` and a `prototype`:
+However, it's generally better to be more specific and provide a full S4 definition with `slots` and a `prototype`:
 
 ```{r, eval = FALSE}
 setClass("factor",
@@ -606,7 +591,7 @@ setClass("factor",
 setOldClass("factor", S4Class = "factor")
 ```
 
-Generally, these definitions should be provided by the creator of the S3 class. If you're trying to build an S4 class on top of an S3 class provided by a package, it is better to request that the package maintainer add this call to the package, rather than running it yourself. 
+Generally, these definitions should be provided by the creator of the S3 class. If you're trying to build an S4 class on top of an S3 class provided by a package, you should request that the package maintainer add this call to their package, rather than adding it to your own code. 
 
 If an S4 object inherits from an S3 class or a base type, it will have a special virtual slot called `.Data`. This contains the underlying base type or S3 object: \indexc{.Data}
 
@@ -632,13 +617,13 @@ As well as creating a new generic from scratch, it's also possible to convert an
 setGeneric("mean")
 ```
 
-In this case, the existing function becomes the default ("ANY") method:
+In this case, the existing function becomes the default (`ANY`) method:
  
 ```{r}
 selectMethod("mean", "ANY")
 ```
  
-Note that `setMethod()` will automatically call `setGeneric()` if the first argument isn't already a generic, enabling you to turn any existing function into an S4 generic. It is ok to convert an existing S3 generic to S4, but you should avoid converting regular functions to S4 generics because it makes code harder to use and requires carefuk coordination if done by multiple packages.
+Note that `setMethod()` will automatically call `setGeneric()` if the first argument isn't already a generic, enabling you to turn any existing function into an S4 generic. It is ok to convert an existing S3 generic to S4, but you should avoid converting regular functions to S4 generics in packages because requires careful coordination if done by multiple packages.
 
 ### Exercises
 

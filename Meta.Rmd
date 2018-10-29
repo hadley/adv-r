@@ -2,88 +2,47 @@
 
 # Introduction {#meta  .unnumbered}
 
-```{r setup, include = FALSE}
+```{r, include = FALSE}
 source("common.R")
 ```
 
 \index{non-standard evaluation} 
 
-One of the most intriguing things about R is its capability for __metaprogramming__: the idea that code is itself data, and can be inspected and modified programmatically. This is powerful idea and deeply influences much R code. At a simple level this tooling allows you to write `library(purrr)` instead of `library("purrr")` and enables `plot(x, sin(x))` to label the axes with `x` and `sin(x)`. At a deeper level it allows `y ~ x1 * x2` to represent a model that predicts the value of `y` from `x1`, `x2` and all interactions. It allows `subset(df, x == y)` to be translated to `df[df$x == df$y, , drop = FALSE]`, and for `dplyr::filter(db, x == y)` to generate the SQL `WHERE x = y` when `db` is a remote database table.
-
-Hard to get your head around at first; requires grappling with a new level of abstraction. Don't be surprised if you're frustrated or confused at first; this is a natural part of the process that happens to every one!
-
-Metaprogramming is particularly important in R because it is well suited to facilitating interactive data analysis. There are two primary uses of metaprogramming that you have probably already seen:
-
-<!-- GVW: "well suited to facilitating" -> "facilitates" -->
-
-* It makes it possible to trade precision for concision in functions like
-  `subset()` and `dplyr::filter()` that make interactive data exploration
-  faster in return for introducing some ambiguity.
-  
-* It makes it possible to build __domain specific languages__ (DSLs) that 
-  tailor R's semantics to specific problem domains like visualisation or data
-  manipulation.
+One of the most intriguing things about R is its capability for __metaprogramming__: the idea that code is itself data, and can be inspected and modified programmatically. This is powerful idea and deeply influences much R code. At a simple level this tooling allows you to write `library(purrr)` instead of `library("purrr")` and enables `plot(x, sin(x))` to label the axes with `x` and `sin(x)`. At a deeper level it allows `y ~ x1 + x2` to represent a model that predicts the value of `y` from `x1` and `x2`. It allows `subset(df, x == y)` to be translated to `df[df$x == df$y, , drop = FALSE]`, and for `dplyr::filter(db, is.na(x))` to generate the SQL `WHERE x IS NULL` when `db` is a remote database table.
 
 Closely related to metaprogramming is __non-standard evalution__, or NSE for short. This a term that's commonly used to describe the behaviour of R functions, but there are two problems with the term that lead me to avoid it. Firstly, NSE is actually a property of an argument (or arguments) of a function, so talking about NSE functions is a little sloppy. Secondly, it's confusing to define something by what it is not (standard), so in this book I'll teach you more precise vocabulary. 
 
-## Overview {-}
-
-In the following chapters, you'll learn about the three big ideas that underpin metaprogramming:
-
-* In __Expressions__, Chapter \@ref(expressions), you'll learn that all R code
-  forms a tree. You'll learn how to visualise that tree, how the rules of R's
-  grammar convert linear sequences of characters into a tree, and how to use
-  recursive functions to work with code trees.
-  
-* In __Quasiquotation__, Chapter \@ref(quasiquotation), you'll learn to use 
-  tools from rlang to capture ("quote") unevaluated function arguments. You'll
-  also learn about quasiquotation, which provides a set of techniques for
-  "unquoting" input that makes it possible to easily generate new trees from 
-  code fragments.
-  
-* In __Evaluation__, Chapter \@ref(evaluation), you'll learn about the inverse 
-  of quotation: evaluation. Here you'll learn about an important data structure,
-  the __quosure__, which ensures correct evaluation by capturing both the code 
-  to evaluate, and the environment in which to evaluate it. This chapter will 
-  show you how to put  all the pieces together to understand how NSE in base 
-  R works, and how to write your own functions that work like `subset()`.
-
-* Finally, in __Translating R code__, Chapter \@ref(translation), you'll see 
-  how to combine first-class environments, lexical scoping, and metaprogramming 
-  to translate R code into other languages, namely HTML and LaTeX.
-
-Each chapter follows the same basic structure. You'll get the lay of the land in introduction, then see a motivating example. Next you'll learn the big ideas using functions from rlang, and then we'll circle back to talk about how those ideas are expressed in base R. Each chapter finishes with a case study, using the ideas to solve a bigger problem.
+Metaprogramming is the hardest topic in this book because it forces you grapple with issues that you haven't thought about before. Don't be surprised if you're frustrated or confused at first; this is a natural part of the process that happens to everyone! 
 
 ## Big ideas
 
-But before you dive into details, I wanted to give you an overview of the most important ideas that motivating what you'll learn:
+But before you dive into details, I wanted to give you an overview of the most important ideas and vocabulary of metaprogramming::
 
-* Code is data
-* Code is a tree
-* Code can generate code
-* Code + environment -> results
-* Can capture code + environment in a quosure
+* Code is data; captured code is called an expression.
+* Code has a tree-like structure called an abstract syntax tree.
+* Expressions can be generated by code.
+* Evaluation executes an expression in an environment.
+* Evaluation can be customised by modifying or overriding the environment.
+* A quosure captures an expression with its environment.
 
-Additionally, implementation of the underlying ideas has occurred piecemeal over the last twenty years. These two forces tend to make base R metaprogramming code harder to understand than it could be as the key ideas are obscured by unimportant details. To focus on the main ideas, the following chapters will start with functions from the __rlang__ package, which have been developed more recently with an eye for consistency. Once you have the basic ideas with rlang, I'll show you the equivalent with base R so you can use your knowledge to understand existing code. This approach seems backward to some, but I think it's easier to grasp the key theories in a clean programming environment, and then learn about the evolutionary quirks of base R.
+Below, I'll use tools primarily from the rlang package, as it allows you to focus on the big ideas, rather than implementation quirks that arise from R's history. This approach seems backward to some, but it's analogous to learning how to drive an automatic transmission before a manual transmission so you can focus on the big picture before learning the details.
 
-```{r}
+```{r setup}
 library(rlang)
 ```
 
 ### Code is data
 
-The first big idea is that code is data: you can capture code and compute on it in the same way that you can capture numeric data and compute on it. The things you can do to code are quite different to the things you can do to a numeric vector, but the idea of capturing data in the world and computing on it is the same.
-
-To compute on code, you first need some way to capture it. You can capture your own code with `rlang::expr()`: it basically returns whatever you put in the first argument.
+The first big idea is that code is data: you can capture code and compute on it like any other type of data. To compute on code, you first need some way to capture it. The first function that captures code is `rlang::expr()`. You can think of it returning exactly what you pass in:
 
 ```{r}
 expr(mean(x, na.rm = TRUE))
 expr(10 + 100 + 1000)
 ```
 
-More formally, we call captured code an __expression__. An expression is one of four main data types (call, symbol, constant, or pairlist), the topic of Chapter \@ref(expression).
+More formally, captured code is called an __expression__. An expression isn't a single type of object, but is a collective term for any of four types (call, symbol, constant, or pairlist), which you'll learn more about in Chapter \@ref(expressions).
 
-Capturing expressions supplied by someone else (i.e. in a function call). `expr()` doesn't work because it always returns the literal input:
+`expr()` lets you capture code that you've typed. You need a different tool to capture code passed to a function because `expr()` doesn't work:
 
 ```{r}
 capture_it <- function(x) {
@@ -92,7 +51,7 @@ capture_it <- function(x) {
 capture_it(a + b + c)
 ```
 
-Instead, you need to use a function specifically designed to capture user input supplied to a function argument:
+Here you need to use a function specifically designed to capture user input in a function argument: `enexpr()`. 
 
 ```{r}
 capture_it <- function(x) {
@@ -101,7 +60,7 @@ capture_it <- function(x) {
 capture_it(a + b + c)
 ```
 
-Once you have captured an expression, you can modify it. Complex expressions behave much like lists. That means you can modify them using `[[` and `$`:
+Once you have captured an expression, you can inspect and modify it. Complex expressions behave much like lists. That means you can modify them using `[[` and `$`:
 
 ```{r}
 f <- expr(f(x = 1, y = 2))
@@ -115,51 +74,57 @@ f[[2]] <- NULL
 f
 ```
 
-Note that the first element of the call is the function to be called, which means the first argument is in the second position.
+Note that the first element of the call is the function to be called, which means the first argument is in the second position. You'll learn about the full details in Section \@ref(calls).
 
 ### Code is a tree
 
-To do more complex manipulation with code, you need to understand its structure. Behind the scenes, almost every programming language represents code as a tree, often called the __abstract syntax tree__, or AST for short. R is unusual in that you can actually inspect and manipulate this tree.
+To do more complex manipulation with code, you need to fully understand its structure. Behind the scenes, almost every programming language represents code as a tree, often called the __abstract syntax tree__, or AST for short. R is unusual in that you can actually inspect and manipulate this tree.
 
-A very convenient tool for understanding the tree-like structure is `lobstr::ast()` which given some code, will display the underlying tree structure. Function calls form the branches of the tree, and are shown by rectangles.
+A very convenient tool for understanding the tree-like structure is `lobstr::ast()`. Given some code, will display the underlying tree structure. Function calls form the branches of the tree, and are shown by rectangles. The leaves of the tree are symbols (like `a`) and constants (like `"b"`).
 
 ```{r}
-lobstr::ast(f(1, g(b, h(5, 6))))
+lobstr::ast(f(a, "b"))
 ```
 
-Because all function forms in can be written in prefix form (Section \@ref(prefix-form)), every R expression can be written in this way:
+Nested function calls create more deeply branching trees:
+
+```{r}
+lobstr::ast(f1(f2(a, b), f3(1, f4(2))))
+```
+
+Because all function forms in can be written in prefix form (Section \@ref(prefix-form)), every R expression can be displayed in this way:
 
 ```{r}
 lobstr::ast(1 + 2 * 3)
 ```
 
-Displaying the code tree in this way provides useful tools for exploring R's grammar, the topic of Section \ref(grammar).
+Displaying the code tree in this way provides useful tools for exploring R's grammar, the topic of Section \@ref(grammar).
 
 ### Code can generate code
 
-As well as seeing the tree used by code typed by a human, you can also use code to create new trees. There are main tools. One approach is to use the low-level `rlang::call2()` which constructs a function call from its components: the function to call, and the arguments to call it with.
+As well as seeing the tree from code typed by a human, you can also use code to create new trees. There are two main tools: `call2()` and unquoting. 
+
+`rlang::call2()` constructs a function call from its components: the function to call, and the arguments to call it with.
 
 ```{r}
 call2("f", 1, 2, 3)
 call2("+", 1, call2("*", 2, 3))
 ```
 
-This works, and is often convenient to program with, but is a bit clunkly for interactive usage. An alternative technique is to build complex code trees by inserting simpler code trees into a template. `expr()` and `enexpr()` have built-in support for this idea via `!!`, the __unquote operator__ (pronounced bang-bang). 
+This is often convenient to program with, but is a bit clunkly for interactive use. An alternative technique is to build complex code trees by combining simpler code trees with a template. `expr()` and `enexpr()` have built-in support for this idea via `!!` (pronounced bang-bang), the __unquote operator__. 
 
-[^inspiration]: Base R functions like `subset()` and `transform()` inspired the development of dplyr.
-
-The exact details are covered in Chapter \@ref(quotation), but basically `!!x` inserts the code tree stored in `x`. This makes it easy to correctly build up more complex trees from simple fragments:
+The precise details are the topic of Chapter \@ref(quasiquotation), but basically `!!x` inserts the code tree stored in `x`. This makes it easy to build complex trees from simple fragments:
 
 ```{r}
-xy <- expr(x + y)
-yz <- expr(y + z)
+xx <- expr(x + x)
+yy <- expr(y + y)
 
-expr(!!xy / !!yz)
+expr(!!xx / !!yy)
 ```
 
-Notice that the output preserves the operator precedence so we get `(x + y) / (y + z)` not `x + y / y + z` (i.e. `x + (y / y) + z)`. This is important to note, particularly if you've been thinking "wouldn't this be easier to do by pasting strings together?
+Notice that the output preserves the operator precedence so we get `(x + x) / (y + y)` not `x + x / y + y` (i.e. `x + (x / y) + y`). This is important to note, particularly if you've been thinking "wouldn't this be easier to do by pasting strings?".
 
-This pattern gets even more useful when you wrap it up into a function, first using `enexpr()` to capture the user's expression, then `expr()` and `!!` to create an new expression using a template. You'll see this pattern alot when wrapping tidyverse functions. The code below generates the code that you could evaluate to compute the coefficient of variation (or cv for short).
+Unquoting gets even more useful when you wrap it up into a function, first using `enexpr()` to capture the user's expression, then `expr()` and `!!` to create an new expression using a template. The example below shows you might generate an expression that computes the coefficient of variation:
 
 ```{r}
 cv <- function(var) {
@@ -177,30 +142,52 @@ Importantly, this works even when given weird variable names:
 cv(`)`)
 ```
 
-This is another good reason to avoid pasting strings together when generating code. You might think this is an esoteric concern, but not worrying about this problem when generating SQL code from web applications lead to SQL injection attacks that have collectively cost billions of dollars. 
+Dealing with non-syntactic variable names is another good reason to `paste()` when generating R code. You might think this is an esoteric concern, but not worrying about it when generating SQL code in web applications lead to SQL injection attacks that have collectively cost billions of dollars. 
 
-These techniques become even more powerful when combined it with functional programming. You'll see these ideas in detail in Section \@ref(quasi-case-studies) but the teaser belows shows how you might generate a complex model specification from simple inputs.
+These techniques become yet more powerful when combined with functional programming. You'll explore these ideas in detail in Section \@ref(quasi-case-studies) but the teaser belows shows how you might generate a complex model specification from simple inputs.
 
 ```{r}
-poly <- function(x, n) {
+library(purrr)
+
+poly <- function(n) {
   i <- as.double(seq(2, n))
-  xs <- c(1, expr(x), purrr::map(i, function(i) expr((x ^ !!i))))
-  terms <- purrr::reduce(xs, function(x1, x2) expr(!!x1 + !!x2))
+  xs <- c(1, expr(x), map(i, function(i) expr(I(x^!!i))))
+  terms <- reduce(xs, call2, .fn = "+")
   expr(y ~ !!terms)
 }
-poly(x, 5)
+poly(5)
 ```
 
-### Executing code requires an environment
+### Evaluation excutes an expression in an environment
 
-Modifying and creating code with code is fun, but it's mostly an academic interest unless we can actually run the code we've created, i.e. we need to __evaluate__ the code. The primary tool for evaluating expressions is `base::eval()`, which takes an expression and an environment:
+Inspecting and modifying code gives you one set of powerful tools. You get another set of powerful tools when you __evaluate__, i.e. execute, an expression. Evaluating an expression requires an environment. This tells R what the symbols (found in the leaves of tree) mean. You'll learn the details of evaluation in Chapter \@ref(evaluation).
+
+The primary tool for evaluating expressions is `base::eval()`, which takes an expression and an environment:
 
 ```{r}
 eval(expr(x + y), env(x = 1, y = 10))
 eval(expr(x + y), env(x = 2, y = 100))
 ```
 
-In the block above, I created custom environments where I overrode the value of variables. An even more powerful technique is to override functions. This is a big idea that we'll come back to in Chapter \@ref(translating), but I wanted to show a small example here. The code math example below evalutes code in a special environment where the basic algebraic operators have been overridden to work instead with strings:
+If you omit the environment, it will use the current environment. Here that's the global environment:
+
+```{r}
+x <- 10
+y <- 100
+eval(expr(x + y))
+```
+
+One of the big advantages of evaluating code manually is that you can tweak the execution environment. There are two main reaons to do this:
+
+* To temporarily override functions to implement a domain specific language.
+* To add a data mask so you can to refer to variables in a data frame as if 
+  they are variables in an environment.
+
+### You can override functions to make a DSL
+
+It's fairly straightforward to understand customising the environment with different variable values. It's less obvious that you can also rebind functions to do different things. This is a big idea that we'll come back to in Chapter \@ref(translating), but I wanted to show a small example here. 
+
+The example below evalutes code in a special environment where the basic algebraic operators (`+`, `-`, `*`, `/`) have been overridden to work with string instead of numbers:
 
 ```{r}
 string_math <- function(x) {
@@ -224,11 +211,9 @@ string_math("Hi" - "i" + "ello " + name)
 string_math("x-" * 3 + "y")
 ```
 
-More extensive use of metaprogramming leads to DSLs like ggplot2 and dplyr. DSLs are particularly useful because they make it possible to translate R code into another language. For example, one of the headline features of dplyr is that you can write R code that is automatically translated into SQL:
+dplyr takes this idea to the extreme, running code in an environment that generates SQL for execution in a remote database:
 
-<!-- GVW: I'd open with readability/fitness for task, not with translation into other languages - that'll seem pretty niche even to regular users -->
-
-```{r}
+```{r, warning = FALSE}
 library(dplyr)
 
 con <- DBI::dbConnect(RSQLite::SQLite(), filename = ":memory:")
@@ -243,26 +228,91 @@ mtcars_db %>%
 DBI::dbDisconnect(con)
 ```
 
-This is a useful technique because it makes it possible to retrieve data from a database without paying the high cognitive overhead of switching between R and SQL.
+### Data masks blur the line between data frames and environments
 
-ggplot2 and dplyr are known as __embedded__ DSLs, because they take advantage of R's parsing and execution framework, but tailor R's semantics for specific tasks. If you're interested in learning more, I highly recommend  _Domain Specific Languages_ [@dsls]. It discusses many options for creating a DSL and provides many examples of different languages.
+Rebinding functions is an extremely powerful technique, but it tends to require a lot of investment. A more immediately practical application is modifying evaluation to look for variables in a data frame instead of an environment. This idea powers the base `subset()` and `transform()` functions, as well as many tidyverse functions like `ggplot2::aes()` and `dplyr::mutate()`. It's possible to use `eval()` for this, but there are a few potential pitfalls, so we'll use `rlang::eval_tidy()` instead. 
 
-
-A more immediately practical application is to modifying evaluation to look for variables in a data frame instead of an environment. This is what powers the base `subset()` and `transform()` functions, as well as many tidyverse functions like `ggplot2::aes()` and `dplyr::mutate()`. It's possible to use `eval()` for this, but there are a few potential pitfalls, so we'll use `rlang::eval_tidy()` instead:
+As well as expression and environment, `eval_tidy()` also takes a __data mask__, which is typically a data frame: 
 
 ```{r}
 df <- data.frame(x = 1:5, y = sample(5))
 eval_tidy(expr(x + y), df)
 ```
 
-This is called a data mask.
+Evaluating with a data mask is a useful technique for interactive analysis because it allows you to write `x + y` rather than `df$x + df$y`. However, that convenience comes at a cost: ambiguity. In Section \@ref(pronouns) you'll learn how to deal ambiugity using special `.data` and `.env` pronouns.
 
-### Code is accompanied by environments
+We can wrap this pattern up into a function by using `enexpr()`. This gives us a function very similar to `base::with()`:
 
-The `eval_tidy(expr(x + y), df)` is ambiguous: you need to know the variables of `df` in order to predict whether it's equivalent to `df$x + df$y` or `x + y` or some other combination. This can be important so `eval_tidy()` 
+```{r}
+with2 <- function(df, expr) {
+  eval_tidy(enexpr(expr), df)
+}
 
-Why do we care about environments?
+with2(df, x + y)
+```
 
-When you, the develoepr, are generating code, you know exactly where it should be evaluated. But how do you do the same for user code, which could be generated in any number of environments?
+Unfortunately, however, this function has a subtle bug, and we need a new data structure to deal with it.
 
-This is the idea of the quosure, which captures code and environment together.
+### Quosures capture an expression with its environment
+
+To make the problem more obvious, I'm going to modify `with2()`:
+
+```{r}
+with2 <- function(df, expr) {
+  a <- 1000
+  eval_tidy(enexpr(expr), df)
+}
+```
+
+(The problem occurs without this modification but it's a sublter and creates error messages that are harder to understand.)
+
+We can see the problem if we attempt to use `with2()` mingling a variable from the data frame, and a variable called `a` in the current environment:
+
+```{r}
+df <- data.frame(x = 1:3)
+a <- 10
+with2(df, x + a)
+```
+
+That's because we really want to evaluate the captured expression in the environment where it was written (where `a` is 10), not the environment inside of `with2()` (where `a` is 1000).
+
+Fortunately we call solve this problem by using a new data structure: the __quosure__ which bundles an expression with an environment. `eval_tidy()` knows how to work with quosures so all we need to do is switch out `enexpr()` for `enquo()`:
+
+```{r}
+with2 <- function(df, expr) {
+  a <- 1000
+  eval_tidy(enquo(expr), df)
+}
+
+with2(df, x + a)
+```
+
+Whenever you use a data mask, you must always use `enquo()` instead of `enexpr()`. This is the topic of Chapter \@ref(evaluation).
+
+## Overview {-}
+
+In the following chapters, you'll learn about the three pieces that underpin metaprogramming:
+
+* In __Expressions__, Chapter \@ref(expressions), you'll learn that all R code
+  forms a tree. You'll learn how to visualise that tree, how the rules of R's
+  grammar convert linear sequences of characters into a tree, and how to use
+  recursive functions to work with code trees.
+  
+* In __Quasiquotation__, Chapter \@ref(quasiquotation), you'll learn to use 
+  tools from rlang to capture ("quote") unevaluated function arguments. You'll
+  also learn about quasiquotation, which provides a set of techniques for
+  "unquoting" input that makes it possible to easily generate new trees from 
+  code fragments.
+  
+* In __Evaluation__, Chapter \@ref(evaluation), you'll learn about the inverse 
+  of quotation: evaluation. Here you'll learn about an important data structure,
+  the __quosure__, which ensures correct evaluation by capturing both the code 
+  to evaluate, and the environment in which to evaluate it. This chapter will 
+  show you how to put  all the pieces together to understand how NSE in base 
+  R works, and how to write your own functions that work like `subset()`.
+
+* Finally, in __Translating R code__, Chapter \@ref(translation), you'll see 
+  how to combine first-class environments, lexical scoping, and metaprogramming 
+  to translate R code into other languages, namely HTML and LaTeX.
+
+Each chapter follows the same basic structure. You'll get the lay of the land in introduction, then see a motivating example. Next you'll learn the big ideas using functions from the rlang package [@rlang], and then we'll circle back to talk about how those ideas are expressed in base R. 
