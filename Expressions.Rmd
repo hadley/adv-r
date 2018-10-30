@@ -121,6 +121,32 @@ We also need to consider code like `f()()`, which arises when you use function f
 lobstr::ast(f(x)(a, 1))
 ```
 
+### Expressions
+
+Collectively, the data structures present in the AST are called expressions. More precisely, an __expression__ is any member of the set of base types created by parsing code: constant scalars, symbols, call objects, and pairlists.  These are the data structures used to represented captured code form `expr()`, and so `is_expression(expr(...))` is always true[^exceptions]. The goal of this section is to define each of these types precisely, and show you how to create, inspect, and modify them.
+
+[^exceptions]: It is _possible_ to insert any other base type into an expression, but this is unusual and only needed in rare circumstances. We'll come back to the idea in Section \@ref(non-standard-ast).
+
+NB: In base R documentation "expression" is used to mean two things. As well as the definition above, expression is also used to refer to the type of object returned by `expression()` and `parse()`, which are basically lists of expressions as defined above. In this book I'll call these __expression vectors__, and I'll come back to at the end of the section.
+
+### Vocabulary
+
+|                   | str                       | typeof                                   |
+|-------------------|---------------------------|------------------------------------------|
+| Scalar constant   | `logi`/`int`/`num`/`chr`  | `logical`/`integer`/`double`/`character` |
+| Symbol            | `symbol`                  | `symbol`                                 |
+| Call object       | `language`                | `language`                               |
+| Pairlist          | Dotted pair list          | `pairlist`                               |
+| Expression vector | `expression()`            | `expression`                             |
+
+|                   | base                | rlang                    |
+|-------------------|---------------------|--------------------------|
+| Scalar constant   | —                   | `is_syntactic_literal()` |
+| Symbol            | `is.symbol()`       | `is_symbol()`            |
+| Call object       | `is.call()`         | `is_call()`              |
+| Pairlist          | `is.pairlist()`     | `is_pairlist()`          |
+| Expression vector | `is.expression()`   | —                        |
+
 ### Exercises
 
 1.  Reconstruct the code represented by the trees below:
@@ -143,13 +169,7 @@ lobstr::ast(f(x)(a, 1))
     lobstr::ast(function(x, y) x + y)
     ```
 
-## Expressions
-
-Collectively, the data structures present in the AST are called expressions. More precisely, an __expression__ is any member of the set of base types created by parsing code: constant scalars, symbols, call objects, and pairlists.  These are the data structures used to represented captured code form `expr()`, and so `is_expression(expr(...))` is always true[^exceptions]. The goal of this section is to define each of these types precisely, and show you how to create, inspect, and modify them.
-
-[^exceptions]: It is _possible_ to insert any other base type into an expression, but this is unusual and only needed in rare circumstances. We'll come back to the idea in Section \@ref(non-standard-ast).
-
-NB: In base R documentation "expression" is used to mean two things. As well as the definition above, expression is also used to refer to the type of object returned by `expression()` and `parse()`, which are basically lists of expressions as defined above. In this book I'll call these __expression vectors__, and I'll come back to at the end of the section.
+## Leaves 
 
 ### Constants
 \index{constants}
@@ -189,7 +209,14 @@ The symbol type is not vectorised, i.e. a symbol is always length 1. If you want
 
 Symbols are very similar to strings without quotes. The big difference between strings and symbols is what happens when you evaluate them: evaluating a string returns the string; evaluating a symbol returns the value associated with the symbol in the evaluation environment. We'll come back to that in Section \@ref(eval).
 
-### Calls
+### Exercises
+
+1.  Which two of the six types of atomic vector can't appear in an expression? 
+    Why? Why can't you create an expression that contains an atomic vector of 
+    length greater than one? 
+
+
+## Calls
 \index{calls}
 
 A __call object__ is the data structure that represents a captured function call. Call objects are vectors: the first component is name of the function to be called, and the remaining elements are the arguments for that call. Call objects create branches in the AST.
@@ -208,6 +235,8 @@ typeof(x)
 
 is_call(x)
 ```
+
+### Subsetting
 
 Calls generally behave like lists, i.e. you can use standard subsetting tools. The first element of the call is a usually symbol giving the function to call:
 
@@ -250,12 +279,52 @@ x$header <- TRUE
 x
 ```
 
+### Constructing
+
 You can construct a call object from its components by using `rlang::call2()`. The first argument is the name of function to call (supplied either as a string or a symbol). The remaining arguments will be passed along to the call:
 
 ```{r}
 call2("mean", x = expr(x), na.rm = TRUE)
 call2(expr(mean), x = expr(x), na.rm = TRUE)
 ```
+
+### Exercises
+
+1.  Describe the differences between the following calls?
+
+    ```{r, results = FALSE}
+    x <- 1:10
+    
+    call2(median, x, na.rm = TRUE)
+    call2(expr(median), x, na.rm = TRUE)
+    call2(median, expr(x), na.rm = TRUE)
+    call2(expr(median), expr(x), na.rm = TRUE)
+    ```
+
+
+1.  `rlang::call_standardise()` doesn't work so well for the following calls.
+    Why? What makes `mean()` special?
+
+    ```{r}
+    call_standardise(quote(mean(1:10, na.rm = TRUE)))
+    call_standardise(quote(mean(n = T, 1:10)))
+    call_standardise(quote(mean(x = 1:10, , TRUE)))
+    ```
+
+1.  Why does this code not make sense?
+
+    ```{r, eval = FALSE}
+    x <- expr(foo(x = 1))
+    names(x) <- c("x", "")
+    ```
+
+1.  Construct the expression `if(x > 1) "a" else "b"` using multiple calls to 
+    `call2()`. How does the code structure reflect the structure of the AST?
+
+
+## Other components
+
+There are two remaining data types that we need to cover for the sake of completeness.
 
 ### Pairlists
 \index{pairlists}
@@ -325,7 +394,6 @@ That prevents the error from occurring and instead returns another empty symbol.
 
 You only need to care about the missing symbol if you're programmatically creating functions with missing arguments; we'll come back to that in the next chapter.
 
-
 ### Expression vectors
 \index{expression vector} \indexc{expression()} \indexc{parse()} 
 
@@ -354,66 +422,9 @@ exp1[[1]]
 
 Conceptually, an expression vector is just a list of expressions. The only difference is that calling `eval()` on an expression evaluates each individual expression. We don't believe this advantage merits introducing a new data structure, so instead of expression vectors we always use regular lists of expressions.
 
-### Vocabulary summary
-
-|                   | str                       | typeof                                   |
-|-------------------|---------------------------|------------------------------------------|
-| Scalar constant   | `logi`/`int`/`num`/`chr`  | `logical`/`integer`/`double`/`character` |
-| Symbol            | `symbol`                  | `symbol`                                 |
-| Call object       | `language`                | `language`                               |
-| Pairlist          | Dotted pair list          | `pairlist`                               |
-| Expression vector | `expression()`            | `expression`                             |
-
-
-|                   | base                | rlang                    |
-|-------------------|---------------------|--------------------------|
-| Scalar constant   | —                   | `is_syntactic_literal()` |
-| Symbol            | `is.symbol()`       | `is_symbol()`            |
-| Call object       | `is.call()`         | `is_call()`              |
-| Pairlist          | `is.pairlist()`     | `is_pairlist()`          |
-| Expression vector | `is.expression()`   | —                        |
-
 ### Exercises
 
-1.  Why isn't there a constructor for expression objects?
-
-1.  Which two of the six types of atomic vector can't appear in an expression? 
-    Why? Why can't you create an expression that contains an atomic vector of 
-    length greater than one? 
-
 1.  How is `rlang::maybe_missing()` implemented? Why does it work?
-
-1.  Describe the differences between the following calls?
-
-    ```{r, results = FALSE}
-    x <- 1:10
-    
-    call2(median, x, na.rm = TRUE)
-    call2(expr(median), x, na.rm = TRUE)
-    call2(median, expr(x), na.rm = TRUE)
-    call2(expr(median), expr(x), na.rm = TRUE)
-    ```
-
-
-1.  `rlang::call_standardise()` doesn't work so well for the following calls.
-    Why? What makes `mean()` special?
-
-    ```{r}
-    call_standardise(quote(mean(1:10, na.rm = TRUE)))
-    call_standardise(quote(mean(n = T, 1:10)))
-    call_standardise(quote(mean(x = 1:10, , TRUE)))
-    ```
-
-1.  Why does this code not make sense?
-
-    ```{r, eval = FALSE}
-    x <- expr(foo(x = 1))
-    names(x) <- c("x", "")
-    ```
-
-1.  Construct the expression `if(x > 1) "a" else "b"` using multiple calls to 
-    `call2()`. How does the code structure reflect the structure of the AST?
-
 
 ## R's grammar {#grammar}
 
