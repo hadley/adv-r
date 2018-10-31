@@ -12,7 +12,7 @@ To compute on the language, we first need to understand its structure. That requ
 y <- x * 10
 ```
 
-It would be nice if we could capture the intent of the code, without executing the code. In other words, how can we separate our description of the action from performing it? One way is to use `rlang::expr()`: 
+It would be nice if we could capture the intent of the code, without executing it. In other words, how can we separate our description of the action from the action itself? One way is to use `rlang::expr()`: 
 
 ```{r}
 z <- rlang::expr(y <- x * 10)
@@ -27,7 +27,7 @@ eval(z)
 y
 ```
 
-The focus of this chapter is understand the data structures that underlie expresssions, which will also help you understand how R executes code. We'll come back to `expr()` in Section \@ref(quotation), and to `eval()` in Section \@ref(eval).
+The focus of this chapter is the data structures that underlie expresssions. Mastering this knowledge will allow you to inspect and modify captured code. We'll come back to `expr()` in Section \@ref(quotation), and to `eval()` in Section \@ref(eval).
 
 ### Outline {-} 
 
@@ -45,47 +45,75 @@ library(lobstr)
 ## Abstract syntax trees
 \index{abstract syntax tree}
 
-Expressions are also called __abstract syntax trees__ (ASTs) because the structure of code is hierarchical and can be naturally represented as a tree. To make that more obvious we're going to introduce some graphical conventions, illustrated with the very simple call `f(x, "y", 1)`. 
+Expressions are also called __abstract syntax trees__ (ASTs) because the structure of code is hierarchical and can be naturally represented as a tree. Understanding this tree structure is crucial for inspecting and modifying expressions (i.e. metaprogramming).
 
-```{r, echo = FALSE, out.width = NULL}
-knitr::include_graphics("diagrams/expressions/simple.png", dpi = 300)
-```
+### Drawing ASTs
 
-The tree is made up of branches and leaves:
+So we'll start by introducing some conventions for drawing ASTs, starting with a very simple call `f(x, "y", 1)`. I'll show trees in two ways:
 
-*   The branches are call objects. Function calls are orange squares. The 
-    first child (`f`) is the function that gets called; the second and
-    subsequent children (`x`, `"y"`, and `1`) are the arguments to that
-    function. We'll discuss the call data structure in more depth in
-    Section \@ref(calls).
-  
-    __NB__: Unlike many trees the order of the children is important: 
-    `f(x, 1)` is not the same as `f(1, x)`.
+*   "Hand"-drawn diagrams
+
+    ```{r, echo = FALSE, out.width = NULL}
+    knitr::include_graphics("diagrams/expressions/simple.png")
+    ```
+
+*   The output of `lobstr::ast()`:
+
+    ```{r}
+    lobstr::ast(f(x, "y", 1))
+    ```
+
+For more complex code, you can also use RStudio's tree viewer which allows you to interactively explore the AST, e.g. `View(f(x, "y", 1))`.
+
+Both approaches share conventions as much as possible:
 
 *   The leaves are either symbols, like `f` and `x`, or constants, like `1` or
-    `"y"`. Symbols have a purple border and rounded corners. Constants, which 
-    are atomic vectors of length one, have black borders and square corners.
-    Strings are always surrounded in quotes to emphasise their difference from
-    symbols --- more on that in Sections \@ref(constants) and \@ref(symbols).
+    `"y"`. Symbols are drawn in purple and have rounded corners. Constants, 
+    which are atomic vectors of length one, have black borders and square 
+    corners. Strings are always surrounded in quotes to emphasise their 
+    difference from symbols. 
 
-Drawing these diagrams by hand takes some time, and obviously you can't rely on me to draw diagrams for your own code, so I'll supplement my hand-drawn trees with computer drawn trees. `lobstr::ast()` tries to make trees as similar as possible to my hand-drawn trees, while respecting the limitations of the console. Let's use `ast()` to display the tree above:
+*   The branches are function calls, represtended by call objects, drawn as 
+    orange squares. The first child (`f`) is the function that gets called; 
+    the second and subsequent children (`x`, `"y"`, and `1`) are the arguments 
+    to that function. 
 
+There are a handful of more exotic objects that you'll encounter very rarely. I'll touch on those in Section \@ref(expression-exotic).
+
+The above example only contained one function call, making for a very shallow tree. Most expressions will contain considerably more calls, making for a deeper tree. For example, consider `f(g(1, 2), h(3, 4, i()))`:
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("diagrams/expressions/complicated.png")
+```
 ```{r}
-lobstr::ast(f(x, "y", 1))
+lobstr::ast(f(g(1, 2), h(3, 4, i())))
 ```
 
-Calls get an orange square, symbols are bold and purple, and strings are surrounded by quote marks. (The colours are not shown in the book, but you'll see them if you run the code yourself.)
+In particular, note the appearance of `i()`; it's a branch with a single (symbol) leaf.
 
-(For more complex code, you might want use RStudio's tree viewer which allows you to interactively explore the AST, e.g. `View(expr(y <- x * 10))`.)
-
-You might have wondered why these are __abstract syntax__ trees. We can now use `ast()` to see why: the abstract syntax tree only captures details of the syntax, not whitespace or comments:
+Named arguments don't change the tree, but just add some labels:
 
 ```{r}
-ast({
-  # This is some important code!
-  x +        y
-})
+lobstr::ast(f(x = x, y = 1))
 ```
+
+You might have wondered why these are _abstract_ syntax trees. They are abstract because they only capture important structural details, not whitespace or comments:
+
+```{r}
+ast(
+  f(x,  y)  # important!
+)
+```
+
+### Exprsessions
+
+Collectively, the data structures present in the AST are called expressions. More precisely, an __expression__ is any member of the set of base types created by parsing code: constant scalars, symbolthats, call objects, and pairlists. These are the data structures used to represented captured code form `expr()`, and so `is_expression(expr(...))` is always true[^exceptions]. In the subsequent sections, we'll come back to define each of these types precisely, and show you how to create, inspect, and modify them.
+
+[^exceptions]: It is _possible_ to insert any other base type into an expression, but this is unusual and only needed in rare circumstances. We'll come back to the idea in Section \@ref(non-standard-ast).
+
+NB: In base R documentation "expression" is used to mean two things. As well as the definition above, expression is also used to refer to the type of object returned by `expression()` and `parse()`, which are basically lists of expressions as defined above. In this book I'll call these __expression vectors__, and I'll come back to them in Section \@ref(expression-vectors).
+
+### Prefix form
 
 Every call in R can be written in tree form, even if it doesn't look like it at first glance. Take `y <- x * 10` again: what are the functions that are being called? It is not as easy to spot as `f(x, 1)` because this expression contains two calls in infix form: `<-` and `*`. But, as discussed in Section \@ref(prefix-transform), any call can be converted to prefix form. That means that these two lines of code are equivalent:
 
@@ -94,40 +122,23 @@ y <- x * 10
 `<-`(y, `*`(x, 10))
 ```
 
-And they both have this AST:
+And they both have this AST[^ast-infix]:
+
+[^ast-infix]: The names of non-prefix functions are non-syntactic so I surround them with `` ` ``, as discussed in Section \@ref(non-syntactic).
 
 ```{r, echo = FALSE, out.width = NULL}
-knitr::include_graphics("diagrams/expressions/prefix.png", dpi = 300)
+knitr::include_graphics("diagrams/expressions/prefix.png")
 ```
 ```{r}
 lobstr::ast(y <- x * 10)
 ```
 
-No matter how non-standard the syntax is, every R expression can be drawn as a tree:
+All R code can always be written in prefix form, no matter how special the syntax:
 
 ```{r}
 lobstr::ast(if (x > y) y:x else (-x):(-y))
 ```
 
-Named arguments don't change the tree, but just add some additional metadata:
-
-```{r}
-lobstr::ast(mean(x = mtcars$cyl, na.rm = TRUE))
-```
-
-We also need to consider code like `f()()`, which arises when you use function factories (Chapter \@ref(function-factories)), function that return functions. In this case, the first branch of the tree is a another branch, not a leaf:
-
-```{r}
-lobstr::ast(f(x)(a, 1))
-```
-
-### Expressions
-
-Collectively, the data structures present in the AST are called expressions. More precisely, an __expression__ is any member of the set of base types created by parsing code: constant scalars, symbols, call objects, and pairlists.  These are the data structures used to represented captured code form `expr()`, and so `is_expression(expr(...))` is always true[^exceptions]. The goal of this section is to define each of these types precisely, and show you how to create, inspect, and modify them.
-
-[^exceptions]: It is _possible_ to insert any other base type into an expression, but this is unusual and only needed in rare circumstances. We'll come back to the idea in Section \@ref(non-standard-ast).
-
-NB: In base R documentation "expression" is used to mean two things. As well as the definition above, expression is also used to refer to the type of object returned by `expression()` and `parse()`, which are basically lists of expressions as defined above. In this book I'll call these __expression vectors__, and I'll come back to at the end of the section.
 
 ### Vocabulary
 
@@ -159,15 +170,30 @@ NB: In base R documentation "expression" is used to mean two things. As well as 
     ast((x + y) * z)
     ```
 
-1.  What does the call tree of an `if` statement with multiple `else if` 
-    conditions look like? Why?
-    
+1.  How are function factories (Chapter \@ref(function-factories)) displayed
+    in the AST? What makes the ASTs of the expressions below special?
+
+    ```{r}
+    lobstr::ast(f(x)(y))
+    lobstr::ast(f(1)(2)(3)(4))
+    ```
+
+1.  What's happening with the ASTs below? (Hint: carefully read `?"^"`)
+
+    ```{r}
+    lobstr::ast(x ** y)
+    lobstr::ast(1 -> x)
+    ```
+
 1.  What is special about the ast below? (Hint: re-read Section
     \@ref(function-components))
 
     ```{r}
     lobstr::ast(function(x, y) x + y)
     ```
+
+1.  What does the call tree of an `if` statement with multiple `else if` 
+    conditions look like? Why?
 
 ## Leaves 
 
@@ -322,7 +348,7 @@ call2(expr(mean), x = expr(x), na.rm = TRUE)
     `call2()`. How does the code structure reflect the structure of the AST?
 
 
-## Other components
+## Other components {#expression-exotic}
 
 There are two remaining data types that we need to cover for the sake of completeness.
 
@@ -442,7 +468,7 @@ Infix functions introduce ambiguity in a way that prefix functions do not. The p
 [^ambig]: These two sources of ambiguity do not exist without infix operators, which can be considered an advantage of purely prefix and postfix languages. It's interesting to compare a simple arithmetic operation in Lisp (prefix) and Forth (postfix). In Lisp you'd write `(* (+ 1 2) 3))`; this avoids ambiguity by requiring parentheses everywhere. In Forth, you'd write `1 2 + 3 *`; this doesn't require any parentheses, but does require more thought when reading.
 
 ```{r, echo = FALSE, out.width = NULL}
-knitr::include_graphics("diagrams/expressions/ambig-order.png", dpi = 300)
+knitr::include_graphics("diagrams/expressions/ambig-order.png")
 ```
 
 Programming languages use conventions called __operator precedence__ to resolve this ambiguity. We can use `ast()` to see what R does: 
