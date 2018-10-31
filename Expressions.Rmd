@@ -112,14 +112,6 @@ lobstr::ast(y < -x)
 
 ### Reading ASTs
 
-### Expressions
-
-Collectively, the data structures present in the AST are called expressions. More precisely, an __expression__ is any member of the set of base types created by parsing code: constant scalars, symbols, call objects, and pairlists. These are the data structures used to represented captured code form `expr()`, and so `is_expression(expr(...))` is always true[^exceptions]. In the subsequent sections, we'll come back to define each of these types precisely, and show you how to create, inspect, and modify them.
-
-[^exceptions]: It is _possible_ to insert any other base type into an expression, but this is unusual and only needed in rare circumstances. We'll come back to the idea in Section \@ref(non-standard-ast).
-
-NB: In base R documentation "expression" is used to mean two things. As well as the definition above, expression is also used to refer to the type of object returned by `expression()` and `parse()`, which are basically lists of expressions as defined above. In this book I'll call these __expression vectors__, and I'll come back to them in Section \@ref(expression-vectors).
-
 ### Prefix form
 
 Every call in R can be written in tree form, even if it doesn't look like it at first glance. Take `y <- x * 10` again: what are the functions that are being called? It is not as easy to spot as `f(x, 1)` because this expression contains two calls in infix form: `<-` and `*`. But, as discussed in Section \@ref(prefix-transform), any call can be converted to prefix form. That means that these two lines of code are equivalent:
@@ -131,7 +123,7 @@ y <- x * 10
 
 And they both have this AST[^ast-infix]:
 
-[^ast-infix]: The names of non-prefix functions are non-syntactic so I surround them with `` ` ``, as discussed in Section \@ref(non-syntactic).
+[^ast-infix]: The names of non-prefix functions are non-syntactic so I show them with `` ` ``, as in Section \@ref(non-syntactic).
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/expressions/prefix.png")
@@ -139,24 +131,6 @@ knitr::include_graphics("diagrams/expressions/prefix.png")
 ```{r}
 lobstr::ast(y <- x * 10)
 ```
-
-### Vocabulary
-
-|                   | str                       | typeof                                   |
-|-------------------|---------------------------|------------------------------------------|
-| Scalar constant   | `logi`/`int`/`num`/`chr`  | `logical`/`integer`/`double`/`character` |
-| Symbol            | `symbol`                  | `symbol`                                 |
-| Call object       | `language`                | `language`                               |
-| Pairlist          | Dotted pair list          | `pairlist`                               |
-| Expression vector | `expression()`            | `expression`                             |
-
-|                   | base                | rlang                    |
-|-------------------|---------------------|--------------------------|
-| Scalar constant   | —                   | `is_syntactic_literal()` |
-| Symbol            | `is.symbol()`       | `is_symbol()`            |
-| Call object       | `is.call()`         | `is_call()`              |
-| Pairlist          | `is.pairlist()`     | `is_pairlist()`          |
-| Expression vector | `is.expression()`   | —                        |
 
 ### Exercises
 
@@ -204,9 +178,14 @@ lobstr::ast(y <- x * 10)
 1.  What does the call tree of an `if` statement with multiple `else if` 
     conditions look like? Why?
 
-## Leaves 
 
-Now that you understand the basic structure of the AST, we'll dive into the details, starting with the object types that can appear in the leaves of the tree: constants and symbols.
+## Expressions
+
+Collectively, the data structures present in the AST are called expressions. More precisely, an __expression__ is any member of the set of base types created by parsing code: constant scalars, symbols, call objects, and pairlists. These are the data structures used to represented captured code form `expr()`, and so `is_expression(expr(...))` is always true[^exceptions]. In the subsequent sections, we'll come back to define each of these types precisely, and show you how to create, inspect, and modify them.
+
+[^exceptions]: It is _possible_ to insert any other base type into an expression, but this is unusual and only needed in rare circumstances. We'll come back to the idea in Section \@ref(non-standard-ast).
+
+NB: In base R documentation "expression" is used to mean two things. As well as the definition above, expression is also used to refer to the type of object returned by `expression()` and `parse()`, which are basically lists of expressions as defined above. In this book I'll call these __expression vectors__, and I'll come back to them in Section \@ref(expression-vectors).
 
 ### Constants
 \index{constants}
@@ -244,14 +223,8 @@ str(expr(x))
 
 The symbol type is not vectorised, i.e. a symbol is always length 1. If you want multiple symbols, you'll need to put them in a list, using (e.g.) `rlang::syms()`.
 
-### Exercises
 
-1.  Which two of the six types of atomic vector can't appear in an expression? 
-    Why? Why can't you create an expression that contains an atomic vector of 
-    length greater than one? 
-
-
-## Calls
+### Calls
 \index{calls}
 
 A __call object__ represents a captured function call. Call objects are vectors: the first component is name of the function to call (usually repesented as a symbol), and the remaining elements are the arguments for that call. Call objects create branches in the AST, because calls can be nested inside other calls.
@@ -268,7 +241,7 @@ typeof(x)
 is.call(x)
 ```
 
-### Subsetting
+#### Subsetting
 
 Calls generally behave like lists, i.e. you can use standard subsetting tools. The first element of the call object the function to call, which is a usually a symbol[^symbol-exception]:
 
@@ -319,7 +292,7 @@ x$header <- TRUE
 x
 ```
 
-### Constructing
+#### Constructing
 
 You can construct a call object from its components by using `rlang::call2()`. The first argument is the name of function to call (either as a string, a symbol, or another call). The remaining arguments will be passed along to the call:
 
@@ -337,6 +310,10 @@ call2("<-", expr(x), 10)
 Using `call2()` to create complex expressions is a bit clunky. You'll learn another technique in Chapter \@ref(quasiquotation).
 
 ### Exercises
+
+1.  Which two of the six types of atomic vector can't appear in an expression? 
+    Why? Why can't you create an expression that contains an atomic vector of 
+    length greater than one? 
 
 1.  What happens when you subset a call object to remove the first element?
     e.g. `expr(read.csv("foo.csv", header = TRUE))[-1]`. Why?
@@ -370,95 +347,6 @@ Using `call2()` to create complex expressions is a bit clunky. You'll learn anot
 
 1.  Construct the expression `if(x > 1) "a" else "b"` using multiple calls to 
     `call2()`. How does the code structure reflect the structure of the AST?
-
-## Other components {#expression-exotic}
-
-There are two remaining data types that we need to cover for the sake of completeness.
-
-### Pairlists
-\index{pairlists}
- 
-Pairlists are a remnant of R's past and have been replaced by lists almost everywhere. The only place you are likely to see pairlists in R[^pairlists-c] is when working with calls to the "function" function, as the formal arguments to a function are stored in a pairlist:
-
-```{r}
-f <- expr(function(x, y = 10) x + y)
-
-args <- f[[2]]
-args
-typeof(args)
-```
-
-[^pairlists-c]: If you're working in C, you'll encounter pairlists more often. For example, call objects are also implemented using pairlists.
- 
-Fortunately, whenever you encounter a pairlist, you can treat it just like a regular list:
-
-```{r}
-pl <- pairlist(x = 1, y = 2)
-length(pl)
-pl$x
-```
-
-Behind the scenes pairlists are implemented using a different data structure, a linked list instead of an array. That makes subsetting a pairlist much slower than subsetting a list, but this has little practical impact.
-
-### Missing arguments
-\index{symbol|empty} 
-\index{missing argument}
-
-There's one special symbol that needs a little extra discussion: the empty symbol, which is used to represent missing arguments (not missing values!). You only need to care about the missing symbol if you're programmatically creating functions with missing arguments; we'll come back to that in Section \@ref(unquote-missing). 
-You can make an empty symbol with  `missing_arg()` (or `expr()`):
-
-```{r}
-missing_arg()
-typeof(missing_arg())
-as_string(missing_arg())
-```
-
-And see if you have a missing symbol with `rlang::is_missing()`:
-
-```{r}
-is_missing(missing_arg())
-```
-
-This symbol has a peculiar property: if you bind it to a variable, then access that variable, you will get an error:
-
-```{r, error = TRUE}
-m1 <- missing_arg()
-m1
-```
-
-This is the same error you get when referring to a missing argument inside a function. 
-
-If you need to preserve the missingness of a variable, `rlang::maybe_missing()` is sometimes helpful. It prevents the error from occurring and instead returns another empty symbol.
-
-### Expression vectors
-\index{expression vector} 
-\indexc{expression()} 
-\indexc{parse()} 
-
-Finally, we need to briefly discuss the expression vector. Expression vectors are produced by only two base functions: `expression()` and `parse()`:
-
-```{r}
-exp1 <- parse(text = c("
-x <- 4
-x
-"))
-exp2 <- expression(x <- 4, x)
-
-typeof(exp1)
-typeof(exp2)
-
-exp1
-exp2
-```
-
-Like calls and pairlists, expression vectors behave like a list:
-
-```{r}
-length(exp1)
-exp1[[1]]
-```
-
-Conceptually, an expression vector is just a list of expressions. The only difference is that calling `eval()` on an expression evaluates each individual expression. I don't believe this advantage merits introducing a new data structure, so instead of expression vectors I just use lists of expressions.
 
 ## R's grammar {#grammar}
 
@@ -902,3 +790,93 @@ While the complete version of this function is quite complicated, it's important
     functions, i.e. `names(x) <- y`.
   
 1.  Write a function that extracts all calls to a specified function.
+
+
+## Specialised data structures
+
+There are two data structures and one special symbol that we need to cover for the sake of completeness. They are not usually important in practice.
+
+### Pairlists
+\index{pairlists}
+ 
+Pairlists are a remnant of R's past and have been replaced by lists almost everywhere. The only place you are likely to see pairlists in R[^pairlists-c] is when working with calls to the "function" function, as the formal arguments to a function are stored in a pairlist:
+
+```{r}
+f <- expr(function(x, y = 10) x + y)
+
+args <- f[[2]]
+args
+typeof(args)
+```
+
+[^pairlists-c]: If you're working in C, you'll encounter pairlists more often. For example, call objects are also implemented using pairlists.
+ 
+Fortunately, whenever you encounter a pairlist, you can treat it just like a regular list:
+
+```{r}
+pl <- pairlist(x = 1, y = 2)
+length(pl)
+pl$x
+```
+
+Behind the scenes pairlists are implemented using a different data structure, a linked list instead of an array. That makes subsetting a pairlist much slower than subsetting a list, but this has little practical impact.
+
+### Missing arguments
+\index{symbol|empty} 
+\index{missing argument}
+
+There's one special symbol that needs a little extra discussion: the empty symbol, which is used to represent missing arguments (not missing values!). You only need to care about the missing symbol if you're programmatically creating functions with missing arguments; we'll come back to that in Section \@ref(unquote-missing). 
+You can make an empty symbol with  `missing_arg()` (or `expr()`):
+
+```{r}
+missing_arg()
+typeof(missing_arg())
+as_string(missing_arg())
+```
+
+And see if you have a missing symbol with `rlang::is_missing()`:
+
+```{r}
+is_missing(missing_arg())
+```
+
+This symbol has a peculiar property: if you bind it to a variable, then access that variable, you will get an error:
+
+```{r, error = TRUE}
+m <- missing_arg()
+m
+```
+
+This is the same error you get when referring to a missing argument inside a function. 
+
+If you need to preserve the missingness of a variable, `rlang::maybe_missing()` is often helpful. It allows you to refer to a potentially missing variable without triggering the error.
+
+### Expression vectors
+\index{expression vector} 
+\indexc{expression()} 
+\indexc{parse()} 
+
+Finally, we need to briefly discuss the expression vector. Expression vectors are produced by only two base functions: `expression()` and `parse()`:
+
+```{r}
+exp1 <- parse(text = c("
+x <- 4
+x
+"))
+exp2 <- expression(x <- 4, x)
+
+typeof(exp1)
+typeof(exp2)
+
+exp1
+exp2
+```
+
+Like calls and pairlists, expression vectors behave like a list:
+
+```{r}
+length(exp1)
+exp1[[1]]
+```
+
+Conceptually, an expression vector is just a list of expressions. The only difference is that calling `eval()` on an expression evaluates each individual expression. I don't believe this advantage merits introducing a new data structure, so instead of expression vectors I just use lists of expressions.
