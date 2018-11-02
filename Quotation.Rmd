@@ -16,21 +16,23 @@ Now that you understand the tree structure of R code, it's time to come back to 
   expression. This is a powerful tool that makes it easy to build up a 
   complex AST from simpler fragments.
 
-The combination of these two ideas makes it easy to compose expressions that are mixtures of direct and indirect specification, and helps to solve a wide variety of challenging problems. 
-
-Quoting functions have deep connections to Lisp __macros__. But macros are usually run at compile-time, which doesn't have any meaning in R, and they always input and output ASTs. (@lumley-2001 shows one way you might implement them in R). Quoting functions are more closely related to Lisp [__fexprs__](http://en.wikipedia.org/wiki/Fexpr), functions where all arguments are quoted by default. These terms are useful to know when looking for related techniques in other programming languages. \index{macros} \index{fexprs}
+The combination of these two ideas makes it easy create functions that combine code written by the function author with code written by the function user, and helps to solve a wide variety of challenging problems. 
 
 ### Outline {-}
 
 ### Prerequisites {-}
 
-Make sure you're familiar with the tree structure of code described in [Abstract syntax trees].
-
-You'll also need the development version of rlang:
+Make sure you're familiar with the tree structure of expressions as described in Section \@ref(expressions). You'll also need the rlang package:
 
 ```{r setup}
 library(rlang)
 ```
+
+### Related work {-}
+\index{macros} 
+\index{fexprs}
+ 
+Quoting functions have deep connections to Lisp __macros__. But macros are usually run at compile-time, which doesn't exist in R, and they always input and output ASTs. (@lumley-2001 shows one way you might implement them in R). Quoting functions are more closely related to Lisp [__fexprs__](http://en.wikipedia.org/wiki/Fexpr), functions where all arguments are quoted by default. These terms are useful to know when looking for related techniques in other programming languages.
 
 ## Motivation
 
@@ -45,15 +47,15 @@ You are sick and tired of writing all those quotes, and instead you just want to
 
 ```{r}
 cement <- function(...) {
-  dots <- exprs(...)
-  paste(purrr::map(dots, expr_name), collapse = " ")
+  args <- ensyms(...)
+  paste(purrr::map(args, as.character), collapse = " ")
 }
 
 cement(Good, morning, Hadley)
 cement(Good, afternoon, Alice)
 ```
 
-(You'll learn what `exprs()` does shortly; for now just look at the results.)
+(You'll learn what `ensyms()` does shortly; for now just look at the results.)
 
 Formally, this function __quotes__ the arguments in `...`. You can think of it as automatically putting quotation marks around each argument. That's not precisely true as the intermediate objects it generates are expressions, not strings, but it's a useful approximation for now.
 
@@ -114,7 +116,23 @@ Now that you've seen the basic idea, it's time to talk a little bit about the th
 
 Quasiquotation was first used in a programming language, LISP, in the mid-1970s [@bawden-1999]. LISP has one quoting function `` ` ``, and uses `,` for unquoting. Most languages with a LISP heritage behave similarly. For example, racket (`` ` `` and `@`), clojure (`` ` `` and `~`), and julia (`:` and `@`) all have quasiquotation tools that differ only slightly from LISP. 
 
-Quasiquotation has only come to R recently (2017). Despite its newness, I teach it in this book because it is a rich and powerful theory that makes many hard problems much easier. Quasiquotation in R is a little different to LISP and descendants. In LISP there is only one function that does quasiquotation (the quote function), and you must call it explicitly when needed. This makes these languages less ambiguous (because there's a clear code signal that something odd is happening), but is less appropriate for R because quasiquotation is such an important part of DSLs for data analysis.
+Base R has one function that implements quasiquotation: `bquote()`, which uses `.()` for unquoting. Unfortunately `bquote()` has had little impact: it not used by any other function in base R. There are three reasons:
+
+* It is only easily used with your code; it is hard to apply it to abitrary
+  code supplied by a user (i.e. it is most similar to `expr()`, and has no 
+  equivalent to `enexpr()`.)
+  
+* It does not provide an unquote-splice operator that allows you to insert
+  multiple arguments, and it doesn't provide a tool that allows you to vary
+  the name of a function argument (i.e. it doesn't have `!!!` or `:=`).
+  
+* It lacks tooling for handling code along with its environment, which is
+  crucial for functions that evaluate code in the context of a data frame,
+  like `subset()` and friends (i.e. it doesn't provide or use quosures). 
+
+Discovering and remedying these lacks lead to the tidy evaluation framework taught in this book. Despite the newness of tidy eval, I teach it here because it is a rich and powerful theory that, once you master it, makes many hard problems much easier. 
+
+Quasiquotation in R is a little different to LISP and descendants. In LISP there is only one function that does quasiquotation (the quote function), and you must call it explicitly when needed. This makes these languages less ambiguous (because there's a clear code signal that something odd is happening), but is less appropriate for R because quasiquotation is such an important part of DSLs for data analysis.
 
 ### Exercises
 
@@ -346,7 +364,7 @@ expr(f(!!x, y))
 ```
 
 ```{r, echo = FALSE, out.width = NULL}
-knitr::include_graphics("diagrams/expressions/bang-bang.png", dpi = 300)
+knitr::include_graphics("diagrams/expressions/bang-bang.png")
 ```
 
 `!!!` is a one-to-many replacement. It takes a list of expressions and inserts them at the location of the `!!!`:
@@ -357,7 +375,7 @@ expr(f(!!!x, z = z))
 ```
 
 ```{r, echo = FALSE, out.width = NULL}
-knitr::include_graphics("diagrams/expressions/bang-bang-bang.png", dpi = 300)
+knitr::include_graphics("diagrams/expressions/bang-bang-bang.png")
 ```
 
 Example of unquoting a function
