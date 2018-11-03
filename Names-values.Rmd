@@ -202,9 +202,9 @@ You _can_ also create non-syntactic bindings using single or double quotes (e.g.
 
 ## Copy-on-modify
 
-Consider the following code, which binds `x` and `y` to the same underlying value, then modifies[^double-bracket] `y`.
+Consider the following code. It binds `x` and `y` to the same underlying value, then modifies `y`.[^double-bracket]
 
-[^double-bracket]: You may be surprised to see `[[` used with a numeric vector. We'll come back to this in Section \@ref(subset-single), but in brief, I think you should use `[[` whenever you are getting or setting a single element.
+[^double-bracket]: You may be surprised to see `[[` used with a numeric vector. We'll come back to this in Section \@ref(subset-single), but in brief, I think you should always use `[[` when you are getting or setting a single element.
 
 <!-- GVW: should I be surprised that `[[` is used with a numeric vector as subscript, or that it's being used to subscript a numeric vector? (I'm new enough that I don't know what should surprise me.) -->
 
@@ -216,17 +216,17 @@ y[[3]] <- 4
 x
 ```
 
-Modifying `y` clearly doesn't modify `x`, so what happened to the shared binding? While the value associated with `y` changes, the original object does not. Instead, R creates a new object, `0xcd2`, a copy of `0x74b` with one value changed, then rebinds `y` to that object.
+Modifying `y` clearly didn't modify `x`. So what happened to the shared binding? While the value associated with `y` changed, the original object did not. Instead, R created a new object, `0xcd2`, a copy of `0x74b` with one value changed, then rebinded `y` to that object.
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/name-value/binding-3.png")
 ```
 
-This behaviour is called __copy-on-modify__, and understanding it makes your intuition for the performance of R code radically better. A related way to describe this phenomenon is to say that R objects are __immutable__, or unchangeable. However, I'll generally avoid that term because there are a couple of important exceptions to copy-on-modify that you'll learn about in Section \@ref(modify-in-place). 
+This behaviour is called __copy-on-modify__. Understanding it will radically improve your intuition about the performance of R code. A related way to describe this behaviour is to say that R objects are unchangeable, or __immutable__. However, I'll generally avoid that term because there are a couple of important exceptions to copy-on-modify that you'll learn about in Section \@ref(modify-in-place). 
 
 ### `tracemem()`
 
-You can see when an object gets copied with the help of `base::tracemem()`. You call it with an object and it returns the current address of the object:
+You can see when an object gets copied with the help of `base::tracemem()`. Once you call that function with an object, you'll get the object's current address:
 
 ```{r trace1, eval = FALSE}
 x <- c(1, 2, 3)
@@ -234,7 +234,7 @@ cat(tracemem(x), "\n")
 #> <0x7f80c0e0ffc8> 
 ```
 
-Whenever that object is copied in the future, `tracemem()` will print out a message telling you which object was copied, what the new address is, and the sequence of calls that lead to the copy:
+From then on, whenever that object is copied, `tracemem()` will print a message telling you which object was copied, its new address, and the sequence of calls that led to the copy:
 
 <!-- GVW: that's cool. -->
 
@@ -244,7 +244,7 @@ y[[3]] <- 4L
 #> tracemem[0x7f80c0e0ffc8 -> 0x7f80c4427f40]: 
 ```
 
-Note that if you modify `y` again, it doesn't get copied. That's because the new object now only has a single name binding to it, so R can apply a modify-in-place optimisation. We'll come back to that shortly.
+Note that if you modify `y` again, it won't get copied. That's because the new object now only has a single name bound to it, so R applies modify-in-place optimisation. We'll come back to this shortly.
 
 <!-- GVW: forward link to section that resolves the "shortly". -->
 
@@ -274,7 +274,7 @@ z <- f(x)
 untracemem(x)
 ```
 
-While `f()` is running, `a` inside the function will point to the same value as `x` does outside of it:
+While `f()` is running, the `a` inside the function points to the same value as the `x` does outside the function:
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/name-value/binding-f1.png")
@@ -284,7 +284,7 @@ knitr::include_graphics("diagrams/name-value/binding-f1.png")
 
 <!-- GVW: I think I've figured out what the colors and curves mean, but I'm not sure... -->
 
-And once complete, `x` and `z` will point to the same object. `0x74b` never gets copied because it never gets modified. If `f()` did modify `x`, R would create a new copy, and then `z` would bind that object. 
+Once `f()` completes, `x` and `z` will point to the same object. `0x74b` never gets copied because it never gets modified. If `f()` did modify `x`, R would create a new copy, and then `z` would bind that object.
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/name-value/binding-f2.png")
@@ -292,13 +292,13 @@ knitr::include_graphics("diagrams/name-value/binding-f2.png")
 
 ### Lists {#list-references}
 
-It's not just names (i.e. variables) that point to values; the elements of lists do too. Take this list, which superficially is very similar to the vector above:
+It's not just names (i.e. variables) that point to values; elements of lists do too. Take this list, which is superficially very similar to the vector above:
 
 ```{r list1}
 l1 <- list(1, 2, 3)
 ```
 
-The internal representation of the list is actually quite different to that of a vector. A list is really a vector of references:
+The internal representation of a list is actually quite different from that of a vector. A list is really a vector of references:
 
 <!-- GVW: isn't this exactly the same as the structure of a vector, just storing a different type? -->
 
@@ -324,9 +324,9 @@ l2[[3]] <- 4
 knitr::include_graphics("diagrams/name-value/l-modify-2.png")
 ```
 
-Like vectors, lists are copied-on-modify; the original list is left unchanged, and R creates a modified copy. This is a __shallow__ copy: the list object and its bindings are copied, but the values pointed to by the bindings are not. The oppposite of a shallow copy is a deep copy, where the contents of every reference are also copied. Prior to R 3.1.0, copies were always deep copies.
+Like vectors, lists use copy-on-modify behaviour; the original list is left unchanged, and R creates a modified copy. This, however, is a __shallow__ copy: the list object and its bindings are copied, but the values pointed to by the bindings are not. The opposite of a shallow copy is a deep copy where the contents of every reference are copied. Prior to R 3.1.0, copies were always deep copies.
 
-You can use `lobstr::ref()` to see values that are shared across lists. `ref()` prints the memory address of each object, along with a local id so that you can easily cross-reference shared components.
+To see values that are shared across lists, use `lobstr::ref()`. `ref()` prints the memory address of each object, along with a local ID so that you can easily cross-reference shared components.
 
 <!-- GVW: install.packages("lobstr") produces "package 'lobstr' is not available (for R version 3.5.1).", but devtools::install_github("r-lib/lobstr") works. -->
 
@@ -345,7 +345,7 @@ d1 <- data.frame(x = c(1, 5, 6), y = c(2, 4, 3))
 knitr::include_graphics("diagrams/name-value/dataframe.png")
 ```
 
-If you modify a column, only that column needs to be modified; the others can continue to point to the same place:
+If you modify a column, only _that_ column needs to be modified; the others will still point to their original references:
 
 ```{r}
 d2 <- d1
@@ -355,7 +355,7 @@ d2[, 2] <- d2[, 2] * 2
 knitr::include_graphics("diagrams/name-value/d-modify-c.png")
 ```
 
-However, if you modify a row, there is no way to share data with the previous version of the data frame, and every column must be copied-and-modified.
+However, if you modify a row, there is no way to share data with the previous version of the data frame: every column must be copied-and-modified.
 
 <!-- GVW: "if you modify a row, every column is modified, which means every column must be copied" -->
 
@@ -370,7 +370,7 @@ knitr::include_graphics("diagrams/name-value/d-modify-r.png")
 ### Character vectors
 \index{string pool}
 
-The final place that R uses references is in character vectors. I usually draw character vectors like this:
+The final place that R uses references is with character vectors. I usually draw character vectors like this:
 
 ```{r}
 x <- c("a", "a", "abc", "d")
@@ -379,7 +379,7 @@ x <- c("a", "a", "abc", "d")
 knitr::include_graphics("diagrams/name-value/character.png")
 ```
 
-But this is a polite fiction, because R has a __global string pool__. Each element of a character vector is actually a pointer to a unique string in that pool:
+But this is a polite fiction. R actually uses a __global string pool__ where each element of a character vector is a pointer to a unique string in the pool:
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/name-value/character-2.png")
@@ -387,13 +387,13 @@ knitr::include_graphics("diagrams/name-value/character-2.png")
 
 <!-- GVW: what I brought with me from other languages was that "character vector" referred to a single string (a vector of characters), but what I now understand is that "character vector" means "a vector of character strings".  Might be worth footnoting this for people who make the same mistake I did? -->
 
-You can request that `ref()` show these references:
+You can request that `ref()` show these references by setting the `character` argument to `TRUE`:
 
 ```{r}
 ref(x, character = TRUE)
 ```
 
-This has a profound impact on the amount of memory a character vector takes, but is otherwise not generally important, so elsewhere in the book I'll draw character vectors as if the strings lived inside the vector.
+This has a profound impact on the amount of memory a character vector uses but is otherwise generally unimportant, so elsewhere in the book I'll draw character vectors as if the strings lived inside a vector.
 
 ### Exercises
 
