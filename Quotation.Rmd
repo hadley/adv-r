@@ -18,13 +18,15 @@ Now that you understand the tree structure of R code, it's time to come back to 
 
 The combination of these two ideas makes it easy create functions that combine code written by the function author with code written by the function user, and helps to solve a wide variety of challenging problems. 
 
-Quasiquotation is a key component of tidy evaluation, a system used throughout the tidyverse, and elsewhere. As a system, tidy evaluation is important because it provides a consistent set of tools that you can learn once and apply in many places.
+Quasiquotation is one of the three component of tidy evaluation, a system used throughout the tidyverse and beyond. You'll learn learn about the other two components (quosures and the data mask) in Chapter \@ref(evaulation). Quasiquotation is useful in its own right but mostly for programming, but tidy evalation is additionally useful for data analysis.
 
 ### Outline {-}
 
 ### Prerequisites {-}
 
-Make sure you're familiar with the tree structure of expressions as described in Section \@ref(expressions). You'll also need the rlang package, and purrr.
+Make sure you've read the metaprogramming overview in Chapter \@ref(meta) to get a broad overview of the motivation and the basic vocabulary, and you're familiar with the tree structure of expressions as described in Section \@ref(expressions). 
+
+Code-wise, we'll mostly be using the tools from rlang, but at the end of the chapter you'll also see some powerful applications in conjunction with purrr.
 
 ```{r setup}
 library(rlang)
@@ -53,7 +55,7 @@ You are sick and tired of writing all those quotes, and instead you just want to
 ```{r}
 cement <- function(...) {
   args <- ensyms(...)
-  paste(purrr::map(args, as.character), collapse = " ")
+  paste(purrr::map(args, as_string), collapse = " ")
 }
 
 cement(Good, morning, Hadley)
@@ -299,10 +301,10 @@ This leads to two families of quoting functions:
 
 *   From rlang:
 
-    |      | Developer | User        |
-    |------|-----------|-------------|
-    | One  | `expr()`  | `enexpr()`  |
-    | Many | `exprs()` | `enexprs()` |
+    |      | Developer | User        | User (symbol only) |
+    |------|-----------|-------------|--------------------|
+    | One  | `expr()`  | `enexpr()`  | `ensym()`          |
+    | Many | `exprs()` | `enexprs()` | `ensyms()`         |
 
 *   From base R:
 
@@ -314,8 +316,7 @@ This leads to two families of quoting functions:
 ### Exercises
 
 1.  What happens if you try to use `enexpr()` with an expression (i.e. 
-    `enexpr(x + y)` ?
-    What happens if you try to use `enexpr()` with a missing argument?
+    `enexpr(x + y)` ? What happens if `enexpr()` is passed a missing argument?
 
 1.  Compare and contrast the following two functions. Can you predict the
     output before running them?
@@ -346,12 +347,12 @@ This leads to two families of quoting functions:
 
     > Substitution takes place by examining each component of the parse tree 
     > as follows: 
-    > * If it is not a bound symbol in env, it is unchanged. 
-    > * If it is a promise object, i.e., a formal argument to a function 
-    >   or explicitly created using delayedAssign(), the expression slot of
-        the promise replaces the symbol. 
-    > * If it is an ordinary variable, its value is substituted, 
-    >   __unless__ env is .GlobalEnv in which case the symbol is left 
+    > 
+    > * If it is not a bound symbol in `env`, it is unchanged. 
+    > * If it is a promise object (i.e., a formal argument to a function) 
+    >   the expression slot of the promise replaces the symbol. 
+    > * If it is an ordinary variable, its value is substituted;
+    > * Unless `env` is .GlobalEnv in which case the symbol is left 
     >   unchanged.
     
     Create four examples that illustrate each of the different cases.
@@ -769,6 +770,27 @@ args <- map(coefs, ~ missing_arg())
 new_function(args, expr({!!eq}))
 ```
 
+
+
+```{r}
+linear <- function(var, val) {
+  var <- ensym(var)
+  
+  coef <- val[-1]
+  coef_name <- syms(paste0(as.character(var), seq_along(coef)))
+
+  summands <- map2(coefs, coef_name, ~ expr((!!.x * !!.y)))
+  summands <- c(val[[1]], summands)
+
+  reduce(summands, ~ expr(!!.x + !!.y))
+  
+}
+
+linear(x, c(10, 5, -4))
+
+```
+
+
 ### Slicing an array
 
 One occassionally useful tool that's missing from base R is the ability to extract a slice of an array given a dimension and an index. For example, we'd like to write `slice(x, 2, 1)` to extract the first slice along the second dimension, which you can write as `x[, 1, ]`. 
@@ -1040,13 +1062,11 @@ As well as `list2()`, rlang also provides `lgl()`, `int()`, `dbl()`, and `chr()`
 
 ### `rlang::exec()`
 
-One useful application of `list2()` is `exec()`, which is a wrapper around `list2()` and `do.call()`:
+One useful application of `list2()` is `exec()`, which you can think of as a wrapper around `list2()` and `do.call()`:
 
 ```{r, eval = FALSE}
 exec <- function(f, ..., .env = caller_env()) {
   args <- list2(...)
-  args <- map(args, sym_protect)
-  
   do.call(f, args, envir = .env)
 }
 ```
@@ -1072,6 +1092,15 @@ And also makes it possible to supply argument names indirectly:
 arg_name <- "na.rm"
 arg_val <- TRUE
 exec("mean", 1:10, !!arg_name := arg_val)
+```
+
+And finally, it's useful if you have a vector of function names or a list of functions that you want to call with the same arguments:
+
+```{r}
+x <- c(runif(10), NA)
+funs <- c("mean", "median", "sd")
+
+purrr:::map_dbl(funs, exec, x, na.rm = TRUE)
 ```
 
 `exec()` is closely related to `call2()`; where `call2()` returns an expression, `exec()` evaluates it. 
