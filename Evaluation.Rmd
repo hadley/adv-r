@@ -834,7 +834,7 @@ That means `subset(df, x == y)` is not equivalent to `df[x == y,]` as you might 
     Read the documentation and make sure that you understand what `within()`
     does, then read the source code.
 
-## Wrapping quoting functions
+## Wrapping quoting functions {#base-unquote}
 
 Now we have all the tools we need to wrap a quoting function inside another function, regardless of whether the quoting function uses tidy evaluation or base R. This is important because it allows you to reduce duplication by turning repeated code into functions. It's straightforward to do this for evaluated arguments; now you'll learn the techniques that allow you to wrap quoted arguments.
 
@@ -872,6 +872,36 @@ grouped_mean <- function(df, group_var, summary_var) {
 ```
 
 Just remember that quoting is infectious, so whenever you call a quoting function you need to quote and then unquote.
+
+### Application: partition
+
+Imagine that you want to extend `dplyr::select()` to return two data frames: one with the variables you selected, and one with the variables that remain. (This problem was inspired by <https://stackoverflow.com/questions/46828296/>.)  There are plenty of ways to attack this problem, but one way is to take advantage of `select()'s` ability to negate a column selection expression in order to remove those columns. 
+
+We can capture the inputs with quasiquotation, then invert each selection call by negating it. We start by practicing interactively with a list of variables created with `exprs()`:
+
+```{r}
+vars <- exprs(x, y, c(a, b), starts_with("x"))
+map(vars, ~ expr(-!!.x))
+```
+
+Then turn it into a function:
+
+```{r}
+partition_cols <- function(.data, ...) {
+  included <- enquos(...)
+  excluded <- map(included, ~ expr(-!!.x))
+
+  list(
+    incl = dplyr::select(.data, !!!included),
+    excl = dplyr::select(.data, !!!excluded)
+  )
+}
+
+df <- data.frame(x1 = 1, x2 = 3, y = "a", z = "b")
+partition_cols(df, dplyr::starts_with("x"))
+```
+
+Note the name of the first argument: `.data`. This is a standard convention through the tidyverse because you don't need to explicitly name this argument (because it's always used), and it avoids potential clashes with argument names in `...`.
 
 ### Base R 
 
@@ -1050,6 +1080,12 @@ build_formula(y, a, b, c)
 ```
 
 ### Exercises
+
+1.  Implement `arrange_desc()`, a variant of `dplyr::arrange()` that sorts
+    in descending order by default.
+
+1.  Implement `filter_or()`, a variant of `dplyr::filter()` that combines 
+    multiple arguments using `|` instead of `&`.
 
 1.  When model building, typically the response and data are relatively 
     constant while you rapidly experiment with different predictors. Write a
