@@ -720,7 +720,7 @@ These functions have no built-in options for indirect specification, but you'll 
 
 ## Dot-dot-dot (`...`) {#tidy-dots}
 
-Quasiquotation ensures that every quoted argument has an escape hatch that allows the user to unquote, or evaluate, selected components, if needed. A similar and related need arises with functions that take arbitrary additional arguments with `...`. Take the following two motivating problems:
+`!!!` is useful because it's not uncommon to have a list of expressions that you want to insert into a call. It turns out that this pattern is common elsewhere. Take the following two motivating problems:
 
 *   What do you do if the elements you want to put in `...` are already stored 
     in a list? For example, imagine you have a list of data frames that 
@@ -749,7 +749,145 @@ Quasiquotation ensures that every quoted argument has an escape hatch that allow
     (i.e. `setNames(data.frame(val), var)`), but this feels inelegant.
     How can we do better?
 
-### Base R: `do.call()`
+One way to think about these problems is to draw explicit parallels to quasiquotation:
+
+*   Row-binding multiple data frames is like unquote-splicing: we want to inline
+    individual elements of the list into the call:
+
+    ```{r}
+    dplyr::bind_rows(!!!dfs)
+    ```
+    
+    When used in this context, the behaviour of `!!!` is known as spatting in 
+    Ruby, Go, PHP, and Julia. It is closely related to `*args` (star-args) and
+    `**kwarg` (star-star-kwargs) in Python, which are sometimes called argument
+    unpacking. 
+
+*   The second problem is like unquoting the left-hand side of `=`: rather 
+    than interpreting `var` literally, we want to use the value stored in the 
+    variable called `var`:
+
+    ```{r}
+    tibble::tibble(!!var := val)
+    ```
+
+    Note the use of `:=` (pronounced colon-equals) rather than `=`. Unfortunately 
+    we need this new operation because R's grammar does not allow expressions as
+    argument names:
+    
+    ```{r, eval = FALSE}
+    tibble::tibble(!!var = value)
+    #> Error: unexpected '=' in "tibble::tibble(!!var ="
+    ```
+    
+    `:=` is like a vestigial organ: it's recognised by R's parser, but it
+    doesn't have any code associated with it. It looks like an `=` but allows 
+    expressions on either side, making it a more flexible alternative to `=`. 
+    It is used in data.table for similar reasons.
+
+Base R takes a different approach, which we'll come back to Section \@ref{do-call}.
+
+We say functions that support these tools, without quoting arguments, have __tidy dots__[^tidy-dots]. To gain tidy dots behaviour in your own function, all you need to do is use `list2()`.
+
+[^tidy-dots]: This is admittedly not the most creative of names, but it clearly suggests it's something that has been added to R after the fact.
+
+### Examples
+
+One place we could use `list2()` is to create a wrapper around `attributes()` that allows us to flexibly set attributes:
+
+```{r}
+set_attr <- function(.x, ...) {
+  attr <- rlang::list2(...)
+  attributes(.x) <- attr
+  .x
+}
+
+attrs <- list(x = 1, y = 2)
+attr_name <- "z"
+
+1:10 %>%
+  set_attr(w = 0, !!!attrs, !!attr_name := 3) %>% 
+  str()
+```
+
+### `exec()`
+
+What if you want to use this technique with a function that doesn't have tidy dots? One option is to use `rlang::exec()` which makes it easy to call functions with some arguments supplied  directly (in ...) and others indirectly (in a list):
+
+```{r}
+# Directly
+exec("mean", x = 1:10, na.rm = TRUE, trim = 0.1)
+
+# Indirectly
+args <- list(x = 1:10, na.rm = TRUE, trim = 0.1)
+exec("mean", !!!args)
+
+# Mixed
+params <- list(na.rm = TRUE, trim = 0.1)
+exec("mean", x = 1:10, !!!params)
+```
+
+And also makes it possible to supply argument names indirectly:
+
+```{r}
+arg_name <- "na.rm"
+arg_val <- TRUE
+exec("mean", 1:10, !!arg_name := arg_val)
+```
+
+And finally, it's useful if you have a vector of function names or a list of functions that you want to call with the same arguments:
+
+```{r}
+x <- c(runif(10), NA)
+funs <- c("mean", "median", "sd")
+
+purrr:::map_dbl(funs, exec, x, na.rm = TRUE)
+```
+
+`exec()` is closely related to `call2()`; where `call2()` returns an expression, `exec()` evaluates it. 
+
+### `dots_list()`
+
+`list2()` provides one other handy feature: by default it will ignore any empty arguments at the end. This is useful in functions like `tibble::tibble()` because it means that you can easily change the order of variables without worrying about the final comma:
+
+```{r, results = FALSE}
+# Can easily move x to first entry:
+tibble::tibble(
+  y = 1:5,
+  z = 3:-1,
+  x = 5:1,
+)
+
+# Need to remove comma from z and add comma to x
+data.frame(
+  y = 1:5,
+  z = 3:-1,
+  x = 5:1
+)
+```
+
+`list2()` is a wrapper around `rlang::dots_list()` with defaults set to the most commonly used settings. You can get more control by calling `dots_list()` directly:
+
+* `.ignore_empty` allows you to control exaclty which arguments are ignored.
+  The default ignores a single trailing argument to get the behaviour
+  describe above, but you can choose to ignore all missing arguments, or
+  no missing arguments.
+
+* `.homonoyms` controls what happens if multiple arguments use the same name:
+
+    ```{r, error = TRUE}
+    str(dots_list(x = 1, x = 2))
+    str(dots_list(x = 1, x = 2, .homonyms = "first"))
+    str(dots_list(x = 1, x = 2, .homonyms = "last"))
+    str(dots_list(x = 1, x = 2, .homonyms = "error"))
+    ```
+
+* If there are empty arguments that are not ignored, `.preserve_empty`
+  controls what to do with them. The default throws an error; setting
+  `.preserve_empty = TRUE` instead returns missing symbols. This is useful
+  if you're using `dots_list()` to generate function calls.
+
+### With base R {#do-call}
 
 Base R provides a swiss-army knife to solve these problems: `do.call()`. `do.call()` has two main arguments. The first argument, `what`, gives a function to call. The second argument, `args`, is a list of arguments to pass to that function, and so `do.call("f", list(x, y, z))` is equivalent to `f(x, y, z)`.
 
@@ -795,132 +933,18 @@ f <- function(..., .dots) {
 
 At the time I discovered it, I found this technique particularly compelling so you can see it used throughout the tidyverse. Now, however, I prefer the approach described next.
 
-### Tidy eval: `list2()`
-
-The tidyverse solves these problems in a different way to base R, by drawing parallel to quasiquotation:
-
-*   Row-binding multiple data frames is like unquote-splicing: we want to inline
-    individual elements of the list into the call:
-
-    ```{r}
-    dplyr::bind_rows(!!!dfs)
-    ```
-    
-    When used in this context, the behaviour of `!!!` is known as spatting in 
-    Ruby, Go, PHP, and Julia. It is closely related to `*args` (star-args) and
-    `**kwarg` (star-star-kwargs) in Python, which are sometimes called argument
-    unpacking. 
-
-*   The second problem is like unquoting the left-hand side of `=`: rather 
-    than interpreting `var` literally, we want to use the value stored in the 
-    variable called `var`:
-
-    ```{r}
-    tibble::tibble(!!var := val)
-    ```
-
-    Note the use of `:=` (pronounced colon-equals) rather than `=`. Unfortunately 
-    we need this new operation because R's grammar does not allow expressions as
-    argument names:
-    
-    ```{r, eval = FALSE}
-    tibble::tibble(!!var = value)
-    #> Error: unexpected '=' in "tibble::tibble(!!var ="
-    ```
-    
-    `:=` is like a vestigial organ: it's recognised by R's parser, but it doesn't
-    have any code associated with it. It looks like an `=` but allows 
-    expressions on either side, making it a more flexible alternative to `=`. 
-    It is used in data.table for similar reasons.
-
-Both `dplyr::bind_rows()` and `tibble::tibble()` are powered by `rlang::list2(...)`. This function is very similar to `list(...)`, but it understands `!!!` and `!!`. If you want to take advantage of this behaviour in your own function, all you need to do is use `list2()` in your own code.
-
-BETTER EXAMPLE
-
-For example, imagine you want to make a version of `structure()` that understands `!!!` and `!!`. We'll call it `set_attr()`:
-
-```{r}
-set_attr <- function(.x, ...) {
-  attr <- rlang::list2(...)
-  attributes(.x) <- attr
-  .x
-}
-
-attrs <- list(x = 1, y = 2)
-attr_name <- "z"
-
-1:10 %>%
-  set_attr(w = 0, !!!attrs, !!attr_name := 3) %>% 
-  str()
-```
-
-Note that we call the first argument `.x`: whenever you use `...` to take arbitrary data, it's good practice to give the other argument names a `.` prefix. This eliminates any ambiguity about who owns the argument, and in this case makes it possible to set the `x` attribute.
-
-`list2()` provides one other handy feature: by default it will ignore any empty arguments at the end. This is useful in functions like `tibble::tibble()` because it means that you can easily change the order of variables without worrying about the final comma:
-
-```{r, results = FALSE}
-# Can easily move x to first entry:
-tibble::tibble(
-  y = 1:5,
-  z = 3:-1,
-  x = 5:1,
-)
-
-# Need to remove comma from z and add comma to x
-data.frame(
-  y = 1:5,
-  z = 3:-1,
-  x = 5:1
-)
-```
-
-### `rlang::exec()`
-
-One useful application of `list2()` is `exec()`, which you can think of as a wrapper around `list2()` and `do.call()`:
-
-```{r, eval = FALSE}
-exec <- function(f, ..., .env = caller_env()) {
-  args <- list2(...)
-  do.call(f, args, envir = .env)
-}
-```
-
-This makes it easy to call functions with some arguments supplied  directly (in ...) and others indirectly (in a list):
-
-```{r}
-# Directly
-exec("mean", x = 1:10, na.rm = TRUE, trim = 0.1)
-
-# Indirectly
-args <- list(x = 1:10, na.rm = TRUE, trim = 0.1)
-exec("mean", !!!args)
-
-# Mixed
-params <- list(na.rm = TRUE, trim = 0.1)
-exec("mean", x = 1:10, !!!params)
-```
-
-And also makes it possible to supply argument names indirectly:
-
-```{r}
-arg_name <- "na.rm"
-arg_val <- TRUE
-exec("mean", 1:10, !!arg_name := arg_val)
-```
-
-And finally, it's useful if you have a vector of function names or a list of functions that you want to call with the same arguments:
-
-```{r}
-x <- c(runif(10), NA)
-funs <- c("mean", "median", "sd")
-
-purrr:::map_dbl(funs, exec, x, na.rm = TRUE)
-```
-
-`exec()` is closely related to `call2()`; where `call2()` returns an expression, `exec()` evaluates it. 
-
 ### Exercises
 
+1.  One way to implement `exec()` below. Describe how it works. What are the
+    key ideas?
+    
+    ```{r}
+    exec <- function(f, ..., .env = caller_env()) {
+      args <- list2(...)
+      do.call(f, args, envir = .env)
+    }
+    ```
+    
 1.  Carefully read the source code for `interaction()`, `expand.grid()`, and 
     `par()`.  Compare and contrast the techniques they use for switching 
     between dots and list behaviour.
