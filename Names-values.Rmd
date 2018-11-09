@@ -514,15 +514,15 @@ obj_size(x, y)
 
 ## Modify-in-place
 
-As we've seen above, modifying an R object will usually create a copy. There are two exceptions that we'll explore below:
+As we've seen above, modifying an R object usually creates a copy. There are two exceptions:
 
 * Objects with a single binding get a special performance optimisation.
 
-* Environments are a special type of object that is always modified in place.
+* Environments, a special type of object, are always modified in place.
 
 ### Objects with a single binding {#single-binding}
 
-If an object has a single name that binds it, R will modify it in place:
+If an object has a single name bound to it, R will modify it in place:
 
 ```{r}
 v <- c(1, 2, 3)
@@ -540,24 +540,24 @@ v[[3]] <- 4
 knitr::include_graphics("diagrams/name-value/v-inplace-2.png")
 ```
 
-(Carefully note the object ids here: `v` continues to bind to the same object, `0x207`.)
+(Note the object IDs here: `v` continues to bind to the same object, `0x207`.)
 
-It's challenging to predict exactly when R applies this optimisation because of two complications:
+Two complications make predicting exactly when R applies this optimisation challenging:
 
 * When it comes to bindings, R can currently[^refcnt] only count 0, 1, 
-  and many. That means if an object has two bindings, and one goes away,
-  the reference count does not go back to 1 (because one less than many is 
-  still many).
+  or many. That means that if an object has two bindings, and one goes away,
+  the reference count does not go back to 1: one less than many is 
+  still many.
   
-* Whenever you call any regular function, it will make a reference to the 
+* Whenever you call any regular function, it makes a reference to the 
   object. The only exception are specially written C functions. These occur 
   mostly in the base package.
 
-[^refcnt]: By the time you read this, that may have changed, as plans are afoot to improve reference counting: https://developer.r-project.org/Refcnt.html
+[^refcnt]: By the time you read this, this may have changed, as plans are afoot to improve reference counting: https://developer.r-project.org/Refcnt.html
 
-Together, this makes it hard to predict whether or not a copy will occur. Instead, it's better to determine it empirically with `tracemem()`. Let's explore the subtleties with a case study using for loops. For loops have a reputation for being slow in R, but often that slowness is because every iteration of the loop is creating a copy. 
+Together, these two complications make it hard to predict whether or not a copy will occur. Instead, it's better to determine it empirically with `tracemem()`.
 
-Consider the following code. It subtracts the median from each column of a large data frame: \index{loops!avoiding copies}
+Let's explore the subtleties with a case study using for loops. For loops have a reputation for being slow in R, but often that slowness is caused by every iteration of the loop creating a copy. Consider the following code. It subtracts the median from each column of a large data frame: \index{loops!avoiding copies}
 
 ```{r, cache = TRUE}
 x <- data.frame(matrix(runif(5 * 1e4), ncol = 5))
@@ -568,7 +568,7 @@ for (i in seq_along(medians)) {
 }
 ```
 
-This loop is surprisingly slow because every iteration of the loop copies the data frame, as revealed by using `tracemem()`:
+This loop is surprisingly slow because each iteration of the loop copies the data frame. You can see this by using `tracemem()`:
 
 ```{r, eval = FALSE}
 cat(tracemem(x), "\n")
@@ -596,9 +596,9 @@ for (i in 1:5) {
 untracemem(x)
 ```
 
-In fact, each iteration copies the data frame not once, not twice, but three times! Two copies are made by `[[.data.frame`, and a further copy[^shallow-copy] it made because `[[.data.frame` is a regular function and hence increments the reference count of `x`. 
+In fact, each iteration copies the data frame not once, not twice, but three times! Two copies are made by `[[.data.frame`, and a further copy[^shallow-copy] is made because `[[.data.frame` is a regular function that increments the reference count of `x`. 
 
-[^shallow-copy]: Note that these copies are shallow, and only copy the reference to each individual column, not the contents. This means the performance isn't terrible, but it's obviously not as good as it could be.
+[^shallow-copy]: Note that these copies are shallow: they only copy the reference to each individual column, not the contents of the columns. This means the performance isn't terrible, but it's obviously not as good as it could be.
 
 We can reduce the number of copies by using a list instead of a data frame. Modifying a list uses internal C code, so the refs are not incremented and only a single copy is made:
 
@@ -613,11 +613,11 @@ for (i in 1:5) {
 #> tracemem[0x7f80c5c3de20 -> 0x7f80c48de210]: 
 ```
 
-While it's not hard to determine when copies are made, it is hard to prevent them. If you find yourself resorting to exotic tricks to avoid copies, it may be time to rewrite your function in C++, as described in Chapter \@ref(rcpp).
+While it's not hard to determine when a copy is made, it is hard to prevent it. If you find yourself resorting to exotic tricks to avoid copies, it may be time to rewrite your function in C++, as described in Chapter \@ref(rcpp).
 
 ### Environments {#env-modify}
 
-You'll learn more about environments in Chapter \@ref(environments), but it's important to mention them here because they behave differently to other objects: environments are always modified in place. This property is sometimes described as __reference semantics__ because when you modify an environment all existing bindings to the environment continue to have the same reference.
+You'll learn more about environments in Chapter \@ref(environments), but it's important to mention them here because their behavior is different from that of other objects: environments are always modified in place. This property is sometimes described as __reference semantics__ because when you modify an environment all existing bindings to that environment continue to have the same reference.
 
 Take this environment, which we bind to `e1` and `e2`:
 
@@ -661,7 +661,7 @@ This is a unique property of environments!
 ### Exercises
 
 1.  Wrap the two methods for subtracting medians into two functions, then
-    use the bench [@bench] package to carefully compare their speeds. How does
+    use the 'bench' package [@bench] to carefully compare their speeds. How does
     performance change as the number of columns increase?
 
 1.  What happens if you attempt to use `tracemem()` on an environment?
