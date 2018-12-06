@@ -673,7 +673,6 @@ This is a very common pattern; whenever you call a quoting function with argumen
 
 In the case above, we needed to think about tidy eval because of quasiquotation. We also need to think tidy evaluation even when the wrapper doesn't need to quote any arguments. Take this wrapper around `subset2()` for example:
 
-
 ```{r}
 threshold_x <- function(df, val) {
   subset2(df, x >= val)
@@ -758,9 +757,7 @@ It's not possible to evaluate `expr` only the data mask, because the data mask d
 
 ## Base evaluation
 
-To understand the benefits of the full tidy evaluation stack, it's worth comparing it to a non-tidy alternative: `subset()`. 
-
-Unfortunately, things are bit more complex if you want to wrap a base R function that quotes an argument. We can no longer rely on tidy evaluation everywhere, because the semantics of NSE functions are not quite rich enough, but we can use it to generate a mostly correct solution. The wrappers that we create can be used interactively, but can not in turn be easily wrapped. This makes them useful for reducing duplication in your analysis code, but not suitable for inclusion in a package.
+Now that you understand tidy evaluation, it's time to come back to the alternatives taken by base R. Here we'll explore two approaches that you might see in base R. The first approach is used by `subset()`, and I'll use it as a motivation to explore the warnings in the `subset()` documentation. The second approach is used by `write.csv()` and `lm()`, and I'll use it as motivation to show how tidy evaluation can be useful to create wrappers.
 
 ### `substitute()`
 
@@ -778,7 +775,7 @@ subset_base <- function(data, rows) {
 }
 ```
 
-### Drawbacks
+### subset
 
 The documentation of `subset()` includes the following warning:
 
@@ -878,7 +875,7 @@ That means `subset(df, x == y)` is not equivalent to `df[x == y,]` as you might 
 
 Real-life alternatives to `subset()`, like `dplyr::filter()`, do even more. For example, `dplyr::filter()` can translate R expressions to SQL so that they can be executed in a database. This makes programming with `filter()` relatively more important (because it does more behind the scenes that you want to take advantage of). Remember we picked `subset()` because it's easy to understand, not because it's particularly featureful.
 
-### Wrapping `subset()` with tidy eval {#base-unquote}
+#### Wrapping `subset()` with tidy eval {#base-unquote}
 
 Sometimes it's simpler to create wrappers around base R functions using quasiquotation.
 
@@ -899,19 +896,23 @@ This code is more verbose, but is a little easier to understand because the unqu
 
 ### `match.call()`
 
-Another form which we'll come to back to in the next section (because it poses some specific challenges) uses `match.call()`:
+Another form which is to capture the complete call to the function with `match.call()`, then modify the call object, and then evaluate. This is used in `write.csv()`. A simple version could be written as:
 
 ```{r}
 write.csv <- function(...) {
-  call <- match.call(expand.dots = TRUE)
+  call <- match.call(write.table, expand.dots = TRUE)
+  
   call[[1]] <- quote(write.table)
   call$sep <- ","
   call$dec <- "."
+  
   eval(call, parent.frame())
 }
 ```
 
-### Wrapping modelling functions
+This technique is technique is used extensively in modelling functions, and because the capture call is also printed, it poses some special challenges, as we'll see next.
+
+#### Wrapping modelling functions
 
 Next we'll pivot to consider wrapping modelling functions. This is a common need, and illustrates the spectrum of challenges you'll need to overcome for other base functions. 
 
@@ -956,7 +957,7 @@ disp2 <- expr(wt)
 lm3(!!resp ~ !!disp1 + !!disp2, mtcars)
 ```
 
-### The evaluation environment
+#### The evaluation environment
 
 What if you want to mingle objects supplied by the user with objects that you create in the function?  For example, imagine you want to make an auto-bootstrapping version of `lm()`. You might write it like this:
 
@@ -1035,7 +1036,7 @@ There are two basic ways to overcome this challenge:
     ```
 
 
-### Quoted arguments
+#### Quoted arguments
 
 Quoting and unquoting works for all the arguments, even those that are quoted and follow the "standard non-standard" rules of evaluation. This includes the `subset` argument which allows you fit a model to only a subset of the data:
 
@@ -1086,46 +1087,6 @@ mod <- lm5(mpg ~ disp, mtcars)
 
 I probably wouldn't bother with it here, but it's a useful technique to have in your back pocket.
 
-### Making formulas
-
-One final aspect to wrapping modelling functions is generating formulas. You just need to learn about one small wrinkle and then you can use the techniques you learned in [Quotation]. Formulas print the same when evaluated and unevaluated:
-
-```{r}
-y ~ x
-expr(y ~ x)
-```
-
-Instead, check the class to make sure you have an actual formula:
-
-```{r}
-class(y ~ x)
-class(expr(y ~ x))
-class(eval(expr(y ~ x)))
-```
-
-This is important when you start to mix data and environment variables, which only tends to happen when you start using more complex models:
-
-```{r}
-n <- 3
-y ~ ns(x, n)
-```
-
-
-Once you understand this, you can generate formulas with unquoting and `reduce()`. Just remember to evaluate the result before returning it. Like in another base NSE wrapper, you should use `caller_env()` as the evaluation environment. 
-
-Here's a simple example that generates a formula by combining a response variable with a set of predictors. 
-
-```{r}
-build_formula <- function(resp, ...) {
-  resp <- enexpr(resp)
-  preds <- enexprs(...)
-  
-  pred_sum <- purrr::reduce(preds, ~ expr(!!.x + !!.y))
-  eval(expr(!!resp ~ !!pred_sum), caller_env())
-}
-build_formula(y, a, b, c)
-```
-
 ### Exercises
 
 1.  Why does this function fail?
@@ -1171,17 +1132,3 @@ build_formula(y, a, b, c)
 4.  Create a formula generation function that allows you to optionally 
     supply a transformation function (e.g. `log()`) to the response or
     the predictors.
-
-1.  What does `transform()` do? Read the documentation. How does it work?
-    Read the source code for `transform.data.frame()`. What does
-    `substitute(list(...))` do? Extract it into it's own function and perform
-    experiments to find out.
-
-1.  What does `with()` do? How does it work? Read the source code for
-    `with.default()`. What does `within()` do? How does it work? Read the
-    source code for `within.data.frame()`. Why is the code so much more
-    complex than `with()`?
-
-1.  Implement a version of `within.data.frame()` that uses tidy evaluation.
-    Read the documentation and make sure that you understand what `within()`
-    does, then read the source code.
