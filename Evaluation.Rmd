@@ -25,7 +25,7 @@ Together, quasiquotation, quosures, and data masks form what we call __tidy eval
 
 ### Prerequisites {-}
 
-You'll need to be familiar with the content of Chapter \@ref(expressions) and Chapter \@ref(quotation), as well as the basics of environments as covered in Section \@ref(env-basics). 
+You'll need to be familiar with the content of Chapter \@ref(expressions) and Chapter \@ref(quotation), as well as the environment data structure (Section \@ref(env-basics)) and the caller environments (Section \@ref(call-stack)). 
 
 We'll continue to use rlang and purrr.
 
@@ -734,18 +734,20 @@ It's not possible to evaluate `expr` only the data mask, because the data mask d
 
 ## Base evaluation
 
-Now that you understand tidy evaluation, it's time to come back to the approaches taken by base R. Here we'll explore two approaches that you might see in base R. 
+Now that you understand tidy evaluation, it's time to come back to the alternative approaches taken by base R, a family of approaches collectively known as non-standard evaluation (NSE). Here I'll explore the two most common techniques in base R:
 
-* The first approach is used by `subset()`, and I'll use it as a motivation 
-  to explore the warnings in the `subset()` documentation. 
+* `substitute()` and evaluation in the caller environment, as used by 
+  `subset()`. I'll use this technique to motivate why this technique is not 
+  programming friendly, as warned about in the `subset()`. documentation. 
 
-* The second approach is used by `write.csv()` and `lm()`, and I'll use it 
-  as motivation to show how quasiquotation and (regular) evalation can help
-  you write wrappers around base functions that use NSE.
+* `match.call()`, call manipulation, and evaluation in the caller environment,
+  as used by `write.csv()` and `lm()`. I'll use this technique to motivate how 
+  quasiquotation and (regular) evalation can help you write wrappers around 
+  NSE functions.
 
-### `substitute()` and `subset()`
+### `substitute()`
 
-We can extract out the core of the `subset()` implementation in a very simlarly form to the tidy evaluation version I showed in Section \@ref(subset). (Repeated below for ease of comparison).
+The most common form of NSE in base R is `substitute()` + `eval()`.  The following code shows how you might write the core of `subset()` in this style, using `substitute()` and `eval()` rather than `enquo()` and `eval_tidy()`. I repeat the code introuced in Section \@ref(subset) so you can compare easily. The main difference is the evaluation environment: in `subset_base()` the expression is evaluated in the caller environment; in `subset_tidy()`, it's evaluated in the environment where it was defined.
 
 ```{r}
 subset_base <- function(data, rows) {
@@ -767,8 +769,6 @@ subset_tidy <- function(data, rows) {
 }
 ```
 
-Implementing `subset()` captures the input expression with `substitute()` and then evaluates a in a data mask using the 3-argument form of `eval()`. 
-
 #### Programming with `subset()`
 
 The documentation of `subset()` includes the following warning:
@@ -778,64 +778,23 @@ The documentation of `subset()` includes the following warning:
 > and in particular the non-standard evaluation of argument `subset` can have 
 > unanticipated consequences.
 
-There are three problems with this implementation:
+There are main three problems:
 
-*   `subset()` doesn't support unquoting, so wrapping the function is hard. 
-    First, you use `substitute()` to capture the complete expression, then
-    you evaluate it. Because `substitute()` doesn't use a syntactic marker for
-    unquoting, it is hard to see exactly what's happening here.
-
-    ```{r}
-    f1a <- function(df1, expr) {
-      call <- substitute(subset_base(df1, expr))
-      eval(call, caller_env())
-    }
-    
-    my_df <- data.frame(x = 1:3, y = 3:1)
-    f1a(my_df, x == 1)
-    ```
-    
-    I think the tidy evaluation equivalent is easier to understand because the
-    quoting and unquoting is explicit, and the environment is tied to the 
-    expression.
-        
-    ```{r}
-    f1b <- function(df, expr) {
-      expr <- enquo(expr)
-      subset_tidy(df, !!expr)
-    }
-    f1b(my_df, x == 1)
-    ```
-    
-    This also leads to cleaner tracebacks in the event of an error.
-    
 *   `base::subset()` always evaluates `rows` in the calling environment, but 
     if `...` has been used, then the expression might need to be evaluated
     elsewhere:
 
     ```{r}
-    f <- function(df, ...) {
+    f1 <- function(df, ...) {
       xval <- 3
       subset_base(df, ...)
     }
     
+    my_df <- data.frame(x = 1:3, y = 3:1)
     xval <- 1
-    f(my_df, x == xval)
+    f1(my_df, x == xval)
     ```
   
-    Because `enquo()` captures the environment of the argument as well as its
-    expression, this is not a problem with `subset2()`:
-  
-    ```{r}
-    f <- function(df, ...) {
-      xval <- 10
-      subset_base(df, ...)
-    }
-    
-    xval <- 1
-    f(my_df, x == xval)
-    ```
-    
     This may seems like an esoteric concern, but it means that `subset_base()`
     cannot reliably work with functionals like `map()` or `lapply()`:
     
@@ -847,29 +806,58 @@ There are three problems with this implementation:
     })
     ```
 
-*   Finally, `eval()` doesn't provide any pronouns so there's no way to write
-    a safe version of `threshold_x()`.
+*   Calling `subset()` from another function requires some care: you have
+    to use `substitute()` to capture a call to `subset()` complete expression, 
+    and then evaluate. Because `substitute()` doesn't use a syntactic marker for
+    unquoting, it's a little hard to predict exactly what `substitute()` does.
+    Here I print the generated call to make it a little easier.
 
     ```{r}
-    threshold_x <- function(df, val) {
-      call <- substitute(subset_base(df1, x > val))
+    f2 <- function(df1, expr) {
+      call <- substitute(subset_base(df1, expr))
+      expr_print(call)
       eval(call, caller_env())
     }
+    
+    my_df <- data.frame(x = 1:3, y = 3:1)
+    f2(my_df, x == 1)
+    ```
+
+*   `eval()` doesn't provide any pronouns so there's no way to require part of
+    the expression to come from the data. As far as I can tell, there's no
+    way to make the following function safe except by manually checking for the
+    presence of `z` variable in `df`.
+
+    ```{r}
+    f3 <- function(df) {
+      call <- substitute(subset_base(df, z > 0))
+      expr_print(call)
+      eval(call, caller_env())
+    }
+    
+    z <- -1
+    f3(my_df)
     ```
 
 #### What about `[`?
 
-You might wonder if all this rigamorale is worth it when you can just use `[`. Firstly, it seems unappealing to have functions that can only be used safely in an interactive context. That would mean that every interactive function needs to be paired with function suitable for programming. 
-
-Secondly, even the simple `subset()` function provides two useful features compared to `[`:
+Given that tidy evaluation is quite complex, why not simply use `[` as `?subset` recommends? Primarily, it seems unappealing to have functions that can only be interactively, and never inside another function. Even the simple `subset()` function provides two useful features compared to `[`:
 
 * It sets `drop = FALSE` by default, so it's guaranteed to return a data frame.
 
 * It drops rows where the condition evaluates to `NA`.
 
-That means `subset(df, x == y)` is not equivalent to `df[x == y,]` as you might expect. Instead, it is equivalent to `df[x == y & !is.na(x == y), , drop = FALSE]`: that's a lot more typing!
+That means `subset(df, x == y)` is not equivalent to `df[x == y,]` as you might expect. Instead, it is equivalent to `df[x == y & !is.na(x == y), , drop = FALSE]`: that's a lot more typing! Real-life alternatives to `subset()`, like `dplyr::filter()`, do even more. For example, `dplyr::filter()` can translate R expressions to SQL so that they can be executed in a database. This makes programming with `filter()` relatively more important (because it does more behind the scenes that you want to take advantage of). 
 
-Real-life alternatives to `subset()`, like `dplyr::filter()`, do even more. For example, `dplyr::filter()` can translate R expressions to SQL so that they can be executed in a database. This makes programming with `filter()` relatively more important (because it does more behind the scenes that you want to take advantage of). 
+It would be possible to pair `subset_base()` with a programmable version, say `subset_prog()` below. I think this is unappealing because now need twice as many functions.
+
+```{r}
+subset_prog <- function(data, rows, env = caller_env()) {
+  rows_val <- eval(rows, data, env)
+  stopifnot(is.logical(rows_val))
+  data[rows_val, , drop = FALSE]
+}
+```
 
 ### `match.call()`
 
