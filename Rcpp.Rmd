@@ -1,14 +1,12 @@
 # Rewriting R code in C++ {#rcpp}
 
-```{r setup, include = FALSE}
+```{r, include = FALSE}
 source("common.R")
-source("performance-microbenchmark.R")
-options("microbenchmark.unit" = "us")
 ```
 
 ## Introduction
 
-Sometimes R code just isn't fast enough. You've used profiling to figure out where your bottlenecks are, and you've done everything you can in R, but your code still isn't fast enough. In this chapter you'll learn how to improve performance by rewriting key functions in C++. This magic comes by way of the [Rcpp](http://www.rcpp.org/) package, a fantastic tool written by Dirk Eddelbuettel and Romain Francois (with key contributions by Doug Bates, John Chambers, and JJ Allaire). Rcpp makes it very simple to connect C++ to R. While it is _possible_ to write C or Fortran code for use in R, it will be painful by comparison. Rcpp provides a clean, approachable API that lets you write high-performance code, insulated from R's arcane C API. \index{Rcpp} \index{C++}
+Sometimes R code just isn't fast enough. You've used profiling to figure out where your bottlenecks are, and you've done everything you can in R, but your code still isn't fast enough. In this chapter you'll learn how to improve performance by rewriting key functions in C++. This magic comes by way of the [Rcpp](http://www.rcpp.org/) package [@Rcpp], a fantastic tool written by Dirk Eddelbuettel and Romain Francois (with key contributions by Doug Bates, John Chambers, and JJ Allaire). Rcpp makes it very simple to connect C++ to R. While it is _possible_ to write C or Fortran code for use in R, it will be painful by comparison. Rcpp provides a clean, approachable API that lets you write high-performance code, insulated from R's arcane C API. \index{Rcpp} \index{C++}
 
 Typical bottlenecks that C++ can address include:
 
@@ -62,7 +60,11 @@ The aim of this chapter is to discuss only those aspects of C++ and Rcpp that ar
 
 ### Prerequistes {-}
 
-All examples in this chapter need version 0.10.1 or above of the `Rcpp` package. This version includes `cppFunction()` and `sourceCpp()`, which makes it very easy to connect C++ to R. Install the latest version of Rcpp from CRAN with `install.packages("Rcpp")`.
+All examples in need the Rcpp package. 
+
+```{r setup}
+library(Rcpp)
+```
 
 You'll also need a working C++ compiler. To get it:
 
@@ -74,8 +76,7 @@ You'll also need a working C++ compiler. To get it:
 
 `cppFunction()` allows you to write C++ functions in R: \indexc{cppFunction()}
 
-```{r add, cache = TRUE}
-library(Rcpp)
+```{r add}
 cppFunction('int add(int x, int y, int z) {
   int sum = x + y + z;
   return sum;
@@ -110,9 +111,9 @@ int one() {
 }
 ```
 
-We can compile and use this from R with `cppFunction`
+We can compile and use this from R with `cppFunction()`
 
-```{r one-cpp, eval = TRUE, cache = TRUE}
+```{r one-cpp}
 cppFunction('int one() {
   return 1;
 }')
@@ -141,7 +142,7 @@ This small function illustrates a number of important differences between R and 
 
 The next example function implements a scalar version of the `sign()` function which returns 1 if the input is positive, and -1 if it's negative:
 
-```{r sign, cache = TRUE}
+```{r sign}
 signR <- function(x) {
   if (x > 0) {
     1
@@ -191,7 +192,7 @@ sumR <- function(x) {
 
 In C++, loops have very little overhead, so it's fine to use them. In [STL](#stl), you'll see alternatives to `for` loops that more clearly express your intent; they're not faster, but they can make your code easier to understand.
 
-```{r sum-cpp, cache = TRUE}
+```{r sum-cpp}
 cppFunction('double sumC(NumericVector x) {
   int n = x.size();
   double total = 0;
@@ -224,9 +225,9 @@ The C++ version is similar, but:
 
 This is a good example of where C++ is much more efficient than R. As shown by the following microbenchmark, `sumC()` is competitive with the built-in (and highly optimised) `sum()`, while `sumR()` is several orders of magnitude slower.
 
-```{r sum-bench, cache = TRUE}
+```{r sum-bench}
 x <- runif(1e3)
-microbenchmark(
+bench::mark(
   sum(x),
   sumC(x),
   sumR(x)
@@ -247,7 +248,7 @@ pdistR <- function(x, ys) {
 
 It's not obvious that we want `x` to be a scalar from the function definition. We'd need to make that clear in the documentation. That's not a problem in the C++ version because we have to be explicit about types:
 
-```{r pdist-cpp, cache = TRUE}
+```{r pdist-cpp}
 cppFunction('NumericVector pdistC(double x, NumericVector ys) {
   int n = ys.size();
   NumericVector out(n);
@@ -275,7 +276,7 @@ In the sugar section, you'll see how to rewrite this function to take advantage 
 
 Each vector type has a matrix equivalent: `NumericMatrix`, `IntegerMatrix`, `CharacterMatrix`, and `LogicalMatrix`. Using them is straightforward. For example, we could create a function that reproduces `rowSums()`:
 
-```{r rowsums-cpp, cache = TRUE}
+```{r rowsums-cpp}
 cppFunction('NumericVector rowSumsC(NumericMatrix x) {
   int nrow = x.nrow(), ncol = x.ncol();
   NumericVector out(nrow);
@@ -350,9 +351,8 @@ double meanC(NumericVector x) {
 }
 
 /*** R
-library(microbenchmark)
 x <- runif(1e5)
-microbenchmark(
+bench::mark(
   mean(x),
   meanC(x)
 )
@@ -365,78 +365,83 @@ For the remainder of this chapter C++ code will be presented stand-alone rather 
 
 ### Exercises
 
-With the basics of C++ in hand, it's now a great time to practice by reading and writing some simple C++ functions. For each of the following functions, read the code and figure out what the corresponding base R function is. You might not understand every part of the code yet, but you should be able to figure out the basics of what the function does.
+1.  With the basics of C++ in hand, it's now a great time to practice by reading 
+    and writing some simple C++ functions. For each of the following functions, 
+    read the code and figure out what the corresponding base R function is. You
+    might not understand every part of the code yet, but you should be able to 
+    figure out the basics of what the function does.
+    
+    ```cpp
+    double f1(NumericVector x) {
+      int n = x.size();
+      double y = 0;
+    
+      for(int i = 0; i < n; ++i) {
+        y += x[i] / n;
+      }
+      return y;
+    }
+    
+    NumericVector f2(NumericVector x) {
+      int n = x.size();
+      NumericVector out(n);
+    
+      out[0] = x[0];
+      for(int i = 1; i < n; ++i) {
+        out[i] = out[i - 1] + x[i];
+      }
+      return out;
+    }
+    
+    bool f3(LogicalVector x) {
+      int n = x.size();
+    
+      for(int i = 0; i < n; ++i) {
+        if (x[i]) return true;
+      }
+      return false;
+    }
+    
+    int f4(Function pred, List x) {
+      int n = x.size();
+    
+      for(int i = 0; i < n; ++i) {
+        LogicalVector res = pred(x[i]);
+        if (res[0]) return i + 1;
+      }
+      return 0;
+    }
+    
+    NumericVector f5(NumericVector x, NumericVector y) {
+      int n = std::max(x.size(), y.size());
+      NumericVector x1 = rep_len(x, n);
+      NumericVector y1 = rep_len(y, n);
+    
+      NumericVector out(n);
+    
+      for (int i = 0; i < n; ++i) {
+        out[i] = std::min(x1[i], y1[i]);
+      }
+    
+      return out;
+    }
+    ```
 
-```cpp
-double f1(NumericVector x) {
-  int n = x.size();
-  double y = 0;
-
-  for(int i = 0; i < n; ++i) {
-    y += x[i] / n;
-  }
-  return y;
-}
-
-NumericVector f2(NumericVector x) {
-  int n = x.size();
-  NumericVector out(n);
-
-  out[0] = x[0];
-  for(int i = 1; i < n; ++i) {
-    out[i] = out[i - 1] + x[i];
-  }
-  return out;
-}
-
-bool f3(LogicalVector x) {
-  int n = x.size();
-
-  for(int i = 0; i < n; ++i) {
-    if (x[i]) return true;
-  }
-  return false;
-}
-
-int f4(Function pred, List x) {
-  int n = x.size();
-
-  for(int i = 0; i < n; ++i) {
-    LogicalVector res = pred(x[i]);
-    if (res[0]) return i + 1;
-  }
-  return 0;
-}
-
-NumericVector f5(NumericVector x, NumericVector y) {
-  int n = std::max(x.size(), y.size());
-  NumericVector x1 = rep_len(x, n);
-  NumericVector y1 = rep_len(y, n);
-
-  NumericVector out(n);
-
-  for (int i = 0; i < n; ++i) {
-    out[i] = std::min(x1[i], y1[i]);
-  }
-
-  return out;
-}
-```
-
-To practice your function writing skills, convert the following functions into C++. For now, assume the inputs have no missing values.
-
-1. `all()`
-
-2. `cumprod()`, `cummin()`, `cummax()`.
-
-3. `diff()`. Start by assuming lag 1, and then generalise for lag `n`.
-
-4. `range`.
-
-5. `var`. Read about the approaches you can take on 
-   [wikipedia](http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance).
-   Whenever implementing a numerical algorithm, it's always good to check what 
-   is already known about the problem.
+1.  To practice your function writing skills, convert the following functions 
+    into C++. For now, assume the inputs have no missing values.
+  
+    1. `all()`
+    
+    2. `cumprod()`, `cummin()`, `cummax()`.
+    
+    3. `diff()`. Start by assuming lag 1, and then generalise for lag `n`.
+    
+    4. `range()`.
+    
+    5. `var()`. Read about the approaches you can take on 
+       [wikipedia](http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance).
+       Whenever implementing a numerical algorithm, it's always good to check 
+       what is already known about the problem.
 
 ## Attributes and other classes {#rcpp-classes}
 
@@ -749,15 +754,16 @@ bool any_naC(NumericVector x) {
 ```
 
 
-```{r, cache = TRUE}
+```{r}
 x0 <- runif(1e5)
 x1 <- c(x0, NA)
 x2 <- c(NA, x0)
 
-microbenchmark(
+bench::mark(
   any_naR(x0), any_naC(x0),
   any_naR(x1), any_naC(x1),
-  any_naR(x2), any_naC(x2)
+  any_naR(x2), any_naC(x2),
+  check = FALSE
 )
 ```
 
@@ -1076,10 +1082,11 @@ NumericMatrix gibbs_cpp(int N, int thin) {
 
 Benchmarking the two implementations yields:
 
-```{r, cache = TRUE}
-microbenchmark(
+```{r}
+bench::mark(
   gibbs_r(100, 10),
-  gibbs_cpp(100, 10)
+  gibbs_cpp(100, 10),
+  check = FALSE
 )
 ```
 
@@ -1172,8 +1179,8 @@ stopifnot(
 
 The original blog post forgot to do this, and introduced a bug in the C++ version: it used `0.004` instead of `0.04`.  Finally, we can benchmark our three approaches:
 
-```{r, cache = TRUE}
-microbenchmark(
+```{r}
+bench::mark(
   vacc1 = vacc1(age, female, ily),
   vacc2 = vacc2(age, female, ily),
   vacc3 = vacc3(age, female, ily)
