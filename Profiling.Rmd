@@ -1,8 +1,7 @@
 # Optimising code {#profiling}
 
-```{r setup, include = FALSE}
+```{r include = FALSE}
 source("common.R")
-source("performance-microbenchmark.R")
 ```
 
 ## Introduction
@@ -64,18 +63,27 @@ It's easy to get caught up in trying to remove all bottlenecks. Don't! Your time
 
 ### Prerequisites {-}
 
-In this chapter we'll be using the `lineprof` package to understand the performance of R code. Get it with:
+In this chapter we'll be using the profvis [@profiv] package to understand the performance of R code. 
 
-```{r, eval = FALSE}
-devtools::install_github("hadley/lineprof")
+```{r setup}
+library(profvis)
 ```
 
-## Measuring performance {#measure-perf}
+## Profiling {#measure-perf}
 
-To understand performance, you use a profiler. There are a number of different types of profilers. R uses a fairly simple type called a sampling or statistical profiler. A sampling profiler stops the execution of code every few milliseconds and records which function is currently executing (along with which function called that function, and so on). For example, consider `f()`, below: \index{profiling} \index{performance!measuring}
+To understand performance, you use a profiler. 
+
+Rather than focussing on individual calls, we'll visualise aggregates using the profvis package, which is connected to RStudio. 
+Built on `Rprof()`.
+
+There are a number of other options, like `summaryRprof()`, the proftools package, and the profr package, but these tools are beyond the scope of this book. 
+
+
+### Time
+
+There are a number of different types of profilers. R uses a fairly simple type called a sampling or statistical profiler. A sampling profiler stops the execution of code every few milliseconds and records which function is currently executing (along with which function called that function, and so on). For example, consider `f()`, below: \index{profiling} \index{performance!measuring}
 
 ```{r}
-library(lineprof)
 f <- function() {
   pause(0.1)
   g()
@@ -90,7 +98,7 @@ h <- function() {
 }
 ```
 
-(I use `lineprof::pause()` instead of `Sys.sleep()` because `Sys.sleep()` does not appear in profiling outputs because as far as R can tell, it doesn't use up any computing time.) \indexc{pause()}
+(I use `profvis::pause()` instead of `Sys.sleep()` because `Sys.sleep()` does not appear in profiling outputs because as far as R can tell, it doesn't use up any computing time.) \indexc{pause()}
 
 If we profiled the execution of `f()`, stopping the execution of code every 0.1 s, we'd see a profile like below. Each line represents one "tick" of the profiler (0.1 s in this case), and function calls are nested with `>`. It shows that the code spends 0.1 s running `f()`, then 0.2 s running `g()`, then 0.1 s running `h()`.
 
@@ -112,40 +120,72 @@ Rprof(NULL)
 
 That's because profiling is hard to do accurately without slowing your code down by many orders of magnitude. The compromise that `RProf()` makes, sampling, only has minimal impact on the overall performance, but is fundamentally stochastic. There's some variability in both the accuracy of the timer and in the time taken by each operation, so each time you profile you'll get a slightly different answer. Fortunately, pinpoint accuracy is not needed to identify the slowest parts of your code. \indexc{RProf()}
 
-Rather than focussing on individual calls, we'll visualise aggregates using the lineprof package. There are a number of other options, like `summaryRprof()`, the proftools package, and the profr package, but these tools are beyond the scope of this book. I wrote the `lineprof` package as a simpler way to visualise profiling data. As the name suggests, the fundamental unit of analysis in `lineprof()` is a line of code. This makes lineprof less precise than the alternatives (because a line of code can contain multiple function calls), but it's easier to understand the context.
-
-To use `lineprof`, we first save the code in a file and `source()` it. Here `profiling-example.R` contains the definition of `f()`, `g()`, and `h()`. Note that you _must_ use `source()` to load the code. This is because lineprof uses srcrefs to match up the code to the profile, and the needed srcrefs are only created when you load code from disk. We then use `lineprof()` to run our function and capture the timing output. Printing this object shows some basic information. For now, we'll just focus on the time column which estimates how long each line took to run and the ref column which tells us which line of code was run. The estimates aren't perfect, but the ratios look about right. \index{line profiling}
+To use profvis, we first save the code in a file and `source()` it. Here `profiling-example.R` contains the definition of `f()`, `g()`, and `h()`. Note that you _must_ use `source()` to load the code. This is because lineprof uses srcrefs to match up the code to the profile, and the needed srcrefs are only created when you load code from disk. We then use `profvis()` to run our function and capture the timing output. Printing this object shows some basic information. For now, we'll just focus on the time column which estimates how long each line took to run and the ref column which tells us which line of code was run. The estimates aren't perfect, but the ratios look about right. \index{line profiling}
 
 ```{r, eval = FALSE}
-library(lineprof)
 source("profiling-example.R")
-l <- lineprof(f())
-l
-#>    time alloc release dups           ref     src
-#> 1 0.074 0.001       0    0 profiling.R#2 f/pause
-#> 2 0.143 0.002       0    0 profiling.R#3 f/g    
-#> 3 0.071 0.000       0    0 profiling.R#4 f/h   
+profvis(f())
 ```
 
-lineprof provides some functions to navigate through this data structure, but they're a bit clumsy. Instead, we'll start an interactive explorer using the shiny package. `shine(l)` will open a new web page (or if you're using RStudio, a new pane) that shows your source code annotated with information about how long each line took to run. `shine()` starts a shiny app which "blocks" your R session. To exit, you'll need to stop the process using escape or ctrl + c. 
-
-```{r, echo = FALSE}
-knitr::include_graphics("screenshots/profiling-lineprof-f.png", dpi = 220)
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("screenshots/performance/flamegraph.png")
 ```
 
-The `t` column visualises how much time is spent on each line. (You'll learn about the other columns in [memory profiling](#memory-profiling).) While not precise, it allows you to spot bottlenecks, and you can get precise numbers by hovering over each bar. This shows that twice as much time is spent on `g()` as on `h()`, so it would make sense to drill down into `g()` for more details. To do so, click `g()`:
-
-```{r, echo = FALSE}
-knitr::include_graphics("screenshots/profiling-lineprof-g.png", dpi = 220)
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("screenshots/performance/info.png")
 ```
 
-Then `h()`:
-
-```{r, echo = FALSE}
-knitr::include_graphics("screenshots/profiling-lineprof-h.png", dpi = 220)
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("screenshots/performance/tree.png")
 ```
 
-This technique should allow you to quickly identify the major bottlenecks in your code.
+### Memory
+
+profvis also does memory profiling. We're going to explore a bare-bones implementation of `read.delim()` with only three arguments: \indexc{read\_delim()}
+
+```{r read_delim}
+```
+
+We'll also create a sample csv file:
+
+```{r}
+write.csv(ggplot2::diamonds, "diamonds.csv", row.names = FALSE)
+```
+
+```{r, eval = FALSE}
+source("memory-read-delim.R")
+profvis(read_delim("diamonds.csv"))
+```
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("screenshots/performance/memory.png")
+```
+
+In this example, looking at the allocations tells us most of the story:
+
+* `scan()` allocates about 2.5 MB of memory, which is very close to the 2.8 MB
+  of space that the file occupies on disk. You wouldn't expect the two numbers 
+  to be identical because R doesn't need to store the commas and because the 
+  global string pool will save some memory.
+
+* Converting the columns allocates another 0.6 MB of memory. You'd also expect 
+  this step to free some memory because we've converted string columns into 
+  integer and numeric columns (which occupy less space), but we can't see those 
+  releases because GC hasn't been triggered yet.
+
+* Finally, calling `as.data.frame()` on a list allocates about 1.6 megabytes 
+  of memory and performs over 600 duplications. This is because 
+  `as.data.frame()` isn't terribly efficient and ends up copying the input 
+  multiple times. We'll discuss duplication more in the next section.
+
+There are two downsides to profiling:
+
+1. `read_delim()` only takes around half a second, but profiling can, at best, 
+   capture memory usage every 1 ms. This means we'll only get about 500 samples.
+
+1. Since GC is lazy, we can never tell exactly when memory is no longer needed.
+
+You can work around both problems by using `torture = TRUE`, which forces R to run GC after every allocation (see `gctorture()` for more details). This helps with both problems because memory is freed as soon as possible, and R runs 10--100x slower. This effectively makes the resolution of the timer greater, so that you can see smaller allocations and exactly when memory is no longer needed. 
 
 ### Limitations
 
@@ -181,79 +221,6 @@ There are some other limitations to profiling:
     
     If this is confusing, you can create temporary variables to force 
     computation to happen earlier.
-
-## Memory profiling with lineprof {#memory-profiling}
-
-`mem_change()` captures the net change in memory when running a block of code. Sometimes, however, we may want to measure incremental change. One way to do this is to use memory profiling to capture usage every few milliseconds. This functionality is provided by `utils::Rprof()` but it doesn't provide a very useful display of the results. Instead we'll use the [lineprof](https://github.com/hadley/lineprof) package. It is powered by `Rprof()`, but displays the results in a more informative manner. \index{memory!profiling}
-
-To demonstrate `lineprof`, we're going to explore a bare-bones implementation of `read.delim()` with only three arguments: \indexc{read\_delim()}
-
-```{r read_delim}
-```
-
-We'll also create a sample csv file:
-
-```{r}
-library(ggplot2)
-write.csv(diamonds, "diamonds.csv", row.names = FALSE)
-```
-
-Using lineprof is straightforward. `source()` the code, apply `lineprof()` to an expression, then use `shine()` to view the results. Note that you _must_ use `source()` to load the code. This is because lineprof uses srcrefs to match up the code and run times. The needed srcrefs are only created when you load code from disk.
-
-```{r, eval = FALSE}
-library(lineprof)
-
-source("code/read-delim.R")
-prof <- lineprof(read_delim("diamonds.csv"))
-shine(prof)
-```
-
-```{r, echo = FALSE}
-knitr::include_graphics("screenshots/memory-lineprof.png", dpi = 220)
-```
-
-`shine()` will also open a new web page (or if you're using RStudio, a new pane) that shows your source code annotated with information about memory usage. `shine()` starts a shiny app which will "block" your R session. To exit, press escape or ctrl + break. 
-
-Next to the source code, four columns provide details about the performance of the code:
-
-* `t`, the time (in seconds) spent on that line of code (explained in 
-  [measuring performance](#measure-perf)).
-
-* `a`, the memory (in megabytes) allocated by that line of code.
-
-* `r`, the memory (in megabytes) released by that line of code. While memory 
-  allocation is deterministic, memory release is stochastic: it depends on when 
-  the GC was run. This means that memory release only tells you that the memory 
-  released was no longer needed before this line.
-
-* `d`, the number of vector duplications that occurred. A vector duplication 
-  occurs when R copies a vector as a result of its copy on modify semantics.
-
-You can hover over any of the bars to get the exact numbers. In this example, looking at the allocations tells us most of the story:
-
-* `scan()` allocates about 2.5 MB of memory, which is very close to the 2.8 MB
-  of space that the file occupies on disk. You wouldn't expect the two numbers 
-  to be identical because R doesn't need to store the commas and because the 
-  global string pool will save some memory.
-
-* Converting the columns allocates another 0.6 MB of memory. You'd also expect 
-  this step to free some memory because we've converted string columns into 
-  integer and numeric columns (which occupy less space), but we can't see those 
-  releases because GC hasn't been triggered yet.
-
-* Finally, calling `as.data.frame()` on a list allocates about 1.6 megabytes 
-  of memory and performs over 600 duplications. This is because 
-  `as.data.frame()` isn't terribly efficient and ends up copying the input 
-  multiple times. We'll discuss duplication more in the next section.
-
-There are two downsides to profiling:
-
-1. `read_delim()` only takes around half a second, but profiling can, at best, 
-   capture memory usage every 1 ms. This means we'll only get about 500 samples.
-
-1. Since GC is lazy, we can never tell exactly when memory is no longer needed.
-
-You can work around both problems by using `torture = TRUE`, which forces R to run GC after every allocation (see `gctorture()` for more details). This helps with both problems because memory is freed as soon as possible, and R runs 10--100x slower. This effectively makes the resolution of the timer greater, so that you can see smaller allocations and exactly when memory is no longer needed. 
 
 ### Exercises
 
@@ -335,10 +302,10 @@ x <- runif(100)
 stopifnot(all.equal(mean1(x), mean2(x)))
 ```
 
-Finally, use the `microbenchmark` package to compare how long each variation takes to run. For bigger problems, reduce the `times` parameter so that it only takes a couple of seconds to run. Focus on the median time, and use the upper and lower quartiles to gauge the variability of the measurement. \indexc{microbenchmark()}
+Finally, use `bench::mark()` package to compare how long each variation takes to run. For bigger problems, reduce the `times` parameter so that it only takes a couple of seconds to run. Focus on the median time, and use the upper and lower quartiles to gauge the variability of the measurement. \indexc{microbenchmark}
 
 ```{r}
-microbenchmark(
+bench::mark(
   mean1(x),
   mean2(x)
 )
@@ -434,7 +401,7 @@ For example, calling `mean.default()` is quite a bit faster than calling `mean()
 ```{r}
 x <- runif(1e2)
 
-microbenchmark(
+bench::mark(
   mean(x),
   mean.default(x)
 )
@@ -557,7 +524,7 @@ Now `diff4()` is both considerably simpler and considerably faster than `diff1()
 
 ```{r}
 x <- runif(100)
-microbenchmark(
+bench::mark(
   diff1(x),
   diff2(x),
   diff3(x),
@@ -586,9 +553,10 @@ boot_cor2 <- function(df, i ) {
 }
 
 df <- data.frame(x = runif(100), y = runif(100))
-microbenchmark(
+bench::mark(
   boot_cor1(df, 10),
-  boot_cor2(df, 10)
+  boot_cor2(df, 10),
+  check = FALSE
 )
 ```
 
@@ -696,10 +664,11 @@ x1 <- "j"
 x10 <- sample(letters, 10)
 x100 <- sample(letters, 100, replace = TRUE)
 
-microbenchmark(
+bench::mark(
   lookup[x1],
   lookup[x10],
-  lookup[x100]
+  lookup[x100],
+  check = FALSE
 )
 ```
 
@@ -737,11 +706,12 @@ collapse <- function(xs) {
   out
 }
 
-microbenchmark(
+bench::mark(
   loop10  = collapse(strings10),
   loop100 = collapse(strings100),
   vec10   = paste(strings10, collapse = ""),
-  vec100  = paste(strings100, collapse = "")
+  vec100  = paste(strings100, collapse = ""),
+  check = FALSE
 )
 ```
 
@@ -763,7 +733,7 @@ lapply2 <- function(x, f, ...) {
 lapply2_c <- compiler::cmpfun(lapply2)
 
 x <- list(1:10, letters, c(F, T), NULL)
-microbenchmark(
+bench::mark(
   lapply2(x, is.null),
   lapply2_c(x, is.null),
   lapply(x, is.null)
@@ -851,15 +821,14 @@ stopifnot(all.equal(t1, t3))
 
 That's much faster! It's at least 40x faster than our previous effort, and around 1000x faster than where we started.
 
-Finally, we could try byte code compilation. Here we'll need to use `microbenchmark()` instead of `system.time()` in order to get enough accuracy to see a difference:
+Finally, we could try byte code compilation. Here we'll need to use `bench::mark()` instead of `system.time()` in order to get enough accuracy to see a difference:
 
 ```{r}
 rowtstat_bc <- compiler::cmpfun(rowtstat)
 
-microbenchmark(
+bench::mark(
   rowtstat(X, grp),
-  rowtstat_bc(X, grp),
-  unit = "ms"
+  rowtstat_bc(X, grp)
 )
 ```
 

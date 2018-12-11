@@ -11,6 +11,7 @@ read_delim <- function(file, header = TRUE, sep = ",") {
 
   # Convert from strings to appropriate types (never to factors)
   all[] <- lapply(all, type.convert, as.is = TRUE)
+  gc()
 
   # Set column names
   if (header) {
