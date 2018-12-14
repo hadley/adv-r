@@ -1,5 +1,13 @@
 # Improving performance {#perf-improve}
 
+```{r, include = FALSE}
+source("common.R")
+```
+
+## Introduction
+\index{improving performance} 
+\index{performance!improving}
+
 > "We should forget about small efficiencies, say about 97% of the time: 
 > premature optimization is the root of all evil. Yet we should not pass up our 
 > opportunities in that critical 3%. A good programmer will not be lulled 
@@ -8,11 +16,7 @@
 > 
 > --- Donald Knuth.
 
-## Introduction
-
-Once you've used profiling to identify a bottleneck, you need to make it faster. The following sections introduce you to a number of techniques that I've found broadly useful. \index{improving performance} \index{performance!improving}
-
-A final technique is to rewrite in a faster language, like C++. That's a big topic and is covered in Chapter \@ref(rcpp).
+Once you've used profiling to identify a bottleneck, you need to make it faster. I'll start by describing a general strategy, and then dive into to a number of techniques that I've found broadly useful. A final technique is to rewrite in a faster language, like C++. That's a big topic and is covered in Chapter \@ref(rcpp).
 
 ### Outline {-}
 
@@ -40,29 +44,26 @@ A final technique is to rewrite in a faster language, like C++. That's a big top
 * Section \@ref(t-test) pulls all the pieces together into a case
   study showing how to speed up repeated t-tests by ~1000x.
 
-* Section \@ref(parallelise) teaches you how to use parallelisation to
-  spread computation across all the cores in your computer.
-
 * Section \@ref(more-techniques) finishes the chapter with pointers to
   more resources that will help you write fast code.
 
 ### Prerequisites {-}
 
-We'll use [profvis](https://rstudio.github.io/profvis/) to measure and visualise the performance of function calls, and [bench](https://bench.r-lib.org/) to perform experiments on small self-contained code chunks.
+We'll use [bench](https://bench.r-lib.org/) to perform experiments on small self-contained code chunks.
 
 ```{r setup}
-library(profvis)
 library(bench)
 ```
 
 ## Code organisation {#code-organisation}
+\index{improving performance!strategy}
 
 There are two traps that are easy to fall into when trying to make your code faster:
 
 1. Writing faster but incorrect code.
 1. Writing code that you think is faster, but is actually no better.
 
-The strategy outlined below will help you avoid these pitfalls. \index{improving performance!strategy}
+The strategy outlined below will help you avoid these pitfalls. 
 
 When tackling a bottleneck, you're likely to come up with multiple approaches. Write a function for each approach, encapsulating all relevant behaviour. This makes it easier to check that each approach returns the correct result and to time how long it takes to run. To demonstrate the strategy, I'll compare two approaches for computing the mean:
 
@@ -71,24 +72,21 @@ mean1 <- function(x) mean(x)
 mean2 <- function(x) sum(x) / length(x)
 ```
 
-I recommend that you keep a record of everything you try, even the failures. If a similar problem occurs in the future, it'll be useful to see everything you've tried. To do this I often use R Markdown, which makes it easy to intermingle code with detailed comments and notes.
+I recommend that you keep a record of everything you try, even the failures. If a similar problem occurs in the future, it'll be useful to see everything you've tried. To do this I recommend R Markdown, which makes it easy to intermingle code with detailed comments and notes.
 
 Next, generate a representative test case. The case should be big enough to capture the essence of your problem but small enough that it takes only a few seconds to run. You don't want it to take too long because you'll need to run the test case many times to compare approaches. On the other hand, you don't want the case to be too small because then results might not scale up to the real problem. 
 
-Use this test case to quickly check that all variants return the same result. An easy way to do so is with `stopifnot()` and `all.equal()`. For real problems with fewer possible outputs, you may need more tests to make sure that an approach doesn't accidentally return the correct answer. That's unlikely for the mean. \indexc{stopifnot()}
-
 ```{r}
-x <- runif(100)
-stopifnot(all.equal(mean1(x), mean2(x)))
+x <- runif(1e4)
 ```
 
-Finally, use `bench::mark()` package to compare how long each variation takes to run. For bigger problems, reduce the `times` parameter so that it only takes a couple of seconds to run. Focus on the median time, and use the upper and lower quartiles to gauge the variability of the measurement. \indexc{microbenchmark}
+Now use `bench::mark()` to precisely compare the variations. It automatically checks that all calls return the same values. This doesn't guarantee that the function behaves the same for all inputs, so in an ideal world you'll also have unit tests to make sure you don't accidentally change the behaviour of the function.
 
 ```{r}
 bench::mark(
   mean1(x),
   mean2(x)
-)
+)[1:6]
 ```
 
 (You might be surprised by the results: `mean(x)` is considerably slower than `sum(x) / length(x)`. This is because, among other reasons, `mean(x)` makes two passes over the vector to be more numerically accurate.)
@@ -120,7 +118,7 @@ As discussed above, record all solutions that you find, not just those that imme
 
 ### Exercises
 
-1.  What are faster alternatives to `lm`? Which are specifically designed 
+1.  What are faster alternatives to `lm()`? Which are specifically designed 
     to work with larger datasets?
 
 1.  What package implements a version of `match()` that's faster for
@@ -156,7 +154,9 @@ Some functions coerce their inputs into a specific type. If your input is not th
 
 Other functions will do less work if you give them more information about the problem. It's always worthwhile to carefully read the documentation and experiment with different arguments. Some examples that I've discovered in the past include:
 
-* `read.csv()`: specify known column types with `colClasses`.
+* `read.csv()`: specify known column types with `colClasses`. Also consider
+  switching to `readr::read_csv()` or `data.table::fread()` which are 
+  considerably faster than `read.csv()`.
 
 * `factor()`: specify known levels with `levels`.
 
@@ -168,6 +168,10 @@ Other functions will do less work if you give them more information about the pr
 
 * `interaction()`: if you only need combinations that exist in the data, use
   `drop = TRUE`.
+
+Below, I explore how you might improve the performance of `mean()`, `as.data.frame()`, and `diff()` by doing less work.
+
+### `mean()`
 
 Sometimes you can make a function faster by avoiding method dispatch. If you're calling a method in a tight loop, you can avoid some of the costs by doing the method lookup only once: \index{methods!cost of dispatch, avoiding}
 
@@ -184,12 +188,24 @@ x <- runif(1e2)
 bench::mark(
   mean(x),
   mean.default(x)
-)
+)[1:6]
 ```
 
 This optimisation is a little risky. While `mean.default()` is almost twice as fast, it'll fail in surprising ways if `x` is not a numeric vector. You should only use it if you know for sure what `x` is.
 
-Knowing that you're dealing with a specific type of input can be another way to write faster code. For example, `as.data.frame()` is quite slow because it coerces each element into a data frame and then `rbind()`s them together. If you have a named list with vectors of equal length, you can directly transform it into a data frame. In this case, if you're able to make strong assumptions about your input, you can write a method that's about 20x faster than the default.
+An even riskier optimisation is to directly call the underlying `.Internal` function. This is faster because it doesn't do any input checking or handle NA's, so you are buying speed at the cost of safety.
+
+```{r}
+bench::mark(
+  mean(x),
+  mean.default(x),
+  .Internal(mean(x))
+)[1:6]
+```
+
+### `as.data.frame()`
+
+Knowing that you're dealing with a specific type of input can be another way to write faster code. For example, `as.data.frame()` is quite slow because it coerces each element into a data frame and then `rbind()`s them together. If you have a named list with vectors of equal length, you can directly transform it into a data frame. In this case, if you can make strong assumptions about your input, you can write a method that's considerably faster than the default.
 
 ```{r}
 quickdf <- function(l) {
@@ -204,7 +220,7 @@ names(l) <- letters
 bench::mark(
   quick_df      = quickdf(l),
   as.data.frame = as.data.frame(l)
-)
+)[1:6]
 ```
 
 Again, note the trade-off. This method is fast because it's dangerous. If you give it bad inputs, you'll get a corrupt data frame:
@@ -215,12 +231,14 @@ quickdf(list(x = 1, y = 1:2))
 
 To come up with this minimal method, I carefully read through and then rewrote the source code for `as.data.frame.list()` and `data.frame()`. I made many small changes, each time checking that I hadn't broken existing behaviour. After several hours work, I was able to isolate the minimal code shown above. This is a very useful technique. Most base R functions are written for flexibility and functionality, not performance. Thus, rewriting for your specific need can often yield substantial improvements. To do this, you'll need to read the source code. It can be complex and confusing, but don't give up!
 
+### `diff()`
+
 The following example shows a progressive simplification of the `diff()` function if you only want computing differences between adjacent values. At each step, I replace one argument with a specific case, and then check to see that the function still works. The initial function is long and complicated, but by restricting the arguments I not only make it around twice as fast, I also make it easier to understand.
 
 First, I take the code of `diff()` and reformat it to my style: \indexc{diff()}
 
 ```{r}
-diff1 <- function (x, lag = 1L, differences = 1L) {
+diff1 <- function(x, lag = 1L, differences = 1L) {
   ismat <- is.matrix(x)
   xlen <- if (ismat) dim(x)[1L] else length(x)
   if (length(lag) > 1L || length(differences) > 1L || 
@@ -251,7 +269,7 @@ diff1 <- function (x, lag = 1L, differences = 1L) {
 Next, I assume vector input. This allows me to remove the `is.matrix()` test and the method that uses matrix subsetting.
 
 ```{r}
-diff2 <- function (x, lag = 1L, differences = 1L) {
+diff2 <- function(x, lag = 1L, differences = 1L) {
   xlen <- length(x)
   if (length(lag) > 1L || length(differences) > 1L || 
       lag < 1L || differences < 1L)
@@ -273,7 +291,7 @@ diff2(cumsum(0:10))
 I now assume that `differences = 1L`. This simplifies input checking and eliminates the for loop:
 
 ```{r}
-diff3 <- function (x, lag = 1L) {
+diff3 <- function(x, lag = 1L) {
   xlen <- length(x)
   if (length(lag) > 1L || lag < 1L)
     stop("'lag' must be integer >= 1")
@@ -291,7 +309,7 @@ diff3(cumsum(0:10))
 Finally I assume `lag = 1L`. This eliminates input checking and simplifies subsetting.
 
 ```{r}
-diff4 <- function (x) {
+diff4 <- function(x) {
   xlen <- length(x)
   if (xlen <= 1) return(x[0L])
 
@@ -300,7 +318,7 @@ diff4 <- function (x) {
 diff4(cumsum(0:10))
 ```
 
-Now `diff4()` is both considerably simpler and considerably faster than `diff1()`:
+Now `diff4()` is both considerably simpler and faster than `diff1()`:
 
 ```{r}
 x <- runif(100)
@@ -309,36 +327,10 @@ bench::mark(
   diff2(x),
   diff3(x),
   diff4(x)
-)
+)[1:6]
 ```
 
 You'll be able to make `diff()` even faster for this special case once you've read Chapter \@ref(rcpp).
-
-A final example of doing less work is to use simpler data structures. For example, when working with rows from a data frame, it's often faster to work with row indices than data frames. For instance, if you wanted to compute a bootstrap estimate of the correlation between two columns in a data frame, there are two basic approaches: you can either work with the whole data frame or with the individual vectors. The following example shows that working with vectors is about twice as fast. \index{bootstrapping}
-
-```{r}
-sample_rows <- function(df, i) sample.int(nrow(df), i, 
-  replace = TRUE)
-
-# Generate a new data frame containing randomly selected rows
-boot_cor1 <- function(df, i) {
-  sub <- df[sample_rows(df, i), , drop = FALSE]
-  cor(sub$x, sub$y)
-}
-
-# Generate new vectors from random rows
-boot_cor2 <- function(df, i ) {
-  idx <- sample_rows(df, i)
-  cor(df$x[idx], df$y[idx])
-}
-
-df <- data.frame(x = runif(100), y = runif(100))
-bench::mark(
-  boot_cor1(df, 10),
-  boot_cor2(df, 10),
-  check = FALSE
-)
-```
 
 ### Exercises
 
@@ -376,23 +368,6 @@ bench::mark(
 1.  Can you make a faster version of `table()` for the case of an input of
     two integer vectors with no missing values? Can you use it to
     speed up your chi-square test?
-
-1.  Imagine you want to compute the bootstrap distribution of a sample
-    correlation using `cor_df()` and the data in the example below. Given that you 
-    want to run this many times, how can you make this code faster? (Hint: the 
-    function has three components that you can speed up.)
-
-    ```{r, eval = FALSE}
-    n <- 1e6
-    df <- data.frame(a = rnorm(n), b = rnorm(n))
-
-    cor_df <- function(df, n) {
-      i <- sample(seq(n), n, replace = TRUE)
-      cor(df[i, , drop = FALSE])[2,1]
-    }
-    ```
-
-    Is there a way to vectorise this procedure?
 
 ## Vectorise {#vectorise}
 
@@ -435,7 +410,7 @@ Vectorised functions that apply to many common performance bottlenecks include:
 
 Matrix algebra is a general example of vectorisation. There loops are executed by highly tuned external libraries like BLAS. If you can figure out a way to use matrix algebra to solve your problem, you'll often get a very fast solution. The ability to solve problems with matrix algebra is a product of experience. While this skill is something you'll develop over time, a good place to start is to ask people with experience in your domain. \index{matrix algebra}
 
-The downside of vectorisation is that it makes it harder to predict how operations will scale. The following example measures how long it takes to use character subsetting to lookup 1, 10, and 100 elements from a list. You might expect that looking up 10 elements would take 10x as long as looking up 1, and that looking up 100 elements would take 10x longer again. In fact, the following example shows that it only takes about 9 times longer to look up 100 elements than it does to look up 1.
+The downside of vectorisation is that it makes it harder to predict how operations will scale. The following example measures how long it takes to use character subsetting to lookup 1, 10, and 100 elements from a list. You might expect that looking up 10 elements would take 10x as long as looking up 1, and that looking up 100 elements would take 10x longer again. In fact, the following example shows that it only takes about ~10x longer to look up 100 elements than it does to look up 1.
 
 ```{r}
 lookup <- setNames(as.list(sample(100, 26)), letters)
@@ -499,7 +474,7 @@ Modifying an object in a loop, e.g., `x[i] <- y`, can also create a copy, depend
 
 ## Byte code compilation {#byte-code}
 
-R 2.13.0 introduced a byte code compiler which can increase the speed of some code. Using the compiler is an easy way to get improvements in speed. Even if it doesn't work well for your function, you won't have invested a lot of time in the effort. The following example shows a pure R version of `lapply()`. Compiling it gives a considerable speedup, although it's still not quite as fast as the C version provided by base R. \index{byte-code compiler} \index{compiler}
+R 2.13.0 introduced a byte code compiler which can increase the speed of some code. Using the compiler is an easy way to get improvements in speed. Even if it doesn't work well for your function, you won't have invested a lot of time in the effort. The following example shows a pure R version of `lapply()`. Compiling it gives a decent speedup. \index{byte-code compiler} \index{compiler}
 
 ```{r}
 lapply2 <- function(x, f, ...) {
@@ -515,12 +490,11 @@ lapply2_c <- compiler::cmpfun(lapply2)
 x <- list(1:10, letters, c(F, T), NULL)
 bench::mark(
   lapply2(x, is.null),
-  lapply2_c(x, is.null),
-  lapply(x, is.null)
+  lapply2_c(x, is.null)
 )
 ```
 
-Byte code compilation really helps here, but in most cases you're more likely to get a 5-10% improvement. All base R functions are byte code compiled by default. 
+In most cases, you can expect byte code compilation to give a 5-10% improvement. All functions in packages are byte code compiled by default. 
 
 ## Case study: t-test {#t-test}
 
@@ -538,9 +512,15 @@ grp <- rep(1:2, each = n / 2)
 For data in this form, there are two ways to use `t.test()`. We can either use the formula interface or provide two vectors, one for each group. Timing reveals that the formula interface is considerably slower.
 
 ```{r, cache = TRUE}
-system.time(for(i in 1:m) t.test(X[i, ] ~ grp)$statistic)
 system.time(
-  for(i in 1:m) t.test(X[i, grp == 1], X[i, grp == 2])$statistic
+  for (i in 1:m) {
+    t.test(X[i, ] ~ grp)$statistic
+  }
+)
+system.time(
+  for (i in 1:m) {
+    t.test(X[i, grp == 1], X[i, grp == 2])$statistic
+  }
 )
 ```
 
@@ -614,56 +594,6 @@ bench::mark(
 
 In this example, byte code compilation doesn't help at all.
 
-## Parallelise {#parallelise}
-
-Parallelisation uses multiple cores to work simultaneously on different parts of a problem. It doesn't reduce the computing time, but it saves your time because you're using more of your computer's resources. Parallel computing is a complex topic, and there's no way to cover it in depth here. Some resources I recommend are: \index{parallel computing} \index{multicore}
-
-* [_Parallel R_](http://amzn.com/B005Z29QT4) by Q. Ethan McCallum and Stephen Weston.
-
-* [_Parallel Computing for Data Science_](http://amzn.com/1466587016) by
-  Norm Matloff.
-
-What I want to show is a simple application of parallel computing to what are called "embarrassingly parallel problems". An embarrassingly parallel problem is one that's made up of many simple problems that can be solved independently. A great example of this is `lapply()` because it operates on each element independently of the others. It's very easy to parallelise `lapply()` on Linux and the Mac because you simply substitute `mclapply()` for `lapply()`. The following code snippet runs a trivial (but slow) function on all cores of your computer.
-
-```{r}
-library(parallel)
-```
-
-```{r, cache = TRUE}
-cores <- detectCores()
-cores
-
-pause <- function(i) {
-  function(x) Sys.sleep(i)
-}
-
-system.time(lapply(1:10, pause(0.25)))
-system.time(mclapply(1:10, pause(0.25), mc.cores = cores))
-```
-
-Life is a bit harder in Windows. You need to first set up a local cluster and then use `parLapply()`: \indexc{mclapply()} \indexc{parLapply()}
-
-```{r, cache = TRUE}
-cluster <- makePSOCKcluster(cores)
-system.time(parLapply(cluster, 1:10, function(i) Sys.sleep(i)))
-```
-
-The main difference between `mclapply()` and `makePSOCKcluster()` is that the individual processes generated by `mclapply()` inherit from the current process, while those generated by `makePSOCKcluster()` start with a fresh session. This means that most real code will need some setup. Use `clusterEvalQ()` to run arbitrary code on each cluster and load needed packages, and `clusterExport()` to copy objects in the current session to the remote sessions.
-
-```{r, eval = FALSE}
-x <- 10
-psock <- parallel::makePSOCKcluster(1L)
-clusterEvalQ(psock, x)
-#> Error: one node produced an error: object 'x' not found 
-
-clusterExport(psock, "x")
-clusterEvalQ(psock, x)
-#> [[1]]
-#> [1] 10
-```
-
-There is some communication overhead with parallel computing. If the subproblems are very small, then parallelisation might hurt rather than help. It's also possible to distribute computation over a network of computers (not just the cores on your local computer) but that's beyond the scope of this book, because it gets increasingly complicated to balance computation and communication costs. A good place to start for more information is the [high performance computing CRAN task view](http://cran.r-project.org/web/views/HighPerformanceComputing.html).
-
 ## Other techniques {#more-techniques}
 
 Being able to write fast R code is part of being a good R programmer. Beyond the specific hints in this chapter, if you want to write fast R code, you'll need to improve your general programming skills. Some ways to do this are to:
@@ -683,9 +613,11 @@ Being able to write fast R code is part of being a good R programmer. Beyond the
   [Algorithms course](https://www.coursera.org/course/algs4partI) offered on
   Coursera.
   
-* Read general books about optimisation like 
-  [_Mature optimisation_](http://carlos.bueno.org/optimization/mature-optimization.pdf)
-  by Carlos Bueno, or the [_Pragmatic Programmer_](http://amzn.com/020161622X) 
-  by Andrew Hunt and David Thomas.
+* Learn how to parallelise your code. Two places to start are
+  "Parallel R" [@parallel-r] and "Parallel Computing for Data Science"
+  [@parcomp-ds].
+
+* Read general books about optimisation like _Mature optimisation" [@mature-opt]
+  or the "Pragmatic Programmer" [@pragprog].
   
 You can also reach out to the community for help. StackOverflow can be a useful resource. You'll need to put some effort into creating an easily digestible example that also captures the salient features of your problem. If your example is too complex, few people will have the time and motivation to attempt a solution. If it's too simple, you'll get answers that solve the toy problem but not the real problem. If you also try to answer questions on StackOverflow, you'll quickly get a feel for what makes a good question.  
