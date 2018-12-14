@@ -6,7 +6,9 @@ source("common.R")
 
 ## Introduction
 
-Sometimes R code just isn't fast enough. You've used profiling to figure out where your bottlenecks are, and you've done everything you can in R, but your code still isn't fast enough. In this chapter you'll learn how to improve performance by rewriting key functions in C++. This magic comes by way of the [Rcpp](http://www.rcpp.org/) package [@Rcpp], a fantastic tool written by Dirk Eddelbuettel and Romain Francois (with key contributions by Doug Bates, John Chambers, and JJ Allaire). Rcpp makes it very simple to connect C++ to R. While it is _possible_ to write C or Fortran code for use in R, it will be painful by comparison. Rcpp provides a clean, approachable API that lets you write high-performance code, insulated from R's arcane C API. \index{Rcpp} \index{C++}
+Sometimes R code just isn't fast enough. You've used profiling to figure out where your bottlenecks are, and you've done everything you can in R, but your code still isn't fast enough. In this chapter you'll learn how to improve performance by rewriting key functions in C++. This magic comes by way of the [Rcpp](http://www.rcpp.org/) package [@Rcpp] (with key contributions by Doug Bates, John Chambers, and JJ Allaire). 
+
+Rcpp makes it very simple to connect C++ to R. While it is _possible_ to write C or Fortran code for use in R, it will be painful by comparison. Rcpp provides a clean, approachable API that lets you write high-performance code, insulated from R's complex C API. \index{Rcpp} \index{C++}
 
 Typical bottlenecks that C++ can address include:
 
@@ -14,15 +16,14 @@ Typical bottlenecks that C++ can address include:
   on previous ones.
 
 * Recursive functions, or problems which involve calling functions millions of 
-  times. The overhead of calling a function in C++ is much lower than that in 
-  R.
+  times. The overhead of calling a function in C++ is much lower than in R.
 
 * Problems that require advanced data structures and algorithms that R doesn't 
   provide. Through the standard template library (STL), C++ has efficient 
   implementations of many important data structures, from ordered maps to 
   double-ended queues.
 
-The aim of this chapter is to discuss only those aspects of C++ and Rcpp that are absolutely necessary to help you eliminate bottlenecks in your code. We won't spend much time on advanced features like object oriented programming or templates because the focus is on writing small, self-contained functions, not big programs. A working knowledge of C++ is helpful, but not essential. Many good tutorials and references are freely available, including <http://www.learncpp.com/> and <https://en.cppreference.com/w/cpp>. For more advanced topics, the _Effective C++_ series by Scott Meyers is a popular choice. You may also enjoy Dirk Eddelbuettel's [_Seamless R and C++ integration with Rcpp_](http://www.springer.com/statistics/computational+statistics/book/978-1-4614-6867-7), which goes into much greater detail into all aspects of Rcpp.
+The aim of this chapter is to discuss only those aspects of C++ and Rcpp that are absolutely necessary to help you eliminate bottlenecks in your code. We won't spend much time on advanced features like object oriented programming or templates because the focus is on writing small, self-contained functions, not big programs. A working knowledge of C++ is helpful, but not essential. Many good tutorials and references are freely available, including <http://www.learncpp.com/> and <https://en.cppreference.com/w/cpp>. For more advanced topics, the _Effective C++_ series by Scott Meyers is a popular choice. 
 
 ### Outline {-}
 
@@ -60,7 +61,7 @@ The aim of this chapter is to discuss only those aspects of C++ and Rcpp that ar
 
 ### Prerequisites {-}
 
-We'll use [Rcpp](http://www.rcpp.org/) to call C++ from R.
+We'll use [Rcpp](http://www.rcpp.org/) to call C++ from R:
 
 ```{r setup}
 library(Rcpp)
@@ -86,7 +87,7 @@ add
 add(1, 2, 3)
 ```
 
-When you run this code, Rcpp will compile the C++ code and construct an R function that connects to the compiled C++ function. We're going to use this simple interface to learn how to write C++. C++ is a large language, and there's no way to cover it all in just one chapter. Instead, you'll get the basics so that you can start writing useful functions to address bottlenecks in your R code. 
+When you run this code, Rcpp will compile the C++ code and construct an R function that connects to the compiled C++ function. There's a lot going on underneath the hood but Rcpp takes care of all the details so you don't need to worry about it.
 
 The following sections will teach you the basics by translating simple R functions to their C++ equivalents. We'll start simple with a function that has no inputs and a scalar output, and then get progressively more complicated:
 
@@ -214,8 +215,9 @@ The C++ version is similar, but:
   not. After each iteration, we increment the value of `i` by one, using the
   special prefix operator `++` which increases the value of `i` by 1.
 
-* In C++, vector indices start at 0. I'll say this again because it's so 
-  important: __IN C++, VECTOR INDICES START AT 0__! This is a very common 
+* In C++, vector indices start at 0, which means that the last element is 
+  at position `n - 1`. I'll say this again because it's so important: 
+  __IN C++, VECTOR INDICES START AT 0__! This is a very common 
   source of bugs when converting R functions to C++.
 
 * Use `=` for assignment, not `<-`.
@@ -231,7 +233,7 @@ bench::mark(
   sum(x),
   sumC(x),
   sumR(x)
-)
+)[1:6]
 ```
 
 ### Vector input, vector output
@@ -246,7 +248,7 @@ pdistR <- function(x, ys) {
 }
 ```
 
-It's not obvious that we want `x` to be a scalar from the function definition. We'd need to make that clear in the documentation. That's not a problem in the C++ version because we have to be explicit about types:
+In R, it's not obvious that we want `x` to be a scalar from the function definition, and we'd need to make that clear in the documentation. That's not a problem in the C++ version because we have to be explicit about types:
 
 ```{r pdist-cpp}
 cppFunction('NumericVector pdistC(double x, NumericVector ys) {
@@ -268,39 +270,22 @@ This function introduces only a few new concepts:
 
 * C++ uses `pow()`, not `^`, for exponentiation.
 
-Note that because the R version is fully vectorised, it's already going to be fast. On my computer, it takes around 8 ms with a 1 million element `y` vector. The C++ function is twice as fast, ~4 ms, but assuming it took you 10 minutes to write the C++ function, you'd need to run it ~150,000 times to make rewriting worthwhile. The reason why the C++ function is faster is subtle, and relates to memory management. The R version needs to create an intermediate vector the same length as y (`x - ys`), and allocating memory is an expensive operation. The C++ function avoids this overhead because it uses an intermediate scalar.
+Note that because the R version is fully vectorised, it's already going to be fast. 
 
-In the sugar section, you'll see how to rewrite this function to take advantage of Rcpp's vectorised operations so that the C++ code is almost as concise as R code.
-
-### Matrix input, vector output
-
-Each vector type has a matrix equivalent: `NumericMatrix`, `IntegerMatrix`, `CharacterMatrix`, and `LogicalMatrix`. Using them is straightforward. For example, we could create a function that reproduces `rowSums()`:
-
-```{r rowsums-cpp}
-cppFunction('NumericVector rowSumsC(NumericMatrix x) {
-  int nrow = x.nrow(), ncol = x.ncol();
-  NumericVector out(nrow);
-
-  for (int i = 0; i < nrow; i++) {
-    double total = 0;
-    for (int j = 0; j < ncol; j++) {
-      total += x(i, j);
-    }
-    out[i] = total;
-  }
-  return out;
-}')
-set.seed(1014)
-x <- matrix(sample(100), 10)
-rowSums(x)
-rowSumsC(x)
+```{r}
+y <- runif(1e6)
+bench::mark(
+  pdistR(0.5, y),
+  pdistC(0.5, y)
+)[1:6]
 ```
 
-The main differences:
+On my computer, it takes around 5 ms with a 1 million element `y` vector. The C++ function is about 2.5x faster, ~2 ms, but assuming it took you 10 minutes to write the C++ function, you'd need to run it ~200,000 times to make rewriting worthwhile. The reason why the C++ function is faster is subtle, and relates to memory management. The R version needs to create an intermediate vector the same length as y (`x - ys`), and allocating memory is an expensive operation. The C++ function avoids this overhead because it uses an intermediate scalar.
 
-* In C++, you subset a matrix with `()`, not `[]`.
-
-* Use `.nrow()` and `.ncol()` _methods_ to get the dimensions of a matrix.
+```{r, include = FALSE}
+# 5e-3 * x == 2e-3 * x + 10 * 60
+600 / (5e-3 - 2e-3) 
+```
 
 ### Using sourceCpp {#sourceCpp}
 
@@ -321,7 +306,9 @@ And for each function that you want available within R, you need to prefix it wi
 
 Note that the space is mandatory. 
 
+:::sidebar
 If you're familiar with roxygen2, you might wonder how this relates to `@export`. `Rcpp::export` controls whether a function is exported from C++ to R; `@export` controls whether a function is exported from a package and made available to the user.
+:::
 
 You can embed R code in special C++ comment blocks. This is really convenient if you want to run some test code:
 
@@ -333,7 +320,9 @@ You can embed R code in special C++ comment blocks. This is really convenient if
 
 The R code is run with `source(echo = TRUE)` so you don't need to explicitly print output.
 
-To compile the C++ code, use `sourceCpp("path/to/file.cpp")`. This will create the matching R functions and add them to your current session. Note that these functions can not be saved in a `.Rdata` file and reloaded in a later session; they must be recreated each time you restart R. For example, running `sourceCpp()` on the following file implements mean in C++ and then compares it to the built-in `mean()`:
+To compile the C++ code, use `sourceCpp("path/to/file.cpp")`. This will create the matching R functions and add them to your current session. Note that these functions can not be saved in a `.Rdata` file and reloaded in a later session; they must be recreated each time you restart R. 
+
+For example, running `sourceCpp()` on the following file implements mean in C++ and then compares it to the built-in `mean()`:
 
 ```{r, engine = "Rcpp", eval = FALSE}
 #include <Rcpp.h>
@@ -361,7 +350,7 @@ bench::mark(
 
 NB: if you run this code yourself, you'll notice that `meanC()` is much faster than the built-in `mean()`. This is because it trades numerical accuracy for speed.
 
-For the remainder of this chapter C++ code will be presented stand-alone rather than wrapped in a call to `cppFunction`. If you want to try compiling and/or modifying the examples you should paste them into a C++ source file that includes the elements described above.
+For the remainder of this chapter C++ code will be presented stand-alone rather than wrapped in a call to `cppFunction`. If you want to try compiling and/or modifying the examples you should paste them into a C++ source file that includes the elements described above. This is easy to do in RMarkdown: all you need to do is specify `engine = "Rcpp"`. 
 
 ### Exercises
 
@@ -443,33 +432,13 @@ For the remainder of this chapter C++ code will be presented stand-alone rather 
        Whenever implementing a numerical algorithm, it's always good to check 
        what is already known about the problem.
 
-## Attributes and other classes {#rcpp-classes}
+## Other classes {#rcpp-classes}
 
-You've already seen the basic vector classes (`IntegerVector`, `NumericVector`, `LogicalVector`, `CharacterVector`) and their scalar (`int`, `double`, `bool`, `String`) and matrix (`IntegerMatrix`, `NumericMatrix`, `LogicalMatrix`, `CharacterMatrix`) equivalents.
-
-All R objects have attributes, which can be queried and modified with `.attr()`. Rcpp also provides `.names()` as an alias for the name attribute. The following code snippet illustrates these methods. Note the use of `::create()`, a _class_ method. This allows you to create an R vector from C++ scalar values: \index{attributes!in C++ } \index{names!in C++}
-
-```{r attribs, engine = "Rcpp"}
-#include <Rcpp.h>
-using namespace Rcpp;
-
-// [[Rcpp::export]]
-NumericVector attribs() {
-  NumericVector out = NumericVector::create(1, 2, 3);
-
-  out.names() = CharacterVector::create("a", "b", "c");
-  out.attr("my-attr") = "my-value";
-  out.attr("class") = "my-class";
-
-  return out;
-}
-```
-
-For S4 objects, `.slot()` plays a similar role to `.attr()`.
+You've already seen the basic vector classes (`IntegerVector`, `NumericVector`, `LogicalVector`, `CharacterVector`) and their scalar (`int`, `double`, `bool`, `String`) equivalents. Rcpp also provides wrappers for all other base data types. The most important are for lists and data frames, functions, and attributes, as described below. Rcpp also provides classes for more types like `Environment`, `DottedPair`, `Language`, `Symbol`, etc, but these are beyond the scope of this chapter.
 
 ### Lists and data frames
 
-Rcpp also provides classes `List` and `DataFrame`, but they are more useful for output than input. This is because lists and data frames can contain arbitrary classes but C++ needs to know their classes in advance. If the list has known structure (e.g., it's an S3 object), you can extract the components and manually convert them to their C++ equivalents with `as()`. For example, the object created by `lm()`, the function that fits a linear model, is a list whose components are always of the same type. The following code illustrates how you might extract the mean percentage error (`mpe()`) of a linear model. This isn't a good example of when to use C++, because it's so easily implemented in R, but it shows how to work with an important S3 class. Note the use of `.inherits()` and the `stop()` to check that the object really is a linear model. \index{lists!in C++} \index{data frames!in C++}
+Rcpp also provides `List` and `DataFrame` classes, but they are more useful for output than input. This is because lists and data frames can contain arbitrary classes but C++ needs to know their classes in advance. If the list has known structure (e.g., it's an S3 object), you can extract the components and manually convert them to their C++ equivalents with `as()`. For example, the object created by `lm()`, the function that fits a linear model, is a list whose components are always of the same type. The following code illustrates how you might extract the mean percentage error (`mpe()`) of a linear model. This isn't a good example of when to use C++, because it's so easily implemented in R, but it shows how to work with an important S3 class. Note the use of `.inherits()` and the `stop()` to check that the object really is a linear model. \index{lists!in C++} \index{data frames!in C++}
 
 <!-- FIXME: needs better motivation -->
 
@@ -499,8 +468,9 @@ mpe(mod)
 ```
 
 ### Functions {#functions-rcpp}
+\index{functions!in C++}
 
-You can put R functions in an object of type `Function`. This makes calling an R function from C++ straightforward. We first define our C++ function: \index{functions!in C++}
+You can put R functions in an object of type `Function`. This makes calling an R function from C++ straightforward. The only challenge is that we don't know what type of output the function will return, so we use the catchall type `RObject`. 
 
 ```{r, engine = "Rcpp"}
 #include <Rcpp.h>
@@ -512,30 +482,9 @@ RObject callWithOne(Function f) {
 }
 ```
 
-Then call it from R:
-
 ```{r}
 callWithOne(function(x) x + 1)
 callWithOne(paste)
-```
-
-What type of object does an R function return? We don't know, so we use the catchall type `RObject`. An alternative is to return a `List`. For example, the following code is a basic implementation of `lapply` in C++:
-
-```{r lapply1, engine = "Rcpp"}
-#include <Rcpp.h>
-using namespace Rcpp;
-
-// [[Rcpp::export]]
-List lapply1(List input, Function f) {
-  int n = input.size();
-  List out(n);
-
-  for(int i = 0; i < n; i++) {
-    out[i] = f(input[i]);
-  }
-
-  return out;
-}
 ```
 
 Calling R functions with positional arguments is obvious:
@@ -544,22 +493,40 @@ Calling R functions with positional arguments is obvious:
 f("y", 1);
 ```
 
-But to use named arguments, you need a special syntax:
+But you need a special syntax for named arguments:
 
 ```cpp
 f(_["x"] = "y", _["value"] = 1);
 ```
 
-### Other types
+### Attributes
 
-There are also classes for many more specialised language objects: `Environment`, `ComplexVector`, `RawVector`, `DottedPair`, `Language`,  `Promise`, `Symbol`, `WeakReference`, and so on. These are beyond the scope of this chapter and won't be discussed further.
+All R objects have attributes, which can be queried and modified with `.attr()`. Rcpp also provides `.names()` as an alias for the name attribute. The following code snippet illustrates these methods. Note the use of `::create()`, a _class_ method. This allows you to create an R vector from C++ scalar values: \index{attributes!in C++ } \index{names!in C++}
+
+```{r attribs, engine = "Rcpp"}
+#include <Rcpp.h>
+using namespace Rcpp;
+
+// [[Rcpp::export]]
+NumericVector attribs() {
+  NumericVector out = NumericVector::create(1, 2, 3);
+
+  out.names() = CharacterVector::create("a", "b", "c");
+  out.attr("my-attr") = "my-value";
+  out.attr("class") = "my-class";
+
+  return out;
+}
+```
+
+For S4 objects, `.slot()` plays a similar role to `.attr()`.
 
 ## Missing values {#rcpp-na}
 
 If you're working with missing values, you need to know two things: \index{missing values!in C++}
 
-* how R's missing values behave in C++'s scalars (e.g., `double`).
-* how to get and set missing values in vectors (e.g., `NumericVector`).
+* How R's missing values behave in C++'s scalars (e.g., `double`).
+* How to get and set missing values in vectors (e.g., `NumericVector`).
 
 ### Scalars
 
@@ -629,7 +596,7 @@ evalCpp("NAN * 1")
 
 ### Boolean
 
-While C++'s `bool` has two possible values (`true` or `false`), a logical vector in R has three (`TRUE`, `FALSE`, and `NA`). If you coerce a length 1 logical vector, make sure it doesn't contain any missing values otherwise they will be converted to TRUE.
+While C++'s `bool` has two possible values (`true` or `false`), a logical vector in R has three (`TRUE`, `FALSE`, and `NA`). If you coerce a length 1 logical vector, make sure it doesn't contain any missing values otherwise they will be converted to TRUE. An easy fix is to use `int` instead, as this can represent `TRUE`, `FALSE`, and `NA`.
 
 ### Vectors {#vectors-rcpp}
 
@@ -645,7 +612,8 @@ List missing_sampler() {
     NumericVector::create(NA_REAL),
     IntegerVector::create(NA_INTEGER),
     LogicalVector::create(NA_LOGICAL),
-    CharacterVector::create(NA_STRING));
+    CharacterVector::create(NA_STRING)
+  );
 }
 ```
 
@@ -702,99 +670,6 @@ is_naC2(c(NA, 5.4, 3.2, NA))
 1. Rewrite `cumsum()` and `diff()` so they can handle missing values. Note that 
    these functions have slightly more complicated behaviour.
 
-## Rcpp sugar {#rcpp-sugar}
-
-Rcpp provides a lot of syntactic "sugar" to ensure that C++ functions work very similarly to their R equivalents. In fact, Rcpp sugar makes it possible to write efficient C++ code that looks almost identical to its R equivalent. If there's a sugar version of the function you're interested in, you should use it: it'll be both expressive and well tested. Sugar functions aren't always faster than a handwritten equivalent, but they will get faster in the future as more time is spent on optimising Rcpp.
-
-Sugar functions can be roughly broken down into
-
-* arithmetic and logical operators
-* logical summary functions
-* vector views
-* other useful functions
-
-### Arithmetic and logical operators
-
-All the basic arithmetic and logical operators are vectorised: `+`, `*`, `-`, `/`, `pow`, `<`, `<=`, `>`, `>=`, `==`, `!=`, `!`.  For example, we could use sugar to considerably simplify the implementation of `pdistC()`.
-
-```{r}
-pdistR <- function(x, ys) {
-  sqrt((x - ys) ^ 2)
-}
-```
-
-```{r, engine = "Rcpp"}
-#include <Rcpp.h>
-using namespace Rcpp;
-
-// [[Rcpp::export]]
-NumericVector pdistC2(double x, NumericVector ys) {
-  return sqrt(pow((x - ys), 2));
-}
-```
-
-### Logical summary functions
-
-The sugar function `any()` and `all()` are fully lazy so that `any(x == 0)`, for example, might only need to evaluate one element of a vector, and return a special type that can be converted into a `bool` using `.is_true()`, `.is_false()`, or `.is_na()`. We could also use this sugar to write an efficient function to determine whether or not a numeric vector contains any missing values. To do this in R, we could use `any(is.na(x))`:
-
-```{r}
-any_naR <- function(x) any(is.na(x))
-```
-
-However, this will do the same amount of work regardless of the location of the missing value. Here's the C++ implementation:
-
-```{r, engine = "Rcpp"}
-#include <Rcpp.h>
-using namespace Rcpp;
-
-// [[Rcpp::export]]
-bool any_naC(NumericVector x) {
-  return is_true(any(is_na(x)));
-}
-```
-
-
-```{r}
-x0 <- runif(1e5)
-x1 <- c(x0, NA)
-x2 <- c(NA, x0)
-
-bench::mark(
-  any_naR(x0), any_naC(x0),
-  any_naR(x1), any_naC(x1),
-  any_naR(x2), any_naC(x2),
-  check = FALSE
-)
-```
-
-### Vector views
-
-A number of helpful functions provide a "view" of a vector: `head()`, `tail()`, `rep_each()`, `rep_len()`, `rev()`, `seq_along()`, and `seq_len()`. In R these would all produce copies of the vector, but in Rcpp they simply point to the existing vector and override the subsetting operator (`[`) to implement special behaviour. This makes them very efficient: for instance, `rep_len(x, 1e6)` does not have to make a million copies of x.
-
-### Other useful functions
-
-Finally, there's a grab bag of sugar functions that mimic frequently used R functions:
-
-* Math functions: `abs()`, `acos()`, `asin()`, `atan()`, `beta()`, `ceil()`,
- `ceiling()`, `choose()`, `cos()`, `cosh()`, `digamma()`, `exp()`, `expm1()`, 
- `factorial()`, `floor()`, `gamma()`, `lbeta()`, `lchoose()`, `lfactorial()`, 
- `lgamma()`, `log()`, `log10()`, `log1p()`, `pentagamma()`, `psigamma()`,
- `round()`, `signif()`, `sin()`, `sinh()`, `sqrt()`, `tan()`, `tanh()`, 
- `tetragamma()`, `trigamma()`, `trunc()`.
-
-* Scalar summaries: `mean()`, `min()`, `max()`, `sum()`, `sd()`, and 
-  (for vectors) `var()`.
-
-* Vector summaries: `cumsum()`, `diff()`, `pmin()`, and `pmax()`.
-
-* Finding values: `match()`, `self_match()`, `which_max()`, `which_min()`.
-
-* Dealing with duplicates: `duplicated()`, `unique()`.
-
-* `d/q/p/r` for all standard distributions.
-
-Finally, `noNA(x)` asserts that the vector `x` does not contain any missing values, and allows optimisation of some mathematical operations. For example, when computing the mean of a vector with no missing values, Rcpp doesn't need to check each value is not missing when computing the sum and the length.
-
 ## The STL {#stl}
 
 The real strength of C++ shows itself when you need to implement more complex algorithms. The standard template library (STL) provides a set of extremely useful data structures and algorithms. This section will explain some of the most important algorithms and data structures and point you in the right direction to learn more. I can't teach you everything you need to know about the STL, but hopefully the examples will show you the power of the STL, and persuade you that it's useful to learn more. \index{standard template library}
@@ -841,6 +716,24 @@ The main changes are in the for loop:
   type has its own iterator type: `LogicalVector::iterator`, 
   `CharacterVector::iterator`, etc.
 
+This code can be simplified still further through the use of a C++11 feature: range-based for loops. C++11 is widely available, and can easily be activated for use with Rcpp by adding `[[Rcpp::plugins(cpp11)]]`.
+
+```{r, engine = "Rcpp"}
+// [[Rcpp::plugins(cpp11)]]
+#include <Rcpp.h>
+using namespace Rcpp;
+
+// [[Rcpp::export]]
+double sum4(NumericVector xs) {
+  double total = 0;
+  
+  for(const auto &x : xs) {
+    total += x;
+  }
+  return total;
+}
+```
+
 Iterators also allow us to use the C++ equivalents of the apply family of functions. For example, we could again rewrite `sum()` to use the `accumulate()` function, which takes a starting and an ending iterator, and adds up all the values in the vector. The third argument to accumulate gives the initial value: it's particularly important because this also determines the data type that accumulate uses (so we use `0.0` and not `0` so that accumulate uses a `double`, not an `int`.). To use `accumulate()` we need to include the `<numeric>` header.
 
 ```{r, engine = "Rcpp"}
@@ -849,12 +742,10 @@ Iterators also allow us to use the C++ equivalents of the apply family of functi
 using namespace Rcpp;
 
 // [[Rcpp::export]]
-double sum4(NumericVector x) {
+double sum5(NumericVector x) {
   return std::accumulate(x.begin(), x.end(), 0.0);
 }
 ```
-
-`accumulate()` (along with the other functions in `<numeric>`, like `adjacent_difference()`, `inner_product()`, and `partial_sum()`) is not that important in Rcpp because Rcpp sugar provides equivalents.
 
 ### Algorithms
 
@@ -979,8 +870,6 @@ LogicalVector duplicatedC(IntegerVector x) {
 }
 ```
 
-Note that unordered sets are only available in C++ 11, which means we need to use the `cpp11` plugin, `[[Rcpp::plugins(cpp11)]]`.
-
 ### Map
 
 A map is similar to a set, but instead of storing presence or absence, it can store additional data. It's useful for functions like `table()` or `match()` that need to look up a value. As with sets, there are ordered (`std::map`) and unordered (`std::unordered_map`) versions. Since maps have a value and a key, you need to specify both types when initialising a map: `map<double, int>`, `unordered_map<int, double>`, and so on. The following example shows how you could use a `map` to implement `table()` for numeric vectors: \index{maps}
@@ -1001,8 +890,6 @@ std::map<double, int> tableC(NumericVector x) {
   return counts;
 }
 ```
-
-Note that unordered maps are only available in C++ 11, so to use them, you'll again need `[[Rcpp::plugins(cpp11)]]`.
 
 ### Exercises
 
@@ -1203,14 +1090,14 @@ The same C++ code that is used with `sourceCpp()` can also be bundled into a pac
 
 To add `Rcpp` to an existing package, you put your C++ files in the `src/` directory and modify/create the following configuration files:
 
-* In `DESCRIPTION` add
+*   In `DESCRIPTION` add
 
     ```
     LinkingTo: Rcpp
     Imports: Rcpp
     ```
 
-* Make sure your `NAMESPACE` includes:
+*   Make sure your `NAMESPACE` includes:
 
     ```
     useDynLib(mypackage)
@@ -1220,19 +1107,8 @@ To add `Rcpp` to an existing package, you put your C++ files in the `src/` direc
     We need to import something (anything) from Rcpp so that internal Rcpp code 
     is properly loaded. This is a bug in R and hopefully will be fixed in the 
     future.
-
-To generate a new Rcpp package that includes a simple "hello world" function you can use `Rcpp.package.skeleton()`:
-
-```{r, eval = FALSE}
-Rcpp.package.skeleton("NewPackage", attributes = TRUE)
-```
-
-To generate a package based on C++ files that you've been using with `sourceCpp()`, use the `cpp_files` parameter:
-
-```{r, eval = FALSE}
-Rcpp.package.skeleton("NewPackage", example_code = FALSE,
-                      cpp_files = c("convolve.cpp"))
-```
+    
+The easiest way to set this up automatically is to call `usethis::use_rcpp()`.
 
 Before building the package, you'll need to run `Rcpp::compileAttributes()`. This function scans the C++ files for `Rcpp::export` attributes and generates the code required to make the functions available in R. Re-run `compileAttributes()` whenever functions are added, removed, or have their signatures changed. This is done automatically by the devtools package and by Rstudio.
 
@@ -1240,7 +1116,7 @@ For more details see the Rcpp package vignette, `vignette("Rcpp-package")`.
 
 ## Learning more {#rcpp-more}
 
-This chapter has only touched on a small part of Rcpp, giving you the basic tools to rewrite poorly performing R code in C++. The [Rcpp book](http://www.rcpp.org/book) is the best reference to learn more about Rcpp. As noted, Rcpp has many other capabilities that make it easy to interface R to existing C++ code, including:
+This chapter has only touched on a small part of Rcpp, giving you the basic tools to rewrite poorly performing R code in C++. As noted, Rcpp has many other capabilities that make it easy to interface R to existing C++ code, including:
 
 * Additional features of attributes including specifying default arguments,
   linking in external C++ dependencies, and exporting C++ interfaces from 
@@ -1255,12 +1131,11 @@ This chapter has only touched on a small part of Rcpp, giving you the basic tool
 * The Rcpp quick reference guide, `vignette("Rcpp-quickref")`, contains a useful 
   summary of Rcpp classes and common programming idioms.
 
-I strongly recommend keeping an eye on the [Rcpp homepage](http://www.rcpp.org) and [Dirk's Rcpp page](http://dirk.eddelbuettel.com/code/rcpp.html) as well as signing up for the [Rcpp mailing list](http://lists.r-forge.r-project.org/cgi-bin/mailman/listinfo/rcpp-devel). Rcpp is still under active development, and is getting better with every release.
+I strongly recommend keeping an eye on the [Rcpp homepage](http://www.rcpp.org) and signing up for the [Rcpp mailing list](http://lists.r-forge.r-project.org/cgi-bin/mailman/listinfo/rcpp-devel).
 
 Other resources I've found helpful in learning C++ are:
 
-* [_Effective C++_](http://amzn.com/0321334876?tag=devtools-20) and 
-  [_Effective STL_](http://amzn.com/0201749629?tag=devtools-20) by Scott Meyers.
+* "Effective C++" [@effective-cpp] and "Effective STL" [@effective-stl].
 
 * [_C++ Annotations_](http://www.icce.rug.nl/documents/cplusplus/cplusplus.html), 
   aimed at "knowledgeable users of C (or any other language using a C-like 
@@ -1271,7 +1146,7 @@ Other resources I've found helpful in learning C++ are:
   which provides a more technical, but still concise, description of 
   important STL concepts. (Follow the links under notes).
 
-Writing performance code may also require you to rethink your basic approach: a solid understanding of basic data structures and algorithms is very helpful here. That's beyond the scope of this book, but I'd suggest the [_Algorithm Design Manual_](http://amzn.com/0387948600?tag=devtools-20), MIT's [_Introduction to Algorithms_](http://ocw.mit.edu/courses/electrical-engineering-and-computer-science/6-046j-introduction-to-algorithms-sma-5503-fall-2005/), _Algorithms_ by Robert Sedgewick and Kevin Wayne which has a free [online textbook](http://algs4.cs.princeton.edu/home/) and a matching [Coursera course](https://www.coursera.org/course/algs4partI).
+Writing performance code may also require you to rethink your basic approach: a solid understanding of basic data structures and algorithms is very helpful here. That's beyond the scope of this book, but I'd suggest the "Algorithm Design Manual" [@alg-design-man], MIT's [_Introduction to Algorithms_](http://ocw.mit.edu/courses/electrical-engineering-and-computer-science/6-046j-introduction-to-algorithms-sma-5503-fall-2005/), _Algorithms_ by Robert Sedgewick and Kevin Wayne which has a free [online textbook](http://algs4.cs.princeton.edu/home/) and a matching [Coursera course](https://www.coursera.org/learn/algorithms-part1).
 
 ## Acknowledgments
 
