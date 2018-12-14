@@ -23,6 +23,7 @@ if (knitr::is_latex_output()) {
   knitr::opts_chunk$set(width = 69)
   options(width = 69)
   options(crayon.enabled = FALSE)
+  options(lobstr.fancy.tree = FALSE)
 }
 
 knitr::knit_hooks$set(
