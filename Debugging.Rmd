@@ -8,20 +8,28 @@ source("common.R")
 \index{debugging} 
 \index{bugs}
  
-What happens when something goes wrong with your R code? What do you do? What tools do you have to address the problem? This chapter will teach you the art and science of debugging, starting with a general strategy, and then following up with specific tools.
+What happens when something goes when R code throws an error that you don't expect? What do you do? What tools do you have to find and fix the problem? This chapter will teach you the art and science of debugging, starting with a general strategy, and then following up with specific tools.
 
-I'll show the tools provided by R and the RStudio IDE. RStudio's integrated debugging support makes life easier by exposing existing R tools in a user friendly way. I'll show you both ways so that you can work with whatever environment you use. You may also want to refer to the official [RStudio debugging documentation](https://support.rstudio.com/hc/en-us/articles/205612627-Debugging-with-RStudio) which always reflects the tools in the latest version of RStudio.
+I'll show the tools provided both by R and the RStudio IDE. RStudio's integrated debugging support makes life easier by exposing existing R tools in a user friendly way. I'll show you both ways so that you can work with whatever environment you use. You may also want to refer to the official [RStudio debugging documentation](https://support.rstudio.com/hc/en-us/articles/205612627-Debugging-with-RStudio) which always reflects the tools in the latest version of RStudio.
 
-You shouldn't need to use these tools when writing new functions. If you find yourself using them frequently with new code, you may want to reconsider your approach. Instead of trying to write one big function all at once, work interactively on small pieces. If you start small, you can quickly identify why something doesn't work. But if you start large, you may end up struggling to identify the source of the problem.
-
+Note that you shouldn't need to use these tools when writing new functions. If you find yourself using them frequently with new code, you may want to reconsider your approach. Instead of trying to write one big function all at once, work interactively on small pieces. If you start small, you can quickly identify why something doesn't work. But if you start large, you may end up struggling to identify the source of the problem.
 
 ### Outline {-}
 
-*  Section \@ref(debugging-techniques) outlines a general approach for finding 
-   and resolving bugs.
+* Section \@ref(debugging-techniques) outlines a general approach for 
+  finding and fixing error.
    
-*  Section \@ref(debugging-tools) introduces you to the R functions and RStudio 
-   features that help you locate exactly where an error occurred.
+* Section \@ref(traceback) introduces you to the `traceback()` function
+  which helps you locate exactly where an error occurred.
+  
+* Section \@ref(browser) shows you how to pause the execution of a function 
+  and launch environment where you can interactively explore what's happening.
+  
+* Section \@ref(non-interactive-debugging) discusses the challenging problem
+  of debugging when you're running code non-interactively.
+  
+* Section \@ref(non-error-failures) discusses a handful of non-error problems
+  that occassionally also need debugging.
 
 ## Overall approach {#debugging-techniques}
 
@@ -99,7 +107,7 @@ Debugging code is challenging. Most bugs are subtle and hard to find because if 
     process. In the absence of automated tests, make sure to carefully record
     the correct output, and check against the inputs that previously failed.
 
-## Locate the error
+## Locate the error {#traceback}
 \index{call stack}
 \indexc{traceback()}
 
@@ -107,7 +115,7 @@ Once you've made the error repeatable, the next step is to figure out where it c
 
 Here's a simple example: you can see that `f()` calls `g()` calls `h()` calls `i()` which adds together a number and a string creating an error: 
 
-```{r, eval = FALSE}
+```{r, error = TRUE}
 f <- function(a) g(a)
 g <- function(b) h(b)
 h <- function(c) i(c)
@@ -141,7 +149,7 @@ You read the call stack from bottom to top: the initial call is `f()`, which cal
 
 Sometimes this is enough information to let you track down the error and fix it. However, `traceback()` shows you where the error occurred, but not why. The next useful tool is the interactive debugger. 
 
-## The interactive debugger
+## The interactive debugger {#browser}
 \index{debugger, interactive}
 \indexc{browser()}
 
@@ -195,7 +203,7 @@ There are two other slightly less useful commands that aren't available in the t
 
 ### Alternatives
 
-There are three alternatives 
+There are three alternatives to using `browser()`: setting break points in RStudio, `option(error = recover)`, and `debug()` and friends.
 
 #### Breakpoints
 \index{breakpoints}
@@ -272,7 +280,7 @@ options(error = recover); f()
 options(error = NULL)
 ```
 
-### Compiled code
+### Compiled code {#debug-compiled}
 \index{debugging!C code}
 \index{gdb}
 
@@ -282,6 +290,7 @@ Unfortunately debugging compiled code (like C or C++) is beyond the scope of thi
 * <https://github.com/wch/r-debug/blob/master/debugging-r.md>
 
 ## Non-interactive debugging
+\index{debugging!non-interactive}
 
 The most challenging debugging comes when you can't run the code interactively, typically because it's part of some pipeline run automatically (possibly on another computer), or because the error doesn't occur when you run same code interactively. This can be extremely frustrating! 
 
@@ -298,9 +307,9 @@ You might also try running the code using `callr::r()`; this runs the code in a 
 
 ### `dump.frames()`
 \indexc{dump.frames()}
+\indexc{recover()}
 
-`dump.frames()` is an equivalent to `recover()` for non-interactive code. In the non-interactive session, it creates a `last.dump.rda` file in the current working directory. Then, in a later interactive R session, you load that file, and use `debugger()` to enter an interactive debugger with the same interface as `recover()`.
-This allows interactive debugging of batch code. 
+`dump.frames()` is an equivalent to `recover()` for non-interactive code. In the non-interactive session, it creates a `last.dump.rda` file in the current working directory. Then, in a later interactive R session, you load that file, and use `debugger()` to enter an interactive debugger with the same interface as `recover()`. This lets you cheat, and interactively debug code that was run non-interactively.
 
 ```{r, eval = FALSE}
 # In batch R process ----
@@ -318,31 +327,38 @@ debugger()
 ```
 
 ### Print debugging
+\index{debugging!with print}
 
 If you can't get `dump.frames()` to work, a good fallback is print debugging, where you insert numerous print statements to narrow down where the problem is occuring, and to see the values of important variables. This is particularly useful if you can't get a good traceback. Start by inserting coarse-grained markers, and then make them progressively more fine-grained as you determine exactly where the problem is.
 
-```{r}
+```{r, error = TRUE}
 f <- function(a) {
-  print("f")
+  cat("f()\n")
   g(a)
 }
 g <- function(b) {
-  print("g")
+  cat("g()\n")
+  cat("b =", b, "\n")
   h(b)
 }
 h <- function(c) {
-  print("i")
+  cat("i()\n")
   i(c)
 }
+
+f(10)
 ```
 
+Print debugging is particularly useful for compiled code because it's not uncommon for the compiler to modify your code to such an extent you can't figure out the root problem even when inside an interactive debugger.
+
 ### RMarkdown
+\index{debugging!RMarkdown}
 
 <!-- Adapted from https://whattheyforgot.org/debugging-r-code.html#debugging-in-rmarkdown-documents -->
 
-If you're knitting the file using RStudio, first start by calling `rmarkdown::render()` instead. This runs the code in the current session, which makes it easier to debug. If doing this makes the problem go away, you'll need to figure out what makes the environments different.
+If you're knitting the file using RStudio, first start by using `rmarkdown::render()` instead. This runs the code in the current session, which makes it easier to debug. If doing this makes the problem go away, you'll need to figure out what makes the environments different.
 
-If the problem still persists, you'll need to use your interactive debugging skills. Note that whatever method you use, you'll need to call `sink()` first. This removes the default "sink" that knitr uses to capture all output, and makes sure you can actually see the result of function calls. For example, to use `recover()` with RMarkdown, you'd put the following code in your setup block:
+If the problem persists, you'll need to use your interactive debugging skills. Whatever method you use, you'll need an extra step: in the error handler, you'll need to call `sink()`. This removes the default "sink" that knitr uses to capture all output, and ensures that you can see the results in the console. For example, to use `recover()` with RMarkdown, you'd put the following code in your setup block:
 
 ```{r, eval = FALSE}
 options(error = function() {
@@ -351,9 +367,9 @@ options(error = function() {
 })
 ```
 
-Note that you can ignore the warning about "no sink to remove".
+This will generate a warning about "no sink to remove" when knitr completes; you can safely ignore this warning.
 
-If you simply want to get a traceback, the easiest option is to use `rlang::trace_back()`, taking advantage of the `rlang_trace_top_env` option. This ensures that you only see the traceback from your code, not all of the functions inside of RMarkdown and knitr.
+If you simply want to a traceback, the easiest option is to use `rlang::trace_back()`, taking advantage of the `rlang_trace_top_env` option. This ensures that you only see the traceback from your code, not all of the functions called by RMarkdown and knitr.
 
 ```{r, eval = FALSE}
 options(rlang_trace_top_env = rlang::current_env())
@@ -364,65 +380,53 @@ options(error = function() {
 ```
 
 ## Non-error failures
+\index{debugging!warnings}
+\index{debugging!messages}
+\index{crash}
 
-There are other ways for a function to fail apart from throwing an error or returning an incorrect result.
+There are other ways for a function to fail apart from throwing an error:
 
-* A function may generate an unexpected warning. The easiest way to track down
-  warnings is to convert them into errors with `options(warn = 2)` and use the
-  regular debugging tools. When you do this you'll see some extra calls
-  in the call stack, like `doWithOneRestart()`, `withOneRestart()`,
-  `withRestarts()`, and `.signalSimpleWarning()`. Ignore these: they are
-  internal functions used to turn warnings into errors.
-  \index{debugging!warnings}
+*   A function may generate an unexpected warning. The easiest way to track down
+    warnings is to convert them into errors with `options(warn = 2)` and use the
+    in the call stack, like `doWithOneRestart()`, `withOneRestart()`,
+    regular debugging tools. When you do this you'll see some extra calls
+    `withRestarts()`, and `.signalSimpleWarning()`. Ignore these: they are
+    internal functions used to turn warnings into errors.
 
-* A function may generate an unexpected message. There's no built-in tool to
-  help solve this problem, but it's possible to create one:
-  \index{debugging!messages}
+*   A function may generate an unexpected message. There's no built-in tool to
+    help solve this problem, but it's possible to create one:
 
-    ```{r, eval = FALSE}
+    ```{r}
     message2error <- function(code) {
-      withCallingHandlers(code, message = function(e) stop(e))
+      withCallingHandlers(code, message = function(cnd) {
+        cat("Message generated in:\n")
+        print(rlang::trace_back(bottom = sys.frame(-1)), simplify = "branch")
+        stop(cnd)
+      })
     }
 
     f <- function() g()
     g <- function() message("Hi!")
     f()
-    # Hi!
+  
     message2error(f())
-    # Error in message("Hi!"): Hi!
-    traceback()
-    # 11: stop(e) at #2
-    # 10: (function (e) 
-    #     stop(e))(list(message = "Hi!\n", call = message("Hi!")))
-    # 9: signalCondition(cond)
-    # 8: doWithOneRestart(return(expr), restart)
-    # 7: withOneRestart(expr, restarts[[1L]])
-    # 6: withRestarts({
-    #        signalCondition(cond)
-    #        defaultHandler(cond)
-    #    }, muffleMessage = function() NULL)
-    # 5: message("Hi!") at #1
-    # 4: g() at #1
-    # 3: f() at #2
-    # 2: withCallingHandlers(code, message = function(e) stop(e)) at #2
-    # 1: message2error(f())
     ```
 
-    As with warnings, you'll need to ignore some of the calls on the traceback
-    (i.e., the first two and the last six).
+*   A function might never return. This is particularly hard to debug
+    automatically, but sometimes terminating the function and looking at the
+    call stack is informative. Otherwise, use use print debugging, as 
+    described above.
 
-* A function might never return. This is particularly hard to debug
-  automatically, but sometimes terminating the function and looking at the
-  call stack is informative. Otherwise, use the basic debugging strategies
-  described above.
-
-* The worst scenario is that your code might crash R completely, leaving you
-  with no way to interactively debug your code. This indicates a bug in the
-  underlying C code. 
-
-    If the crash is caused by base R code, post a reproducible example to R-help.
-    If it's in a package, contact the package maintainer. If it's your own C or
-    C++ code, you'll need to use numerous `print()` statements to narrow down
-    the location of the bug, and then you'll need to use many more print
-    statements to figure out which data structure doesn't have the properties
-    that you expect.
+*   The worst scenario is that your code might crash R completely, leaving you
+    with no way to interactively debug your code. This indicates a bug in
+    underlying compiled (C or C++) code.
+    
+    If it's in your compiled code, you'll need to follow the links in Section 
+    \@ref(debug-compiled) and learn how to use an interactive C debugger
+    (or insert many print statements).
+    
+    If it's in a package or base R, you'll need to contact the package 
+    maintainer. In either case, work on making the smallest possible
+    reprex (Section \@ref(getting-help)) to make it as easy as possible for the
+    developer to help you.
+    
