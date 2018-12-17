@@ -29,7 +29,7 @@ I also found it helpful to work through the underlying C code that implements th
 
 ### Quiz {-}
 
-Want to skip this chapter? Go for it, if you can answer the questions below. Find the answers at the end of the chapter in [answers](#conditions-answers).
+Want to skip this chapter? Go for it, if you can answer the questions below. Find the answers at the end of the chapter in Section \@ref(conditions-answers).
 
 1. What are the three most important types of condition?
 
@@ -39,29 +39,30 @@ Want to skip this chapter? Go for it, if you can answer the questions below. Fin
 
 1. Why might you want to create a custom error object?
 
-### Overview {-}
+### Outline {-}
 
-* [Signalling conditions] introduces the basic tools for signalling conditions,
-  and discusses when it is appropriate to use each type. 
+* Section \@ref(signalling-conditions) introduces the basic tools for 
+  signalling conditions, and discusses when it is appropriate to use each type. 
 
-* [Ignoring conditions] teaches you about the simplest tools for handling 
-  conditions: functions like `try()` and `supressMessages()` that swallow
-  conditions and prevent them from getting to the top level.
+* Section \@ref(ignoring-conditions) teaches you about the simplest tools for
+  handling conditions: functions like `try()` and `supressMessages()` that 
+  swallow conditions and prevent them from getting to the top level.
 
-* [Handling conditions] introduces the condition __object__, and the two 
-  fundamental tools of condition handling: `tryCatch()` for error conditions, 
-  and `withCallingHandlers()` for everything else.
+* Section \@ref(handling-conditions) introduces the condition __object__, and 
+  the two fundamental tools of condition handling: `tryCatch()` for error 
+  conditions, and `withCallingHandlers()` for everything else.
 
-* [Custom conditions] shows you how to extend the built-in condition objects 
-  to store useful data that condition handlers can use to make more informed
-  decisions.
+* Section \@ref(custom-conditions) shows you how to extend the built-in 
+  condition objects to store useful data that condition handlers can use to 
+  make more informed decisions.
 
-* [Applications] closes out the chapter with a grab bag of practical 
-  applications based on the low-level tools found in earlier sections.
+* Section \@ref(condition-applications) closes out the chapter with a grab bag 
+  of practical applications based on the low-level tools found in earlier 
+  sections.
 
 ### Prerequisites
 
-As well as base R functions, this chapter uses condition signalling and handling functions from rlang.
+As well as base R functions, this chapter uses condition signalling and handling functions from [rlang](https://rlang.r-lib.org).
 
 ```{r setup}
 library(rlang)
@@ -125,7 +126,7 @@ h <- function() abort("This is an error!")
 f()
 ```
 
-(Note that `stop()` pastes together multiple inputs, while `abort()` does not. To create complex error messages with abort, I recommend using `glue::glue()`. This allows us to use other arguments to `abort()` for useful features that you'll learn about in [custom conditions].)
+(Note that `stop()` pastes together multiple inputs, while `abort()` does not. To create complex error messages with abort, I recommend using `glue::glue()`. This allows us to use other arguments to `abort()` for useful features that you'll learn about in Section \@ref(custom-conditions).)
 
 The best error messages tell you what is wrong and point you in the right direction to fix the problem. Writing good error messages is hard because errors usually occur when the user has a flawed mental model of the function. As a developer, it's hard to imagine how the user might be thinking incorrectly about your function, and thus it's hard to write a message that will steer the user in the correct direction. That said, the tidyverse style guide discusses a few general principles that we have found useful: <http://style.tidyverse.org/error-messages.html>.
 
@@ -223,7 +224,7 @@ fm()
 
 Good places to use a message are:
 
-* When a default argument requries some non-trivial amount of computation
+* When a default argument requires some non-trivial amount of computation
   and you want to tell the user what value was used. For example, ggplot2
   reports the number of bins used if you don't supply a `binwidth`.
   
@@ -382,7 +383,7 @@ But before we can learn about and use these handlers, we need to talk a little b
 So far we've just signalled conditions, and not looked at the objects that are created behind the scenes. The easiest way to see a condition object is to catch one from a signalled condition. That's the job of `rlang::catch_cnd()`:
 
 ```{r}
-cnd <- catch_cnd(abort("An error"))
+cnd <- catch_cnd(stop("An error"))
 str(cnd)
 ```
 
@@ -395,20 +396,24 @@ Built-in conditions are lists with two elements:
   use the call, so it will often be `NULL`. To extract it, use 
   `conditionCall(cnd)`.
 
-Custom conditions may contain other components, which we'll discuss in [custom conditions].
+Custom conditions may contain other components, which we'll discuss in Section \@ref(custom-conditions).
 
 Conditions also have a `class` attribute, which makes them S3 objects. We won't disucss S3 until [S3], but fortunately, even if you don't know about S3, condition objects are quite simple. The most important thing to know is that the `class` attribute is a character vector, and it determines which handlers will match the condition.
 
 ### Exiting handlers
 \indexc{tryCatch()} \index{handlers!exiting}
 
-`tryCatch()` registers exiting handlers, and is typically used to handle error conditions. It allows you to override the default error behaviour. For example, the following code will return `10` instead of display an error:
+`tryCatch()` registers exiting handlers, and is typically used to handle error conditions. It allows you to override the default error behaviour. For example, the following code will return `NA` instead of throwing an error:
 
 ```{r}
-tryCatch(
-  error = function(cnd) 10,
-  stop("This is an error!")
-)
+f3 <- function(x) {
+  tryCatch(
+    error = function(cnd) NA,
+    log(x)
+  )
+}
+
+f3("x")
 ```
 
 If no conditions are signalled, or the class of the signalled condition does not match the handler name, the code executes normally:
@@ -455,6 +460,20 @@ tryCatch(
 
 `tryCatch()` has one other argument: `finally`. It specifies a block of code (not a function) to run regardless of whether the initial expression succeeds or fails. This can be useful for clean up, like  deleting files, or closing connections. This is functionally equivalent to using `on.exit()` (and indeed that's how it's implemented) but it can wrap smaller chunks of code than an entire function. \indexc{on.exit()}
 
+```{r}
+path <- tempfile()
+tryCatch(
+  {
+    writeLines("Hi!", path)
+    # ...
+  },
+  finally = {
+    # always run
+    unlink(path)
+  }
+)
+```
+
 ### Calling handlers
 \index{handlers!calling}
 
@@ -499,7 +518,7 @@ withCallingHandlers(
 
 The return value of a calling handler is ignored because the code continues to execute after the handler completes; where would the return value go? That means that calling handlers are only useful for their side-effects. 
 
-One important side-effect unique to calling handlers is the ability to __muffle__ the signal. By default, a condition will continue to propogate to parent handlers, all the way up to the default handler (or an exiting handler, if provided):
+One important side-effect unique to calling handlers is the ability to __muffle__ the signal. By default, a condition will continue to propagate to parent handlers, all the way up to the default handler (or an exiting handler, if provided):
 
 ```{r}
 # Bubbles all the way up to default handler which generates the message
@@ -551,7 +570,7 @@ withCallingHandlers(
 
 ### Call stacks
 
-To complete the section, there are some important differences between the call stacks of exiting and calling handlers. These differences are generally not important but I'm including it here because I've occassionally found it useful, and don't want to forget about it!
+To complete the section, there are some important differences between the call stacks of exiting and calling handlers. These differences are generally not important but I'm including it here because I've occasionally found it useful, and don't want to forget about it!
 
 It's easiest to see the difference by setting up a small example that uses `lobstr::cst()`:
 
@@ -619,7 +638,7 @@ tryCatch(f(), message = function(cnd) lobstr::cst())
 
 1.  How could you rewrite `show_condition()` to use a single handler?
 
-## Custom conditions
+## Custom conditions {#custom-conditions}
 \index{conditions!custom}
 
 One of the challenges of error handling in R is that most functions generate one of the built-in conditions, which contain only a `message` and a `call`. That means that if you want to detect a specific type of error, you can only work with the text of the error message. This is error prone, not only because the message might change over time, but also because messages can be translated into other languages. 
@@ -673,7 +692,7 @@ This is an improvement for interactive usage as the error messages are more like
 
 ### Signalling
 
-Let's build some infrastructure to improve this situtation, We'll start by providing a custom `abort()` function for bad arguments. This is a little over-generalised for the example at hand, but it reflects common patterns that I've seen across other functions. The pattern is fairly simple. We create a nice error message for the user, using `glue::glue()`, and store metadata in the condition call for the developer. 
+Let's build some infrastructure to improve this situation, We'll start by providing a custom `abort()` function for bad arguments. This is a little over-generalised for the example at hand, but it reflects common patterns that I've seen across other functions. The pattern is fairly simple. We create a nice error message for the user, using `glue::glue()`, and store metadata in the condition call for the developer. 
 
 ```{r}
 abort_bad_argument <- function(arg, must, not = NULL) {
@@ -731,7 +750,7 @@ my_log <- function(x, base = exp(1)) {
 }
 ```
 
-`my_log()` itself is not much shorter, but is a little more meanginful, and it ensures that error messages for bad arguments are consistent across functions. It yields the same interactive error messages as before:
+`my_log()` itself is not much shorter, but is a little more meangingful, and it ensures that error messages for bad arguments are consistent across functions. It yields the same interactive error messages as before:
 
 ```{r, error = TRUE}
 my_log(letters)
@@ -751,7 +770,7 @@ expect_equal(err$arg, "x")
 expect_equal(err$not, "character")
 ```
 
-We can also use the class (`error_bad_argument`) in `tryCatch()` to only handle that specfic error:
+We can also use the class (`error_bad_argument`) in `tryCatch()` to only handle that specific error:
 
 ```{r}
 tryCatch(
@@ -773,7 +792,7 @@ tryCatch(
 
 ### Exercises
 
-1.  Inside a package, it's occassionally useful to check that a package is 
+1.  Inside a package, it's occasionally useful to check that a package is 
     installed before using it. Write a function that checks if a package is 
     installed (with `requireNamespace("pkg", quietly = FALSE))` and if not,
     throws a custom condition that includes the package name in the metadata.
@@ -882,7 +901,7 @@ safety <- function(expr) {
 }
 
 str(safety(1 + 10))
-str(safety(abort("Error!")))
+str(safety(stop("Error!")))
 ```
 
 (This is closely related to `purrr::safely()`, a function operator, which we'll come back to in Section \@ref(safely).)
@@ -907,7 +926,7 @@ warning2error({
 })
 ```
 
-You could write a similar function if you were trying to find the source of an annyoing message.
+You could write a similar function if you were trying to find the source of an annoying message.
 
 <!-- 
 Another common place where it's useful to add additional context dependent information. For example, you might have a function to download data from a remote website:
@@ -1068,7 +1087,7 @@ Restarts are currently beyond the scope of the book, but I suspect will be inclu
 ### Exercises
 
 1.  Create `suppressConditions()` that works like `suppressMessages()` and 
-    `supressWarnings()` but supresses everything. Think carefully about how you
+    `suppressWarnings()` but suppresses everything. Think carefully about how you
     should handle errors.
 
 1.  Compare the following two implementations of `message2error()`. What is the

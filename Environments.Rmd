@@ -7,12 +7,12 @@ source("common.R")
 
 ## Introduction
 
-The environment is the data structure that powers scoping. This chapter dives deep into environments, describing their structure in depth, and using them to improve your understanding of the four scoping rules described in [lexical scoping](#lexical-scoping). 
+The environment is the data structure that powers scoping. This chapter dives deep into environments, describing their structure in depth, and using them to improve your understanding of the four scoping rules described in Section \@ref(lexical-scoping). 
 Understanding environments is not necessary for day-to-day use of R. But they are important to understand because they power many important R features like lexical scoping, namespaces, and R6 classes, and interact with evaluation to give you powerful tools for making domain specific languages, like dplyr and ggplot2.
 
 ### Quiz {-}
 
-If you can answer the following questions correctly, you already know the most important topics in this chapter. You can find the answers at the end of the chapter in [answers](#env-answers).
+If you can answer the following questions correctly, you already know the most important topics in this chapter. You can find the answers at the end of the chapter in Section \@ref(env-answers).
 
 1.  List at least three ways that an environment is different to a list.
 
@@ -28,30 +28,31 @@ If you can answer the following questions correctly, you already know the most i
 
 ### Outline {-}
 
-* [Environment basics](#env-basics) introduces you to the basic properties
+* Section \@ref(env-basics) introduces you to the basic properties
   of an environment and shows you how to create your own.
   
-* [Recursing over environments](#env-recursion) provides a function template
+* Section \@ref(env-recursion) provides a function template
   for computing with environments, illustrating the idea with a useful
   function.
   
-* [Explicit environments](#explicit-envs) briefly discusses three places where
+* Section \@ref(function-envs) describes environments used for special 
+  purposes: for packages, within functions, for namespaces, and for
+  function execution.
+  
+* Section \@ref(call-stack) explains the last important environment: the 
+  caller environment. This requires you to learn about the "call stack",
+  that describes how a function was called. You'll have seen the call stack 
+  before if you've ever called `traceback()` to aid debugging.
+  
+* Section \@ref(explicit-envs) briefly discusses three places where
   environments are useful data structures for solving other problems.
 
 ### Prerequisites {-}
 
-This chapter will use rlang functions for working with environments, because it allows us to focus on the essence of environments, rather than the incidental details. 
+This chapter will use [rlang](https://rlang.r-lib.org) functions for working with environments, because it allows us to focus on the essence of environments, rather than the incidental details. 
 
 ```{r setup, message = FALSE}
 library(rlang)
-
-# Some API changes that haven't made it in rlang yet
-search_envs <- function() {
-  rlang:::new_environments(c(
-    list(global_env()),
-    head(env_parents(global_env()), -1)
-  ))
-}
 ```
 
 Note that the `env_` functions in rlang are designed to work with the pipe: all take an environment as the first argument, and many also return an environment. I won't use the pipe in this chapter in the interest of keeping the code as simple as possible, but you should consider it for your own code.
@@ -97,7 +98,7 @@ The job of an environment is to associate, or __bind__, a set of names to a set 
 knitr::include_graphics("diagrams/environments/bindings.png")
 ```
 
-As discussed in [names and values](#env-modify), environments have reference semantics: unlike most R objects, when you modify them, you modify them in place, and don't create a copy. One important implication is that environments can contain themselves. This means that environments go one step further in their level of recursion than lists: an environment can contain any object, including itself!
+As discussed in Section \@ref(env-modify), environments have reference semantics: unlike most R objects, when you modify them, you modify them in place, and don't create a copy. One important implication is that environments can contain themselves. This means that environments go one step further in their level of recursion than lists: an environment can contain any object, including itself!
 
 <!-- GVW: is it R's copy-on-modify semantics that prevents lists from containing lists? -->
 
@@ -128,12 +129,12 @@ env_names(e1)
 ```
 
 ::: base
-In R 3.2.0 and greater, use `names()` to list the bindings in an environment. If your code needs to work with R 3.1.0 or earlier, use `ls()`, but note that the default value of `all.names` is `FALSE` so you don't see any bindings that start with `.`.
+In R 3.2.0 and greater, use `names()` to list the bindings in an environment. If your code needs to work with R 3.1.0 or earlier, use `ls()`, but note that you'll need to set `all.names = TRUE` to show all bindings.
 :::
 
 ### Important environments
 
-We'll talk in detail about special environments in [Special environments], but for now we need to mention two. The current environment, or `current_env()` is the environment in which code is currently executing. When you're experimenting interactively, that's usually the global environment, or `global_env()`. The global environment is sometimes called your "workspace", as it's where all interactive (i.e. outside of a function) computation takes place.
+We'll talk in detail about special environments in \@ref(special-environments), but for now we need to mention two. The current environment, or `current_env()` is the environment in which code is currently executing. When you're experimenting interactively, that's usually the global environment, or `global_env()`. The global environment is sometimes called your "workspace", as it's where all interactive (i.e. outside of a function) computation takes place.
 
 Note that to compare environments, you need to use `identical()` and not `==`:
 
@@ -151,8 +152,7 @@ Access the global environment with `globalenv()` and the current environment wit
 
 ### Parents
 
-Every environment has a __parent__, another environment. In diagrams, the parent is shown as a small pale blue circle and arrow that points to another environment. The parent is what's used to implement lexical scoping: if a name is not found in an environment, then R will look in its parent (and so on). 
-You can set the parent environment by supplying an unnamed argument to `env()`. If you don't supply it, it defaults to the current environment.
+Every environment has a __parent__, another environment. In diagrams, the parent is shown as a small pale blue circle and arrow that points to another environment. The parent is what's used to implement lexical scoping: if a name is not found in an environment, then R will look in its parent (and so on).  You can set the parent environment by supplying an unnamed argument to `env()`. If you don't supply it, it defaults to the current environment. In the code below, `e2a` is the parent of `e2b`.
 
 ```{r}
 e2a <- env(d = 4, e = 5)
@@ -206,7 +206,7 @@ By default, `env_parents()` continues until it hits either the global environmen
 Use `parent.env()` to find the parent of an environment. No base function returns all ancestors.
 :::
 
-### Super assigment, `<<-`
+### Super assignment, `<<-`
 
 <!-- GVW: "found by in" below... -->
 
@@ -294,16 +294,12 @@ env_unbind(e3, "a")
 env_has(e3, "a")
 ```
 
-Unbinding a name doesn't delete the object. That's the job of the garbage collector, which automatically removes objects with no names binding to them. This process is described in more detail in [GC](#gc).
+Unbinding a name doesn't delete the object. That's the job of the garbage collector, which automatically removes objects with no names binding to them. This process is described in more detail in Section \@ref(gc).
 
 ::: base
 \indexc{rm()}\indexc{assign()}\indexc{get()}\indexc{exists()}
 See `get()`, `assign()`, `exists()`, and `rm()`. These are designed interactively for use with the current environment, so working with other environments is a little clunky. Also beware the `inherits` argument: it defaults to `TRUE` meaning that the base equivalents will inspect the supplied environment and all its ancestors.
 :::
-
-### Finalisers
-
-[Add something once rlang has an API. Also mention in data structures below]{.todo}
 
 ### Advanced bindings
 \index{bindings!delayed} \index{bindings!active}
@@ -406,7 +402,7 @@ See  `?delayedAssign()` and `?makeActiveBinding()`.
 
 If you want to operate on every ancestor of an environment, it's often convenient to write a recursive function. This section shows you how, applying your new knowledge of environments to write a function that given a name, finds the environment `where()` that name is defined, using R's regular scoping rules. 
 
-The definition of `where()` is straightforward. It has two arguments: the name to look for (as a string), and the environment in which to start the search. (We'll learn why `caller_env()` is a good default in [calling environments](#calling-environments).)
+The definition of `where()` is straightforward. It has two arguments: the name to look for (as a string), and the environment in which to start the search. (We'll learn why `caller_env()` is a good default in Section \@ref(calling-environments).)
 
 <!-- GVW: am I correct that this avoids the problem Python has using function calls to create default values for parameters because the call to `caller_env` is delayed until `env` is used? -->
 
@@ -692,7 +688,7 @@ g(10)
 g(10)
 ```
 
-This function returns the same value every time because of the fresh start principle, described in [a fresh start](#fresh-start). Each time a function is called, a new environment is created to host execution. This is called the execution environment, and its parent is the function environment. Let's illustrate that process with a simpler function. I'll draw execution environments with an indirect parent; the parent environment is found via the function environment.
+This function returns the same value every time because of the fresh start principle, described in Section \@ref(fresh-start). Each time a function is called, a new environment is created to host execution. This is called the execution environment, and its parent is the function environment. Let's illustrate that process with a simpler function. I'll draw execution environments with an indirect parent; the parent environment is found via the function environment.
 
 ```{r}
 h <- function(x) {
@@ -750,7 +746,7 @@ plus_one(2)
 knitr::include_graphics("diagrams/environments/closure-call.png", dpi = 300)
 ```
 
-You'll learn more about function factories in [functional programming](#functional-programming).
+You'll learn more about function factories in Section \@ref(functional-programming).
 
 ### Exercises
 
@@ -832,7 +828,7 @@ f(x = 1)
 
 This shows us that `cst()` was called from `h()`, which was called from `g()`, which was called from `f()`. Note that the order is the opposite from `traceback()`. As the call stacks get more complicated, I think it's easier to understand the sequence of calls if you start from the beginning, rather than the end (i.e. `f()` calls `g()`; rather than `g()` was called by `f()`).
 
-### Lazy evaluation
+### Lazy evaluation {#lazy-call-stack}
 
 The call stack above is simple - while you get a hint that there's some tree-like structure involved, everything happens on a single branch. This is typical of a call stack when all arguments are eagerly evaluated. 
 
@@ -885,7 +881,7 @@ The frame also holds exit handlers created with `on.exit()`, restarts and handle
 
 ### Dynamic scope
 
-Looking up variables in the calling stack rather than in the enclosing environment is called __dynamic scoping__. Few languages implement dynamic scoping (Emacs Lisp is a [notable exception](http://www.gnu.org/software/emacs/emacs-paper.html#SEC15).) This is because dynamic scoping makes it much harder to reason about how a function operates: not only do you need to know how it was defined, you also need to know the context in which it was called. Dynamic scoping is primarily useful for developing functions that aid interactive data analysis. It is one of the topics discussed in [non-standard evaluation](#nse). 
+Looking up variables in the calling stack rather than in the enclosing environment is called __dynamic scoping__. Few languages implement dynamic scoping (Emacs Lisp is a [notable exception](http://www.gnu.org/software/emacs/emacs-paper.html#SEC15).) This is because dynamic scoping makes it much harder to reason about how a function operates: not only do you need to know how it was defined, you also need to know the context in which it was called. Dynamic scoping is primarily useful for developing functions that aid interactive data analysis. It is one of the topics discussed in Section \@ref(nse).
 
 ### Exercises
 
@@ -924,7 +920,7 @@ As well as powering scoping, environments are also useful data structures in the
 
     Returning the old value from setter functions is a good pattern because 
     it makes it easier to reset the previous value in conjunction with 
-    `on.exit()` (see more in [on exit](#on-exit)).
+    `on.exit()` (Section \@ref(on-exit)).
 
 *   __As a hashmap__. A hashmap is a data structure that takes constant, O(1), 
     time to find an object based on its name. Environments provide this 

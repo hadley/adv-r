@@ -1,0 +1,307 @@
+# Measuring performance {#perf-measure}
+
+```{r include = FALSE}
+source("common.R")
+
+num <- function(x) format(round(x), big.mark = ",", scientific = FALSE)
+ns <- function(x) paste0(num(round(unclass(x) * 1e9, -1)), " ns")
+```
+
+## Introduction
+
+> "Programmers waste enormous amounts of time thinking about, or worrying 
+> about, the speed of noncritical parts of their programs, and these attempts 
+> at efficiency actually have a strong negative impact when debugging and 
+> maintenance are considered."
+>
+> --- Donald Knuth.
+
+Optimising code to make it run faster is an iterative process: \index{optimisation}
+
+1. Find the biggest bottleneck (the slowest part of your code).
+1. Try to eliminate it (you may not succeed but that's ok).
+1. Repeat until your code is "fast enough."
+
+This sounds easy, but it's not.
+
+Even experienced programmers have a hard time identifying bottlenecks in their code. Instead of relying on your intuition, you should __profile__ your code: use realistic inputs and measure the run-time of each individual operation. Only once you've identified the most important bottlenecks can you attempt to eliminate them. It's difficult to provide general advice on improving performance, but I try my best with six techniques that can be applied in many situations. I'll also suggest a general strategy for performance optimisation that helps ensure that your faster code will still be correct code.
+
+It's easy to get caught up in trying to remove all bottlenecks. Don't! Your time is valuable and is better spent analysing your data, not eliminating possible inefficiencies in your code. Be pragmatic: don't spend hours of your time to save seconds of computer time. To enforce this advice, you should set a goal time for your code and optimise only up to that goal. This means you will not eliminate all bottlenecks. Some you will not get to because you've met your goal. Others you may need to pass over and accept either because there is no quick and easy solution or because the code is already well optimised and no significant improvement is possible. Accept these possibilities and move on to the next candidate. \index{bottlenecks}
+
+### Outline {-}
+
+* Section \@ref(profiling) shows you how to use profiling tools to dig into
+  exactly what is making a function slow.
+  
+* Section \@ref(microbenchmarking) shows how to use microbenchmarking to 
+  explore alternative implementations and figure out exactly which one is 
+  fastest.
+
+### Prerequisites {-}
+
+We'll use [profvis](https://rstudio.github.io/profvis/) for profiling, and [bench](https://bench.r-lib.org/) for microbenchmarking.
+
+```{r setup}
+library(profvis)
+library(bench)
+```
+
+## Profiling {#profiling}
+
+To understand performance, you use a profiler. 
+
+Rather than focussing on individual calls, we'll visualise aggregates using the profvis package, which is connected to RStudio. 
+Built on `Rprof()`.
+
+There are a number of other options, like `summaryRprof()`, the proftools package, and the profr package, but these tools are beyond the scope of this book. 
+
+
+### Time
+
+There are a number of different types of profilers. R uses a fairly simple type called a sampling or statistical profiler. A sampling profiler stops the execution of code every few milliseconds and records which function is currently executing (along with which function called that function, and so on). For example, consider `f()`, below: \index{profiling} \index{performance!measuring}
+
+```{r}
+f <- function() {
+  pause(0.1)
+  g()
+  h()
+}
+g <- function() {
+  pause(0.1)
+  h()
+}
+h <- function() {
+  pause(0.1)
+}
+```
+
+(I use `profvis::pause()` instead of `Sys.sleep()` because `Sys.sleep()` does not appear in profiling outputs because as far as R can tell, it doesn't use up any computing time.) \indexc{pause()}
+
+If we profiled the execution of `f()`, stopping the execution of code every 0.1 s, we'd see a profile like below. Each line represents one "tick" of the profiler (0.1 s in this case), and function calls are nested with `>`. It shows that the code spends 0.1 s running `f()`, then 0.2 s running `g()`, then 0.1 s running `h()`.
+
+```
+f() 
+f() > g()
+f() > g() > h()
+f() > h()
+```
+
+If we actually profile `f()`, using the code below, we're unlikely to get such a clear result.
+
+```{r, eval = FALSE}
+tmp <- tempfile()
+Rprof(tmp, interval = 0.1)
+f()
+Rprof(NULL)
+```
+
+That's because profiling is hard to do accurately without slowing your code down by many orders of magnitude. The compromise that `RProf()` makes, sampling, only has minimal impact on the overall performance, but is fundamentally stochastic. There's some variability in both the accuracy of the timer and in the time taken by each operation, so each time you profile you'll get a slightly different answer. Fortunately, pinpoint accuracy is not needed to identify the slowest parts of your code. \indexc{RProf()}
+
+To use profvis, we first save the code in a file and `source()` it. Here `profiling-example.R` contains the definition of `f()`, `g()`, and `h()`. Note that you _must_ use `source()` to load the code. This is because lineprof uses srcrefs to match up the code to the profile, and the needed srcrefs are only created when you load code from disk. We then use `profvis()` to run our function and capture the timing output. Printing this object shows some basic information. For now, we'll just focus on the time column which estimates how long each line took to run and the ref column which tells us which line of code was run. The estimates aren't perfect, but the ratios look about right. \index{line profiling}
+
+```{r, eval = FALSE}
+source("profiling-example.R")
+profvis(f())
+```
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("screenshots/performance/flamegraph.png")
+```
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("screenshots/performance/info.png")
+```
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("screenshots/performance/tree.png")
+```
+
+### Memory
+
+profvis also does memory profiling. We're going to explore a bare-bones implementation of `read.delim()` with only three arguments: \indexc{read\_delim()}
+
+```{r read_delim}
+```
+
+We'll also create a sample csv file:
+
+```{r}
+write.csv(ggplot2::diamonds, "diamonds.csv", row.names = FALSE)
+```
+
+```{r, eval = FALSE}
+source("memory-read-delim.R")
+profvis(read_delim("diamonds.csv"))
+```
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("screenshots/performance/memory.png")
+```
+
+In this example, looking at the allocations tells us most of the story:
+
+* `scan()` allocates about 2.5 MB of memory, which is very close to the 2.8 MB
+  of space that the file occupies on disk. You wouldn't expect the two numbers 
+  to be identical because R doesn't need to store the commas and because the 
+  global string pool will save some memory.
+
+* Converting the columns allocates another 0.6 MB of memory. You'd also expect 
+  this step to free some memory because we've converted string columns into 
+  integer and numeric columns (which occupy less space), but we can't see those 
+  releases because GC hasn't been triggered yet.
+
+* Finally, calling `as.data.frame()` on a list allocates about 1.6 megabytes 
+  of memory and performs over 600 duplications. This is because 
+  `as.data.frame()` isn't terribly efficient and ends up copying the input 
+  multiple times. We'll discuss duplication more in the next section.
+
+There are two downsides to profiling:
+
+1. `read_delim()` only takes around half a second, but profiling can, at best, 
+   capture memory usage every 1 ms. This means we'll only get about 500 samples.
+
+1. Since GC is lazy, we can never tell exactly when memory is no longer needed.
+
+You can work around both problems by using `torture = TRUE`, which forces R to run GC after every allocation (see `gctorture()` for more details). This helps with both problems because memory is freed as soon as possible, and R runs 10--100x slower. This effectively makes the resolution of the timer greater, so that you can see smaller allocations and exactly when memory is no longer needed. 
+
+### Limitations
+
+There are some other limitations to profiling:
+
+* Profiling does not extend to C code. You can see if your R code calls C/C++
+  code but not what functions are called inside of your C/C++ code. Unfortunately, 
+  tools for profiling compiled code are beyond the scope of this book (i.e., I 
+  have no idea how to do it).
+
+* Similarly, you can't see what's going on inside primitive functions or byte 
+  code compiled code. 
+
+* If you're doing a lot of functional programming with anonymous functions,
+  it can be hard to figure out exactly which function is being called.
+  The easiest way to work around this is to name your functions.
+
+* Lazy evaluation means that arguments are often evaluated inside another 
+  function. For example, in the following code, profiling would make it seem
+  like `i()` was called by `j()` because the argument isn't evaluated until it's
+  needed by `j()`.
+
+    ```{r, eval = FALSE}
+    i <- function() {
+      pause(0.1)
+      10
+    }
+    j <- function(x) {
+      x + 10
+    }
+    j(i())
+    ```
+    
+    If this is confusing, you can create temporary variables to force 
+    computation to happen earlier.
+
+### Exercises
+
+1. When the input is a list, we can make a more efficient `as.data.frame()` 
+   by using special knowledge. A data frame is a list with class `data.frame` 
+   and `row.names` attribute. `row.names` is either a character vector or 
+   vector of sequential integers, stored in a special format created by 
+   `.set_row_names()`. This leads to an alternative `as.data.frame()`:
+
+    ```{r}
+    to_df <- function(x) {
+      class(x) <- "data.frame"
+      attr(x, "row.names") <- .set_row_names(length(x[[1]]))
+      x
+    }
+    ```
+
+    What impact does this function have on `read_delim()`?  What are the 
+    downsides of this function?
+
+1.  Line profile the following function with `torture = TRUE`. What is 
+    surprising? Read the source code of `rm()` to figure out what's going on.
+
+    ```{r}
+    f <- function(n = 1e5) {
+      x <- rep(1, n)
+      rm(x)
+    }
+    ```
+
+
+
+## Microbenchmarking {#microbenchmarking}
+
+A microbenchmark is a measurement of the performance of a very small piece of code, something that might take microseconds (µs) or nanoseconds (ns) to run. I'm going to use microbenchmarks to demonstrate the performance of very low-level pieces of R code, which help develop your intuition for how R works. This intuition, by-and-large, is not useful for increasing the speed of real code. The observed differences in microbenchmarks will typically be dominated by higher-order effects in real code; a deep understanding of subatomic physics is not very helpful when baking. Don't change the way you code because of these microbenchmarks. Instead wait until you've read the practical advice in the following chapters. \index{microbenchmarks}
+
+The best tool for microbenchmarking in R is the bench [@bench] package. It provides very precise timings, making it possible to compare operations that only take a tiny amount of time. For example, the following code compares the speed of two ways of computing a square root.
+
+```{r bench-sqrt}
+x <- runif(100)
+(lb <- bench::mark(
+  sqrt(x),
+  x ^ 0.5
+))
+```
+
+(I save the benchmark to a variable so that I can re-use the numbers in text below. `lb` = last benchmark.)
+
+```{r, dependson = "bench-sqrt", include = FALSE}
+sqrt_x <- round(lb$min[[1]], 8)
+```
+
+By default, `bench::mark()` runs each expression at least once, and at most enough times to take 0.5s. It returns the results as tibble, with one row for each input expression, and a column for each summary statistic.
+
+* `min`, `mean`, `median`, `max`, and `itr/sec` summarise the time taken by the 
+  expression. Focus on the median. In this example, you can see that using the 
+  special purpose `sqrt()` function is faster than the general exponentiation 
+  operator. 
+
+* `mem_alloc` tells you the amount of memory allocated by the first run,
+  and `n_gc()` tells you the total number of garbage collections over all
+  runs. These are useful for assessing the memory usage of the expression.
+  
+* `n_itr` and `total_time` tells you how many times the expression was 
+  evaluated and how long that took in total. `n_itr` will always be
+  greater than the `min_iteration` parameter, and `total_time` will always
+  be greater than the `min_time` parameter.
+
+* `result`, `memory`, `time`, and `gc` are list-columns that store the 
+  raw underlying list data.
+
+As with all microbenchmarks, pay careful attention to the units: here, each computation takes about `r ns(sqrt_x)`, `r num(sqrt_x * 1e9)` billionths of a second. To help calibrate the impact of a microbenchmark on run time, it's useful to think about how many times a function needs to run before it takes a second. If a microbenchmark takes:
+
+* 1 ms, then one thousand calls takes a second
+* 1 µs, then one million calls takes a second
+* 1 ns, then one billion calls takes a second
+
+The `sqrt()` function takes about `r ns(sqrt_x)`, or `r format(sqrt_x * 1e6)` µs, to compute the square root of 100 numbers. That means if you repeated the operation a million times, it would take `r format(sqrt_x * 1e6)` s. So changing the way you compute the square root is unlikely to significantly affect real code.
+### Exercises
+
+
+1. Instead of using `bench::mark()`, you could use the built-in function
+   `system.time()`. But `system.time()` is much less precise, so you'll
+   need to repeat each operation many times with a loop, and then divide
+   to find the average time of each operation, as in the code below.
+
+    ```{r, eval = FALSE}
+    n <- 1e6
+    system.time(for (i in 1:n) sqrt(x)) / n
+    system.time(for (i in 1:n) x ^ 0.5) / n
+    ```
+    
+    How do the estimates from `system.time()` compare to those from
+    `bench::mark()`? Why are they different?
+
+1.  Here are two other ways to compute the square root of a vector. Which
+    do you think will be fastest? Which will be slowest? Use microbenchmarking
+    to test your answers.
+
+    ```{r, eval = FALSE}
+    x ^ (1 / 2)
+    exp(log(x) / 2)
+    ```
+
+1.  Use microbenchmarking to rank the basic arithmetic operators (`+`, `-`,
+    `*`, `/`, and `^`) in terms of their speed. Visualise the results. Compare
+    the speed of arithmetic on integers vs. doubles.

@@ -74,10 +74,9 @@ Answer the following questions to see if you can safely skip this chapter. You c
 
 ### Prerequisites {-}
 
-We'll use the development version of [lobstr](https://github.com/r-lib/lobstr) to dig into the internal representation of R objects.
+We'll use the [lobstr](https://github.com/r-lib/lobstr) package to dig into the internal representation of R objects.
 
 ```{r setup}
-# devtools::install_github("r-lib/lobstr")
 library(lobstr)
 ```
 
@@ -86,7 +85,9 @@ library(lobstr)
 The details of R's memory management are not documented in a single place. Much of the information in this chapter was gleaned from a close reading of the documentation (particularly `?Memory` and `?gc`), the [memory profiling](http://cran.r-project.org/doc/manuals/R-exts.html#Profiling-R-code-for-memory-use) section of "Writing R extensions" [@r-exts], and the [SEXPs](http://cran.r-project.org/doc/manuals/R-ints.html#SEXPs) section of "R internals" [@r-ints]. The rest I figured out by reading the C source code, performing small experiments, and asking questions on R-devel. Any mistakes are entirely mine.
 
 ## Binding basics
-\index{bindings} \index{assignment}
+\index{bindings} 
+\index{assignment}
+\index{obj\_addr()}
 
 Consider this code: 
 
@@ -201,6 +202,7 @@ You _can_ also create non-syntactic bindings using single or double quotes (e.g.
     not a syntactic name? Read `?make.names` for the full details.
 
 ## Copy-on-modify
+\index{copy on modify}
 
 Consider the following code. It binds `x` and `y` to the same underlying value, then modifies `y`.[^double-bracket]
 
@@ -214,7 +216,7 @@ y[[3]] <- 4
 x
 ```
 
-Modifying `y` clearly didn't modify `x`. So what happened to the shared binding? While the value associated with `y` changed, the original object did not. Instead, R created a new object, `0xcd2`, a copy of `0x74b` with one value changed, then rebinded `y` to that object.
+Modifying `y` clearly didn't modify `x`. So what happened to the shared binding? While the value associated with `y` changed, the original object did not. Instead, R created a new object, `0xcd2`, a copy of `0x74b` with one value changed, then rebound `y` to that object.
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/name-value/binding-3.png")
@@ -225,6 +227,7 @@ This behaviour is called __copy-on-modify__. Understanding it will radically imp
 When exploring copy-on-modify behaviour interactively, be aware that you'll get different results inside of RStudio. That's because the environment pane must make a reference to each object in order to display information about it. This distorts your interactive exploration but doesn't affect code inside of functions, and so doesn't affect performance during data analysis. For experimentation, I recommend either running R directly from the terminal, or using RMarkdown (like this book).
 
 ### `tracemem()`
+\indexc{tracemem()}
 
 You can see when an object gets copied with the help of `base::tracemem()`. Once you call that function with an object, you'll get the object's current address:
 
@@ -291,6 +294,8 @@ knitr::include_graphics("diagrams/name-value/binding-f2.png")
 ```
 
 ### Lists {#list-references}
+\indexc{ref()}
+\index{lists}
 
 It's not just names (i.e. variables) that point to values; elements of lists do too. Take this list, which is superficially very similar to the vector above:
 
@@ -327,8 +332,6 @@ knitr::include_graphics("diagrams/name-value/l-modify-2.png")
 Like vectors, lists use copy-on-modify behaviour; the original list is left unchanged, and R creates a modified copy. This, however, is a __shallow__ copy: the list object and its bindings are copied, but the values pointed to by the bindings are not. The opposite of a shallow copy is a deep copy where the contents of every reference are copied. Prior to R 3.1.0, copies were always deep copies.
 
 To see values that are shared across lists, use `lobstr::ref()`. `ref()` prints the memory address of each object, along with a local ID so that you can easily cross-reference shared components.
-
-<!-- GVW: install.packages("lobstr") produces "package 'lobstr' is not available (for R version 3.5.1).", but devtools::install_github("r-lib/lobstr") works. -->
 
 ```{r list4, dependson = "list3"}
 ref(l1, l2)
@@ -430,6 +433,8 @@ This has a profound impact on the amount of memory a character vector uses but i
 ## Object size
 \indexc{object\_size} 
 \indexc{obj\_size}
+\index{ALTREP}
+\index{memory usage}
 
 You can find out how much memory an object takes with `lobstr::obj_size()`[^object.size]:
 
@@ -498,30 +503,31 @@ obj_size(1:1e9)
 1.  Take the following list. Why is its size somewhat misleading?
 
     ```{r}
-    x <- list(mean, sd, var)
-    obj_size(x)
+    funs <- list(mean, sd, var)
+    obj_size(funs)
     ```
 
 1.  Predict the output of the following code:
 
     ```{r, results = FALSE}
-    x <- runif(1e6)
-    obj_size(x)
+    a <- runif(1e6)
+    obj_size(a)
     
-    y <- list(x, x)
-    obj_size(y)
-    obj_size(x, y)
+    b <- list(a, a)
+    obj_size(b)
+    obj_size(a, b)
     
-    y[[1]][[1]] <- 10
-    obj_size(y)
-    obj_size(x, y)
+    b[[1]][[1]] <- 10
+    obj_size(b)
+    obj_size(a, b)
     
-    y[[2]][[1]] <- 10
-    obj_size(y)
-    obj_size(x, y)
+    b[[2]][[1]] <- 10
+    obj_size(b)
+    obj_size(a, b)
     ```
 
 ## Modify-in-place
+\index{in place modification}
 
 As we've seen above, modifying an R object usually creates a copy. There are two exceptions:
 
@@ -530,6 +536,7 @@ As we've seen above, modifying an R object usually creates a copy. There are two
 * Environments, a special type of object, are always modified in place.
 
 ### Objects with a single binding {#single-binding}
+\index{loops!avoiding copies}
 
 If an object has a single name bound to it, R will modify it in place:
 
@@ -556,17 +563,18 @@ Two complications make predicting exactly when R applies this optimisation chall
 * When it comes to bindings, R can currently[^refcnt] only count 0, 1, 
   or many. That means that if an object has two bindings, and one goes away,
   the reference count does not go back to 1: one less than many is 
-  still many.
+  still many. In turn, this means that R will make copies when it sometimes
+  doesn't need to.
   
-* Whenever you call any regular function, it makes a reference to the 
-  object. The only exception are specially written C functions. These occur 
-  mostly in the base package.
+* Whenever you call the vast majority of functions, it makes a reference to the 
+  object. The only exception are specially written "primitve" C functions. 
+  These can only be written by R-core and occur mostly in the base package.
 
 [^refcnt]: By the time you read this, this may have changed, as plans are afoot to improve reference counting: https://developer.r-project.org/Refcnt.html
 
 Together, these two complications make it hard to predict whether or not a copy will occur. Instead, it's better to determine it empirically with `tracemem()`.
 
-Let's explore the subtleties with a case study using for loops. For loops have a reputation for being slow in R, but often that slowness is caused by every iteration of the loop creating a copy. Consider the following code. It subtracts the median from each column of a large data frame: \index{loops!avoiding copies}
+Let's explore the subtleties with a case study using for loops. For loops have a reputation for being slow in R, but often that slowness is caused by every iteration of the loop creating a copy. Consider the following code. It subtracts the median from each column of a large data frame: 
 
 ```{r, cache = TRUE}
 x <- data.frame(matrix(runif(5 * 1e4), ncol = 5))
@@ -625,8 +633,10 @@ for (i in 1:5) {
 While it's not hard to determine when a copy is made, it is hard to prevent it. If you find yourself resorting to exotic tricks to avoid copies, it may be time to rewrite your function in C++, as described in Chapter \@ref(rcpp).
 
 ### Environments {#env-modify}
+\index{reference semantics}
+\index{environments}
 
-You'll learn more about environments in Chapter \@ref(environments), but it's important to mention them here because their behavior is different from that of other objects: environments are always modified in place. This property is sometimes described as __reference semantics__ because when you modify an environment all existing bindings to that environment continue to have the same reference.
+You'll learn more about environments in Chapter \@ref(environments), but it's important to mention them here because their behaviour is different from that of other objects: environments are always modified in place. This property is sometimes described as __reference semantics__ because when you modify an environment all existing bindings to that environment continue to have the same reference.
 
 Take this environment, which we bind to `e1` and `e2`:
 
@@ -677,6 +687,7 @@ This is a unique property of environments!
 
 ## Unbinding and the garbage collector {#gc}
 \index{garbage collector} 
+\index{unbinding}
 \indexc{rm()}
 \indexc{gc()}
 
