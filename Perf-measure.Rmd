@@ -1,4 +1,6 @@
 # Measuring performance {#perf-measure}
+\index{profiling} 
+\index{performance!measuring}
 
 ```{r include = FALSE}
 source("common.R")
@@ -16,17 +18,9 @@ ns <- function(x) paste0(num(round(unclass(x) * 1e9, -1)), " ns")
 >
 > --- Donald Knuth.
 
-Optimising code to make it run faster is an iterative process: \index{optimisation}
+Before you can make your code faster, you first need to figure out what's making it slow. This sounds easy, but it's not. Even experienced programmers have a hard time identifying bottlenecks in their code. Instead of relying on your intuition, you should __profile__ your code: use realistic inputs and measure the run-time of each individual operation. Only once you've identified the most important bottlenecks can you attempt to eliminate them. It's difficult to provide general advice on improving performance, but I try my best with six techniques that can be applied in many situations. I'll also suggest a general strategy for performance optimisation that helps ensure that your faster code will still be correct code.
 
-1. Find the biggest bottleneck (the slowest part of your code).
-1. Try to eliminate it (you may not succeed but that's ok).
-1. Repeat until your code is "fast enough."
-
-This sounds easy, but it's not.
-
-Even experienced programmers have a hard time identifying bottlenecks in their code. Instead of relying on your intuition, you should __profile__ your code: use realistic inputs and measure the run-time of each individual operation. Only once you've identified the most important bottlenecks can you attempt to eliminate them. It's difficult to provide general advice on improving performance, but I try my best with six techniques that can be applied in many situations. I'll also suggest a general strategy for performance optimisation that helps ensure that your faster code will still be correct code.
-
-It's easy to get caught up in trying to remove all bottlenecks. Don't! Your time is valuable and is better spent analysing your data, not eliminating possible inefficiencies in your code. Be pragmatic: don't spend hours of your time to save seconds of computer time. To enforce this advice, you should set a goal time for your code and optimise only up to that goal. This means you will not eliminate all bottlenecks. Some you will not get to because you've met your goal. Others you may need to pass over and accept either because there is no quick and easy solution or because the code is already well optimised and no significant improvement is possible. Accept these possibilities and move on to the next candidate. \index{bottlenecks}
+Once you've identified bottlenecks you'll need to carefully experiment with alternatives to find faster code that is still equivalent. In Chapter  \@ref(perf-improve) you'll learn a bunch of ways to speed up code, but first you need to learn how to __microbenchmark__ so that you can precisely measure the difference in performance.
 
 ### Outline {-}
 
@@ -47,18 +41,9 @@ library(bench)
 ```
 
 ## Profiling {#profiling}
+\indexc{RProf()}
 
-To understand performance, you use a profiler. 
-
-Rather than focussing on individual calls, we'll visualise aggregates using the profvis package, which is connected to RStudio. 
-Built on `Rprof()`.
-
-There are a number of other options, like `summaryRprof()`, the proftools package, and the profr package, but these tools are beyond the scope of this book. 
-
-
-### Time
-
-There are a number of different types of profilers. R uses a fairly simple type called a sampling or statistical profiler. A sampling profiler stops the execution of code every few milliseconds and records which function is currently executing (along with which function called that function, and so on). For example, consider `f()`, below: \index{profiling} \index{performance!measuring}
+Across programming languages, the primary tool used to understand code performance is the profiler. There are a number of different types of profilers ,but R uses a fairly simple type called a sampling or statistical profiler. A sampling profiler stops the execution of code every few milliseconds and records the call stack (i.e. which function is currently executing, and the funcion that function, and so on). For example, consider `f()`, below: 
 
 ```{r}
 f <- function() {
@@ -77,48 +62,73 @@ h <- function() {
 
 (I use `profvis::pause()` instead of `Sys.sleep()` because `Sys.sleep()` does not appear in profiling outputs because as far as R can tell, it doesn't use up any computing time.) \indexc{pause()}
 
-If we profiled the execution of `f()`, stopping the execution of code every 0.1 s, we'd see a profile like below. Each line represents one "tick" of the profiler (0.1 s in this case), and function calls are nested with `>`. It shows that the code spends 0.1 s running `f()`, then 0.2 s running `g()`, then 0.1 s running `h()`.
+If we profiled the execution of `f()`, stopping the execution of code every 0.1 s, we'd see a profile like below. Each line represents one "tick" of the profiler (0.1 s in this case), and function calls are recorded from right to left: the first line shows `f()` calling `pause()`. It shows that the code spends 0.1 s running `f()`, then 0.2 s running `g()`, then 0.1 s running `h()`.
 
 ```
-f() 
-f() > g()
-f() > g() > h()
-f() > h()
+"pause" "f" 
+"pause" "f" "g"
+"pause" "f" "g" "h"
+"pause" "f" "h"
 ```
 
-If we actually profile `f()`, using the code below, we're unlikely to get such a clear result.
+If we actually profile `f()`, using `utils::Rprof()` the code below, we're unlikely to get such a clear result.
 
 ```{r, eval = FALSE}
 tmp <- tempfile()
 Rprof(tmp, interval = 0.1)
 f()
 Rprof(NULL)
+writeLines(readLines(tmp))
+#> sample.interval=100000
+#> "pause" "g" "f" 
+#> "pause" "h" "g" "f" 
+#> "pause" "h" "f" 
 ```
 
-That's because profiling is hard to do accurately without slowing your code down by many orders of magnitude. The compromise that `RProf()` makes, sampling, only has minimal impact on the overall performance, but is fundamentally stochastic. There's some variability in both the accuracy of the timer and in the time taken by each operation, so each time you profile you'll get a slightly different answer. Fortunately, pinpoint accuracy is not needed to identify the slowest parts of your code. \indexc{RProf()}
+That's because profiling has to make a fundamental trade-off between accuracy and performance. The compromise that `RProf()` makes, sampling, only has minimal impact on performance, but is fundamentally stochastic because there's some variability in both the accuracy of the timer and in the time taken by each operation. That means each time that you profile you'll get a slightly different answer. Fortunately, the slowest parts of your code will be least variable, and those are the parts that you're mos interested in.
 
-To use profvis, we first save the code in a file and `source()` it. Here `profiling-example.R` contains the definition of `f()`, `g()`, and `h()`. Note that you _must_ use `source()` to load the code. This is because lineprof uses srcrefs to match up the code to the profile, and the needed srcrefs are only created when you load code from disk. We then use `profvis()` to run our function and capture the timing output. Printing this object shows some basic information. For now, we'll just focus on the time column which estimates how long each line took to run and the ref column which tells us which line of code was run. The estimates aren't perfect, but the ratios look about right. \index{line profiling}
+### Visualising profiles
 
-```{r, eval = FALSE}
-source("profiling-example.R")
-profvis(f())
-```
+Typically we'll profile every 0.01 seconds, so we'll generate 100 call stacks per second. That quickly grows beyond our ability to look at directly, so instead of using `uils::Rprof()` we'll use the profvis package to visualise aggregates. It also connects profiling data back to the underlying source code, making it easier to build up a mental model of what you need to change. 
+
+There are other options, like `utils::summaryRprof()`, the proftools package
+
+There are two ways to use profvis:
+
+*   If you're in the RStudio IDE, you can use the "Profile" menu to start 
+    profiling, run some code, and then stop it to see the results.
+  
+*   By calling `profvis::profvis()`. I recommend storing your code in 
+    a separate file and source it in; this will ensure you get the best
+    connection between profiling data and source code.
+
+    ```{r, eval = FALSE}
+    source("profiling-example.R")
+    profvis(f())
+    ```
+
+After profvis has completed, it will open an interactive HTML document that allows you to explore the results. The top pane shows the source code with a barchart showing the total execution time for each function. This gives you a good overall feel for the bottlenecks but doesn't always help you precisely identify the cause. Here, for example, you can see that `h()` takes 150ms, twice as long as `g()`; that's not because the function itself is slower, but because it's called twice as often.
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("screenshots/performance/flamegraph.png")
 ```
 
+The bottom pane displays a __flame graph__ which shows the full call stack. This allows you to see the full sequence of calls leading to each function, allowing you to see that `h()` is called from two different places. In this display you can mouse over individual calls to get more information:
+
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("screenshots/performance/info.png")
 ```
+
+The __data tab__ lets you interactively dive into the tree of performance data. This is basically the same display as the flame graph (rotated 90°), but it's more useful when you have very large or deeply nested call stacks because you can choose to interactively zoom into only selected components.
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("screenshots/performance/tree.png")
 ```
 
-### Memory
+### Memory profiling
+\indexc{read.delim()}
 
-profvis also does memory profiling. We're going to explore a bare-bones implementation of `read.delim()` with only three arguments: \indexc{read\_delim()}
+profvis also does memory profiling. We're going to explore a bare-bones implementation of `read.delim()` with only three arguments:
 
 ```{r read_delim}
 ```
@@ -129,10 +139,14 @@ We'll also create a sample csv file:
 write.csv(ggplot2::diamonds, "diamonds.csv", row.names = FALSE)
 ```
 
+And then profile reading `diamonds.csv()` with `read_delim()`:
+
 ```{r, eval = FALSE}
 source("memory-read-delim.R")
 profvis(read_delim("diamonds.csv"))
 ```
+
+This yields the same display as before, but now we're going to discuss the memory column:
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("screenshots/performance/memory.png")
@@ -140,12 +154,12 @@ knitr::include_graphics("screenshots/performance/memory.png")
 
 In this example, looking at the allocations tells us most of the story:
 
-* `scan()` allocates about 2.5 MB of memory, which is very close to the 2.8 MB
+* `scan()` allocates about 10 MB of memory, which is very close to the 2.8 MB
   of space that the file occupies on disk. You wouldn't expect the two numbers 
   to be identical because R doesn't need to store the commas and because the 
   global string pool will save some memory.
 
-* Converting the columns allocates another 0.6 MB of memory. You'd also expect 
+* Converting the columns allocates another 7 MB of memory. You'd also expect 
   this step to free some memory because we've converted string columns into 
   integer and numeric columns (which occupy less space), but we can't see those 
   releases because GC hasn't been triggered yet.
@@ -154,15 +168,6 @@ In this example, looking at the allocations tells us most of the story:
   of memory and performs over 600 duplications. This is because 
   `as.data.frame()` isn't terribly efficient and ends up copying the input 
   multiple times. We'll discuss duplication more in the next section.
-
-There are two downsides to profiling:
-
-1. `read_delim()` only takes around half a second, but profiling can, at best, 
-   capture memory usage every 1 ms. This means we'll only get about 500 samples.
-
-1. Since GC is lazy, we can never tell exactly when memory is no longer needed.
-
-You can work around both problems by using `torture = TRUE`, which forces R to run GC after every allocation (see `gctorture()` for more details). This helps with both problems because memory is freed as soon as possible, and R runs 10--100x slower. This effectively makes the resolution of the timer greater, so that you can see smaller allocations and exactly when memory is no longer needed. 
 
 ### Limitations
 
@@ -173,17 +178,16 @@ There are some other limitations to profiling:
   tools for profiling compiled code are beyond the scope of this book (i.e., I 
   have no idea how to do it).
 
-* Similarly, you can't see what's going on inside primitive functions or byte 
-  code compiled code. 
-
 * If you're doing a lot of functional programming with anonymous functions,
   it can be hard to figure out exactly which function is being called.
   The easiest way to work around this is to name your functions.
 
 * Lazy evaluation means that arguments are often evaluated inside another 
-  function. For example, in the following code, profiling would make it seem
-  like `i()` was called by `j()` because the argument isn't evaluated until it's
-  needed by `j()`.
+  function, and this complicates the call stack (Section 
+  \@ref(lazy-call-stack)). Unfortunately R's profiler doesn't store enough
+  information to disentangle lazy evaluation so that in the following code, 
+  profiling would  make it seem like `i()` was called by `j()` because the 
+  argument isn'tevaluated until it's needed by `j()`. 
 
     ```{r, eval = FALSE}
     i <- function() {
@@ -199,26 +203,15 @@ There are some other limitations to profiling:
     If this is confusing, you can create temporary variables to force 
     computation to happen earlier.
 
+1.  Since GC is only performed when needed (Section \@ref(gc)), we can never 
+    tell exactly when memory is no longer needed. If that is important for 
+    your problem, you can force R to GC after every allocation by using 
+    `torture = TRUE` (see `gctorture()` for more details). This ensures that
+    you see exactly when memory can be freed, but makes R run 10--100x slower.
+
 ### Exercises
 
-1. When the input is a list, we can make a more efficient `as.data.frame()` 
-   by using special knowledge. A data frame is a list with class `data.frame` 
-   and `row.names` attribute. `row.names` is either a character vector or 
-   vector of sequential integers, stored in a special format created by 
-   `.set_row_names()`. This leads to an alternative `as.data.frame()`:
-
-    ```{r}
-    to_df <- function(x) {
-      class(x) <- "data.frame"
-      attr(x, "row.names") <- .set_row_names(length(x[[1]]))
-      x
-    }
-    ```
-
-    What impact does this function have on `read_delim()`?  What are the 
-    downsides of this function?
-
-1.  Line profile the following function with `torture = TRUE`. What is 
+1.  Profile the following function with `torture = TRUE`. What is 
     surprising? Read the source code of `rm()` to figure out what's going on.
 
     ```{r}
@@ -227,8 +220,6 @@ There are some other limitations to profiling:
       rm(x)
     }
     ```
-
-
 
 ## Microbenchmarking {#microbenchmarking}
 
