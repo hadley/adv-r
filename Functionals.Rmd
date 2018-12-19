@@ -123,43 +123,48 @@ The base equivalent to `map()` is `lapply()`. The only difference is that `lappl
 `map()` returns a list, which makes it the most general of the "map" family because you can put anything in a list. But it is inconvenient to return a list when a simpler data structure would do, so there are four more specific variants: `map_lgl()`, `map_int()`, `map_dbl()`, and `map_chr()`. Each returns an atomic vector of the specified type:
 
 ```{r}
+# map_chr() always returns a character vector
 map_chr(mtcars, typeof)
 
+# map_lgl() always returns a logical vector
 map_lgl(mtcars, is.double)
 
-map_dbl(mtcars, mean)
-
+# map_int() always returns a integer vector
 n_unique <- function(x) length(unique(x))
 map_int(mtcars, n_unique)
+
+# map_dbl() always returns a double vector
+map_dbl(mtcars, mean)
 ```
 
-purrr generally adopts the convention that suffixes, like `_dbl()`, refer to the output. All `map_*()` functions can take any type of vector as input.
-
-These examples rely on the fact that data frames are lists containing vectors of the same length. This is more obvious if we draw a data frame with the same orientation as vector:
+purrr uses the convention that suffixes, like `_dbl()`, refer to the output. All `map_*()` functions can take any type of vector as input. These examples rely on the fact that data frames are lists containing vectors of the same length. This is more obvious if we draw a data frame with the same orientation as vector:
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/functionals/map-list.png")
 ```
 
-All map functions always return an output vector the same length as the input. This means that you'll get an error if the function you are mapping returns multiple results:
+All map functions always return an output vector the same length as the input, which implies that each call to `.f` must return a single value. If it does not, you'll get an error:
 
 ```{r, error = TRUE}
 pair <- function(x) c(x, x)
-map_dbl(1:3, pair)
+map_dbl(1:2, pair)
 ```
 
-When debugging problems like this, it's often useful to switch back to `map()` so you can see what the problematic output is.
+This is similar to the error you'll get if `.f` returns the wrong type of result:
+
+```{r, error = TRUE}
+map_dbl(1:2, as.character)
+```
+
+In either case, it's often useful to switch back to `map()`, because `map()` can accept any type of output. That allows you to see the problematic output, and figure out what to do with it.
 
 ```{r}
-map(1:3, pair)
+map(1:2, pair)
+map(1:2, as.character)
 ```
 
 ::: base
-Base R has two apply functions that can return atomic vectors: `sapply()` and `vapply()`. 
-
-`sapply()` tries to simplify the result to an atomic vector wherever possible. But this simplification depends on the result, so sometimes you'll get a list, sometimes a vector, and sometimes a matrix. This makes it difficult to program with, and it should be avoided in non-interactive settings.
-
-`vapply()` allows you to provide a template, `FUN.VALUE`, that describes the output shape. If you want to use only base R code you should always use `vapply()` in your functions, not `sapply()`. The primary downside of `vapply()` is its verbosity: the equivalent to `map_dbl(x, mean, na.rm = TRUE)` is `vapply(x, mean, na.rm = TRUE, FUN.VALUE = double(1))`.
+Base R has two apply functions that can return atomic vectors: `sapply()` and `vapply()`. I recommend that you avoid `sapply()` because it tries simplify the result, so it can return a list, a vector, or a matrix. This makes it difficult to program with, and it should be avoided in non-interactive settings. `vapply()` is safer because it allows you to provide a template, `FUN.VALUE`, that describes the output shape. If you don't want to use purrr, I recommend using always use `vapply()` in your functions, not `sapply()`. The primary downside of `vapply()` is its verbosity: the equivalent to `map_dbl(x, mean, na.rm = TRUE)` is `vapply(x, mean, na.rm = TRUE, FUN.VALUE = double(1))`.
 :::
 
 ### Anonymous functions and shortcuts {#purrr-shortcuts}
@@ -410,7 +415,9 @@ Before we go on to explore more map variants, let's take a quick look at how you
 by_cyl <- split(mtcars, mtcars$cyl)
 ```
 
-Now imagine we want to fit a linear model, then extract the second coefficient (i.e. the intercept). The following code shows how you might do that with purrr:
+This creates a list of three data frames: the cars with 4, 6, and 8 cylinders respectively.
+
+Now imagine we want to fit a linear model, then extract the second coefficient (i.e. the slope). The following code shows how you might do that with purrr:
 
 ```{r}
 by_cyl %>% 
@@ -785,7 +792,7 @@ After the map family, the next most important family of functions is the reduce 
 knitr::include_graphics("diagrams/functionals/reduce.png")
 ```
 
-`reduce()` is a useful way to generalise a function that works with two inputs (a __binary__ function) to work with any number of inputs. Imagine you have a list of numeric vectors, and you want to find the values that occur in every element:
+`reduce()` is a useful way to generalise a function that works with two inputs (a __binary__ function) to work with any number of inputs. Imagine you have a list of numeric vectors, and you want to find the values that occur in every element. First we generate some sample data:
 
 ```{r}
 l <- map(1:4, ~ sample(1:10, 15, replace = T))
@@ -957,12 +964,19 @@ str(discard(df, is.factor))
 
 ### Map variants {#predicate-map}
 
-`map()` and `modify()` come in variants that also take predicate functions, transforming only the elements of `.x` with `.p` is `TRUE`.
+`map()` and `modify()` come in variants that also take predicate functions, transforming only the elements of `.x` where `.p` is `TRUE`.
 
 ```{r}
-str(map_if(iris, is.numeric, mean))
-str(modify_if(iris, is.numeric, mean))
-str(map(keep(iris, is.numeric), mean))
+df <- data.frame(
+  num1 = c(0, 10, 20),
+  num2 = c(5, 6, 7),
+  chr1 = c("a", "b", "c"),
+  stringsAsFactors = FALSE
+)
+
+str(map_if(df, is.numeric, mean))
+str(modify_if(df, is.numeric, mean))
+str(map(keep(df, is.numeric), mean))
 ```
 
 ### Exercises
