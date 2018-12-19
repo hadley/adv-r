@@ -89,7 +89,7 @@ That's because profiling has to make a fundamental trade-off between accuracy an
 
 ### Visualising profiles
 
-The default profiling resolution is 0.01 seconds, which means that we generate 100 call stacks per second. That quickly grows beyond our ability to look at directly, so instead of using `uils::Rprof()` we'll use the profvis package to visualise aggregates. profvis also connects profiling data back to the underlying source code, making it easier to build up a mental model of what you need to change. If you find profvis doesn't work for your application, you might try one of the other options like `utils::summaryRprof()` or the proftools package [@proftools].
+The default profiling resolution is quite small, so if your function takes even a few seconds it will generate hundreds of samples. That quickly grows beyond our ability to look at directly, so instead of using `uils::Rprof()` we'll use the profvis package to visualise aggregates. profvis also connects profiling data back to the underlying source code, making it easier to build up a mental model of what you need to change. If you find profvis doesn't work for your application, you might try one of the other options like `utils::summaryRprof()` or the proftools package [@proftools].
 
 There are two ways to use profvis:
 
@@ -105,7 +105,7 @@ There are two ways to use profvis:
     profvis(f())
     ```
 
-After profiling is complete, profvis will open an interactive HTML document that allows you to explore the results. There are two panes. The top pane shows the source code, overlaid with bar graphs for memory and execution time for each line of code. I'm not going to discuss memory profiling further here because it's not generally that useful, and interpretation requires great care because of the stochastic nature of the garbage collector. 
+After profiling is complete, profvis will open an interactive HTML document that allows you to explore the results. There are two panes. The top pane shows the source code, overlaid with bar graphs for memory and execution time for each line of code. Here I'll focus on time, and we'll come back to memory shortly.
 
 This display gives you a good overall feel for the bottlenecks but doesn't always help you precisely identify the cause. Here, for example, you can see that `h()` takes 150ms, twice as long as `g()`; that's not because the function itself is slower, but because it's called twice as often.
 
@@ -124,6 +124,25 @@ The __data tab__ lets you interactively dive into the tree of performance data. 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("screenshots/performance/tree.png")
 ```
+
+### Memory profiling
+
+There is a special entry in the flame graph that doesn't correspond to your code: `<GC>`, which indicates that the garbage collector is running. If `<GC>` is taking a lot of time, it's usually an indicating that you're creating many short-lived objects. For example, take this small snippet of code:
+
+```{r}
+x <- integer()
+for (i in 1:1e4) {
+  x <- c(x, i)
+}
+```
+
+If you profile it, you'll see that most of the time is spent in the garbage collector:
+
+```{r, echo = FALSE, out.width = NULL}
+knitr::include_graphics("screenshots/performance/memory.png")
+```
+
+When you see the garbage collector taking up a lot of time in your own code, you can often figure out the source of the problem by looking at the memory column: you'll see a line where large amounts of memory are being allocated (the bar on the right) and freed (the bar on the left). Here the problem arises because of copy-on-modify (Section \@ref(copy-on-modify)): each iteration of the loop creates another copy of `x`. You'll learn strategies to resolve this type of problem in Section \@ref(avoid-copies).
 
 ### Limitations
 
