@@ -7,8 +7,9 @@ source("common.R")
 ## Introduction
 \index{S3} 
 \index{objects!S3|see{S3}} 
+\index{vctrs}
 
-S3 is R's first and simplest OO system. S3 is informal and ad hoc, but there is a certain elegance in its minimalism: you can't take away any part of it and still have a useful OO system. For these reasons, you should use it, unless you have a compelling reason to do otherwise. S3 is the only OO system used in the base and stats packages, and it's the most commonly used system in CRAN packages. \index{S3} \index{objects!S3|see{S3}}
+S3 is R's first and simplest OO system. S3 is informal and ad hoc, but there is a certain elegance in its minimalism: you can't take away any part of it and still have a useful OO system. For these reasons, you should use it, unless you have a compelling reason to do otherwise. S3 is the only OO system used in the base and stats packages, and it's the most commonly used system in CRAN packages.
 
 S3 is very flexible, which means it allows you to do things that are quite ill-advised. If you're coming from a strict environment like Java this will seem pretty frightening, but it gives R programmers a tremendous amount of freedom.  It may be very difficult to prevent someone from doing something you don't want them to do, but your users will never be held back because there is something you haven't implemented yet. Since S3 has few built-in constraints, the key to its successful use is applying the constraints yourself. This chapter will therefore teach you the conventions you should (almost) always adhere to.
 
@@ -49,6 +50,8 @@ library(sloop)
 ```
 
 ## Basics {#s3-basics}
+\index{attributes!class}
+\index{class!see(S3)}
 
 An S3 object is a base type with at least a "class" attribute (other attributes may be used to store other data). For example, take the factor. Its base type is the integer vector, it has a class attribute of "factor", and a levels attribute that stores the possible levels:
 
@@ -64,6 +67,9 @@ You can get the "underlying" base type by `unclass()`ing it, which strips the cl
 ```{r}
 unclass(f)
 ```
+
+\index{generic functions}
+\index{functions!generic}
 
 An S3 object behaves differently from its underlying base type whenever it's passed to a __generic__ (short for generic function). The easiest way to tell if a function is a generic is to use `sloop::ftype()` and look for "generic" in the output:
 
@@ -93,12 +99,15 @@ str(unclass(time))
 
 The generic is a middleman: its job is to define the interface (i.e. the arguments) then find the right implementation for the job. The implementation for a specific class is called a __method__, and the generic finds that method by performing __method dispatch__.
 
+\indexc{s3\_dispatch()}
+
 You can use `sloop::s3_dispatch()` to see the process of method dispatch:
 
 ```{r}
 s3_dispatch(print(f))
 ```
 
+\index{S3!methods}
 We'll come back to the details of dispatch in Section \@ref(method-dispatch), for now note that S3 methods are functions with a special naming scheme, `generic.class()`. For example, the `factor` method for the `print()` generic is called `print.factor()`. You should never call the method directly, but instead rely on the generic to find it for you.
 
 Generally, you can identify a method by the presence of `.` in the function name, but there are a number of important functions in base R that were written before S3, and hence use `.` to join words. If you're unsure, check with `sloop::ftype()`:
@@ -108,6 +117,7 @@ ftype(t.test)
 ftype(t.data.frame)
 ```
 
+\index{S3!finding source}
 Unlike most functions, you can't see the source code for most S3 methods[^base-s3] just by typing their names. That's because S3 methods are not usually exported: they live only inside the package, and are not available from the global environment. Instead, you can use `sloop::s3_get_method()`, which will work regardless of where the method lives:
 
 ```{r, error = TRUE}
@@ -158,8 +168,6 @@ s3_get_method(weighted.mean.Date)
 
 ## Classes {#s3-classes}
 \index{S3!classes} 
-\index{classes!S3}
-\indexc{class()}
 \index{attributes!class}
 
 If you have done object oriented programming in other languages, you may be surprised to learn that S3 has no formal definition of a class: to make an object an instance of a class, you simply set the __class attribute__. You can do that during creation with `structure()`, or after the fact with `class<-()`: 
@@ -214,6 +222,8 @@ To avoid foot-bullet intersections when creating your own class, I recommend tha
 You don't need a validator for very simple classes, and you can skip the helper if the class is for internal use only, but you should always provide a constructor.
 
 ### Constructors {#s3-constructor}
+\index{S3!constructors}
+\index{constructors!S3}
 
 S3 doesn't provide a formal definition of a class, so it has no built-in way to ensure that all objects of a given class have the same structure (i.e. the same base type and the same attributes with the same types). Instead, you must enforce a consistent structure yourself by using a __constructor__.
 
@@ -229,6 +239,7 @@ I'll illustrate these ideas by creating constructors for base classes[^base-cons
 
 [^base-constructors]: Recent versions of R have `.Date()`, `.difftime()`, `.POSIXct()`, and `.POSIXlt()` constructors but they are internal, not well documented, and do not follow the principles that I recommend.
 
+\indexc{Date}
 ```{r}
 new_Date <- function(x = double()) {
   stopifnot(is.double(x))
@@ -242,6 +253,7 @@ The purpose of constructors is to help you, the developer. That means you can ke
 
 A slightly more complicated constructor is that for `difftime`, which is used to represent time differences. It is again built on a double, but has a units attribute that must take one of a small set of values:
 
+\indexc{difftime}
 ```{r}
 new_difftime <- function(x = double(), units = "secs") {
   stopifnot(is.double(x))
@@ -260,9 +272,12 @@ new_difftime(52, "weeks")
 The constructor is a developer function: it will be called in many places, by an experienced user. That means it's ok to trade a little safety in return for performance, and you should avoid potentially time-consuming checks in the constructor.
 
 ### Validators
+\index{S3!validators}
+\index{validators!S3}
 
 More complicated classes require more complicated checks for validity. Take factors, for example. A constructor only checks that types are correct, making it possible to create malformed factors:
 
+\indexc{factor}
 ```{r, error = TRUE}
 new_factor <- function(x = integer(), levels = character()) {
   stopifnot(is.integer(x))
@@ -310,6 +325,8 @@ validate_factor(new_factor(0:1, "a"))
 This validator function is called primarily for its side-effects (throwing an error if the object is invalid) so you'd expect it to invisibly return its primary input (as described in Section \@ref(invisible)). However, it's useful for validation methods to return visibly, as we'll see next.
 
 ### Helpers
+\index{S3!helpers}
+\index{helpers!S3}
 
 If you want users to construct objects from your class, you should also provide a helper method that makes their life as easy as possible. A helper should always:
 
@@ -344,6 +361,7 @@ The last bullet is the trickiest, and it's hard to give general advice. However,
     
     difftime(1:10)
     ```
+    \indexc{difftime}
     
 *   Often, the most natural representation of a complex object is a string.
     For example, it's very convenient to specify factors with a character 
@@ -360,6 +378,7 @@ The last bullet is the trickiest, and it's hard to give general advice. However,
     
     factor(c("a", "a", "b"))
     ```
+    \indexc{factor}
 
 *   Some complex objects are most naturally specified by multiple simple    
     components. For example, I think it's natural to construct a date-time
@@ -380,7 +399,8 @@ The last bullet is the trickiest, and it's hard to give general advice. However,
     
     POSIXct(2020, 1, 1, tzone = "America/New_York")
     ```
-  
+    \indexc{POSIXct}
+
 [^efficient]: Note that this helper is not efficient: behind the scenes `ISODatetime()` works by pasting the components into a string and then using `strptime()`. A more efficient equivalent is available in `lubridate::make_datetime()`.
 
 For more complicated classes, you should feel free to go beyond these patterns to make life as easy as possible for your users.
@@ -409,6 +429,7 @@ For more complicated classes, you should feel free to go beyond these patterns t
 ## Generics and methods {#s3-methods}
 \indexc{UseMethod()} 
 \index{S3!new generic}
+\index{generic functions!S3}
 
 The job of an S3 generic is to perform method dispatch, i.e. find the specific implementation for a class. Method dispatch is performed by `UseMethod()`, which every generic calls[^internal-generic]. `UseMethod()` takes two arguments: the name of the generic function (required), and the argument to use for method dispatch (optional). If you omit the second argument, it will dispatch based on the first argument, which is almost always what is desired.
 
@@ -433,6 +454,9 @@ my_new_generic <- function(x) {
 Note that you don't pass any of the arguments of the generic to `UseMethod()`; it uses deep magic to pass to the method automatically. The precise process is complicated and frequently surprising, so you should avoid doing any computation in a generic. To learn the full details, carefully read the "technical details" section in `?UseMethod`.
 
 ### Method dispatch
+\index{S3!method dispatch}
+\index{method dispatch!S3}
+\indexc{s3\_dispatch()}
 
 How does `UseMethod()` work? It basically creates a vector of method names, `paste0("generic", ".", c(class(x), "default"))`, and then looks for each potential method in turn. We can see this in action with `sloop::s3_dispatch()`. You give it a call to an S3 generic, and it lists all the possible methods. For example, what method is called when you print a `Date` object?
 
@@ -458,6 +482,7 @@ s3_dispatch(sum(Sys.time()))
 ```
 
 ### Finding methods
+\index{S3!methods!find all}
 
 `sloop::s3_dispatch()` lets you find the specific method used for a single call. What if you want to find all methods defined for a generic or associated with a class? That's the job of `sloop::s3_methods_generic()` and `sloop::s3_methods_class()`:
 
@@ -468,6 +493,7 @@ s3_methods_class("ordered")
 ```
 
 ### Creating methods {#s3-arguments}
+\index{S3!methods!creating}
 
 There are two wrinkles to be aware of when you create a new method:
 
@@ -525,6 +551,7 @@ There are two wrinkles to be aware of when you create a new method:
 1.  What are the arguments to `[`? Why is this a hard question to answer?
 
 ## Object styles
+\index{S3!object styles}
 
 So far I've focussed on "vector style" classes like `Date` and `factor`. These have the key property that `length(x)` represents the number of observations in the vector. There are three variants that do not have this property:
 
@@ -544,6 +571,7 @@ So far I've focussed on "vector style" classes like `Date` and `factor`. These h
     x[[1]] # the first date time
     unclass(x)[[1]] # the first component, the number of seconds
     ```
+    \indexc{POSIXlt}
 
 *   Data frames are similar to record style objects in that both use lists of
     equal length vectors. However, data frames are conceptually two dimensional, 
@@ -555,6 +583,7 @@ So far I've focussed on "vector style" classes like `Date` and `factor`. These h
     length(x)
     nrow(x)
     ```
+    \indexc{Date}
 
 *   Scalar objects typically use a list to represent a single "thing". 
     For example, an `lm` object is a list of length 12 but it represents one
@@ -569,6 +598,7 @@ So far I've focussed on "vector style" classes like `Date` and `factor`. These h
     environments[^s3-pairlist]. This is less generally useful, but you can see 
     applications in `stats::ecdf()`, R6 (Chapter \@ref(r6)), and
     `rlang::quo()` (Chapter \@ref(quasiquotation)).
+    \indexc{lm}
     
 [^s3-pairlist]: You can also build an object on top of a pairlist, but I have yet to find a good reason to do so.
 
@@ -585,6 +615,11 @@ Unfortunately, describing the appropriate use of each of these object styles is 
     types.
     
 ## Inheritance {#s3-inheritance}
+\index{S3!inheritance}
+\index{S3!methods!inheriting}
+\index{inheritance!S3}
+\index{subclass!S3}
+\index{superclass!S3}
 
 S3 classes can share behaviour through a mechanism called __inheritance__. Inheritance is powered by three ideas:
 
@@ -595,6 +630,8 @@ S3 classes can share behaviour through a mechanism called __inheritance__. Inher
     class(ordered("x"))
     class(Sys.time())
     ```
+    \indexc{POSIXct}
+    \indexc{ordered}
 
 *   If a method is not found for the class in the first element of the 
     vector, R looks for a method for the second class (and so on):
@@ -623,8 +660,10 @@ S3 imposes no restrictions on the relationship between sub- and superclasses but
   of the superclass.
 
 Note that `POSIXt` does not adhere to these principles because `POSIXct` has type double, and `POSIXlt` has type list. This means that `POSIXt` is not a superclass, and illustrates that it's quite possible to use the S3 inheritance system to implement other styles of code sharing (here `POSIXt` plays a role more like an interface), but you'll need to figure out safe conventions yourself.
+\indexc{POSIXt}
 
 ### `NextMethod()`
+\indexc{NextMethod()}
 
 `NextMethod()` is the hardest part of inheritance to understand, so we'll start with a concrete example for the most common use case: `[`.  We'll start by creating a simple toy class: a `secret` class that hides its output when printed:
 
@@ -688,6 +727,7 @@ The `=>` indicates that `[.secret` is called, but that `NextMethod()` delegates 
 As with `UseMethod()`, the precise semantics of `NextMethod()` are complex. In particular, it tracks the list of potential next methods with a special variable, which means that modifying the object that's being dispatched upon will have no impact on which method gets called next.
 
 ### Allowing subclassing {#s3-subclassing}
+\index{S3!subclassing}
 
 When you create a class, you need to decide if you want to allow subclasses, because it requires some changes to the constructor and careful thought in your methods. 
 
@@ -733,6 +773,7 @@ Concretely, this means we need to revise the `[.secret` method. Currently it alw
 x2[1:3]
 ```
 
+\indexc{vec\_restore}
 We want to make sure that `[.secret` returns the same class as `x` even if it's a subclass. As far as I can tell, there is no way to solve this problem using base R alone. Instead, you'll need to use the vctrs package, which provides a solution in the form of the `vctrs::vec_restore()` generic. This generic takes two inputs: an object which has lost subclass information, and a template object to use for restoration.
 
 Typically `vec_restore()` methods are quite simple: you just call the constructor with appropriate arguments:
@@ -783,6 +824,7 @@ If you build your class using the tools provided by the vctrs package, `[` will 
     ```
 
 ## Dispatch details {#s3-dispatch}
+\index{S3!method dispatch}
 
 This chapter concludes with a few additional details about method dispatch. It is safe to skip these details if you're new to S3.
 
@@ -827,6 +869,8 @@ s3_dispatch(mean(x2))
 ```
 
 ### Internal generics {#internal-generics}
+\index{generic functions!internal}
+\index{internal generics}
 
 Some base functions, like `[`, `sum()`, and `cbind()`, are called __internal generics__ because they don't call `UseMethod()` but instead  call the C functions `DispatchGroup()` or `DispatchOrEval()`. `s3_dispatch()` shows internal generics by including the name of the generic followed by `(internal)`:
 
@@ -881,6 +925,8 @@ It dispatches to the next method, here the internal default, to perform the actu
 Note that inside a group generic function a special variable `.Generic` provides the actual generic function called. This can be useful when producing error messages, and can sometimes be useful if you need to manually re-call the generic with different arguments.
 
 ### Double dispatch
+\index{double dispatch}
+\index{method dispatch!S3!double}
 
 Generics in the "Ops" group, which includes the two-argument arithmetic and boolean operators like `-` and `&`, implement a special type of method dispatch. They dispatch on the type of _both_ of the arguments, which is called __double dispatch__. This is necessary to preserve the commutative property of many operators, i.e. `a + b` should equal `b + a`. Take the following simple example:
 
