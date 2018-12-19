@@ -9,16 +9,16 @@ source("common.R")
 \index{bugs}
 \index{errors!debugging}
  
-What happens when something goes when R code throws an error that you don't expect? What do you do? What tools do you have to find and fix the problem? This chapter will teach you the art and science of debugging, starting with a general strategy, and then following up with specific tools.
+What do you do when R code throws an unexpected error? What tools do you have to find and fix the problem? This chapter will teach you the art and science of debugging, starting with a general strategy, then following up with specific tools.
 
-I'll show the tools provided both by R and the RStudio IDE. RStudio's integrated debugging support makes life easier by exposing existing R tools in a user friendly way. I'll show you both ways so that you can work with whatever environment you use. You may also want to refer to the official [RStudio debugging documentation](https://support.rstudio.com/hc/en-us/articles/205612627-Debugging-with-RStudio) which always reflects the tools in the latest version of RStudio.
+I'll show the tools provided both by R and the RStudio IDE. I recommend using RStudio's tools if you use RStudio, but I'll also show you the keyboard equivalents which work everywhere. You may also want to refer to the official [RStudio debugging documentation](https://support.rstudio.com/hc/en-us/articles/205612627-Debugging-with-RStudio) which always reflects the tools in the latest version of RStudio.
 
-Note that you shouldn't need to use these tools when writing new functions. If you find yourself using them frequently with new code, you may want to reconsider your approach. Instead of trying to write one big function all at once, work interactively on small pieces. If you start small, you can quickly identify why something doesn't work. But if you start large, you may end up struggling to identify the source of the problem.
+NB: You shouldn't need to use these tools when writing _new_ functions. If you find yourself using them frequently with new code, reconsider your approach. Instead of trying to write one big function all at once, work interactively on small pieces. If you start small, you can quickly identify why something doesn't work, and don't need sophisticated debugging tools.
 
 ### Outline {-}
 
-* Section \@ref(debugging-techniques) outlines a general approach for 
-  finding and fixing error.
+* Section \@ref(debugging-strategy) outlines a general strategy for 
+  finding and fixing errors.
    
 * Section \@ref(traceback) introduces you to the `traceback()` function
   which helps you locate exactly where an error occurred.
@@ -32,7 +32,7 @@ Note that you shouldn't need to use these tools when writing new functions. If y
 * Section \@ref(non-error-failures) discusses a handful of non-error problems
   that occassionally also need debugging.
 
-## Overall approach {#debugging-techniques}
+## Overall approach {#debugging-strategy}
 
 > "Finding your bug is a process of confirming the many things
 > that you believe are true — until you find one which is not
@@ -40,23 +40,14 @@ Note that you shouldn't need to use these tools when writing new functions. If y
 > 
 > ---Norm Matloff
 
-Debugging code is challenging. Most bugs are subtle and hard to find because if they were obvious, you would've avoided them in the first place. A good strategy helps. Below I outline a five step process that I have found useful:
+Debugging code is challenging. Most bugs are subtle and hard to find because if they were obvious, you would've avoided them in the first place. A good strategy helps. Below I outline a four step process that I have found useful:
 
-1. __Realise that you have a bug__
-
-    If you're reading this chapter, you've probably already completed this step.
-    It is a surprisingly important one: you can't fix a bug until you know it
-    exists. This is one reason why automated test suites are important when
-    producing high-quality code. Unfortunately, automated testing is outside the
-    scope of this book, but you can read more about it at
-    <http://r-pkgs.had.co.nz/tests.html>.
-    
 1. __Look for existing work__
 
-    Next, see if you've discovered a common error that might have a known 
-    solution. The easiest way to determine this is to google the text of 
-    the error message (making sure to remove any variable names or values that
-    are specific to your problem).
+    Whenever you see an error message, start by googling it. If you're lucky,
+    you'll discover that it's a common error with a known solution. When
+    googling, improve your chances of a good match by removing any variable 
+    names or values that are specific to your problem.
     
     This is such a useful technique that the errorist [@errorist] and searcher     
     [@searcher] packages automate the process.
@@ -68,15 +59,15 @@ Debugging code is challenging. Most bugs are subtle and hard to find because if 
     cause and to confirm that you've successfully fixed it.
 
     Generally, you will start with a big block of code that you know causes the
-    error and then slowly whittle it down to get to the smallest possible
-    snippet that still causes the error. Binary search is particularly useful
-    for this. To do a binary search, you repeatedly remove half of the code
-    until you find the bug. This is fast because, with each step, you reduce the
-    amount of code to look through by half.
+    error and then slowly whittle it down. __Binary search__ can be particularly
+    usefulhere : repeatedly remove half of the code until you find the bug. 
+    This is fast because, with each step, you reduce the amount of code to 
+    look through by half.
 
     If it takes a long time to generate the bug, it's also worthwhile to figure
     out how to generate it faster. The quicker you can do this, the quicker you
-    can figure out the cause.
+    can figure out the cause. This typically requires reducing the size of the
+    input data.
 
     As you work on creating a minimal example, you'll also discover similar
     inputs that don't trigger the bug. Make note of them: they will be helpful
@@ -114,49 +105,76 @@ Debugging code is challenging. Most bugs are subtle and hard to find because if 
 
 Once you've made the error repeatable, the next step is to figure out where it comes from. The most important tool for this part of the process is `traceback()`, which shows you the sequence of calls (aka the call stack, Section \@ref(call-stack)), that lead to the error.
 
-Here's a simple example: you can see that `f()` calls `g()` calls `h()` calls `i()` which adds together a number and a string creating an error: 
+Here's a simple example: you can see that `f()` calls `g()` calls `h()` calls `i()` that checks it's argument is numeric:
 
-```{r, error = TRUE}
-f <- function(a) g(a)
-g <- function(b) h(b)
-h <- function(c) i(c)
-i <- function(d) "a" + d
-f(10)
+```{r, code = readLines("debugging.R"), error = TRUE}
+```
+```{r, include = FALSE}
+source("debugging.R")
 ```
 
-When we run this code in RStudio we see:
+When we run `f("a")` code in RStudio we see:
 
 ```{r, echo = FALSE, out.width = NULL}
-knitr::include_graphics("screenshots/traceback-hidden.png")
+knitr::include_graphics("screenshots/debugging/rstudio-error.png")
 ```
 
 Two options appear to the right of the error message: "Show Traceback" and "Rerun with Debug".  If you click "Show traceback" you see:
 
 ```{r, echo = FALSE, out.width = NULL}
-knitr::include_graphics("screenshots/traceback-shown.png")
+knitr::include_graphics("screenshots/debugging/rstudio-traceback.png")
 ```
 
 If you're not using RStudio, you can use `traceback()` to get the same information (sans pretty formatting):
 
 ```{r, eval = FALSE}
 traceback()
-# 4: i(c) at exceptions-example.R#3
-# 3: h(b) at exceptions-example.R#2
-# 2: g(a) at exceptions-example.R#1
-# 1: f(10)
+#> 5: stop("`d` must be numeric", call. = FALSE) at debugging.R#6
+#> 4: i(c) at debugging.R#3
+#> 3: h(b) at debugging.R#2
+#> 2: g(a) at debugging.R#1
+#> 1: f("a")
 ```
 
 You read the call stack from bottom to top: the initial call is `f()`, which calls `g()`, then `h()`, then `i()`, which triggers the error. If you're calling code that you `source()`d into R, the traceback will also display the location of the function, in the form `filename.r#linenumber`. These are clickable in RStudio, and will take you to the corresponding line of code in the editor.
 
-Sometimes this is enough information to let you track down the error and fix it. However, `traceback()` shows you where the error occurred, but not why. The next useful tool is the interactive debugger. 
+### Lazy evaluation
+
+One drawback to `traceback()` is that it always linearises the call tree, which can be confusing if there is much lazy evaluation involved (Section \@ref(lazy-call-stack)). For example, take the following example where the error when evaluating the argument to `f()`:
+
+```{r, error = TRUE}
+j <- function() k()
+k <- function() stop("Oops!", call. = FALSE)
+f(j())
+```
+
+```{r, eval = FALSE}
+traceback()
+#> 7: stop("Oops!") at #1
+#> 6: k() at #1
+#> 5: j() at debugging.R#1
+#> 4: i(c) at debugging.R#3
+#> 3: h(b) at debugging.R#2
+#> 2: g(a) at debugging.R#1
+#> 1: f(j())
+```
+
+You can using `rlang::with_abort()` and `rlang::last_trace()` to see the call tree. Here, I think it makes it much easier to see the source of the problem.
+
+```{r, error = TRUE}
+rlang::with_abort(f(j()))
+rlang::last_trace()
+```
+
+Note that `rlang::last_trace()` is ordered in the opposite way to `traceback()`. We'll come back to that issue in Section \@ref(call-stack-ordering).
 
 ## The interactive debugger {#browser}
 \index{debugger, interactive}
 \indexc{browser()}
 
-R's interactive debugger allows you to pause execution of a function and interactively explore its state. The easiest way to enter the interactive debugger is through RStudio's "Rerun with Debug" tool. This reruns the command that created the error, pausing execution where the error occurred. You're now inside the function and you can interactively explore to figure out what the problem is: ou'll see the corresponding code in the editor (with the statement that will be run next highlighted), objects in the current environment in the "Environment" pane, the call stack in a "Traceback" pane, and you can run arbitrary R code in the console. 
+Sometimes, the precise location of the error is enough to let you track it down and fix it. Frequently, however, you need more data, and the easiest way to get it is with the interactive debugger. R's interactive debugger allows you to pause execution of a function and interactively explore its state. 
 
-As well as RStudios "Rerun with debug" you can manually start the debugger with  `base::browser()`. No matter how you use R, you can insert this call to get an interactive environment where ever you need it. For example, we could insert it in `g()`:
+If you're using RStudio, the easiest way to enter the interactive debugger is through RStudio's "Rerun with Debug" tool. This reruns the command that created the error, pausing execution where the error occurred. Otherwise, you can insert a call to `browser()` where you want to pause, and re-run the function yourself. For example, we could insert a call `browser()` in `g()`:
 
 ```{r, eval = FALSE}
 g <- function(b) {
@@ -166,18 +184,32 @@ g <- function(b) {
 f(10)
 ```
 
-You'll know when you're in the interactive debugger because you get a special prompt:
+`browser()` is just a regular function call which means that you can run it conditionally by wrapping it in an `if` statement:
+ 
+```{r, eval = FALSE}
+g <- function(b) {
+  if (b < 0) {
+    browser()
+  }
+  h(b)
+}
+```
+
+In either case, you'll end up in an interactive environment _inside_ the function where you can run arbitrary R code to explore the current state. You'll know when you're in the interactive debugger because you get a special prompt:
 
 ```
 Browse[1]> 
 ```
+
+In RStudio, you'll see the corresponding code in the editor (with the statement that will be run next highlighted), objects in the current environment in the "Environment" pane, and the call stack in the "Traceback" pane. 
+
 
 ### `browser()` commands
 
 As well as allowing you to run regular R code, `browser()` provides a few special commands. You can use them by either typing short text commands, or by clicking a button in the RStudio toolbar ((![](screenshots/debug-toolbar.png){height=20})):
 
 * Next, `n`: executes the next step in the function. Note that if you have a
-  variable named `n`; to print it you'll need to do `print(n)`.
+  variable named `n`, you'll need `print(n)` to display its value.
 
 * Step into, ![](screenshots/step-into.png){height=20} or `s`: 
   works like next, but if the next step is a function, it will step into that
@@ -204,38 +236,37 @@ There are two other slightly less useful commands that aren't available in the t
 
 ### Alternatives
 
-There are three alternatives to using `browser()`: setting break points in RStudio, `option(error = recover)`, and `debug()` and friends.
+There are three alternatives to using `browser()`: setting breakpoints in RStudio, `option(error = recover)`, and `debug()` and friends.
 
 #### Breakpoints
 \index{breakpoints}
 
-You can set a breakpoint in RStudio by clicking to the left of the line number, or pressing `Shift + F9`. Equivalently, add `browser()` where you want execution to pause. Breakpoints behave similarly to `browser()` but they are easier to set (one click instead of nine key presses), and you don't run the risk of accidentally including a `browser()` statement in your source code. There are two small downsides to breakpoints:
+In RStudio, you can set a breakpoint by clicking to the left of the line number, or pressing `Shift + F9`. Breakpoints behave similarly to `browser()` but they are easier to set (one click instead of nine key presses), and you don't run the risk of accidentally including a `browser()` statement in your source code. There are two small downsides to breakpoints:
 
-* There are a few unusual situations in which breakpoints will not work: 
-  read [breakpoint troubleshooting](http://www.rstudio.com/ide/docs/debugging/breakpoint-troubleshooting) for more details.
+* There are a few unusual situations in which breakpoints will not work.
+  Read [breakpoint troubleshooting](http://www.rstudio.com/ide/docs/debugging/breakpoint-troubleshooting) for more details.
 
-* RStudio currently does not support conditional breakpoints, whereas you 
-  can always put `browser()` inside an `if` statement.
+* RStudio currently does not support conditional breakpoints but you 
+  can always put a `browser()` call inside an `if` statement.
 
 #### `recover()`
 \indexc{recover()}
 
-Another way to activate `browser()` is to use `options(error = browser())`. Now when you get an error, you'll get an interactive prompt that displays the traceback and gives you the ability to interactively debug inside any of the frames:
+Another way to activate `browser()` is to use `options(error = recover)`. Now when you get an error, you'll get an interactive prompt that displays the traceback and gives you the ability to interactively debug inside any of the frames:
 
 ```{r, eval = FALSE}
 options(error = recover)
-f(10)
-
-#> Error in "a" + d : non-numeric argument to binary operator
+f("x")
+#> Error: `d` must be numeric
 #> 
 #> Enter a frame number, or 0 to exit   
 #> 
-#> 1: f(10)
-#> 2: exceptions-example.R#1: g(a)
-#> 3: exceptions-example.R#2: h(b)
-#> 4: exceptions-example.R#3: i(c)
+#> 1: f("x")
+#> 2: debugging.R#1: g(a)
+#> 3: debugging.R#2: h(b)
+#> 4: debugging.R#3: i(c)
 #> 
-#> Selection: 
+#> Selection:
 ```
 
 You can return to default error handling with `options(error = NULL)`.
@@ -257,52 +288,59 @@ Another approach is to call a function that inserts the `browser()` call:
 
 These two functions are both special cases of `trace()`, which inserts arbitrary code at any position in an existing function. `trace()` is occasionally useful when you're debugging code that you don't have the source for. To remove tracing from a function, use `untrace()`. You can only perform one trace per function, but that one trace can call multiple functions.
 
-#### The call stack
+#### The call stack {#call-stack-ordering}
 \index{call stack}
 
-Unfortunately, the call stacks printed by `traceback()`, `browser()` + `where`, and `recover()` are not consistent. The following table shows how the call stacks from a simple nested set of calls are displayed by the three tools. 
+Unfortunately, the call stacks printed by `traceback()`, `browser()` + `where`, and `recover()` are not consistent. The following table shows how the call stacks from a simple nested set of calls are displayed by the three tools. The numbering is different between `traceback()` and `where`, and that `recover()` displays calls in the opposite order. RStudio displays calls in the same order as `traceback()` but omits the numbers. All rlang functions use the same ordering and numbering as `recover()`, but also use indenting to reinforce the hierarchy of calls, and, where possible, display additional information about the source of the function.
 
-`traceback()`   `where`             `recover()`
---------------  -----------------   ------------
-`4: i(c)`       `where 1: i(c)`     `1: f()`
-`3: h(b)`       `where 2: h(b)`     `2: g(a)`
-`2: g(a)`       `where 3: g(a)`     `3: h(b)`
-`1: f(10)`      `where 4: f(10)`    `4: i(c)`
-
-Note that numbering is different between `traceback()` and `where`, and that `recover()` displays calls in the opposite order, and omits the call to `stop()`. RStudio displays calls in the same order as `traceback()` but omits the numbers.
+`traceback()`    `where`             `recover()`   rlang functions
+--------------   -----------------   ------------  ---------------------------
+`5: stop("...")`  
+`4: i(c)`        `where 1: i(c)`     `1: f()`      `1. └─global::f(10)`
+`3: h(b)`        `where 2: h(b)`     `2: g(a)`     `2.   └─global::g(a)` 
+`2: g(a)`        `where 3: g(a)`     `3: h(b)`     `3.     └─global::h(b)`
+`1: f("a")`      `where 4: f("a")`   `4: i("a")`   `4.       └─global::i("a")`
 
 ```{r, eval = FALSE, echo = FALSE}
-f <- function(x) g(x)
-g <- function(x) h(x)
-h <- function(x) stop("Error")
-f(); traceback()
+f("a")
+base::traceback()
 options(error = browser); f()
 options(error = recover); f()
 options(error = NULL)
+
+rlang::with_abort(f("a")); 
+rlang::last_trace()
 ```
 
 ### Compiled code {#debug-compiled}
 \index{debugging!C code}
 \index{gdb}
 
-Unfortunately debugging compiled code (like C or C++) is beyond the scope of this book. There are two resources that you might find useful:
+It is also possible to use an interactive debugger (gdb or lldb) for compiled code (like C or C++). Unfortunately that's beyond the scope of this book, but there are a few resources that you might find useful:
 
 * <http://r-pkgs.had.co.nz/src.html#src-debugging>
 * <https://github.com/wch/r-debug/blob/master/debugging-r.md>
+* <http://kevinushey.github.io/blog/2015/04/05/debugging-with-valgrind/>
+* <https://www.jimhester.com/2018/08/22/debugging-rstudio/>
 
 ## Non-interactive debugging
 \index{debugging!non-interactive}
 
-The most challenging debugging comes when you can't run the code interactively, typically because it's part of some pipeline run automatically (possibly on another computer), or because the error doesn't occur when you run same code interactively. This can be extremely frustrating! 
+Debugging is most challenging when you can't run code interactively, typically because it's part of some pipeline run automatically (possibly on another computer), or because the error doesn't occur when you run same code interactively. This can be extremely frustrating! 
 
-This section will give you some useful tools, but don't forget the general strategy outlined above. When you can't explore interactively, it's particularly important to spend some time making the problem as small as possible so you can iterate quickly.  You might also want to double check for the common causes below:
+This section will give you some useful tools, but don't forget the general strategy in Section \@ref(debugging-strategy). When you can't explore interactively, it's particularly important to spend some time making the problem as small as possible so you can iterate quickly. You might also want to double check for these common causes:
 
 * Is the global environment different? Have you loaded different packages in
   your interactive environment? Are there objects left around from previous
   sessions that are causing differences?
 
-* Is the working directory different? Are the `R_LIBS` (location of R library)
-  or `PATH` (location of external commands) environment variables different?
+* Is the working directory different? 
+
+* Is the `PATH` environment variable, which determines where external 
+  commands (like `git`) are found, different?
+
+* Is the `R_LIBS` environment variable, which determines where `library()`
+  looks for packages, different?
 
 You might also try running the code using `callr::r()`; this runs the code in a fresh session, and can be a useful way to reproduce the problem by running code from an interactive session.
 
@@ -310,7 +348,7 @@ You might also try running the code using `callr::r()`; this runs the code in a 
 \indexc{dump.frames()}
 \indexc{recover()}
 
-`dump.frames()` is an equivalent to `recover()` for non-interactive code. In the non-interactive session, it creates a `last.dump.rda` file in the current working directory. Then, in a later interactive R session, you load that file, and use `debugger()` to enter an interactive debugger with the same interface as `recover()`. This lets you cheat, and interactively debug code that was run non-interactively.
+`dump.frames()` is the equivalent to `recover()` for non-interactive code. It saves a `last.dump.rda` file in the working directory. Later, an interactive session, you can later `load("last.dump.rda"); debugger()` to enter an interactive debugger with the same interface as `recover()`. This lets you "cheat", interactively debugging code that was run non-interactively.
 
 ```{r, eval = FALSE}
 # In batch R process ----
@@ -330,7 +368,7 @@ debugger()
 ### Print debugging
 \index{debugging!with print}
 
-If you can't get `dump.frames()` to work, a good fallback is print debugging, where you insert numerous print statements to narrow down where the problem is occuring, and to see the values of important variables. This is particularly useful if you can't get a good traceback. Start by inserting coarse-grained markers, and then make them progressively more fine-grained as you determine exactly where the problem is.
+If `dump.frames()` doesn't help, a good fallback is __print debugging__, where you insert numerous print statements to precisely locate where the problem, and see the values of important variables. Print debugging is slow and primitive, but it always works, so it's particularly useful if you can't get a good traceback. Start by inserting coarse-grained markers, and then make them progressively more fine-grained as you determine exactly where the problem is.
 
 ```{r, error = TRUE}
 f <- function(a) {
@@ -394,29 +432,22 @@ There are other ways for a function to fail apart from throwing an error:
     `withRestarts()`, and `.signalSimpleWarning()`. Ignore these: they are
     internal functions used to turn warnings into errors.
 
-*   A function may generate an unexpected message. There's no built-in tool to
-    help solve this problem, but it's possible to create one:
+*   A function may generate an unexpected message. You can use 
+    `rlang::with_abort()` to turn these messages into errors:
 
-    ```{r}
-    message2error <- function(code) {
-      withCallingHandlers(code, message = function(cnd) {
-        cat("Message generated in:\n")
-        print(rlang::trace_back(bottom = sys.frame(-1)), simplify = "branch")
-        stop(cnd)
-      })
-    }
-
+    ```{r, error = TRUE}
     f <- function() g()
     g <- function() message("Hi!")
     f()
   
-    message2error(f())
+    rlang::with_abort(f(), "message")
+    rlang::last_trace()
     ```
 
 *   A function might never return. This is particularly hard to debug
     automatically, but sometimes terminating the function and looking at the
-    call stack is informative. Otherwise, use use print debugging, as 
-    described above.
+    `traceback()` is informative. Otherwise, use use print debugging, 
+    in Section \@ref(print-debugging).
 
 *   The worst scenario is that your code might crash R completely, leaving you
     with no way to interactively debug your code. This indicates a bug in
@@ -428,6 +459,5 @@ There are other ways for a function to fail apart from throwing an error:
     
     If it's in a package or base R, you'll need to contact the package 
     maintainer. In either case, work on making the smallest possible
-    reprex (Section \@ref(getting-help)) to make it as easy as possible for the
-    developer to help you.
+    reprex (Section \@ref(getting-help)) to help the developer help you.
     

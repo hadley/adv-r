@@ -14,6 +14,8 @@ knitr::opts_chunk$set(
   fig.show = "hold"
 )
 
+options(rlang_trace_top_env = rlang::current_env())
+
 options(
   digits = 3,
   str = strOptions(strict.width = "cut")
