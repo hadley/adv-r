@@ -133,6 +133,96 @@ This is what makes manufactured functions behave differently from one another: n
 
 [^env_print]: A future version of `env_print()` is likely to do better at summarising the contents so you don't need this step.
 
+### Scoping
+
+Here I'll focus on how they interact with scoping. The following function, `g05()`, returns a function. What do you think this function will return when it's called?[^answer3]
+
+[^answer3]: `g06()` returns `c(10, 2)`.
+
+```{r, results = "hide"}
+x <- 10
+y <- 20
+
+g05 <- function() {
+  y <- 2
+  function() {
+    c(x, y)
+  }
+}
+g06 <- g05()
+g06()
+```
+
+This seems a little magical: how does R know what the value of `y` is after `g05()` is returned? R knows because `g06()` preserves the environment where it was defined and that environment includes the value of `y`. You'll learn more about how environments work in Chapter \@ref(environments).
+
+
+### Forcing evaluation
+\indexc{force()}
+
+To __compel__ the evaluation of an argument, use `force()`: 
+
+```{r, error = TRUE}
+h02 <- function(x) {
+  force(x)
+  10
+}
+h02(stop("This is an error!"))
+```
+
+It's usually not necessary to force evaluation. However, it is important for certain functional programming techniques, like the one we'll cover in detail in Chapter \@ref(function-operators). Here, I'm just going to show you what the basic issue is.
+
+Consider this small but surprisingly tricky function. It takes a single argument `x`, and returns a function that returns `x` when called.
+
+<!-- GVW: at this point I'm finding names like `g10` and `capture1` and the like pretty hard to keep track of... -->
+
+```{r}
+capture1 <- function(x) {
+  function() {
+    x
+  }
+}
+```
+
+The subtlety here is that the value of `x` will be captured not when you call `capture1()`, but when you call the function that `capture1()` returns:
+
+```{r}
+x <- 10
+h03 <- capture1(x)
+h04 <- capture1(x)
+
+h03()
+
+x <- 20
+h04()
+```
+
+Even more confusingly this only happens once: the value is locked in after you have called `h03()`/`h04()` for the first time.
+
+```{r}
+x <- 30
+h03()
+h04()
+```
+
+This behaviour is a consequence of lazy evaluation. The `x` argument is evaluated once `h03()`/`h04()` is called, and then its value is cached.  We can avoid the confusion by forcing `x`:
+
+```{r}
+capture2 <- function(x) {
+  force(x)
+  
+  function() {
+    x
+  }
+}
+
+x <- 10
+h05 <- capture2(x)
+
+x <- 20
+h05()
+```
+
+
 ### Diagram conventions
 
 We can also show these relationships in a diagram:
@@ -163,6 +253,7 @@ square(10)
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/function-factories/power-exec.png")
 ```
+
 
 
 ### Stateful functions {#stateful-funs}
@@ -264,6 +355,14 @@ lobstr::obj_size(g2)
 ```
 
 ### Exercises
+
+1.  The definition of `force()` is simple:
+
+    ```{r}
+    force
+    ```
+    
+    Why is it better to `force(x)` instead of just `x`?
 
 1.  Base R contains two function factories, `approxfun()` and `ecdf()`. 
     Read their documentation and experiment to figure out what the functions 
