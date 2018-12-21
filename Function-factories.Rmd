@@ -11,8 +11,6 @@ A __function factory__ is a function that makes functions. Here's a very simple 
 
 ```{r}
 power1 <- function(exp) {
-  force(exp)
-  
   function(x) {
     x ^ exp
   }
@@ -22,7 +20,7 @@ square <- power1(2)
 cube <- power1(3)
 ```
 
-Don't worry if this code doesn't make sense yet; it should by the end of the chapter!
+Don't worry if this doesn't make sense yet, it should by the end of the chapter!
 
 \index{manufactured functions}
 \index{functions!manufactured}
@@ -101,7 +99,7 @@ square
 cube
 ```
 
-Printing manufactured functions is not revealing because the bodies are identical; it's the contents of the enclosing environment that's important. We can get a little more insight by using `rlang::env_print()`. That shows us that we have two different environments (each of which was originally an execution environment of `power1()`). The environments have the same parent, which is the enclosing environment of `power1()`, the global environment.
+It's obvious where `x` comes from, but how does R find the value associated with `exp`? Simply printing the manufactured functions is not revealing because the bodies are identical; it's the contents of the enclosing environment that's important. We can get a little more insight by using `rlang::env_print()`. That shows us that we have two different environments (each of which was originally an execution environment of `power1()`). The environments have the same parent, which is the enclosing environment of `power1()`, the global environment.
 
 ```{r}
 env_print(square)
@@ -109,7 +107,7 @@ env_print(square)
 env_print(cube)
 ```
 
-`env_print()` shows us that both environments have a binding to `exp`, but we want to see its value[^env_print]. We can do that by first getting the environment of the function, and then extract the values:
+`env_print()` shows us that both environments have a binding to `exp`, but we want to see its value[^env_print]. We can do that by first getting the environment of the function, and then extracting the values:
 
 ```{r}
 fn_env(square)$exp
@@ -120,94 +118,6 @@ fn_env(cube)$exp
 This is what makes manufactured functions behave differently from one another: names in the enclosing environment are bound to different values.
 
 [^env_print]: A future version of `env_print()` is likely to do better at summarising the contents so you don't need this step.
-
-### Scoping
-
-Here I'll focus on how they interact with scoping. The following function, `g05()`, returns a function. What do you think this function will return when it's called?[^answer3]
-
-[^answer3]: `g06()` returns `c(10, 2)`.
-
-```{r, results = "hide"}
-x <- 10
-y <- 20
-
-g05 <- function() {
-  y <- 2
-  function() {
-    c(x, y)
-  }
-}
-g06 <- g05()
-g06()
-```
-
-This seems a little magical: how does R know what the value of `y` is after `g05()` is returned? R knows because `g06()` preserves the environment where it was defined and that environment includes the value of `y`. You'll learn more about how environments work in Chapter \@ref(environments).
-
-
-### Forcing evaluation
-\indexc{force()}
-
-To __compel__ the evaluation of an argument, use `force()`: 
-
-```{r, error = TRUE}
-h02 <- function(x) {
-  force(x)
-  10
-}
-h02(stop("This is an error!"))
-```
-
-It's usually not necessary to force evaluation. However, it is important for certain functional programming techniques, like the one we'll cover in detail in Chapter \@ref(function-operators). Here, I'm just going to show you what the basic issue is.
-
-Consider this small but surprisingly tricky function. It takes a single argument `x`, and returns a function that returns `x` when called.
-
-```{r}
-capture1 <- function(x) {
-  function() {
-    x
-  }
-}
-```
-
-The subtlety here is that the value of `x` will be captured not when you call `capture1()`, but when you call the function that `capture1()` returns:
-
-```{r}
-x <- 10
-h03 <- capture1(x)
-h04 <- capture1(x)
-
-h03()
-
-x <- 20
-h04()
-```
-
-Even more confusingly this only happens once: the value is locked in after you have called `h03()`/`h04()` for the first time.
-
-```{r}
-x <- 30
-h03()
-h04()
-```
-
-This behaviour is a consequence of lazy evaluation. The `x` argument is evaluated once `h03()`/`h04()` is called, and then its value is cached.  We can avoid the confusion by forcing `x`:
-
-```{r}
-capture2 <- function(x) {
-  force(x)
-  
-  function() {
-    x
-  }
-}
-
-x <- 10
-h05 <- capture2(x)
-
-x <- 20
-h05()
-```
-
 
 ### Diagram conventions
 
@@ -240,7 +150,43 @@ square(10)
 knitr::include_graphics("diagrams/function-factories/power-exec.png")
 ```
 
+### Forcing evaluation
+\indexc{lazy evaluation}
+\indexc{force()}
 
+There's a subtle bug in `power1()` caused by lazy evaluation. To see the problem we need to introduce some indirection:
+
+```{r}
+x <- 2
+square <- power1(x)
+x <- 3
+```
+
+What should `square(2)` return? You would hope it returns 4:
+
+```{r}
+square(2)
+```
+
+Unfortunately it doesn't because `x` is only evaluated lazily when `square()` is run, not when `power1()` is run. In general, this problem will arise whenever a binding changes in between calling the factory function and calling the manufactured function. This is likely to only happen rarely, but when it does, it will lead to a real head-scratcher of a bug. 
+
+We can fix this problem by __forcing__ evaluation with `force()`:
+
+```{r}
+power2 <- function(exp) {
+  force(exp)
+  function(x) {
+    x ^ exp
+  }
+}
+
+x <- 2
+square <- power2(x)
+x <- 3
+square(2)
+```
+
+Whenever you create a function factory, make sure every argument is evaluated, using `force()` as necessary if the argument is only used by the manufactured function.
 
 ### Stateful functions {#stateful-funs}
 \indexc{<<-} 
@@ -291,30 +237,7 @@ knitr::include_graphics("diagrams/function-factories/counter-2.png")
 
 Stateful functions are best used in moderation. As soon as your function starts managing the state of multiple variables, it's better to switch to R6, the topic of Chapter \@ref(r6).
 
-### Potential pitfalls {#factory-pitfalls}
-\index{lazy evaluation}
-\indexc{force()}
-
-There are two potential pitfalls to be aware of when creating your own function factories: forgetting to evaluate all inputs and accidentally capturing large objects. 
-
-Generally, you can rely on lazy evaluation to evaluate function inputs at the right time. However, there's a catch when it comes to function factories: if you don't eagerly evaluate every argument, it's possible to get confusing behaviour, as shown below.
-
-```{r}
-power2 <- function(exp) {
-  function(x) {
-    x ^ exp
-  }
-}
-
-exp2 <- 2
-square2 <- power2(exp2)
-exp2 <- 3
-
-square2(2)
-```
-
-This is described in Section \@ref(forcing-evaluation), and happens when a binding changes in between calling the factory function and calling the manufactured function. This is likely to only happen rarely, but when it does, it will lead to a real head-scratcher of a bug. Avoid future pain by ensuring every argument is evaluated, using `force()` if the argument is only used by the manufactured function.
-
+### Garbage collection {#factory-pitfalls}
 \index{garbage collector!manufactured functions}
 
 With most functions, you can rely on the garbage collector to clean up any large temporary objects created inside a function. However, manufactured functions hold on to the execution environment, so you'll need to explicitly unbind any large temporary objects with `rm()`. Compare the sizes of `g1()` and `g2()` in the example below:
