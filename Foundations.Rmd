@@ -21,7 +21,12 @@ To start your journey in mastering R, the following six chapters will help you l
     \@ref(subsetting). Understanding the fundamental components of subsetting 
     will allow you to solve new problems by combining the building blocks in 
     novel ways.
-    
+
+1.  The tools of control flow allow you to only execute code under certain
+    conditions, or to repeatedly execute code with changing inputs. In Chapter
+    \@ref(control-flow), you'll learn the important `if` and `for` constructs,
+    as well as related tools like `switch()` and `while`.
+
 1.  Functions are the most important building block of R code, and in Chapter
     \@ref(functions), you'll learn exactly how they work, including
     the __scoping__ rules, which govern how R looks up values from names.

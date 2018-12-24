@@ -1,0 +1,289 @@
+# Control flow
+
+```{r, include = FALSE}
+source("common.R")
+```
+
+## `if`
+\indexc{if}
+
+The basic form of R's if statement is as follows:
+
+```{r, eval = FALSE}
+if (condition) true_action
+if (condition) true_action else false_action
+```
+
+If `condition` is `TRUE`, `true_action` will be evaluated; if `condition` is `FALSE`, the optional `else` statement will be evaluated. Typically the actions are compound statements contained within `{`:
+
+```{r}
+grade <- function(x) {
+  if (x > 90) {
+    "A"
+  } else if (x > 80) {
+    "B"
+  } else if (x > 50) {
+    "C"
+  } else {
+    "F"
+  }
+}
+```
+
+`if` returns a value so that you can assign the results:
+
+```{r}
+x1 <- if (TRUE) 1 else 2
+x2 <- if (FALSE) 1 else 2
+
+c(x1, x2)
+```
+
+(I recommend using this technique only when the whole expression can fit one line; otherwise it tends to be hard to read.)
+
+When you use the single argument form without an else statement, `if` invisible returns `NULL` is the condtion is `FALSE`. Since functions like `c()` and `paste()` drop `NULL` inputs, this allows you to write compact code.
+
+```{r}
+greet <- function(name, birthday = FALSE) {
+  paste0(
+    "Hi ", name,
+    if (birthday) " and HAPPY BIRTHDAY"
+  )
+}
+greet("Maria", FALSE)
+greet("Jaime", TRUE)
+```
+
+### Invalid inputs
+
+The condition should evaluate to a single `TRUE` or `FALSE`. If it does not, R throws an error in most cases:
+
+```{r, error = TRUE}
+if ("x") 1
+if (logical()) 1
+if (NA) 1
+```
+
+The exception is a logical vector of length greater than 1, which only generates a warning:
+
+```{r, include = FALSE}
+Sys.setenv("_R_CHECK_LENGTH_1_CONDITION_" = "false")
+```
+
+```{r}
+if (c(TRUE, FALSE)) 1
+```
+
+In R 3.5.0 and greater, thanks to [Henrik Bengtsson](https://github.com/HenrikBengtsson/Wishlist-for-R/issues/38), you can turn this an error by setting an environment variable:
+
+```{r, error = TRUE}
+Sys.setenv("_R_CHECK_LENGTH_1_CONDITION_" = "true")
+if (c(TRUE, FALSE)) 1
+```
+
+I think it's good practice to set this environment variable, as it clearly reveals a mistake in your code that might otherwise slip through.
+
+### Vectorised if
+
+Given that `if` only works with a single `TRUE` or `FALSE`, you might wonder what do if you have a vector of logical values. Handling that case is the job of `ifelse()`: it's a vectorised function that takes where `condition`, `true_action`, and `false_action` are all vectors (that will be recycled to the same length):
+
+```{r}
+x <- 1:10
+ifelse(x %% 5 == 0, "XXX", as.character(x))
+
+ifelse(x %% 2 == 0, "even", "odd")
+```
+
+The tidyverse provides an even more general alternative with `dplyr::case_when()`: 
+
+```{r}
+dplyr::case_when(
+  x %% 35 == 0 ~ "fizz buzz",
+  x %% 5 == 0 ~ "fizz",
+  x %% 7 == 0 ~ "buzz",
+  TRUE ~ as.character(x)
+)
+```
+
+### `switch()` statement
+\indexc{switch()}
+
+Closely related to `if` is the `switch()`-statement. The switch statement is a compact, special purpose equivalent to `if` that lets you replace code like:
+
+```{r}
+x_option <- function(x) {
+  if (x == "a") {
+    "option 1"
+  } else if (x == "b") {
+    "option 2" 
+  } else if (x == "c") {
+    "option 3"
+  } else {
+    stop("Invalid `x` value")
+  }
+}
+```
+
+with a succinct equivalent:
+
+```{r}
+x_option <- function(x) {
+  switch(x,
+    a = "option 1",
+    b = "option 2",
+    c = "option 3",
+    stop("Invalid `x` value")
+  )
+}
+```
+
+If multiple inputs have the same output, you can leave the value empty and it will "fall through" to the next value. This mimics that behaviour of C's `switch` statment:
+
+```{r}
+legs <- function(x) {
+  switch(x,
+    cow = ,
+    horse = ,
+    dog = 4,
+    human = ,
+    chicken = 2,
+    plant = 0,
+    stop("Unknown input")
+  )
+}
+```
+
+There is no vectorised version of `switch()` in base R; the tidyverse has `dplyr::recode()`.
+
+You can also use `switch()` with numeric `x`, but is harder to read, and has undesirable failure modes if `x` is a not an integer greater than or equal to 1. For those reasons, I recommend using `switch()` only with character inputs.
+
+## `for` loops
+\index{for loops}
+\index{for loops!foo@\textttt{for}}
+
+For loops are used to iterate over values in a vector. They have the following basic form:
+
+```{r, eval = FALSE}
+for (index in vector) perform_action
+```
+
+`perform_action` is called once for each value in `vector`, each changing the binding of `variable` each time. When iterating over integers, it's conventional to use very short indices like `i`, `j`, or `k`.
+
+```{r}
+for (i in 1:3) {
+  print(i)
+}
+```
+
+Note that `for` assigns the index in the current environment, so that an existing variable with the same name will be overwritten:
+
+```{r}
+i <- 100
+for (i in 1:3) {}
+i
+```
+
+If you're saving the results of the for loop, make sure to preallocate the output. Otherewise it will be very slow; see Sections \@ref(memory-profiling) and \@ref(avoid-copies) for more details. The `vector()` function is helpful here.
+
+```{r}
+n <- 10
+out <- vector("list", n)
+for (i in 1:n) {
+  out[[i]] <- runif(n)
+}
+```
+
+There are two ways to terminate a for loop early:
+
+* `next` terminates the current iteration and advances to the next.
+* `break` exits the entire for loop.
+
+```{r}
+for (i in 1:10) {
+  if (i < 3) 
+    next
+
+  print(i)
+  
+  if (i >= 5)
+    break
+}
+```
+
+### Common pitfalls
+
+There are two common problems that you might encounter with for loops. First, beware iterating over `1:length(x)`. This will fail in unhelpful ways if `x` has length 0:
+
+```{r, error = TRUE}
+x <- integer()
+out <- vector("list", length(x))
+for (i in 1:length(x)) {
+  out[[i]] <- x[[i]] ^ 2
+}
+```
+
+That's because `:` works with both positive and increasing sequences:
+
+```{r}
+1:length(x)
+```
+
+Instead switch to `seq_along(x)` which always returns a value the same length as `x`:
+
+```{r}
+seq_along(x)
+
+x <- integer()
+out <- vector("integer", length(x))
+for (i in seq_along(x)) {
+  out[[i]] <- x[[i]] ^ 2
+}
+```
+
+You might also encounter problems when iterating over S3 vectors, as for loops typically strip the attributes:
+
+```{r}
+xs <- as.Date(c("2020-01-01", "2010-01-01"))
+for (x in xs) {
+  print(x)
+}
+```
+
+Work around this by calling `[[` yourself:
+
+```{r}
+for (i in seq_along(xs)) {
+  print(xs[[i]])
+}
+```
+
+### Related
+
+`for` loops are useful if you know in advance the set of values that you want to iterate over. There are two related tools that have more flexible specifications:
+
+* `while(condition) action`: performs `action` while `condition` is `TRUE`.
+
+* `repeat(action)`: repeats action forever (or until `break`).
+
+R does not have an equivalent to the `do {action} while (condition)` syntax found in other languages.
+
+### Exercises
+
+1.  Why does this code succeed without errors or warnings? 
+    
+    ```{r, results = FALSE}
+    out <- vector("list", length(x))
+    for (i in 1:length(x)) {
+      out[i] <- x[i] ^ 2
+    }
+    out
+    ```
+
+1.  What does the following code tell you about when the vector is evaluated?
+
+    ```{r}
+    xs <- 1
+    for (x in xs) {
+      xs <- c(xs, x * 2)
+    }
+    ```
