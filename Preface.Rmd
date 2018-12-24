@@ -37,6 +37,10 @@ The foundations of R have not changed in the five years since the 1st edition, b
     understand how `[[` works with lists, and introduces new functions that 
     provide more consistent behaviour for out-of-bounds indices.
 
+*   Chapter \@ref(control-flow), "Control flow", is a new chapter: somehow
+    I previously managed to forget about such important tools like `if` and 
+    `for`!
+
 *   Chapter \@ref(functions), "Functions", has an improved ordering,
     introduces the pipe (`%>%`) as a third way to compose functions (Section 
     \@ref(function-composition)), and has considerably improved coverage of 
