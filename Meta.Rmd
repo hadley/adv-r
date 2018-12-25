@@ -18,7 +18,7 @@ In particular, this book focuses on tidy evaluation, or tidy eval for short. Tid
 
 Metaprogramming is the hardest topic in this book because it brings together many formerly unrelated topics and forces you grapple with issues that you probably haven't thought about before. Don't be surprised if you're frustrated or confused at first; this is a natural part of the process that happens to everyone!
 
-## Big ideas
+## Big ideas {.unnumbered}
 
 Before you dive into details, I want to give you an overview of the most important ideas and vocabulary of metaprogramming::
 
@@ -36,12 +36,9 @@ Below, I'll use tools primarily from the rlang package, as it allows you to focu
 library(rlang)
 ```
 
+### Code is data {.unnumbered}
 
-### Code is data
-
-<!-- GVW: second sentence in para below seems redundant (?) -->
-
-The first big idea is that code is data: you can capture code and compute on it like any other type of data. To compute on code, you first need some way to capture it. The first function that captures code is `rlang::expr()`. You can think of it returning exactly what you pass in:
+The first big idea is that code is data: you can capture code and compute on it like any other type of data. The first way to capture code is with `rlang::expr()`. You can think of `expr()` as returning exactly what you pass in:
 
 ```{r}
 expr(mean(x, na.rm = TRUE))
@@ -59,9 +56,7 @@ capture_it <- function(x) {
 capture_it(a + b + c)
 ```
 
-<!-- GVW: maybe a hint about what the "en" in "enexpr" stands for -->
-
-Here you need to use a function specifically designed to capture user input in a function argument: `enexpr()`.
+Here you need to use a function specifically designed to capture user input in a function argument: `enexpr()`. Think of the "en" like in "enrich", `enexpr()` takes a lazily evaluted argument and turns it into an expression:
 
 ```{r}
 capture_it <- function(x) {
@@ -84,9 +79,9 @@ f[[2]] <- NULL
 f
 ```
 
-Note that the first element of the call is the function to be called, which means the first argument is in the second position. You'll learn about the full details in Section \@ref(calls).
+The first element of the call is the function to be called, which means the first argument is in the second position. You'll learn about the full details in Section \@ref(calls).
 
-### Code is a tree
+### Code is a tree {.unnumbered}
 
 To do more complex manipulation with code, you need to fully understand its structure. Behind the scenes, almost every programming language represents code as a tree, often called the __abstract syntax tree__, or AST for short. R is unusual in that you can actually inspect and manipulate this tree.
 
@@ -110,7 +105,7 @@ lobstr::ast(1 + 2 * 3)
 
 Displaying the code tree in this way is a useful tool for exploring R's grammar, the topic of Section \@ref(grammar).
 
-### Code can generate code
+### Code can generate code {.unnumbered}
 
 As well as seeing the tree from code typed by a human, you can also use code to create new trees. There are two main tools: `call2()` and unquoting.
 
@@ -136,23 +131,21 @@ expr(!!xx / !!yy)
 
 Notice that the output preserves the operator precedence so we get `(x + x) / (y + y)` not `x + x / y + y` (i.e. `x + (x / y) + y`). This is important to note, particularly if you've been thinking "wouldn't this be easier to do by pasting strings?".
 
-<!-- GVW: I like the operator precedence mention above -->
-
 Unquoting gets even more useful when you wrap it up into a function, first using `enexpr()` to capture the user's expression, then `expr()` and `!!` to create an new expression using a template. The example below shows how you can generate an expression that computes the coefficient of variation:
 
 ```{r}
 cv <- function(var) {
   var <- enexpr(var)
-  expr(mean(!!var) / sd(!!var))
+  expr(sd(!!var) / mean(!!var))
 }
 
 cv(x)
 cv(x + y)
 ```
 
-Importantly, this works even when given weird variable names:
+(This isn't very useful here, but being able to create this sort of building block is very useful when solving more complex problems.)
 
-<!-- GVW: in the above, is weird variable names the main reason for using this trick? seems to imply that it is (but maybe that's just me) -->
+Importantly, this works even when given weird variable names:
 
 ```{r}
 cv(`)`)
@@ -160,17 +153,15 @@ cv(`)`)
 
 Dealing with non-syntactic variable names is another good reason to `paste()` when generating R code. You might think this is an esoteric concern, but not worrying about it when generating SQL code in web applications led to SQL injection attacks that have collectively cost billions of dollars.
 
-These techniques become yet more powerful when combined with functional programming. You'll explore these ideas in detail in Section \@ref(expr-case-studies) but the teaser below shows how you might generate a complex model specification from simple inputs.
-
-<!-- GVW: I read this teaser twice and still don't know what it's showing me - I can probably figure it out, but I think a lot of readers will be as baffled as I am -->
+These techniques become yet more powerful when combined with functional programming. You'll explore these ideas in detail in Section \@ref(expr-case-studies) but the teaser below shows how you could generate a polynomial model specification automatically. At this point, don't worry about fully understanding the code, and instead focus on the input to and output from the function.
 
 ```{r}
 library(purrr)
 
 poly <- function(n) {
-  i <- as.double(seq(2, n))
+  i <- seq(2, n)
   xs <- c(1, expr(x), map(i, function(i) expr(I(x^!!i))))
-  terms <- reduce(xs, call2, .fn = "+")
+  terms <- reduce(xs, function(l, r) expr(!!l + !!r))
   expr(y ~ !!terms)
 }
 poly(5)
@@ -178,9 +169,7 @@ poly(5)
 
 ### Evaluation executes an expression in an environment
 
-<!-- GVW: I'd say "waht the symbols in the tree mean" and skip that they're leaf nodes for now -->
-
-Inspecting and modifying code gives you one set of powerful tools. You get another set of powerful tools when you __evaluate__, i.e. execute, an expression. Evaluating an expression requires an environment. This tells R what the symbols (found in the leaves of tree) mean. You'll learn the details of evaluation in Chapter \@ref(evaluation).
+Inspecting and modifying code gives you one set of powerful tools. You get another set of powerful tools when you __evaluate__, i.e. execute, an expression. Evaluating an expression requires an environment. This tells R what the symbols mean. You'll learn the details of evaluation in Chapter \@ref(evaluation).
 
 The primary tool for evaluating expressions is `base::eval()`, which takes an expression and an environment:
 
@@ -244,9 +233,7 @@ DBI::dbDisconnect(con)
 
 ### Data masks blur the line between data frames and environments
 
-<!-- GVW: insert parenthetical comment after "pitfalls" to say which section will cover them -->
-
-Rebinding functions is an extremely powerful technique, but it tends to require a lot of investment. A more immediately practical application is modifying evaluation to look for variables in a data frame instead of an environment. This idea powers the base `subset()` and `transform()` functions, as well as many tidyverse functions like `ggplot2::aes()` and `dplyr::mutate()`. It's possible to use `eval()` for this, but there are a few potential pitfalls, so we'll use `rlang::eval_tidy()` instead.
+Rebinding functions is an extremely powerful technique, but it tends to require a lot of investment. A more immediately practical application is modifying evaluation to look for variables in a data frame instead of an environment. This idea powers the base `subset()` and `transform()` functions, as well as many tidyverse functions like `ggplot2::aes()` and `dplyr::mutate()`. It's possible to use `eval()` for this, but there are a few potential pitfalls (Section \@ref(subset)), so we'll use `rlang::eval_tidy()` instead.
 
 As well as expression and environment, `eval_tidy()` also takes a __data mask__, which is typically a data frame:
 
@@ -282,15 +269,13 @@ with2 <- function(df, expr) {
 
 (The problem occurs without this modification but is subtler and creates error messages that are harder to understand.)
 
-We can see the problem if we attempt to use `with2()` mingling a variable from the data frame and a variable called `a` in the current environment:
+We can see the problem if we attempt to use `with2()` mingling a variable from the data frame and a variable called `a` in the current environment. We want the value of `a` to come from the binding we can see (10), not the binding internal to the function (1000):
 
 ```{r}
 df <- data.frame(x = 1:3)
 a <- 10
 with2(df, x + a)
 ```
-
-<!-- GVW: explain the difference between actual and desired output here, just to be sure readers understand the problem -->
 
 That's because we really want to evaluate the captured expression in the environment where it was written (where `a` is 10), not the environment inside of `with2()` (where `a` is 1000).
 

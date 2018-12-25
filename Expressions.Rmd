@@ -188,8 +188,6 @@ The order in which infix operators are applied is governed by a set of rules cal
     lobstr::ast(1 -> x)
     ```
 
-<!-- GVW: should I read the docs for ?"^" or ?"**" ? -->
-
 1.  What is special about the AST below? (Hint: re-read Section
     \@ref(fun-components))
 
@@ -209,8 +207,6 @@ Collectively, the data structures present in the AST are called expressions. Mor
 [^exceptions]: It is _possible_ to insert any other base object into an expression, but this is unusual and only needed in rare circumstances. We'll come back to that idea in Section \@ref(non-standard-ast).
 
 Expressions use a couple of data structures that we'll come back to later. Pairlists are used when capturing function creation, but behave identically to lists; we'll discuss them in Section \@ref(pairlists). There also a special symbol used to represent missing arguments; we'll come back to it in Section \@ref(empty-symbol).
-
-<!-- GVW: elsewhere you use "Note" rather than "NB" -->
 
 NB: In base R documentation "expression" is used to mean two things. As well as the definition above, expression is also used to refer to the type of object returned by `expression()` and `parse()`, which are basically lists of expressions as defined above. In this book I'll call these __expression vectors__, and I'll come back to them in Section \@ref(expression-vectors).
 
@@ -263,9 +259,9 @@ The symbol type is not vectorised, i.e. a symbol is always length 1. If you want
 \index{call objects}
 \index{language objects!see {call objects}}
 
-<!-- GVW: are call objects vectors or lists? (I realize a list is a kind of vector, but the word "list" seems to be used whenever elements can be heterogeneous.) -->
+A __call object__ represents a captured function call. Call objects are a special type of list[^call-pairlist] where the first component specifies the function to call (usually a symbol), and the remaining elements are the arguments for that call. Call objects create branches in the AST, because calls can be nested inside other calls.
 
-A __call object__ represents a captured function call. Call objects are vectors: the first component specifies the function to call (usually a symbol), and the remaining elements are the arguments for that call. Call objects create branches in the AST, because calls can be nested inside other calls.
+[^call-pairlist]: More precisely, they're pairlists, Section \@ref(pairlists), but this distinction only matters in C code.
 
 You can identify a call object when printed because it looks just like a function call. Confusingly `typeof()` and `str()` print "language"[^is.language] for call objects, but `is_call()` returns `TRUE`:
 
@@ -500,15 +496,14 @@ lobstr::ast(x <- y <- z)
 
 Most of the time you type code into the console, and R takes care of turning the characters you've typed into an AST. But occasionally you have code stored in a string, and you want to parse it yourself. You can do so using `rlang::parse_expr()`:
 
-<!-- GVW: whoops: using !! here is confusing, since it hasn't been explained -->
-
 ```{r}
 x1 <- "y <- x + 10"
-lobstr::ast(!!x1)
+x1
+is.call(x1)
 
 x2 <- rlang::parse_expr(x1)
 x2
-lobstr::ast(!!x2)
+is.call(x2)
 ```
 
 `parse_expr()` always returns a single expression. If you have multiple expression separated by `;` or `\n`, you'll need to use `rlang::parse_exprs()`. It returns a list of expressions:
@@ -643,6 +638,7 @@ expr_type <- function(x) {
 }
 
 expr_type(expr("a"))
+expr_type(expr(x))
 expr_type(expr(f(1, 2)))
 ```
 
@@ -657,9 +653,7 @@ switch_expr <- function(x, ...) {
 }
 ```
 
-With these two functions in hand, the basic template for any function that walks the AST is as follows:
-
-<!-- GVW: I still don't understand what's going on here with `symbol = ,` - is something supposed to come before the `,`? I realize it's all being spliced into switch_expr, but... -->
+With these two functions in hand, we can write a basic template for any function that walks the AST using `switch()` (Section \@ref(switch)):
 
 ```{r}
 recurse_call <- function(x) {
@@ -675,19 +669,18 @@ recurse_call <- function(x) {
 }
 ```
 
-<!-- GVW: why am I looking to purrr below for help? (seems deus ex something or other) -->
-
-Typically, solving the base case is easy, so we'll do that first, then check the results. The recursive cases are a little more tricky. Typically you'll think about the structure of the final output and then find the correct purrr function to produce it. To that end, make sure you're familiar with [Functionals] before continuing.
+Typically, solving the base case is easy, so we'll do that first, then check the results. The recursive cases are a little more tricky, and will often require some functional programming.
 
 ### Finding F and T
 
-We'll start simple with a function that determines whether a function uses the logical abbreviations `T` and `F`: it will return `TRUE` if it finds a logical abbreviation, and `FALSE` otherwise. Using `T` and `F` is generally considered to be poor coding practice, and is something that `R CMD check` will warn about.
+We'll start with a function that determines whether another function uses the logical abbreviations `T` and `F` because using them is often considered to be poor coding practice. Our goal is to return `TRUE` if the input contains a logical abbreviation, and `FALSE` otherwise. 
 
-Let's first compare the AST for `T` vs. `TRUE`:
+Let's first the type of `T` vs. `TRUE`:
 
 ```{r}
-ast(TRUE)
-ast(T)
+expr_type(expr(TRUE))
+
+expr_type(expr(T))
 ```
 
 `TRUE` is parsed as a logical vector of length one, while `T` is parsed as a name. This tells us how to write our base cases for the recursive function: a constant is never a logical abbreviation, and a symbol is an abbreviation if it's "F" or "T":
@@ -706,8 +699,6 @@ logical_abbr_rec(expr(T))
 
 I've written `logical_abbr_rec()` function assuming that the input will be an expression as this will make the recursive operation simpler. However, when writing a recursive function it's common to write a wrapper that provides defaults or makes the function a little easier to use. Here we'll typically make a wrapper that quotes its input (we'll learn more about that in the next chapter), so we don't need to use `expr()` every time.
 
-<!-- GVW: still struggling a bit to follow this example, but less so than before (probably because I've now used quasiquotation) -->
-
 ```{r}
 logical_abbr <- function(x) {
   logical_abbr_rec(enexpr(x))
@@ -717,9 +708,7 @@ logical_abbr(T)
 logical_abbr(FALSE)
 ```
 
-<!------ this section (the case study) is heavy on the use of "simple" ------>
-
-Next we need to implement the recursive cases. Here it's simple because we want to do the same thing for calls and for pairlists: recursively apply the function to each subcomponent, and return `TRUE` if any subcomponent contains a logical abbreviation. This is made easy by `purrr::some()`, which iterates over a list and returns `TRUE` if the predicate function is true for any element.
+Next we need to implement the recursive cases. Here we want to do the same thing for calls and for pairlists: recursively apply the function to each subcomponent, and return `TRUE` if any subcomponent contains a logical abbreviation. This is made easy by `purrr::some()`, which iterates over a list and returns `TRUE` if the predicate function is true for any element.
 
 ```{r}
 logical_abbr_rec <- function(x) {
@@ -740,7 +729,7 @@ logical_abbr(function(x, na.rm = T) FALSE)
 
 ### Finding all variables created by assignment
 
-`logical_abbr()` is very simple: it only returns a single `TRUE` or `FALSE`. The next task, listing all variables created by assignment, is a little more complicated. We'll start simply, and then make the function progressively more rigorous. \indexc{find\_assign()}
+`logical_abbr()` is relatively simple: it only returns a single `TRUE` or `FALSE`. The next task, listing all variables created by assignment, is a little more complicated. We'll start simply, and then make the function progressively more rigorous. \indexc{find\_assign()}
 
 We start by looking at the AST for assignment:
 
@@ -752,7 +741,7 @@ Assignment is a call object where the first element is the symbol `<-`, the seco
 
 Next, we need to decide what data structure we're going to use for the results. Here I think it will be easiest if we return a character vector. If we return symbols, we'll need to use a `list()` and that makes things a little more complicated.
 
-With that in hand we can start by implementing the base cases and providing a helpful wrapper around the recursive function. The base cases here are really simple!
+With that in hand we can start by implementing the base cases and providing a helpful wrapper around the recursive function. Here the base cases are straightforward because we know that neither a symbol nor a constant represents assignment.
 
 ```{r}
 find_assign_rec <- function(x) {
@@ -779,7 +768,7 @@ flat_map_chr <- function(.x, .f, ...) {
 flat_map_chr(letters[1:3], ~ rep(., sample(3, 1)))
 ```
 
-The recursive case for pairlists is simple: we iterate over every element of the pairlist (i.e. each function argument) and combine the results. The case for calls is a little bit more complex - if this is a call to `<-` then we should return the second element of the call:
+The recursive case for pairlists is straightforward: we iterate over every element of the pairlist (i.e. each function argument) and combine the results. The case for calls is a little bit more complex - if this is a call to `<-` then we should return the second element of the call:
 
 ```{r}
 find_assign_rec <- function(x) {
@@ -868,9 +857,7 @@ find_assign(a <- b <- c <- 1)
 find_assign(system.time(x <- print(y <- 5)))
 ```
 
-While the complete version of this function is quite complicated, it's important to remember we wrote it by working our way up by writing simple component parts.
-
-<!-- GVW: I would probably spend 2-3 hour-long lectures walking computer science students who hadn't seen recursion before through the material you've just covered. -->
+The complete version of this function is quite complicated, it's important to remember we wrote it by working our way up by writing simple component parts.
 
 ### Exercises
 
