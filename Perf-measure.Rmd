@@ -17,14 +17,14 @@ ns <- function(x) paste0(num(round(unclass(x) * 1e9, -1)), " ns")
 >
 > --- Donald Knuth.
 
-Before you can make your code faster, you first need to figure out what's making it slow. This sounds easy, but it's not. Even experienced programmers have a hard time identifying bottlenecks in their code. Instead of relying on your intuition, you should __profile__ your code: use realistic inputs and measure the run-time of each individual operation. Only once you've identified the most important bottlenecks can you attempt to eliminate them. It's difficult to provide general advice on improving performance, but I try my best with six techniques that can be applied in many situations. I'll also suggest a general strategy for performance optimisation that helps ensure that your faster code will still be correct code.
+Before you can make your code faster, you first need to figure out what's making it slow. This sounds easy, but it's not. Even experienced programmers have a hard time identifying bottlenecks in their code. So instead of relying on your intuition, you should __profile__ your code: measure the run-time of each line of code using realistic inputs.
 
 Once you've identified bottlenecks you'll need to carefully experiment with alternatives to find faster code that is still equivalent. In Chapter  \@ref(perf-improve) you'll learn a bunch of ways to speed up code, but first you need to learn how to __microbenchmark__ so that you can precisely measure the difference in performance.
 
 ### Outline {-}
 
 * Section \@ref(profiling) shows you how to use profiling tools to dig into
-  exactly what is making a function slow.
+  exactly what is making code slow.
   
 * Section \@ref(microbenchmarking) shows how to use microbenchmarking to 
   explore alternative implementations and figure out exactly which one is 
@@ -62,16 +62,18 @@ h <- function() {
 
 (I use `profvis::pause()` instead of `Sys.sleep()` because `Sys.sleep()` does not appear in profiling outputs because as far as R can tell, it doesn't use up any computing time.) \indexc{pause()}
 
-If we profiled the execution of `f()`, stopping the execution of code every 0.1 s, we'd see a profile like below. Each line represents one "tick" of the profiler (0.1 s in this case), and function calls are recorded from right to left: the first line shows `f()` calling `pause()`. It shows that the code spends 0.1 s running `f()`, then 0.2 s running `g()`, then 0.1 s running `h()`.
+If we profiled the execution of `f()`, stopping the execution of code every 0.1 s, we'd see a profile like this:
 
-```
+```{r, eval = FALSE}
 "pause" "f" 
 "pause" "f" "g"
 "pause" "f" "g" "h"
 "pause" "f" "h"
 ```
 
-If we actually profile `f()`, using `utils::Rprof()` the code below, we're unlikely to get such a clear result.
+Each line represents one "tick" of the profiler (0.1 s in this case), and function calls are recorded from right to left: the first line shows `f()` calling `pause()`. It shows that the code spends 0.1 s running `f()`, then 0.2 s running `g()`, then 0.1 s running `h()`.
+
+If we actually profile `f()`, using `utils::Rprof()` as in the code below, we're unlikely to get such a clear result.
 
 ```{r, eval = FALSE}
 tmp <- tempfile()
@@ -85,44 +87,43 @@ writeLines(readLines(tmp))
 #> "pause" "h" "f" 
 ```
 
-That's because profiling has to make a fundamental trade-off between accuracy and performance. The compromise that `RProf()` makes, sampling, only has minimal impact on performance, but is fundamentally stochastic because there's some variability in both the accuracy of the timer and in the time taken by each operation. That means each time that you profile you'll get a slightly different answer. Fortunately, the slowest parts of your code will be least variable, and those are the parts that you're mos interested in.
+That's because all profilers must make a fundamental trade-off between accuracy and performance. The compromise that makes, using a sampling profiler, only has minimal impact on performance, but is fundamentally stochastic because there's some variability in both the accuracy of the timer and in the time taken by each operation. That means each time that you profile you'll get a slightly different answer. Fortunately, the variability most affects functions that take very little time ot run, which are also the functions that we're least interested in.
 
 ### Visualising profiles
 \indexc{profvis()}
 
-The default profiling resolution is quite small, so if your function takes even a few seconds it will generate hundreds of samples. That quickly grows beyond our ability to look at directly, so instead of using `uils::Rprof()` we'll use the profvis package to visualise aggregates. profvis also connects profiling data back to the underlying source code, making it easier to build up a mental model of what you need to change. If you find profvis doesn't work for your application, you might try one of the other options like `utils::summaryRprof()` or the proftools package [@proftools].
+The default profiling resolution is quite small, so if your function takes even a few seconds it will generate hundreds of samples. That quickly grows beyond our ability to look at directly, so instead of using `uils::Rprof()` we'll use the profvis package to visualise aggregates. profvis also connects profiling data back to the underlying source code, making it easier to build up a mental model of what you need to change. If you find profvis doesn't help for your code, you might try one of the other options like `utils::summaryRprof()` or the proftools package [@proftools].
 
 There are two ways to use profvis:
 
-*   In the RStudio IDE, you can use the "Profile" menu to start profiling, run 
-    some code, and then stop it to see the results.
+*   From the "Profile" menu in RStudio.
   
-*   By calling `profvis::profvis()`. I recommend storing your code in 
-    a separate file and source it in; this will ensure you get the best
-    connection between profiling data and source code.
+*   With `profvis::profvis()`. I recommend storing your code in a separate 
+    file and `source()`ing it in; this will ensure you get the best connection 
+    between profiling data and source code.
 
     ```{r, eval = FALSE}
     source("profiling-example.R")
     profvis(f())
     ```
 
-After profiling is complete, profvis will open an interactive HTML document that allows you to explore the results. There are two panes. The top pane shows the source code, overlaid with bar graphs for memory and execution time for each line of code. Here I'll focus on time, and we'll come back to memory shortly.
+After profiling is complete, profvis will open an interactive HTML document that allows you to explore the results. There are two panes, as shown in Figure \@ref(fig:flamegraph). 
 
-This display gives you a good overall feel for the bottlenecks but doesn't always help you precisely identify the cause. Here, for example, you can see that `h()` takes 150ms, twice as long as `g()`; that's not because the function itself is slower, but because it's called twice as often.
-
-```{r, echo = FALSE, out.width = NULL}
+```{r flamegraph, echo = FALSE, out.width = "100%", fig.cap = "profvis output showing source on top and flame graph below."}
 knitr::include_graphics("screenshots/performance/flamegraph.png")
 ```
 
-The bottom pane displays a __flame graph__ showing the full call stack. This allows you to see the full sequence of calls leading to each function, allowing you to see that `h()` is called from two different places. In this display you can mouse over individual calls to get more information, and see the corresponding line of source code:
+The top pane shows the source code, overlaid with bar graphs for memory and execution time for each line of code. Here I'll focus on time, and we'll come back to memory shortly. This display gives you a good overall feel for the bottlenecks but doesn't always help you precisely identify the cause. Here, for example, you can see that `h()` takes 150ms, twice as long as `g()`; that's not because the function itself is slower, but because it's called twice as often.
 
-```{r, echo = FALSE, out.width = NULL}
+The bottom pane displays a __flame graph__ showing the full call stack. This allows you to see the full sequence of calls leading to each function, allowing you to see that `h()` is called from two different places. In this display you can mouse over individual calls to get more information, and see the corresponding line of source code, as in Figure \@ref(fig:perf-info).
+
+```{r perf-info, echo = FALSE, out.width = "100%", fig.cap = "Hovering over a call in the flamegraph highlights the corresponding line of code, and displays additional information about performance."}
 knitr::include_graphics("screenshots/performance/info.png")
 ```
 
-The __data tab__ lets you interactively dive into the tree of performance data. This is basically the same display as the flame graph (rotated 90°), but it's more useful when you have very large or deeply nested call stacks because you can choose to interactively zoom into only selected components.
+Alternatively, you can use the __data tab__, Figure \@ref(fig:perf-tree) lets you interactively dive into the tree of performance data. This is basically the same display as the flame graph (rotated 90°), but it's more useful when you have very large or deeply nested call stacks because you can choose to interactively zoom into only selected components.
 
-```{r, echo = FALSE, out.width = NULL}
+```{r perf-tree, echo = FALSE, out.width = "100%", fig.cap = "The data gives an interactive tree that allows you to selectively zoom into key components"}
 knitr::include_graphics("screenshots/performance/tree.png")
 ```
 
@@ -140,9 +141,9 @@ for (i in 1:1e4) {
 }
 ```
 
-If you profile it, you'll see that most of the time is spent in the garbage collector:
+If you profile it, you'll see that most of the time is spent in the garbage collector, Figure \@ref(fig:perf-memory).
 
-```{r, echo = FALSE, out.width = NULL}
+```{r perf-memory, echo = FALSE, out.width = "100%", fig.cap = "Profiling a loop that modifies an existing variable reveals that most time is spent in the garbage collector (`<GC>`)"}
 knitr::include_graphics("screenshots/performance/memory.png")
 ```
 
@@ -153,21 +154,21 @@ When you see the garbage collector taking up a lot of time in your own code, you
 
 There are some other limitations to profiling:
 
-* Profiling does not extend to C code. You can see if your R code calls C/C++
-  code but not what functions are called inside of your C/C++ code. Unfortunately, 
-  tools for profiling compiled code are beyond the scope of this book (i.e., I 
-  have no idea how to do it).
+*   Profiling does not extend to C code. You can see if your R code calls C/C++
+    code but not what functions are called inside of your C/C++ code. 
+    Unfortunately, tools for profiling compiled code are beyond the scope of
+    this book; start by looking at <https://github.com/r-prof/jointprof>.
 
-* If you're doing a lot of functional programming with anonymous functions,
-  it can be hard to figure out exactly which function is being called.
-  The easiest way to work around this is to name your functions.
+*   If you're doing a lot of functional programming with anonymous functions,
+    it can be hard to figure out exactly which function is being called.
+    The easiest way to work around this is to name your functions.
 
-* Lazy evaluation means that arguments are often evaluated inside another 
-  function, and this complicates the call stack (Section 
-  \@ref(lazy-call-stack)). Unfortunately R's profiler doesn't store enough
-  information to disentangle lazy evaluation so that in the following code, 
-  profiling would  make it seem like `i()` was called by `j()` because the 
-  argument isn'tevaluated until it's needed by `j()`. 
+*   Lazy evaluation means that arguments are often evaluated inside another 
+    function, and this complicates the call stack (Section 
+    \@ref(lazy-call-stack)). Unfortunately R's profiler doesn't store enough
+    information to disentangle lazy evaluation so that in the following code, 
+    profiling would  make it seem like `i()` was called by `j()` because the 
+    argument isn't evaluated until it's needed by `j()`. 
 
     ```{r, eval = FALSE}
     i <- function() {
@@ -180,8 +181,8 @@ There are some other limitations to profiling:
     j(i())
     ```
     
-    If this is confusing, you can create temporary variables to force 
-    computation to happen earlier.
+    If this is confusing, use `force()` (Section \@ref{forcing-evaluation}) to 
+    force computation to happen earlier.
 
 ### Exercises
 
@@ -201,7 +202,7 @@ There are some other limitations to profiling:
  
 A __microbenchmark__ is a measurement of the performance of a very small piece of code, something that might take milliseconds (ms), microseconds (µs), or nanoseconds (ns) to run. Microbenchmarks are useful for comparing small snippets of code for specific tasks. Be very wary of generalising the results of microbenchmarks to real code: the observed differences in microbenchmarks will typically be dominated by higher-order effects in real code; a deep understanding of subatomic physics is not very helpful when baking.
 
-A great tool for microbenchmarking in R is the bench package [@bench]. It provides very precise timings, making it possible to compare operations that only take a tiny amount of time. For example, the following code compares the speed of two approaches to computing a square root.
+A great tool for microbenchmarking in R is the bench package [@bench]. bench uses a a high precision timer, making it possible to compare operations that only take a tiny amount of time. For example, the following code compares the speed of two approaches to computing a square root.
 
 ```{r bench-sqrt}
 x <- runif(100)
@@ -216,7 +217,7 @@ By default, `bench::mark()` runs each expression at least once (`min_iterations 
 ### `bench::mark()` results
 \indexc{mark()}
 
-`bench::mark()` returns the results as a tibble, with one row for each input expression, the following columns:
+`bench::mark()` returns the results as a tibble, with one row for each input expression, and the following columns:
 
 *   `min`, `mean`, `median`, `max`, and `itr/sec` summarise the time taken by the 
     expression. Focus on the minimum (the best possible running time) and the
