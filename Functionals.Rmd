@@ -40,11 +40,11 @@ randomise(sum)
 The chances are that you've already used a functional. You might have used for-loop replacements like base R's `lapply()`, `apply()`, and `tapply()`; or purrr's `map()`; or maybe you've used a mathematical functional like `integrate()` or `optim()`. 
 
 \index{loops!replacing}
-A common use of functionals is as an alternative to for loops. For loops have a bad rap in R because many people believe they are slow[^not-slow], but the real downside of for loops is that they're very flexible and hence not very expressive. A for loop conveys that it's iterating over something, but doesn't clearly convey what you are trying to achieve. Instead of using a for loop, it's better to use a functional. Each functional is tailored for a specific task, so when you recognise the functional you immediately know why it's being used.
+A common use of functionals is as an alternative to for loops. For loops have a bad rap in R because many people believe they are slow[^not-slow], but the real downside of for loops is that they're very flexible: a loop conveys that you're iterating, but not what should be done with the results. Just as it's better to use `while` than `repeat`, and it's better to use `for` than `while` (Section \@ref(for-family)), it's better to use a functional than `for`. Each functional is tailored for a specific task, so when you recognise the functional you immediately know why it's being used.
 
-[^not-slow]: Typically it's not the for loop itself that's slow, but what you're doing inside of it. A common culprit of slow loops is modifying a data structure, where each modification generates a copy. See Section \@ref(single-binding) for more details.
+[^not-slow]: Typically it's not the for loop itself that's slow, but what you're doing inside of it. A common culprit of slow loops is modifying a data structure, where each modification generates a copy. See Sections \@ref(single-binding) and \@ref(avoid-copies) for more details.
 
-Using functionals is a pattern matching exercise. You look at the for loop and find a functional that matches the basic form. If one doesn't exist, don't try and torture an existing functional to fit the form you need. Instead, just leave it as a for loop! (Or once you've repeated the same loop two or more times, maybe think about writing your own functional).
+If you're an experienced for loop user, switching to functionals is typically a pattern matching exercise. You look at the for loop and find a functional that matches the basic form. If one doesn't exist, don't try and torture an existing functional to fit the form you need. Instead, just leave it as a for loop! (Or once you've repeated the same loop two or more times, maybe think about writing your own functional).
 
 ### Outline {-}
 
@@ -71,7 +71,7 @@ Using functionals is a pattern matching exercise. You look at the for loop and f
 
 ### Prerequisites {-}
 
-This chapter will focus on functionals provided by the [purrr](https://purrr.tidyverse.org) package [@purrr]. These functions have a consistent interface that makes it easier to understand the key ideas than their base equivalents, which have grown organically over many years. I'll compare and contrast base R functions as we go, and then wrap up the chapter with a discussion of base functionals that don't have purrr equivalents.
+This chapter will focus on functionals provided by the [purrr package](https://purrr.tidyverse.org) [@purrr]. These functions have a consistent interface that makes it easier to understand the key ideas than their base equivalents, which have grown organically over many years. I'll compare and contrast base R functions as we go, and then wrap up the chapter with a discussion of base functionals that don't have purrr equivalents.
 
 ```{r setup}
 library(purrr)
@@ -79,7 +79,6 @@ library(purrr)
 
 ## My first functional: `map()` {#map}
 \indexc{map()}
-\indexc{lapply()}
 
 The most fundamental functional is `purrr::map()`[^Map]. It takes a vector and a function, calls the function once for each element of the vector, and returns the results in a list. In other words, `map(1:3, f)` is equivalent to `list(f(1), f(2), f(3))`. 
 
@@ -100,7 +99,7 @@ You might wonder why this function is called `map()`. What does it have to do wi
 
 [^Map]: Not to be confused with `base::Map()`, which is considerably more complex. I'll discuss `Map()` in Section \@ref(pmap).
 
-The implementation of `map()` is quite simple. We allocate a list the same length as the input, and then fill in the list with a for loop. A basic implementation is only a handful of lines of code:
+The implementation of `map()` is quite simple. We allocate a list the same length as the input, and then fill in the list with a for loop. The heart of the implementation is only a handful of lines of code:
 
 ```{r}
 simple_map <- function(x, f, ...) {
@@ -115,6 +114,7 @@ simple_map <- function(x, f, ...) {
 The real `purrr::map()` function has a few differences: it is written in C to eke out every last iota of performance, preserves names, and supports a few shortcuts that you'll learn about in Section \@ref(purrr-shortcuts).
 
 ::: base
+\indexc{lapply()}
 The base equivalent to `map()` is `lapply()`. The only difference is that `lapply()` does not support the helpers that you'll learn about below, so if you're only using `map()` from purrr, you can skip the additional dependency and use `lapply()` directly.
 :::
 
@@ -137,7 +137,7 @@ map_int(mtcars, n_unique)
 map_dbl(mtcars, mean)
 ```
 
-purrr uses the convention that suffixes, like `_dbl()`, refer to the output. All `map_*()` functions can take any type of vector as input. These examples rely on the fact that data frames are lists containing vectors of the same length. This is more obvious if we draw a data frame with the same orientation as vector:
+purrr uses the convention that suffixes, like `_dbl()`, refer to the output. All `map_*()` functions can take any type of vector as input. These examples rely two facts: `mtcars` is a data frame, and data frames are lists containing vectors of the same length. This is more obvious if we draw a data frame with the same orientation as vector:
 
 ```{r, echo = FALSE, out.width = NULL}
 knitr::include_graphics("diagrams/functionals/map-list.png")
@@ -167,7 +167,7 @@ map(1:2, as.character)
 \indexc{sapply()}
 \indexc{vapply()}
 
-Base R has two apply functions that can return atomic vectors: `sapply()` and `vapply()`. I recommend that you avoid `sapply()` because it tries simplify the result, so it can return a list, a vector, or a matrix. This makes it difficult to program with, and it should be avoided in non-interactive settings. `vapply()` is safer because it allows you to provide a template, `FUN.VALUE`, that describes the output shape. If you don't want to use purrr, I recommend using always use `vapply()` in your functions, not `sapply()`. The primary downside of `vapply()` is its verbosity: the equivalent to `map_dbl(x, mean, na.rm = TRUE)` is `vapply(x, mean, na.rm = TRUE, FUN.VALUE = double(1))`.
+Base R has two apply functions that can return atomic vectors: `sapply()` and `vapply()`. I recommend that you avoid `sapply()` because it tries simplify the result, so it can return a list, a vector, or a matrix. This makes it difficult to program with, and it should be avoided in non-interactive settings. `vapply()` is safer because it allows you to provide a template, `FUN.VALUE`, that describes the output shape. If you don't want to use purrr, I recommend using always use `vapply()` in your functions, not `sapply()`. The primary downside of `vapply()` is its verbosity: for example, the equivalent to `map_dbl(x, mean, na.rm = TRUE)` is `vapply(x, mean, na.rm = TRUE, FUN.VALUE = double(1))`.
 :::
 
 ### Anonymous functions and shortcuts {#purrr-shortcuts}
@@ -723,7 +723,7 @@ pmap_dbl(list(trim = trims), mean, x = x)
 knitr::include_graphics("diagrams/functionals/pmap-3.png")
 ```
 
-I think it's good practice to name the list to make it very clear how the function will be called. 
+I think it's good practice to name the components of the list to make it very clear how the function will be called. 
 
 It's often convenient to call `pmap()` with a data frame. A handy way to create that data frame is with `tibble::tribble()`, which allows you to describe a data frame row-by-row (rather than column-by-column, as usual): thinking about the parameters to a function as a data frame is a very powerful pattern. The following example shows how you might draw random uniform numbers with varying parameters:
 
@@ -1040,7 +1040,7 @@ str(map(keep(df, is.numeric), mean))
 
 ## Base functionals {#base-functionals}
 
-To finish up the chapter, here I provide a survey of important base functionals that are not members of the map, reduce, or predicate families, and hence have no equivalent in purrr. This is not to say that they're not important, but they have more of a mathematical/statistical flavour, so they are generally less useful in data analysis.
+To finish up the chapter, here I provide a survey of important base functionals that are not members of the map, reduce, or predicate families, and hence have no equivalent in purrr. This is not to say that they're not important, but they have more of a mathematical/statistical flavour, and they are generally less useful in data analysis.
 
 ### Matrices and arrays
 \indexc{apply()}
@@ -1060,9 +1060,9 @@ To finish up the chapter, here I provide a survey of important base functionals 
 A typical example of `apply()` looks like this
 
 ```{r}
-a <- matrix(1:20, nrow = 5)
-apply(a, 1, mean)
-apply(a, 2, mean)
+a2d <- matrix(1:20, nrow = 5)
+apply(a2d, 1, mean)
+apply(a2d, 2, mean)
 ```
 
 <!-- HW: recreate diagrams from plyr paper -->
@@ -1070,9 +1070,9 @@ apply(a, 2, mean)
 You can specify multiple dimensions to `MARGIN`, which is useful for high-d arrays:
 
 ```{r}
-a <- array(1:24, c(2, 3, 4))
-apply(a, 1, mean)
-apply(a, c(1, 2), mean)
+a3d <- array(1:24, c(2, 3, 4))
+apply(a3d, 1, mean)
+apply(a3d, c(1, 2), mean)
 ```
 
 There are two caveats to using `apply()`: 
@@ -1088,11 +1088,11 @@ There are two caveats to using `apply()`:
     the input. 
 
     ```{r}
-    a1 <- apply(a, 1, identity)
-    identical(a, a1)
+    a1 <- apply(a2d, 1, identity)
+    identical(a2d, a1)
 
-    a2 <- apply(a, 2, identity)
-    identical(a, a2)
+    a2 <- apply(a2d, 2, identity)
+    identical(a2d, a2)
     ```
 
 *   Never use `apply()` with a data frame. It always coerces it to a matrix,
