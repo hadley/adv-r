@@ -1,7 +1,7 @@
 library(methods)
 set.seed(1014)
 
-options(lifecycle_warnings_as_errors = TRUE)
+# options(lifecycle_warnings_as_errors = TRUE)
 
 knitr::opts_chunk$set(
   comment = "#>",
