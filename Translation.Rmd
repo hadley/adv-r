@@ -17,7 +17,9 @@ translate_sql(!first %in% c("John", "Roger", "Robert"))
 translate_sql(select == 7)
 ```
 
-Translating R to SQL is complex because of the many idiosyncrasies of different SQL dialects, so here I'll develop two simple, but useful, domain specific languages (DSL): one to generate HTML, and the other to generate mathematical equations LaTeX. If you're interested in learning more about domain specific languages in general, I highly recommend  _Domain Specific Languages_ [@dsls]. It discusses many options for creating a DSL and provides many examples of different languages.
+Translating R to SQL is complex because of the many idiosyncrasies of SQL dialects, so here I'll develop two simple, but useful, domain specific languages (DSL): one to generate HTML, and the other to generate mathematical equations in LaTeX. 
+
+If you're interested in learning more about domain specific languages in general, I highly recommend  _Domain Specific Languages_ [@dsls]. It discusses many options for creating a DSL and provides many examples of different languages.
 
 ### Outline {-}
 
@@ -50,7 +52,7 @@ HTML (HyperText Markup Language) is the language that underlies the majority of 
 </body>
 ```
 
-Even if you've never looked at HTML before, you can still see that the key component of its coding structure is tags: `<tag></tag>`. Tags can be nested within other tags and intermingled with text. There are over 100 HTML tags, but in this chapter we'll focus on just a handful:
+Even if you've never looked at HTML before, you can still see that the key component of its coding structure is tags, which look like `<tag></tag>` or `<tag />`. Tags can be nested within other tags and intermingled with text. There are over 100 HTML tags, but in this chapter we'll focus on just a handful:
 
 * `<body>` is the top-level tag that contains all content.
 * `<h1>` defines a top level heading.
@@ -58,9 +60,9 @@ Even if you've never looked at HTML before, you can still see that the key compo
 * `<b>` emboldens text.
 * `<img>` embeds an image.
 
-Tags can also have named __attributes__ which look like `<tag name1='value1' name2='value2'></tag>`. Two of the most important attributes are `id` and `class`, which are used in conjunction with CSS (Cascading Style Sheets) to control the visual appearance of the page.
+Tags can have named __attributes__ which look like `<tag name1='value1' name2='value2'></tag>`. Two of the most important attributes are `id` and `class`, which are used in conjunction with CSS (Cascading Style Sheets) to control the visual appearance of the page.
 
-__Void tags__, like `<img>`, don't have any content, and are written `<img />`, not `<img></img>`. Since they have no content, attributes are more important, and  `img` has three that are used with almost every image: `src` (where the image lives), `width`, and `height`.
+__Void tags__, like `<img>`, don't have any children, and are written `<img />`, not `<img></img>`. Since they have no content, attributes are more important, and  `img` has three that are used with almost every image: `src` (where the image lives), `width`, and `height`.
 
 Because `<` and `>` have special meanings in HTML, you can't write them directly. Instead you have to use the HTML __escapes__: `&gt;` and `&lt;`. And since those escapes use `&`, if you want a literal ampersand you have to escape it as `&amp;`.
 
@@ -76,7 +78,7 @@ Our goal is to make it easy to generate HTML from R. To give a concrete example,
 </body>
 ```
 
-And we want the structure of the R code to match the structure of the HTML as closely as possible. To that end, we will work our way up to the following DSL:
+Using the following code that matches the structure of the HTML as closely as possible: 
 
 ```{r, eval = FALSE}
 with_html(
@@ -107,15 +109,14 @@ Escaping is so fundamental to translation that it'll be our first topic. There a
 * At the same time we need to make sure that the `&`, `<` and `>` we generate
   are not double-escaped (i.e. that we don't accidentally generate `&amp;amp;`, `&amp;lt;` and `&amp;gt;`).
 
-The easiest way to do this is to create an S3 class that distinguishes between regular text (that needs escaping) and HTML (that doesn't).
+The easiest way to do this is to create an S3 class (Section \@ref(s3-classes)) that distinguishes between regular text (that needs escaping) and HTML (that doesn't).
 
 ```{r escape}
 html <- function(x) structure(x, class = "advr_html")
-cat_line <- function(...) cat(..., "\n", sep = "")
 
 print.advr_html <- function(x, ...) {
   out <- paste0("<HTML> ", x)
-  cat_line(paste(strwrap(out), collapse = "\n"))
+  cat(paste(strwrap(out), collapse = "\n"), "\n", sep = "")
 }
 ```
 
@@ -124,7 +125,7 @@ We then write an escape generic. It has two important methods:
 * `escape.character()` takes a regular character vector and returns an HTML
   vector with special characters (`&`, `<`, `>`) escaped.
 
-* `escape.advr_html()` which leaves already escaped HTML as is.
+* `escape.advr_html()` leaves already escaped HTML alone.
 
 ```{r}
 escape <- function(x) UseMethod("escape")
@@ -159,13 +160,13 @@ Conveniently, this also allows a user to opt out of our escaping if they know th
 
 Next, we'll write a one-tag function by hand, then figure out how to generalise it so we can generate a function for every tag with code.
 
-Let's start with `<p>`. HTML tags can have both attributes (e.g., id or class) and children (like `<b>` or `<i>`). We need some way of separating these in the function call. Given that attributes are named values and children are not, it seems natural to use named and unnamed arguments for them respectively. For example, a call to `p()` might look like:
+Let's start with `<p>`. HTML tags can have both attributes (e.g., id or class) and children (like `<b>` or `<i>`). We need some way of separating these in the function call. Given that attributes are named and children are not, it seems natural to use named and unnamed arguments for them respectively. For example, a call to `p()` might look like:
 
 ```{r, eval = FALSE}
 p("Some text. ", b(i("some bold italic text")), class = "mypara")
 ```
 
-We could list all the possible attributes of the `<p>` tag in the function definition, but that's hard because there are many attributes, and because it's possible to use [custom attributes](http://html5doctor.com/html5-custom-data-attributes/). Instead, we'll use `...` and separate the components based on whether or not they are named. With this in mind, we create a helper function that wraps around `rlang::list2()` (so we can use `!!` and `!!!`) and returns named and unnamed components separately:
+We could list all the possible attributes of the `<p>` tag in the function definition, but that's hard because there are many attributes, and because it's possible to use [custom attributes](http://html5doctor.com/html5-custom-data-attributes/). Instead, we'll use `...` and separate the components based on whether or not they are named. With this in mind, we create a helper function that wraps around `rlang::list2()` (Section \@ref(tidy-dots)) and returns named and unnamed components separately:
 
 ```{r named}
 dots_partition <- function(...) {
@@ -206,7 +207,7 @@ p("Some text", class = "important", `data-value` = 10)
 
 ### Tag functions
 
-It's straightforward to adapt `p()` to other tags: we just need to replace `"p"` with the name of the tag. One elegant way to do that is to create a function with `rlang::new_function()`, using unquoting and `paste0()` to generate the starting and ending tags. 
+It's straightforward to adapt `p()` to other tags: we just need to replace `"p"` with the name of the tag. One elegant way to do that is to create a function with `rlang::new_function()` (Section \@ref(new-function)), using unquoting and `paste0()` to generate the starting and ending tags. 
 
 ```{r}
 tag <- function(tag) {
@@ -249,7 +250,7 @@ void_tag <- function(tag) {
     expr({
       dots <- dots_partition(...)
       if (length(dots$unnamed) > 0) {
-        stop(!!paste0("<", tag, "> must not have unnamed arguments"), call. = FALSE)
+        abort(!!paste0("<", tag, "> must not have unnamed arguments"))
       }
       attribs <- html_attributes(dots$named)
 
@@ -291,7 +292,7 @@ void_tags <- c("area", "base", "br", "col", "command", "embed",
 )
 ```
 
-If you look at this list carefully, you'll see there are quite a few tags that have the same name as base R functions (`body`, `col`, `q`, `source`, `sub`, `summary`, `table`). This means we don't want to make all the functions available by default, in either the global environment or in a package. Instead, we'll put them in a list (like in Section \@ref(functional-factories)) and then provide a helper to make it easy to use them when desired. First, we make a named list containing all the tag functions:
+If you look at this list carefully, you'll see there are quite a few tags that have the same name as base R functions (`body`, `col`, `q`, `source`, `sub`, `summary`, `table`). This means we don't want to make all the functions available by default, either in the global environment or in a package. Instead, we'll put them in a list (like in Section \@ref(functional-factories)) and then provide a helper to make it easy to use them when desired. First, we make a named list containing all the tag functions:
 
 ```{r}
 html_tags <- c(
@@ -351,7 +352,8 @@ If you want to access the R function overridden by an HTML tag with the same nam
     <script>'<\/script>'</script>
     ```
 
-    Adapt the code above to follow these rules.
+    Adapt the `escape()` to follow these rules when a new argument `script`
+    is set to `TRUE`.
 
 1.  The use of `...` for all functions has some big downsides. There's no
     input validation and there will be little information in the
@@ -368,10 +370,6 @@ If you want to access the R function overridden by an HTML tag with the same nam
 
     All tags should get `class` and `id` attributes.
 
-1.  Currently the HTML doesn't look terribly pretty, and it's hard to see the
-    structure. How could you adapt `tag()` to do indenting and formatting?
-    (You may need to do some research into block vs inline tags.)
-
 1.  Reason about the following code that calls `with_html()` referencing objects
     from the environment. Will it work or fail? Why? Run the code to
     verify your predictions.
@@ -385,6 +383,9 @@ If you want to access the R function overridden by an HTML tag with the same nam
     with_html(p(address))
     ```
 
+1.  Currently the HTML doesn't look terribly pretty, and it's hard to see the
+    structure. How could you adapt `tag()` to do indenting and formatting?
+    (You may need to do some research into block vs inline tags.)
 
 ## LaTeX {#latex}
 \index{LaTeX}
@@ -418,20 +419,20 @@ Before we begin, let's quickly cover how formulas are expressed in LaTeX. The fu
   `f(a * b)` represents calling the function `f` with input `a * b`,
   or is shorthand for `f * (a * b)`. If `f` is a function, you can tell
   LaTeX to typeset it using an upright font with `\textrm{f}(a * b)`.
-  (The `rm` stands for "Roman", to distinguish the font from "it" for "italics".)
+  (The `rm` stands for "Roman", the opposite of italics.)
 
 ### Goal
 
 Our goal is to use these rules to automatically convert an R expression to its appropriate LaTeX representation. We'll tackle this in four stages:
 
-* Convert known symbols: `pi` -> `\pi`
+* Convert known symbols: `pi` → `\pi`
 
-* Leave other symbols unchanged: `x` -> `x`, `y` -> `y`
+* Leave other symbols unchanged: `x` → `x`, `y` → `y`
 
-* Convert known functions to their special forms: `sqrt(frac(a, b))` ->
+* Convert known functions to their special forms: `sqrt(frac(a, b))` →
   `\sqrt{\frac{a, b}}`
 
-* Wrap unknown functions with `\textrm`: `f(a)` -> `\textrm{f}(a)`
+* Wrap unknown functions with `\textrm`: `f(a)` → `\textrm{f}(a)`
 
 We'll code this translation in the opposite direction of what we did with the HTML DSL. We'll start with infrastructure, because that makes it easy to experiment with our DSL, and then work our way back down to generate the desired output.
 
@@ -458,7 +459,7 @@ to_math <- function(x) {
 
 latex <- function(x) structure(x, class = "advr_latex")
 print.advr_latex <- function(x) {
-  cat_line("<LATEX> ", x)
+  cat("<LATEX> ", x, "\n", sep = "")
 }
 ```
 
@@ -475,7 +476,8 @@ greek <- c(
   "varphi", "epsilon", "lambda", "varrho", "chi", "varepsilon",
   "mu", "sigma", "psi", "zeta", "nu", "varsigma", "omega", "eta",
   "xi", "Gamma", "Lambda", "Sigma", "Psi", "Delta", "Xi",
-  "Upsilon", "Omega", "Theta", "Pi", "Phi")
+  "Upsilon", "Omega", "Theta", "Pi", "Phi"
+)
 greek_list <- set_names(paste0("\\", greek), greek)
 greek_env <- as_environment(greek_list)
 ```
@@ -529,7 +531,6 @@ all_names_rec <- function(x) {
   switch_expr(x,
     constant = character(),
     symbol =   as.character(x),
-    pairlist = ,
     call =     flat_map_chr(as.list(x[-1]), all_names)
   )
 }
@@ -653,7 +654,7 @@ latex_env <- function(expr) {
 }
 
 to_math(sin(x + pi))
-to_math(log(x_i ^ 2))
+to_math(log(x[i]^2))
 to_math(sin(sin))
 ```
 
@@ -670,8 +671,7 @@ all_calls_rec <- function(x) {
       fname <- as.character(x[[1]])
       children <- flat_map_chr(as.list(x[-1]), all_calls)
       c(fname, children)
-    },
-    pairlist = flat_map_chr(as.list(x[1]), all_calls)
+    }
   )
 }
 all_calls <- function(x) {
