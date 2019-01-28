@@ -24,11 +24,11 @@ The foundations of R have not changed in the five years since the 1st edition, b
     programming.
 
 *   Chapter \@ref(vectors-chap), "Vectors" (previously called data structures), 
-    and has been rewritten to focus on vector types like integers, factors, and 
+    has been rewritten to focus on vector types like integers, factors, and 
     data frames. It contains more details of important S3 vectors (like dates 
     and date-times), discusses the data frame variation provided by the 
-    [tibble](https://tibble.tidyverse.org), and generally reflect my improved
-    understand of vector data types.
+    [tibble](https://tibble.tidyverse.org), and generally reflects my improved
+    understanding of vector data types.
 
 *   Chapter \@ref(subsetting), "Subsetting", now distinguishes between `[` and
     `[[` by their intention: `[` extracts many values and `[[` extracts a 
