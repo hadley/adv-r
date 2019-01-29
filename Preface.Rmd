@@ -13,7 +13,7 @@ Welcome to the 2nd edition of Advanced R. I had three main goals for this editio
   
 If you're familiar with the 1st edition, this preface describes the major changes so that you can focus your reading on the new areas. If you're reading a printed version of this book you'll notice one big change very quickly: Advanced R is now in colour! This has considerably improved the syntax highlighting of code chunks, and made it much easier to create helpful diagrams. I have taken advantage of this and included over 100 new diagrams throughout the book.
 
-Another big change in this version is the use of packages, particularly [rlang](http://rlang.r-lib.org), which provides a clean interface to low-level data structures and operations. The 1st edition used base R functions almost exclusively, which created some pedagogical challenges because many functions evolved independently over multiple years, making it hard to see the big underlying ideas hidden amongst the incidental variations in function names and arguments. I continue to show base equivalents in sidebars, footnotes, and where needed, in individual sections, but if you want to see the purest base R expression of the ideas in this book, I recommend reading the 1st edition, which you can find online at <http://adv-r.had.co.nz>.
+Another big change in this version is the use of new packages, particularly [rlang](http://rlang.r-lib.org), which provides a clean interface to low-level data structures and operations. The 1st edition used base R functions almost exclusively, which created some pedagogical challenges because many functions evolved independently over multiple years, making it hard to see the big underlying ideas hidden amongst the incidental variations in function names and arguments. I continue to show base equivalents in sidebars, footnotes, and where needed, in individual sections, but if you want to see the purest base R expression of the ideas in this book, I recommend reading the 1st edition, which you can find online at <http://adv-r.had.co.nz>.
 
 The foundations of R have not changed in the five years since the 1st edition, but my understanding of them certainly has. Thus, the overall structure of "Foundations" has remained roughly the same, but many of the individual chapters have been considerably improved:
 
@@ -27,8 +27,8 @@ The foundations of R have not changed in the five years since the 1st edition, b
     has been rewritten to focus on vector types like integers, factors, and 
     data frames. It contains more details of important S3 vectors (like dates 
     and date-times), discusses the data frame variation provided by the 
-    [tibble](https://tibble.tidyverse.org), and generally reflects my improved
-    understanding of vector data types.
+    tibble package [@tibble], and generally reflects my improved understanding 
+    of vector data types.
 
 *   Chapter \@ref(subsetting), "Subsetting", now distinguishes between `[` and
     `[[` by their intention: `[` extracts many values and `[[` extracts a 
@@ -38,8 +38,8 @@ The foundations of R have not changed in the five years since the 1st edition, b
     provide more consistent behaviour for out-of-bounds indices.
 
 *   Chapter \@ref(control-flow), "Control flow", is a new chapter: somehow
-    I previously managed to forget about such important tools like `if` and 
-    `for`!
+    I previously forgot about important tools like `if` statements and `for` 
+    loops!
 
 *   Chapter \@ref(functions), "Functions", has an improved ordering,
     introduces the pipe (`%>%`) as a third way to compose functions (Section 
@@ -47,8 +47,8 @@ The foundations of R have not changed in the five years since the 1st edition, b
     function forms (Section \@ref(function-forms)).
 
 *   Chapter \@ref(environments), "Environments", has a reorganised treatment of
-    special environments (Section \@ref(special-environments)), and a much improved 
-    discussion of the call stack (Section \@ref(call-stack)).
+    special environments (Section \@ref(special-environments)), and a much 
+    improved discussion of the call stack (Section \@ref(call-stack)).
 
 *   Chapter \@ref(conditions), "Conditions", contains material previously 
     in "Exceptions and debugging", and much new content on how R's condition
@@ -63,11 +63,11 @@ The chapters following foundations have been re-organised around the three most 
   (Chapter \@ref(function-operators)). I've focussed in on ideas that have
   practical applications in data science and reduced the amount of pure theory.
   
-  These chapters now use functions provided by the purrr package, which allow 
-  me to focus more on the underlying ideas and less on the incidental 
-  details. This also lead to a considerable simplification of the function 
-  operators chapter since a major use was to work around the absence of `...`
-  in base functionals.
+  These chapters now use functions provided by the purrr package [@purrr], 
+  which allow me to focus more on the underlying ideas and less on the 
+  incidental details. This lead to a considerable simplification of the 
+  function operators chapter since a major use was to work around the absence 
+  of `...` in base functionals.
   
 * Object oriented programming (OOP) now forms a major section of the book with 
   completely new chapters on base types (Chapter \@ref(base-types)), 
@@ -84,12 +84,13 @@ The chapters following foundations have been re-organised around the three most 
   1st edition this material has been substantially expanded and now focusses on
   "tidy evaluation", a set of ideas and theory that that make metaprogramming 
   safe, well-principled, and accessible to many more R programmers. 
-  Chapter \@ref(expressions), "Expressions", describes the underlying data 
-  structures; Chapter \@ref(quasiquotation), "Quasiquotation", quoting and 
-  unquoting; Chapter \@ref(evaluation), "Evaluation", evaluating code in 
-  special environments; and Chapter \@ref(translation), "Translations", pulls 
-  all the themes together to show how you might translate from one 
-  (programming) language to another.
+  Chapter \@ref(meta-big-picture), "Big picture" coarsely lays out how all 
+  the pieces fig together; Chapter \@ref(expressions), "Expressions", describes 
+  the underlying data structures; Chapter \@ref(quasiquotation), 
+  "Quasiquotation", quoting and unquoting; Chapter \@ref(evaluation), 
+  "Evaluation", evaluating code in special environments; and Chapter 
+  \@ref(translation), "Translations", pulls all the themes together to show 
+  how you might translate from one (programming) language to another.
 
 The final section of the book pulls together the chapters on programming techniques: profiling, measuring and improving performance, and Rcpp. The contents are very similar to the first edition, although the organisation is a little different. I have made light updates throughout these chapters particularly to use newer packges (microbenchmark -> bench, lineprof -> profvis), but the majority of the text is the same.
 
@@ -101,7 +102,7 @@ While the 2nd edition has mostly expanded coverage of existing material, there w
 
 * The style chapter has been replaced with an online style guide, 
   <http://style.tidyverse.org/>. The style guide is paired with the new
-  [styler][styler] package which can automatically apply many of the rules.
+  styler package [@styler] which can automatically apply many of the rules.
 
 * The C chapter has been moved to a new repo, 
   <https://github.com/hadley/r-internals>, which, over time, will provide
@@ -111,7 +112,5 @@ While the 2nd edition has mostly expanded coverage of existing material, there w
   into Chapter \@ref(names-values) and the remainder felt excessively technical
   and not that important to understand.
   
-* The chapter on R's performance as a language was removed. This delivered
-  few actionable insights, and easily becomes out date as R itself changes.
-
-[styler]: http://styler.r-lib.org/
+* The chapter on R's performance as a language was removed. It delivered
+  few actionable insights, and became dated as R itself changed.
