@@ -1,6 +1,6 @@
 # (PART) Techniques {-}
 
-# Introduction {.unnumbered}
+# Introduction {#techniques .unnumbered}
 
 The final four chapters cover two general programming techniques: finding and fixing bugs, and finding and fixing performance issues.
 
