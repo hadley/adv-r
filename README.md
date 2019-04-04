@@ -37,6 +37,12 @@ RMarkdown
 * Beware caching: after changing the size of an image you may need to
   clear the cache before it is correctly updated.
 
+To zip files to for publisher:
+
+```
+zip -r adv-r-source.zip . -x '_book/*' -x '_bookdown_files/*' -x main.pdf -x 'www/*' -x '.*'
+```
+
 ## Code of conduct
 
 Please note that Advanced R is released with a [Contributor Code of Conduct](CODE_OF_CONDUCT.md).
