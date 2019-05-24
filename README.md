@@ -40,7 +40,18 @@ RMarkdown
 To zip files to for publisher:
 
 ```
-zip -r adv-r-source.zip . -x '_book/*' -x '_bookdown_files/*' -x main.pdf -x 'www/*' -x '.*'
+mkdir crc
+cp _book/_main.tex crc
+cp -r _bookdown_files/*_files crc
+cp -r diagrams crc
+cp -r screenshots crc
+cp -r emoji crc
+cp mina.jpg crc
+cp krantz.cls crc
+cp book.bib crc
+rm crc/diagrams/*.graffle
+
+zip -r adv-r-source.zip crc
 ```
 
 ## Code of conduct
