@@ -11,16 +11,37 @@ needs_update <- function(src, dest) {
 render_chapter <- function(src) {
   dest <- file.path("book/tex/", gsub("\\.rmd", "\\.tex", src))
   if (!needs_update(src, dest)) return()
-
   message("Rendering ", src)
-  command <- bquote(rmarkdown::render(.(src), oldbookdown::tex_chapter(),
-    output_dir = "book/tex", quiet = TRUE, envir = globalenv()))
-  writeLines(deparse(command), "run.r")
-  on.exit(unlink("run.r"))
-  source_clean("run.r")
+  render_old <- function(src) {
+    library(oldbookdown)
+    # from https://github.com/hadley/ggplot2-book/pull/142/commits/29f39e32b1dfe52f3c7b3342213f3ca2b2edc57a
+    tex_chapter <- function(chapter = NULL, latex_engine = c("xelatex", "pdflatex",
+                                                              "lualatex"), code_width = 65) {
+      options(digits = 3)
+      set.seed(1014)
+      latex_engine <- match.arg(latex_engine)
+      rmarkdown::output_format(rmarkdown::knitr_options("html", chapter),
+                               rmarkdown::pandoc_options(to = "latex", from = "markdown",
+                                                         ext = ".tex",
+                                                         args = c("--top-level-division=chapter",
+                                                                  rmarkdown::pandoc_latex_engine_args(latex_engine))),
+                               clean_supporting = FALSE)
+    }
+    rmarkdown::render(src, tex_chapter(),
+                      output_dir = "book/tex", quiet = TRUE, envir = globalenv())
+  }
+
+  callr::r(render_old, args = list(src = src))
+
+#   command <- bquote(rmarkdown::render(.(src), tex_chapter(),
+#     output_dir = "book/tex", quiet = TRUE, envir = globalenv()))
+#   writeLines(deparse(command), "run.r")
+#   on.exit(unlink("run.r"))
+#   source_clean("run.r")
 }
 
 source_clean <- function(path) {
+browser()
   r_path <- file.path(R.home("bin"), "R")
   cmd <- paste0(shQuote(r_path), " --quiet --file=", shQuote(path))
 
@@ -64,7 +85,7 @@ file.copy("book/krantz.cls", "book/tex/", recursive = TRUE)
 file.copy(dir("book", "^K", full.names = TRUE), "book/tex/", recursive = TRUE)
 file.copy("diagrams/", "book/tex/", recursive = TRUE)
 file.copy("screenshots/", "book/tex/", recursive = TRUE)
-file.copy("figures", "book/tex/", recursive = TRUE)
+# file.copy("figures", "book/tex/", recursive = TRUE)
 
 # Build tex file ---------------------------------------------------------------
 # (build with Rstudio to find/diagnose errors)

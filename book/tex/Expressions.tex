@@ -1,48 +1,59 @@
-\chapter{Expressions}\label{metaprogramming}
+\begin{verbatim}
+## Registered S3 method overwritten by 'pryr':
+##   method      from
+##   print.bytes Rcpp
+\end{verbatim}
 
-In \hyperref[nse]{non-standard evaluation}, you learned the basics of
-accessing and evaluating the expressions underlying computation in R. In
-this chapter, you'll learn how to manipulate these expressions with
-code. You're going to learn how to metaprogram: how to create programs
-with other programs! \index{metaprogramming}
+\hypertarget{metaprogramming}{%
+\chapter{Expressions}\label{metaprogramming}}
+
+In \protect\hyperlink{nse}{non-standard evaluation}, you learned the
+basics of accessing and evaluating the expressions underlying
+computation in R. In this chapter, you'll learn how to manipulate these
+expressions with code. You're going to learn how to metaprogram: how to
+create programs with other programs! \index{metaprogramming}
 \index{computing on the language|see{metaprogramming}}
 
-\paragraph{Outline}
+\hypertarget{outline}{%
+\paragraph{Outline}\label{outline}}
 
 \begin{itemize}
 \item
-  \hyperref[structure-of-expressions]{Structure of expressions} begins
-  with a deep dive into the structure of expressions. You'll learn about
-  the four components of an expression: constants, names, calls, and
-  pairlists.
+  \protect\hyperlink{structure-of-expressions}{Structure of expressions}
+  begins with a deep dive into the structure of expressions. You'll
+  learn about the four components of an expression: constants, names,
+  calls, and pairlists.
 \item
-  \hyperref[names]{Names} goes into further details about names.
+  \protect\hyperlink{names}{Names} goes into further details about
+  names.
 \item
-  \hyperref[calls]{Calls} gives more details about calls.
+  \protect\hyperlink{calls}{Calls} gives more details about calls.
 \item
-  \hyperref[capturing-call]{Capturing the current call} takes a minor
-  detour to discuss some common uses of calls in base R.
+  \protect\hyperlink{capturing-call}{Capturing the current call} takes a
+  minor detour to discuss some common uses of calls in base R.
 \item
-  \hyperref[pairlists]{Pairlists} completes the discussion of the four
-  major components of an expression, and shows how you can create
-  functions from their component pieces.
+  \protect\hyperlink{pairlists}{Pairlists} completes the discussion of
+  the four major components of an expression, and shows how you can
+  create functions from their component pieces.
 \item
-  \hyperref[parsing-and-deparsing]{Parsing and deparsing} discusses how
-  to convert back and forth between expressions and text.
+  \protect\hyperlink{parsing-and-deparsing}{Parsing and deparsing}
+  discusses how to convert back and forth between expressions and text.
 \item
-  \hyperref[ast-funs]{Walking the call tree with recursive functions}
-  concludes the chapter, combining everything you've learned about
-  writing functions that can compute on and modify arbitrary R code.
+  \protect\hyperlink{ast-funs}{Walking the call tree with recursive
+  functions} concludes the chapter, combining everything you've learned
+  about writing functions that can compute on and modify arbitrary R
+  code.
 \end{itemize}
 
-\paragraph{Prerequisites}
+\hypertarget{prerequisites}{%
+\paragraph{Prerequisites}\label{prerequisites}}
 
 Throughout this chapter we're going to use tools from the \texttt{pryr}
 package to help see what's going on. If you don't already have it,
 install it by running \texttt{install.packages("pryr")}.
 
-\hyperdef{}{structure-of-expressions}{\section{Structure of
-expressions}\label{structure-of-expressions}}
+\hypertarget{structure-of-expressions}{%
+\section{Structure of expressions}\label{structure-of-expressions}}
 
 To compute on the language, we first need to understand the structure of
 the language. That will require some new vocabulary, some new tools, and
@@ -53,11 +64,14 @@ understand is the distinction between an operation and a result:
 \begin{Shaded}
 \begin{Highlighting}[]
 \NormalTok{x <-}\StringTok{ }\DecValTok{4}
-\NormalTok{y <-}\StringTok{ }\NormalTok{x *}\StringTok{ }\DecValTok{10}
+\NormalTok{y <-}\StringTok{ }\NormalTok{x }\OperatorTok{*}\StringTok{ }\DecValTok{10}
 \NormalTok{y}
-\CommentTok{#> [1] 40}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## [1] 40
+\end{verbatim}
 
 We want to distinguish the action of multiplying \texttt{x} by 10 and
 assigning that result to \texttt{y} from the actual result (40). As
@@ -66,18 +80,21 @@ we've seen in the previous chapter, we can capture the action with
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{z <-}\StringTok{ }\KeywordTok{quote}\NormalTok{(y <-}\StringTok{ }\NormalTok{x *}\StringTok{ }\DecValTok{10}\NormalTok{)}
+\NormalTok{z <-}\StringTok{ }\KeywordTok{quote}\NormalTok{(y <-}\StringTok{ }\NormalTok{x }\OperatorTok{*}\StringTok{ }\DecValTok{10}\NormalTok{)}
 \NormalTok{z}
-\CommentTok{#> y <- x * 10}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## y <- x * 10
+\end{verbatim}
 
 \texttt{quote()} returns an \textbf{expression}: an object that
 represents an action that can be performed by R. (Unfortunately
 \texttt{expression()} does not return an expression in this sense.
 Instead, it returns something more like a list of expressions. See
-\hyperref[parsing-and-deparsing]{parsing and deparsing} for more
-details.) \indexc{quote()}
+\protect\hyperlink{parsing-and-deparsing}{parsing and deparsing} for
+more details.) \indexc{quote()}
 
 An expression is also called an abstract syntax tree (AST) because it
 represents the hierarchical tree structure of the code. We'll use
@@ -86,16 +103,19 @@ represents the hierarchical tree structure of the code. We'll use
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\KeywordTok{ast}\NormalTok{(y <-}\StringTok{ }\NormalTok{x *}\StringTok{ }\DecValTok{10}\NormalTok{)}
-\CommentTok{#> \textbackslash{}- ()}
-\CommentTok{#>   \textbackslash{}- `<-}
-\CommentTok{#>   \textbackslash{}- `y}
-\CommentTok{#>   \textbackslash{}- ()}
-\CommentTok{#>     \textbackslash{}- `*}
-\CommentTok{#>     \textbackslash{}- `x}
-\CommentTok{#>     \textbackslash{}-  10}
+\KeywordTok{ast}\NormalTok{(y <-}\StringTok{ }\NormalTok{x }\OperatorTok{*}\StringTok{ }\DecValTok{10}\NormalTok{)}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## \- ()
+##   \- `<-
+##   \- `y
+##   \- ()
+##     \- `*
+##     \- `x
+##     \-  10
+\end{verbatim}
 
 There are four possible components of an expression: constants, names,
 calls, and pairlists.
@@ -108,26 +128,64 @@ calls, and pairlists.
 \begin{Shaded}
 \begin{Highlighting}[]
 \KeywordTok{ast}\NormalTok{(}\StringTok{"a"}\NormalTok{)}
-\CommentTok{#> \textbackslash{}-  "a"}
-\KeywordTok{ast}\NormalTok{(}\DecValTok{1}\NormalTok{)}
-\CommentTok{#> \textbackslash{}-  1}
-\KeywordTok{ast}\NormalTok{(1L)}
-\CommentTok{#> \textbackslash{}-  1L}
-\KeywordTok{ast}\NormalTok{(}\OtherTok{TRUE}\NormalTok{)}
-\CommentTok{#> \textbackslash{}-  TRUE}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## \-  "a"
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{ast}\NormalTok{(}\DecValTok{1}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## \-  1
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{ast}\NormalTok{(1L)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## \-  1L
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{ast}\NormalTok{(}\OtherTok{TRUE}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## \-  TRUE
+\end{verbatim}
 
   Quoting a constant returns it unchanged:
 
 \begin{Shaded}
 \begin{Highlighting}[]
 \KeywordTok{identical}\NormalTok{(}\DecValTok{1}\NormalTok{, }\KeywordTok{quote}\NormalTok{(}\DecValTok{1}\NormalTok{))}
-\CommentTok{#> [1] TRUE}
-\KeywordTok{identical}\NormalTok{(}\StringTok{"test"}\NormalTok{, }\KeywordTok{quote}\NormalTok{(}\StringTok{"test"}\NormalTok{))}
-\CommentTok{#> [1] TRUE}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## [1] TRUE
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{identical}\NormalTok{(}\StringTok{"test"}\NormalTok{, }\KeywordTok{quote}\NormalTok{(}\StringTok{"test"}\NormalTok{))}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] TRUE
+\end{verbatim}
 \item
   \textbf{names}, or symbols, represent the name of an object rather
   than its value. \texttt{ast()} prefixes names with a backtick.
@@ -136,13 +194,32 @@ calls, and pairlists.
 \begin{Shaded}
 \begin{Highlighting}[]
 \KeywordTok{ast}\NormalTok{(x)}
-\CommentTok{#> \textbackslash{}- `x}
-\KeywordTok{ast}\NormalTok{(mean)}
-\CommentTok{#> \textbackslash{}- `mean}
-\KeywordTok{ast}\NormalTok{(}\StringTok{`}\DataTypeTok{an unusual name}\StringTok{`}\NormalTok{)}
-\CommentTok{#> \textbackslash{}- `an unusual name}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## \- `x
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{ast}\NormalTok{(mean)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## \- `mean
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{ast}\NormalTok{(}\StringTok{`}\DataTypeTok{an unusual name}\StringTok{`}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## \- `an unusual name
+\end{verbatim}
 \item
   \textbf{calls} represent the action of calling a function. Like lists,
   calls are recursive: they can contain constants, names, pairlists, and
@@ -153,55 +230,93 @@ calls, and pairlists.
 \begin{Shaded}
 \begin{Highlighting}[]
 \KeywordTok{ast}\NormalTok{(}\KeywordTok{f}\NormalTok{())}
-\CommentTok{#> \textbackslash{}- ()}
-\CommentTok{#>   \textbackslash{}- `f}
-\KeywordTok{ast}\NormalTok{(}\KeywordTok{f}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{2}\NormalTok{))}
-\CommentTok{#> \textbackslash{}- ()}
-\CommentTok{#>   \textbackslash{}- `f}
-\CommentTok{#>   \textbackslash{}-  1}
-\CommentTok{#>   \textbackslash{}-  2}
-\KeywordTok{ast}\NormalTok{(}\KeywordTok{f}\NormalTok{(a, b))}
-\CommentTok{#> \textbackslash{}- ()}
-\CommentTok{#>   \textbackslash{}- `f}
-\CommentTok{#>   \textbackslash{}- `a}
-\CommentTok{#>   \textbackslash{}- `b}
-\KeywordTok{ast}\NormalTok{(}\KeywordTok{f}\NormalTok{(}\KeywordTok{g}\NormalTok{(), }\KeywordTok{h}\NormalTok{(}\DecValTok{1}\NormalTok{, a)))}
-\CommentTok{#> \textbackslash{}- ()}
-\CommentTok{#>   \textbackslash{}- `f}
-\CommentTok{#>   \textbackslash{}- ()}
-\CommentTok{#>     \textbackslash{}- `g}
-\CommentTok{#>   \textbackslash{}- ()}
-\CommentTok{#>     \textbackslash{}- `h}
-\CommentTok{#>     \textbackslash{}-  1}
-\CommentTok{#>     \textbackslash{}- `a}
 \end{Highlighting}
 \end{Shaded}
 
-  As mentioned in \hyperref[all-calls]{every operation is a function
-  call}, even things that don't look like function calls still have this
-  hierarchical structure:
+\begin{verbatim}
+## \- ()
+##   \- `f
+\end{verbatim}
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\KeywordTok{ast}\NormalTok{(a +}\StringTok{ }\NormalTok{b)}
-\CommentTok{#> \textbackslash{}- ()}
-\CommentTok{#>   \textbackslash{}- `+}
-\CommentTok{#>   \textbackslash{}- `a}
-\CommentTok{#>   \textbackslash{}- `b}
-\KeywordTok{ast}\NormalTok{(if (x >}\StringTok{ }\DecValTok{1}\NormalTok{) x else }\DecValTok{1}\NormalTok{/x)}
-\CommentTok{#> \textbackslash{}- ()}
-\CommentTok{#>   \textbackslash{}- `if}
-\CommentTok{#>   \textbackslash{}- ()}
-\CommentTok{#>     \textbackslash{}- `>}
-\CommentTok{#>     \textbackslash{}- `x}
-\CommentTok{#>     \textbackslash{}-  1}
-\CommentTok{#>   \textbackslash{}- `x}
-\CommentTok{#>   \textbackslash{}- ()}
-\CommentTok{#>     \textbackslash{}- `/}
-\CommentTok{#>     \textbackslash{}-  1}
-\CommentTok{#>     \textbackslash{}- `x}
+\KeywordTok{ast}\NormalTok{(}\KeywordTok{f}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{2}\NormalTok{))}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## \- ()
+##   \- `f
+##   \-  1
+##   \-  2
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{ast}\NormalTok{(}\KeywordTok{f}\NormalTok{(a, b))}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## \- ()
+##   \- `f
+##   \- `a
+##   \- `b
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{ast}\NormalTok{(}\KeywordTok{f}\NormalTok{(}\KeywordTok{g}\NormalTok{(), }\KeywordTok{h}\NormalTok{(}\DecValTok{1}\NormalTok{, a)))}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## \- ()
+##   \- `f
+##   \- ()
+##     \- `g
+##   \- ()
+##     \- `h
+##     \-  1
+##     \- `a
+\end{verbatim}
+
+  As mentioned in \protect\hyperlink{all-calls}{every operation is a
+  function call}, even things that don't look like function calls still
+  have this hierarchical structure:
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{ast}\NormalTok{(a }\OperatorTok{+}\StringTok{ }\NormalTok{b)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## \- ()
+##   \- `+
+##   \- `a
+##   \- `b
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{ast}\NormalTok{(}\ControlFlowTok{if}\NormalTok{ (x }\OperatorTok{>}\StringTok{ }\DecValTok{1}\NormalTok{) x }\ControlFlowTok{else} \DecValTok{1}\OperatorTok{/}\NormalTok{x)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## \- ()
+##   \- `if
+##   \- ()
+##     \- `>
+##     \- `x
+##     \-  1
+##   \- `x
+##   \- ()
+##     \- `/
+##     \-  1
+##     \- `x
+\end{verbatim}
 \item
   \textbf{pairlists}, short for dotted pair lists, are a legacy of R's
   past. They are only used in one place: the formal arguments of a
@@ -211,32 +326,43 @@ calls, and pairlists.
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\KeywordTok{ast}\NormalTok{(function(}\DataTypeTok{x =} \DecValTok{1}\NormalTok{, y) x)}
-\CommentTok{#> \textbackslash{}- ()}
-\CommentTok{#>   \textbackslash{}- `function}
-\CommentTok{#>   \textbackslash{}- []}
-\CommentTok{#>     \textbackslash{} x = 1}
-\CommentTok{#>     \textbackslash{} y =`MISSING}
-\CommentTok{#>   \textbackslash{}- `x}
-\CommentTok{#>   \textbackslash{}- <srcref>}
-\KeywordTok{ast}\NormalTok{(function(}\DataTypeTok{x =} \DecValTok{1}\NormalTok{, }\DataTypeTok{y =} \NormalTok{x *}\StringTok{ }\DecValTok{2}\NormalTok{) \{x /}\StringTok{ }\NormalTok{y\})}
-\CommentTok{#> \textbackslash{}- ()}
-\CommentTok{#>   \textbackslash{}- `function}
-\CommentTok{#>   \textbackslash{}- []}
-\CommentTok{#>     \textbackslash{} x = 1}
-\CommentTok{#>     \textbackslash{} y =()}
-\CommentTok{#>       \textbackslash{}- `*}
-\CommentTok{#>       \textbackslash{}- `x}
-\CommentTok{#>       \textbackslash{}-  2}
-\CommentTok{#>   \textbackslash{}- ()}
-\CommentTok{#>     \textbackslash{}- `\{}
-\CommentTok{#>     \textbackslash{}- ()}
-\CommentTok{#>       \textbackslash{}- `/}
-\CommentTok{#>       \textbackslash{}- `x}
-\CommentTok{#>       \textbackslash{}- `y}
-\CommentTok{#>   \textbackslash{}- <srcref>}
+\KeywordTok{ast}\NormalTok{(}\ControlFlowTok{function}\NormalTok{(}\DataTypeTok{x =} \DecValTok{1}\NormalTok{, y) x)}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## \- ()
+##   \- `function
+##   \- []
+##     \ x = 1
+##     \ y =`MISSING
+##   \- `x
+##   \- <srcref>
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{ast}\NormalTok{(}\ControlFlowTok{function}\NormalTok{(}\DataTypeTok{x =} \DecValTok{1}\NormalTok{, }\DataTypeTok{y =}\NormalTok{ x }\OperatorTok{*}\StringTok{ }\DecValTok{2}\NormalTok{) \{x }\OperatorTok{/}\StringTok{ }\NormalTok{y\})}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## \- ()
+##   \- `function
+##   \- []
+##     \ x = 1
+##     \ y =()
+##       \- `*
+##       \- `x
+##       \-  2
+##   \- ()
+##     \- `{
+##     \- ()
+##       \- `/
+##       \- `x
+##       \- `y
+##   \- <srcref>
+\end{verbatim}
 \end{itemize}
 
 Note that \texttt{str()} does not follow these naming conventions when
@@ -246,11 +372,22 @@ language objects:
 \begin{Shaded}
 \begin{Highlighting}[]
 \KeywordTok{str}\NormalTok{(}\KeywordTok{quote}\NormalTok{(a))}
-\CommentTok{#>  symbol a}
-\KeywordTok{str}\NormalTok{(}\KeywordTok{quote}\NormalTok{(a +}\StringTok{ }\NormalTok{b))}
-\CommentTok{#>  language a + b}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+##  symbol a
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{str}\NormalTok{(}\KeywordTok{quote}\NormalTok{(a }\OperatorTok{+}\StringTok{ }\NormalTok{b))}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+##  language a + b
+\end{verbatim}
 
 Using low-level functions, it is possible to create call trees that
 contain objects other than constants, names, calls, and pairlists. The
@@ -263,16 +400,28 @@ but when evaluated, it returns ``data.frame''. \indexc{substitute()}
 \begin{Highlighting}[]
 \NormalTok{class_df <-}\StringTok{ }\KeywordTok{substitute}\NormalTok{(}\KeywordTok{class}\NormalTok{(df), }\KeywordTok{list}\NormalTok{(}\DataTypeTok{df =} \KeywordTok{data.frame}\NormalTok{(}\DataTypeTok{x =} \DecValTok{10}\NormalTok{)))}
 \NormalTok{class_df}
-\CommentTok{#> class(list(x = 10))}
-\KeywordTok{eval}\NormalTok{(class_df)}
-\CommentTok{#> [1] "data.frame"}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## class(list(x = 10))
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{eval}\NormalTok{(class_df)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] "data.frame"
+\end{verbatim}
 
 Together these four components define the structure of all R code. They
 are explained in more detail in the following sections.
 
-\subsection{Exercises}
+\hypertarget{exercises}{%
+\subsection{Exercises}\label{exercises}}
 
 \begin{enumerate}
 \def\labelenumi{\arabic{enumi}.}
@@ -288,15 +437,17 @@ are explained in more detail in the following sections.
   What does the call tree of an if statement with multiple else
   conditions look like?
 \item
-  Compare \texttt{ast(x + y \%+\% z)} to \texttt{ast(x \^{} y \%+\% z)}.
-  What do they tell you about the precedence of custom infix functions?
+  Compare \texttt{ast(x\ +\ y\ \%+\%\ z)} to
+  \texttt{ast(x\ \^{}\ y\ \%+\%\ z)}. What do they tell you about the
+  precedence of custom infix functions?
 \item
   Why can't an expression contain an atomic vector of length greater
   than one? Which one of the six types of atomic vector can't appear in
   an expression? Why?
 \end{enumerate}
 
-\hyperdef{}{names}{\section{Names}\label{names}}
+\hypertarget{names}{%
+\section{Names}\label{names}}
 
 Typically, we use \texttt{quote()} to capture names. You can also
 convert a string to a name with \texttt{as.name()}. However, this is
@@ -308,18 +459,52 @@ it involves more typing than using \texttt{quote()}. (You can use
 \begin{Shaded}
 \begin{Highlighting}[]
 \KeywordTok{as.name}\NormalTok{(}\StringTok{"name"}\NormalTok{)}
-\CommentTok{#> name}
-\KeywordTok{identical}\NormalTok{(}\KeywordTok{quote}\NormalTok{(name), }\KeywordTok{as.name}\NormalTok{(}\StringTok{"name"}\NormalTok{))}
-\CommentTok{#> [1] TRUE}
-
-\KeywordTok{is.name}\NormalTok{(}\StringTok{"name"}\NormalTok{)}
-\CommentTok{#> [1] FALSE}
-\KeywordTok{is.name}\NormalTok{(}\KeywordTok{quote}\NormalTok{(name))}
-\CommentTok{#> [1] TRUE}
-\KeywordTok{is.name}\NormalTok{(}\KeywordTok{quote}\NormalTok{(}\KeywordTok{f}\NormalTok{(name)))}
-\CommentTok{#> [1] FALSE}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## name
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{identical}\NormalTok{(}\KeywordTok{quote}\NormalTok{(name), }\KeywordTok{as.name}\NormalTok{(}\StringTok{"name"}\NormalTok{))}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] TRUE
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{is.name}\NormalTok{(}\StringTok{"name"}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] FALSE
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{is.name}\NormalTok{(}\KeywordTok{quote}\NormalTok{(name))}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] TRUE
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{is.name}\NormalTok{(}\KeywordTok{quote}\NormalTok{(}\KeywordTok{f}\NormalTok{(name)))}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] FALSE
+\end{verbatim}
 
 (Names are also called symbols. \texttt{as.symbol()} and
 \texttt{is.symbol()} are identical to \texttt{as.name()} and
@@ -331,11 +516,22 @@ backticks: \index{non-syntactic names}
 \begin{Shaded}
 \begin{Highlighting}[]
 \KeywordTok{as.name}\NormalTok{(}\StringTok{"a b"}\NormalTok{)}
-\CommentTok{#> `a b`}
-\KeywordTok{as.name}\NormalTok{(}\StringTok{"if"}\NormalTok{)}
-\CommentTok{#> `if`}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## `a b`
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{as.name}\NormalTok{(}\StringTok{"if"}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## `if`
+\end{verbatim}
 
 There's one special name that needs a little extra discussion: the empty
 name. It is used to represent missing arguments. This object behaves
@@ -346,19 +542,42 @@ programmatically create a function with missing arguments.
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{f <-}\StringTok{ }\NormalTok{function(x) }\DecValTok{10}
-\KeywordTok{formals}\NormalTok{(f)$x}
-\KeywordTok{is.name}\NormalTok{(}\KeywordTok{formals}\NormalTok{(f)$x)}
-\CommentTok{#> [1] TRUE}
-\KeywordTok{as.character}\NormalTok{(}\KeywordTok{formals}\NormalTok{(f)$x)}
-\CommentTok{#> [1] ""}
-
-\NormalTok{missing_arg <-}\StringTok{ }\KeywordTok{formals}\NormalTok{(f)$x}
-\CommentTok{# Doesn't work!}
-\KeywordTok{is.name}\NormalTok{(missing_arg)}
-\CommentTok{#> Error in eval(expr, envir, enclos): argument "missing_arg" is missing, with no default}
+\NormalTok{f <-}\StringTok{ }\ControlFlowTok{function}\NormalTok{(x) }\DecValTok{10}
+\KeywordTok{formals}\NormalTok{(f)}\OperatorTok{$}\NormalTok{x}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{is.name}\NormalTok{(}\KeywordTok{formals}\NormalTok{(f)}\OperatorTok{$}\NormalTok{x)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] TRUE
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{as.character}\NormalTok{(}\KeywordTok{formals}\NormalTok{(f)}\OperatorTok{$}\NormalTok{x)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] ""
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{missing_arg <-}\StringTok{ }\KeywordTok{formals}\NormalTok{(f)}\OperatorTok{$}\NormalTok{x}
+\CommentTok{# Doesn't work!}
+\KeywordTok{is.name}\NormalTok{(missing_arg)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## Error in eval(expr, envir, enclos): argument "missing_arg" is missing, with no default
+\end{verbatim}
 
 To explicitly create it when needed, call \texttt{quote()} with a named
 argument:
@@ -369,7 +588,8 @@ argument:
 \end{Highlighting}
 \end{Shaded}
 
-\subsection{Exercises}
+\hypertarget{exercises-1}{%
+\subsection{Exercises}\label{exercises-1}}
 
 \begin{enumerate}
 \def\labelenumi{\arabic{enumi}.}
@@ -380,8 +600,8 @@ argument:
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{g <-}\StringTok{ }\NormalTok{function(}\DataTypeTok{x =} \DecValTok{20}\NormalTok{, y) \{}
-  \NormalTok{x +}\StringTok{ }\NormalTok{y}
+\NormalTok{g <-}\StringTok{ }\ControlFlowTok{function}\NormalTok{(}\DataTypeTok{x =} \DecValTok{20}\NormalTok{, y) \{}
+\NormalTok{  x }\OperatorTok{+}\StringTok{ }\NormalTok{y}
 \NormalTok{\}}
 \end{Highlighting}
 \end{Shaded}
@@ -393,7 +613,8 @@ argument:
   the user supplies it explicitly.)
 \end{enumerate}
 
-\hyperdef{}{calls}{\section{Calls}\label{calls}}
+\hypertarget{calls}{%
+\section{Calls}\label{calls}}
 
 A call is very similar to a list. It has \texttt{length},
 \texttt{{[}{[}} and \texttt{{[}} methods, and is recursive because calls
@@ -405,11 +626,22 @@ that gets called. It's usually the \emph{name} of a function:
 \begin{Highlighting}[]
 \NormalTok{x <-}\StringTok{ }\KeywordTok{quote}\NormalTok{(}\KeywordTok{read.csv}\NormalTok{(}\StringTok{"important.csv"}\NormalTok{, }\DataTypeTok{row.names =} \OtherTok{FALSE}\NormalTok{))}
 \NormalTok{x[[}\DecValTok{1}\NormalTok{]]}
-\CommentTok{#> read.csv}
-\KeywordTok{is.name}\NormalTok{(x[[}\DecValTok{1}\NormalTok{]])}
-\CommentTok{#> [1] TRUE}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## read.csv
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{is.name}\NormalTok{(x[[}\DecValTok{1}\NormalTok{]])}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] TRUE
+\end{verbatim}
 
 But it can also be another call:
 
@@ -417,11 +649,22 @@ But it can also be another call:
 \begin{Highlighting}[]
 \NormalTok{y <-}\StringTok{ }\KeywordTok{quote}\NormalTok{(}\KeywordTok{add}\NormalTok{(}\DecValTok{10}\NormalTok{)(}\DecValTok{20}\NormalTok{))}
 \NormalTok{y[[}\DecValTok{1}\NormalTok{]]}
-\CommentTok{#> add(10)}
-\KeywordTok{is.call}\NormalTok{(y[[}\DecValTok{1}\NormalTok{]])}
-\CommentTok{#> [1] TRUE}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## add(10)
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{is.call}\NormalTok{(y[[}\DecValTok{1}\NormalTok{]])}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] TRUE
+\end{verbatim}
 
 The remaining elements are the arguments. They can be extracted by name
 or by position.
@@ -430,24 +673,47 @@ or by position.
 \begin{Highlighting}[]
 \NormalTok{x <-}\StringTok{ }\KeywordTok{quote}\NormalTok{(}\KeywordTok{read.csv}\NormalTok{(}\StringTok{"important.csv"}\NormalTok{, }\DataTypeTok{row.names =} \OtherTok{FALSE}\NormalTok{))}
 \NormalTok{x[[}\DecValTok{2}\NormalTok{]]}
-\CommentTok{#> [1] "important.csv"}
-\NormalTok{x$row.names}
-\CommentTok{#> [1] FALSE}
-\KeywordTok{names}\NormalTok{(x)}
-\CommentTok{#> [1] ""          ""          "row.names"}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## [1] "important.csv"
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{x}\OperatorTok{$}\NormalTok{row.names}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] FALSE
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{names}\NormalTok{(x)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] ""          ""          "row.names"
+\end{verbatim}
 
 The length of a call minus 1 gives the number of arguments:
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\KeywordTok{length}\NormalTok{(x) -}\StringTok{ }\DecValTok{1}
-\CommentTok{#> [1] 2}
+\KeywordTok{length}\NormalTok{(x) }\OperatorTok{-}\StringTok{ }\DecValTok{1}
 \end{Highlighting}
 \end{Shaded}
 
-\subsection{Modifying a call}
+\begin{verbatim}
+## [1] 2
+\end{verbatim}
+
+\hypertarget{modifying-a-call}{%
+\subsection{Modifying a call}\label{modifying-a-call}}
 
 You can add, modify, and delete elements of the call with the standard
 replacement operators, \texttt{\$\textless{}-} and
@@ -456,35 +722,71 @@ replacement operators, \texttt{\$\textless{}-} and
 \begin{Shaded}
 \begin{Highlighting}[]
 \NormalTok{y <-}\StringTok{ }\KeywordTok{quote}\NormalTok{(}\KeywordTok{read.csv}\NormalTok{(}\StringTok{"important.csv"}\NormalTok{, }\DataTypeTok{row.names =} \OtherTok{FALSE}\NormalTok{))}
-\NormalTok{y$row.names <-}\StringTok{ }\OtherTok{TRUE}
-\NormalTok{y$col.names <-}\StringTok{ }\OtherTok{FALSE}
+\NormalTok{y}\OperatorTok{$}\NormalTok{row.names <-}\StringTok{ }\OtherTok{TRUE}
+\NormalTok{y}\OperatorTok{$}\NormalTok{col.names <-}\StringTok{ }\OtherTok{FALSE}
 \NormalTok{y}
-\CommentTok{#> read.csv("important.csv", row.names = TRUE, col.names = FALSE)}
+\end{Highlighting}
+\end{Shaded}
 
+\begin{verbatim}
+## read.csv("important.csv", row.names = TRUE, col.names = FALSE)
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
 \NormalTok{y[[}\DecValTok{2}\NormalTok{]] <-}\StringTok{ }\KeywordTok{quote}\NormalTok{(}\KeywordTok{paste0}\NormalTok{(filename, }\StringTok{".csv"}\NormalTok{))}
 \NormalTok{y[[}\DecValTok{4}\NormalTok{]] <-}\StringTok{ }\OtherTok{NULL}
 \NormalTok{y}
-\CommentTok{#> read.csv(paste0(filename, ".csv"), row.names = TRUE)}
-
-\NormalTok{y$sep <-}\StringTok{ ","}
-\NormalTok{y}
-\CommentTok{#> read.csv(paste0(filename, ".csv"), row.names = TRUE, sep = ",")}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## read.csv(paste0(filename, ".csv"), row.names = TRUE)
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{y}\OperatorTok{$}\NormalTok{sep <-}\StringTok{ ","}
+\NormalTok{y}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## read.csv(paste0(filename, ".csv"), row.names = TRUE, sep = ",")
+\end{verbatim}
 
 Calls also support the \texttt{{[}} method. But use it with care.
 Removing the first element is unlikely to create a useful call.
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{x[-}\DecValTok{3}\NormalTok{] }\CommentTok{# remove the second argument}
-\CommentTok{#> read.csv("important.csv")}
-\NormalTok{x[-}\DecValTok{1}\NormalTok{] }\CommentTok{# remove the function name - but it's still a call!}
-\CommentTok{#> "important.csv"(row.names = FALSE)}
-\NormalTok{x}
-\CommentTok{#> read.csv("important.csv", row.names = FALSE)}
+\NormalTok{x[}\OperatorTok{-}\DecValTok{3}\NormalTok{] }\CommentTok{# remove the second argument}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## read.csv("important.csv")
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{x[}\OperatorTok{-}\DecValTok{1}\NormalTok{] }\CommentTok{# remove the function name - but it's still a call!}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## "important.csv"(row.names = FALSE)
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{x}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## read.csv("important.csv", row.names = FALSE)
+\end{verbatim}
 
 If you want a list of the unevaluated arguments (expressions), use
 explicit coercion:
@@ -492,14 +794,17 @@ explicit coercion:
 \begin{Shaded}
 \begin{Highlighting}[]
 \CommentTok{# A list of the unevaluated arguments}
-\KeywordTok{as.list}\NormalTok{(x[-}\DecValTok{1}\NormalTok{])}
-\CommentTok{#> [[1]]}
-\CommentTok{#> [1] "important.csv"}
-\CommentTok{#> }
-\CommentTok{#> $row.names}
-\CommentTok{#> [1] FALSE}
+\KeywordTok{as.list}\NormalTok{(x[}\OperatorTok{-}\DecValTok{1}\NormalTok{])}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## [[1]]
+## [1] "important.csv"
+## 
+## $row.names
+## [1] FALSE
+\end{verbatim}
 
 Generally speaking, because R's function calling semantics are so
 flexible, getting or setting arguments by position is dangerous. For
@@ -522,15 +827,36 @@ positional arguments to named arguments: \indexc{standardise\_call()}
 \begin{Shaded}
 \begin{Highlighting}[]
 \KeywordTok{standardise_call}\NormalTok{(m1)}
-\CommentTok{#> read.delim(file = "data.txt", sep = "|")}
-\KeywordTok{standardise_call}\NormalTok{(m2)}
-\CommentTok{#> read.delim(file = "data.txt", sep = "|")}
-\KeywordTok{standardise_call}\NormalTok{(m3)}
-\CommentTok{#> read.delim(file = "data.txt", sep = "|")}
 \end{Highlighting}
 \end{Shaded}
 
-\subsection{Creating a call from its components}
+\begin{verbatim}
+## read.delim(file = "data.txt", sep = "|")
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{standardise_call}\NormalTok{(m2)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## read.delim(file = "data.txt", sep = "|")
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{standardise_call}\NormalTok{(m3)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## read.delim(file = "data.txt", sep = "|")
+\end{verbatim}
+
+\hypertarget{creating-a-call-from-its-components}{%
+\subsection{Creating a call from its
+components}\label{creating-a-call-from-its-components}}
 
 To create a new call from its components, you can use \texttt{call()} or
 \texttt{as.call()}. The first argument to \texttt{call()} is a string
@@ -540,11 +866,22 @@ represent the arguments of the call. \indexc{call()} \indexc{as.call()}
 \begin{Shaded}
 \begin{Highlighting}[]
 \KeywordTok{call}\NormalTok{(}\StringTok{":"}\NormalTok{, }\DecValTok{1}\NormalTok{, }\DecValTok{10}\NormalTok{)}
-\CommentTok{#> 1:10}
-\KeywordTok{call}\NormalTok{(}\StringTok{"mean"}\NormalTok{, }\KeywordTok{quote}\NormalTok{(}\DecValTok{1}\NormalTok{:}\DecValTok{10}\NormalTok{), }\DataTypeTok{na.rm =} \OtherTok{TRUE}\NormalTok{)}
-\CommentTok{#> mean(1:10, na.rm = TRUE)}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## 1:10
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{call}\NormalTok{(}\StringTok{"mean"}\NormalTok{, }\KeywordTok{quote}\NormalTok{(}\DecValTok{1}\OperatorTok{:}\DecValTok{10}\NormalTok{), }\DataTypeTok{na.rm =} \OtherTok{TRUE}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## mean(1:10, na.rm = TRUE)
+\end{verbatim}
 
 \texttt{as.call()} is a minor variant of \texttt{call()} that takes a
 single list as input. The first element is a name or call. The
@@ -552,14 +889,26 @@ subsequent elements are the arguments.
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\KeywordTok{as.call}\NormalTok{(}\KeywordTok{list}\NormalTok{(}\KeywordTok{quote}\NormalTok{(mean), }\KeywordTok{quote}\NormalTok{(}\DecValTok{1}\NormalTok{:}\DecValTok{10}\NormalTok{)))}
-\CommentTok{#> mean(1:10)}
-\KeywordTok{as.call}\NormalTok{(}\KeywordTok{list}\NormalTok{(}\KeywordTok{quote}\NormalTok{(}\KeywordTok{adder}\NormalTok{(}\DecValTok{10}\NormalTok{)), }\DecValTok{20}\NormalTok{))}
-\CommentTok{#> adder(10)(20)}
+\KeywordTok{as.call}\NormalTok{(}\KeywordTok{list}\NormalTok{(}\KeywordTok{quote}\NormalTok{(mean), }\KeywordTok{quote}\NormalTok{(}\DecValTok{1}\OperatorTok{:}\DecValTok{10}\NormalTok{)))}
 \end{Highlighting}
 \end{Shaded}
 
-\subsection{Exercises}
+\begin{verbatim}
+## mean(1:10)
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{as.call}\NormalTok{(}\KeywordTok{list}\NormalTok{(}\KeywordTok{quote}\NormalTok{(}\KeywordTok{adder}\NormalTok{(}\DecValTok{10}\NormalTok{)), }\DecValTok{20}\NormalTok{))}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## adder(10)(20)
+\end{verbatim}
+
+\hypertarget{exercises-2}{%
+\subsection{Exercises}\label{exercises-2}}
 
 \begin{enumerate}
 \def\labelenumi{\arabic{enumi}.}
@@ -568,14 +917,33 @@ subsequent elements are the arguments.
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{(a <-}\StringTok{ }\KeywordTok{call}\NormalTok{(}\StringTok{"mean"}\NormalTok{, }\DecValTok{1}\NormalTok{:}\DecValTok{10}\NormalTok{))}
-\CommentTok{#> mean(1:10)}
-\NormalTok{(b <-}\StringTok{ }\KeywordTok{call}\NormalTok{(}\StringTok{"mean"}\NormalTok{, }\KeywordTok{quote}\NormalTok{(}\DecValTok{1}\NormalTok{:}\DecValTok{10}\NormalTok{)))}
-\CommentTok{#> mean(1:10)}
-\KeywordTok{identical}\NormalTok{(a, b)}
-\CommentTok{#> [1] FALSE}
+\NormalTok{(a <-}\StringTok{ }\KeywordTok{call}\NormalTok{(}\StringTok{"mean"}\NormalTok{, }\DecValTok{1}\OperatorTok{:}\DecValTok{10}\NormalTok{))}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## mean(1:10)
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{(b <-}\StringTok{ }\KeywordTok{call}\NormalTok{(}\StringTok{"mean"}\NormalTok{, }\KeywordTok{quote}\NormalTok{(}\DecValTok{1}\OperatorTok{:}\DecValTok{10}\NormalTok{)))}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## mean(1:10)
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{identical}\NormalTok{(a, b)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] FALSE
+\end{verbatim}
 
   What's the difference? Which one should you prefer?
 \item
@@ -617,14 +985,33 @@ subsequent elements are the arguments.
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\KeywordTok{standardise_call}\NormalTok{(}\KeywordTok{quote}\NormalTok{(}\KeywordTok{mean}\NormalTok{(}\DecValTok{1}\NormalTok{:}\DecValTok{10}\NormalTok{, }\DataTypeTok{na.rm =} \OtherTok{TRUE}\NormalTok{)))}
-\CommentTok{#> mean(x = 1:10, na.rm = TRUE)}
-\KeywordTok{standardise_call}\NormalTok{(}\KeywordTok{quote}\NormalTok{(}\KeywordTok{mean}\NormalTok{(}\DataTypeTok{n =} \NormalTok{T, }\DecValTok{1}\NormalTok{:}\DecValTok{10}\NormalTok{)))}
-\CommentTok{#> mean(x = 1:10, n = T)}
-\KeywordTok{standardise_call}\NormalTok{(}\KeywordTok{quote}\NormalTok{(}\KeywordTok{mean}\NormalTok{(}\DataTypeTok{x =} \DecValTok{1}\NormalTok{:}\DecValTok{10}\NormalTok{, , }\OtherTok{TRUE}\NormalTok{)))}
-\CommentTok{#> mean(x = 1:10, , TRUE)}
+\KeywordTok{standardise_call}\NormalTok{(}\KeywordTok{quote}\NormalTok{(}\KeywordTok{mean}\NormalTok{(}\DecValTok{1}\OperatorTok{:}\DecValTok{10}\NormalTok{, }\DataTypeTok{na.rm =} \OtherTok{TRUE}\NormalTok{)))}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## mean(x = 1:10, na.rm = TRUE)
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{standardise_call}\NormalTok{(}\KeywordTok{quote}\NormalTok{(}\KeywordTok{mean}\NormalTok{(}\DataTypeTok{n =}\NormalTok{ T, }\DecValTok{1}\OperatorTok{:}\DecValTok{10}\NormalTok{)))}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## mean(x = 1:10, n = T)
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{standardise_call}\NormalTok{(}\KeywordTok{quote}\NormalTok{(}\KeywordTok{mean}\NormalTok{(}\DataTypeTok{x =} \DecValTok{1}\OperatorTok{:}\DecValTok{10}\NormalTok{, , }\OtherTok{TRUE}\NormalTok{)))}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## mean(x = 1:10, , TRUE)
+\end{verbatim}
 \item
   Read the documentation for \texttt{pryr::modify\_call()}. How do you
   think it works? Read the source code.
@@ -635,8 +1022,8 @@ subsequent elements are the arguments.
   calls?
 \end{enumerate}
 
-\hyperdef{}{capturing-call}{\section{Capturing the current
-call}\label{capturing-call}}
+\hypertarget{capturing-call}{%
+\section{Capturing the current call}\label{capturing-call}}
 
 Many base R functions use the current call: the expression that caused
 the current function to be run. There are two ways to capture a current
@@ -656,17 +1043,20 @@ The following example illustrates the difference between the two:
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{f <-}\StringTok{ }\NormalTok{function(}\DataTypeTok{abc =} \DecValTok{1}\NormalTok{, }\DataTypeTok{def =} \DecValTok{2}\NormalTok{, }\DataTypeTok{ghi =} \DecValTok{3}\NormalTok{) \{}
+\NormalTok{f <-}\StringTok{ }\ControlFlowTok{function}\NormalTok{(}\DataTypeTok{abc =} \DecValTok{1}\NormalTok{, }\DataTypeTok{def =} \DecValTok{2}\NormalTok{, }\DataTypeTok{ghi =} \DecValTok{3}\NormalTok{) \{}
   \KeywordTok{list}\NormalTok{(}\DataTypeTok{sys =} \KeywordTok{sys.call}\NormalTok{(), }\DataTypeTok{match =} \KeywordTok{match.call}\NormalTok{())}
 \NormalTok{\}}
 \KeywordTok{f}\NormalTok{(}\DataTypeTok{d =} \DecValTok{2}\NormalTok{, }\DecValTok{2}\NormalTok{)}
-\CommentTok{#> $sys}
-\CommentTok{#> f(d = 2, 2)}
-\CommentTok{#> }
-\CommentTok{#> $match}
-\CommentTok{#> f(abc = 2, def = 2)}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## $sys
+## f(d = 2, 2)
+## 
+## $match
+## f(abc = 2, def = 2)
+\end{verbatim}
 
 Modelling functions often use \texttt{match.call()} to capture the call
 used to create the model. This makes it possible to \texttt{update()} a
@@ -675,47 +1065,53 @@ Here's an example of \texttt{update()} in action: \indexc{update()}
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{mod <-}\StringTok{ }\KeywordTok{lm}\NormalTok{(mpg ~}\StringTok{ }\NormalTok{wt, }\DataTypeTok{data =} \NormalTok{mtcars)}
-\KeywordTok{update}\NormalTok{(mod, }\DataTypeTok{formula =} \NormalTok{. ~}\StringTok{ }\NormalTok{. +}\StringTok{ }\NormalTok{cyl)}
-\CommentTok{#> }
-\CommentTok{#> Call:}
-\CommentTok{#> lm(formula = mpg ~ wt + cyl, data = mtcars)}
-\CommentTok{#> }
-\CommentTok{#> Coefficients:}
-\CommentTok{#> (Intercept)           wt          cyl  }
-\CommentTok{#>       39.69        -3.19        -1.51}
+\NormalTok{mod <-}\StringTok{ }\KeywordTok{lm}\NormalTok{(mpg }\OperatorTok{~}\StringTok{ }\NormalTok{wt, }\DataTypeTok{data =}\NormalTok{ mtcars)}
+\KeywordTok{update}\NormalTok{(mod, }\DataTypeTok{formula =}\NormalTok{ . }\OperatorTok{~}\StringTok{ }\NormalTok{. }\OperatorTok{+}\StringTok{ }\NormalTok{cyl)}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## 
+## Call:
+## lm(formula = mpg ~ wt + cyl, data = mtcars)
+## 
+## Coefficients:
+## (Intercept)           wt          cyl  
+##       39.69        -3.19        -1.51
+\end{verbatim}
 
 How does \texttt{update()} work? We can rewrite it using some tools from
 pryr to focus on the essence of the algorithm.
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{update_call <-}\StringTok{ }\NormalTok{function (object, formula., ...) \{}
-  \NormalTok{call <-}\StringTok{ }\NormalTok{object$call}
+\NormalTok{update_call <-}\StringTok{ }\ControlFlowTok{function}\NormalTok{ (object, formula., ...) \{}
+\NormalTok{  call <-}\StringTok{ }\NormalTok{object}\OperatorTok{$}\NormalTok{call}
 
   \CommentTok{# Use update.formula to deal with formulas like . ~ .}
-  \NormalTok{if (!}\KeywordTok{missing}\NormalTok{(formula.)) \{}
-    \NormalTok{call$formula <-}\StringTok{ }\KeywordTok{update.formula}\NormalTok{(}\KeywordTok{formula}\NormalTok{(object), formula.)}
-  \NormalTok{\}}
+  \ControlFlowTok{if}\NormalTok{ (}\OperatorTok{!}\KeywordTok{missing}\NormalTok{(formula.)) \{}
+\NormalTok{    call}\OperatorTok{$}\NormalTok{formula <-}\StringTok{ }\KeywordTok{update.formula}\NormalTok{(}\KeywordTok{formula}\NormalTok{(object), formula.)}
+\NormalTok{  \}}
 
   \KeywordTok{modify_call}\NormalTok{(call, }\KeywordTok{dots}\NormalTok{(...))}
 \NormalTok{\}}
-\NormalTok{update_model <-}\StringTok{ }\NormalTok{function(object, formula., ...) \{}
-  \NormalTok{call <-}\StringTok{ }\KeywordTok{update_call}\NormalTok{(object, formula., ...)}
+\NormalTok{update_model <-}\StringTok{ }\ControlFlowTok{function}\NormalTok{(object, formula., ...) \{}
+\NormalTok{  call <-}\StringTok{ }\KeywordTok{update_call}\NormalTok{(object, formula., ...)}
   \KeywordTok{eval}\NormalTok{(call, }\KeywordTok{parent.frame}\NormalTok{())}
 \NormalTok{\}}
-\KeywordTok{update_model}\NormalTok{(mod, }\DataTypeTok{formula =} \NormalTok{. ~}\StringTok{ }\NormalTok{. +}\StringTok{ }\NormalTok{cyl)}
-\CommentTok{#> }
-\CommentTok{#> Call:}
-\CommentTok{#> lm(formula = mpg ~ wt + cyl, data = mtcars)}
-\CommentTok{#> }
-\CommentTok{#> Coefficients:}
-\CommentTok{#> (Intercept)           wt          cyl  }
-\CommentTok{#>       39.69        -3.19        -1.51}
+\KeywordTok{update_model}\NormalTok{(mod, }\DataTypeTok{formula =}\NormalTok{ . }\OperatorTok{~}\StringTok{ }\NormalTok{. }\OperatorTok{+}\StringTok{ }\NormalTok{cyl)}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## 
+## Call:
+## lm(formula = mpg ~ wt + cyl, data = mtcars)
+## 
+## Coefficients:
+## (Intercept)           wt          cyl  
+##       39.69        -3.19        -1.51
+\end{verbatim}
 
 The original \texttt{update()} has an \texttt{evaluate} argument that
 controls whether the function returns the call or the result. But I
@@ -730,28 +1126,38 @@ originally fit --- in the formula.
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{f <-}\StringTok{ }\NormalTok{function() \{}
-  \NormalTok{n <-}\StringTok{ }\DecValTok{3}
-  \KeywordTok{lm}\NormalTok{(mpg ~}\StringTok{ }\KeywordTok{poly}\NormalTok{(wt, n), }\DataTypeTok{data =} \NormalTok{mtcars)}
+\NormalTok{f <-}\StringTok{ }\ControlFlowTok{function}\NormalTok{() \{}
+\NormalTok{  n <-}\StringTok{ }\DecValTok{3}
+  \KeywordTok{lm}\NormalTok{(mpg }\OperatorTok{~}\StringTok{ }\KeywordTok{poly}\NormalTok{(wt, n), }\DataTypeTok{data =}\NormalTok{ mtcars)}
 \NormalTok{\}}
 \NormalTok{mod <-}\StringTok{ }\KeywordTok{f}\NormalTok{()}
-\KeywordTok{update}\NormalTok{(mod, }\DataTypeTok{data =} \NormalTok{mtcars)}
-\CommentTok{#> Error in poly(wt, n): object 'n' not found}
-
-\NormalTok{update_model <-}\StringTok{ }\NormalTok{function(object, formula., ...) \{}
-  \NormalTok{call <-}\StringTok{ }\KeywordTok{update_call}\NormalTok{(object, formula., ...)}
-  \KeywordTok{eval}\NormalTok{(call, }\KeywordTok{environment}\NormalTok{(}\KeywordTok{formula}\NormalTok{(object)))}
-\NormalTok{\}}
-\KeywordTok{update_model}\NormalTok{(mod, }\DataTypeTok{data =} \NormalTok{mtcars)}
-\CommentTok{#> }
-\CommentTok{#> Call:}
-\CommentTok{#> lm(formula = mpg ~ poly(wt, n), data = mtcars)}
-\CommentTok{#> }
-\CommentTok{#> Coefficients:}
-\CommentTok{#>  (Intercept)  poly(wt, n)1  poly(wt, n)2  poly(wt, n)3  }
-\CommentTok{#>       20.091       -29.116         8.636         0.275}
+\KeywordTok{update}\NormalTok{(mod, }\DataTypeTok{data =}\NormalTok{ mtcars)}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## Error in poly(wt, n): object 'n' not found
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{update_model <-}\StringTok{ }\ControlFlowTok{function}\NormalTok{(object, formula., ...) \{}
+\NormalTok{  call <-}\StringTok{ }\KeywordTok{update_call}\NormalTok{(object, formula., ...)}
+  \KeywordTok{eval}\NormalTok{(call, }\KeywordTok{environment}\NormalTok{(}\KeywordTok{formula}\NormalTok{(object)))}
+\NormalTok{\}}
+\KeywordTok{update_model}\NormalTok{(mod, }\DataTypeTok{data =}\NormalTok{ mtcars)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## 
+## Call:
+## lm(formula = mpg ~ poly(wt, n), data = mtcars)
+## 
+## Coefficients:
+##  (Intercept)  poly(wt, n)1  poly(wt, n)2  poly(wt, n)3  
+##       20.091       -29.116         8.636         0.275
+\end{verbatim}
 
 This is an important principle to remember: if you want to re-run code
 captured with \texttt{match.call()}, you also need to capture the
@@ -759,8 +1165,8 @@ environment in which it was evaluated, usually the
 \texttt{parent.frame()}. The downside to this is that capturing the
 environment also means capturing any large objects which happen to be in
 that environment, which prevents their memory from being released. This
-topic is explored in more detail in \hyperref[gc]{garbage collection}.
-\index{environments|capturing}
+topic is explored in more detail in \protect\hyperlink{gc}{garbage
+collection}. \index{environments|capturing}
 
 Some base R functions use \texttt{match.call()} where it's not
 necessary. For example, \texttt{write.csv()} captures the call to
@@ -769,20 +1175,20 @@ instead:
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{write.csv <-}\StringTok{ }\NormalTok{function(...) \{}
-  \NormalTok{Call <-}\StringTok{ }\KeywordTok{match.call}\NormalTok{(}\DataTypeTok{expand.dots =} \OtherTok{TRUE}\NormalTok{)}
-  \NormalTok{for (arg in }\KeywordTok{c}\NormalTok{(}\StringTok{"append"}\NormalTok{, }\StringTok{"col.names"}\NormalTok{, }\StringTok{"sep"}\NormalTok{, }\StringTok{"dec"}\NormalTok{, }\StringTok{"qmethod"}\NormalTok{)) \{}
-    \NormalTok{if (!}\KeywordTok{is.null}\NormalTok{(Call[[arg]])) \{}
+\NormalTok{write.csv <-}\StringTok{ }\ControlFlowTok{function}\NormalTok{(...) \{}
+\NormalTok{  Call <-}\StringTok{ }\KeywordTok{match.call}\NormalTok{(}\DataTypeTok{expand.dots =} \OtherTok{TRUE}\NormalTok{)}
+  \ControlFlowTok{for}\NormalTok{ (arg }\ControlFlowTok{in} \KeywordTok{c}\NormalTok{(}\StringTok{"append"}\NormalTok{, }\StringTok{"col.names"}\NormalTok{, }\StringTok{"sep"}\NormalTok{, }\StringTok{"dec"}\NormalTok{, }\StringTok{"qmethod"}\NormalTok{)) \{}
+    \ControlFlowTok{if}\NormalTok{ (}\OperatorTok{!}\KeywordTok{is.null}\NormalTok{(Call[[arg]])) \{}
       \KeywordTok{warning}\NormalTok{(}\KeywordTok{gettextf}\NormalTok{(}\StringTok{"attempt to set '%s' ignored"}\NormalTok{, arg))}
-    \NormalTok{\}}
-  \NormalTok{\}}
-  \NormalTok{rn <-}\StringTok{ }\KeywordTok{eval.parent}\NormalTok{(Call$row.names)}
-  \NormalTok{Call$append <-}\StringTok{ }\OtherTok{NULL}
-  \NormalTok{Call$col.names <-}\StringTok{ }\NormalTok{if (}\KeywordTok{is.logical}\NormalTok{(rn) &&}\StringTok{ }\NormalTok{!rn) }\OtherTok{TRUE} \NormalTok{else }\OtherTok{NA}
-  \NormalTok{Call$sep <-}\StringTok{ ","}
-  \NormalTok{Call$dec <-}\StringTok{ "."}
-  \NormalTok{Call$qmethod <-}\StringTok{ "double"}
-  \NormalTok{Call[[1L]] <-}\StringTok{ }\KeywordTok{as.name}\NormalTok{(}\StringTok{"write.table"}\NormalTok{)}
+\NormalTok{    \}}
+\NormalTok{  \}}
+\NormalTok{  rn <-}\StringTok{ }\KeywordTok{eval.parent}\NormalTok{(Call}\OperatorTok{$}\NormalTok{row.names)}
+\NormalTok{  Call}\OperatorTok{$}\NormalTok{append <-}\StringTok{ }\OtherTok{NULL}
+\NormalTok{  Call}\OperatorTok{$}\NormalTok{col.names <-}\StringTok{ }\ControlFlowTok{if}\NormalTok{ (}\KeywordTok{is.logical}\NormalTok{(rn) }\OperatorTok{&&}\StringTok{ }\OperatorTok{!}\NormalTok{rn) }\OtherTok{TRUE} \ControlFlowTok{else} \OtherTok{NA}
+\NormalTok{  Call}\OperatorTok{$}\NormalTok{sep <-}\StringTok{ ","}
+\NormalTok{  Call}\OperatorTok{$}\NormalTok{dec <-}\StringTok{ "."}
+\NormalTok{  Call}\OperatorTok{$}\NormalTok{qmethod <-}\StringTok{ "double"}
+\NormalTok{  Call[[1L]] <-}\StringTok{ }\KeywordTok{as.name}\NormalTok{(}\StringTok{"write.table"}\NormalTok{)}
   \KeywordTok{eval.parent}\NormalTok{(Call)}
 \NormalTok{\}}
 \end{Highlighting}
@@ -793,10 +1199,10 @@ function call semantics:
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{write.csv <-}\StringTok{ }\NormalTok{function(x, }\DataTypeTok{file =} \StringTok{""}\NormalTok{, }\DataTypeTok{sep =} \StringTok{","}\NormalTok{, }\DataTypeTok{qmethod =} \StringTok{"double"}\NormalTok{, }
-                      \NormalTok{...) \{}
-  \KeywordTok{write.table}\NormalTok{(}\DataTypeTok{x =} \NormalTok{x, }\DataTypeTok{file =} \NormalTok{file, }\DataTypeTok{sep =} \NormalTok{sep, }\DataTypeTok{qmethod =} \NormalTok{qmethod, }
-    \NormalTok{...)}
+\NormalTok{write.csv <-}\StringTok{ }\ControlFlowTok{function}\NormalTok{(x, }\DataTypeTok{file =} \StringTok{""}\NormalTok{, }\DataTypeTok{sep =} \StringTok{","}\NormalTok{, }\DataTypeTok{qmethod =} \StringTok{"double"}\NormalTok{, }
+\NormalTok{                      ...) \{}
+  \KeywordTok{write.table}\NormalTok{(}\DataTypeTok{x =}\NormalTok{ x, }\DataTypeTok{file =}\NormalTok{ file, }\DataTypeTok{sep =}\NormalTok{ sep, }\DataTypeTok{qmethod =}\NormalTok{ qmethod, }
+\NormalTok{    ...)}
 \NormalTok{\}}
 \end{Highlighting}
 \end{Shaded}
@@ -804,12 +1210,13 @@ function call semantics:
 This is much easier to understand: it's just calling
 \texttt{write.table()} with different defaults. This also fixes a subtle
 bug in the original \texttt{write.csv()}:
-\texttt{write.csv(mtcars, row = FALSE)} raises an error, but
-\texttt{write.csv(mtcars, row.names = FALSE)} does not. The lesson here
-is that it's always better to solve a problem with the simplest tool
-possible.
+\texttt{write.csv(mtcars,\ row\ =\ FALSE)} raises an error, but
+\texttt{write.csv(mtcars,\ row.names\ =\ FALSE)} does not. The lesson
+here is that it's always better to solve a problem with the simplest
+tool possible.
 
-\subsection{Exercises}
+\hypertarget{exercises-3}{%
+\subsection{Exercises}\label{exercises-3}}
 
 \begin{enumerate}
 \def\labelenumi{\arabic{enumi}.}
@@ -817,7 +1224,7 @@ possible.
   Compare and contrast \texttt{update\_model()} with
   \texttt{update.default()}.
 \item
-  Why doesn't \texttt{write.csv(mtcars, "mtcars.csv", row = FALSE)}
+  Why doesn't \texttt{write.csv(mtcars,\ "mtcars.csv",\ row\ =\ FALSE)}
   work? What property of argument matching has the original author
   forgotten?
 \item
@@ -829,7 +1236,8 @@ possible.
   \texttt{match.call()} to find this function?
 \end{enumerate}
 
-\hyperdef{}{pairlists}{\section{Pairlists}\label{pairlists}}
+\hypertarget{pairlists}{%
+\section{Pairlists}\label{pairlists}}
 
 Pairlists are a holdover from R's past. They behave identically to
 lists, but have a different internal representation (as a linked list
@@ -847,8 +1255,8 @@ environment. The function uses \texttt{as.pairlist()} to ensure that the
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{make_function <-}\StringTok{ }\NormalTok{function(args, body, }\DataTypeTok{env =} \KeywordTok{parent.frame}\NormalTok{()) \{}
-  \NormalTok{args <-}\StringTok{ }\KeywordTok{as.pairlist}\NormalTok{(args)}
+\NormalTok{make_function <-}\StringTok{ }\ControlFlowTok{function}\NormalTok{(args, body, }\DataTypeTok{env =} \KeywordTok{parent.frame}\NormalTok{()) \{}
+\NormalTok{  args <-}\StringTok{ }\KeywordTok{as.pairlist}\NormalTok{(args)}
 
   \KeywordTok{eval}\NormalTok{(}\KeywordTok{call}\NormalTok{(}\StringTok{"function"}\NormalTok{, args, body), env)}
 \NormalTok{\}}
@@ -859,26 +1267,52 @@ This function is also available in pryr, where it does a little extra
 checking of arguments. \texttt{make\_function()} is best used in
 conjunction with \texttt{alist()}, the \textbf{a}rgument list function.
 \texttt{alist()} doesn't evaluate its arguments so that
-\texttt{alist(x = a)} is shorthand for \texttt{list(x = quote(a))}.
+\texttt{alist(x\ =\ a)} is shorthand for \texttt{list(x\ =\ quote(a))}.
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{add <-}\StringTok{ }\KeywordTok{make_function}\NormalTok{(}\KeywordTok{alist}\NormalTok{(}\DataTypeTok{a =} \DecValTok{1}\NormalTok{, }\DataTypeTok{b =} \DecValTok{2}\NormalTok{), }\KeywordTok{quote}\NormalTok{(a +}\StringTok{ }\NormalTok{b))}
+\NormalTok{add <-}\StringTok{ }\KeywordTok{make_function}\NormalTok{(}\KeywordTok{alist}\NormalTok{(}\DataTypeTok{a =} \DecValTok{1}\NormalTok{, }\DataTypeTok{b =} \DecValTok{2}\NormalTok{), }\KeywordTok{quote}\NormalTok{(a }\OperatorTok{+}\StringTok{ }\NormalTok{b))}
 \KeywordTok{add}\NormalTok{(}\DecValTok{1}\NormalTok{)}
-\CommentTok{#> [1] 3}
-\KeywordTok{add}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{2}\NormalTok{)}
-\CommentTok{#> [1] 3}
-
-\CommentTok{# To have an argument with no default, you need an explicit =}
-\KeywordTok{make_function}\NormalTok{(}\KeywordTok{alist}\NormalTok{(}\DataTypeTok{a =} \NormalTok{, }\DataTypeTok{b =} \NormalTok{a), }\KeywordTok{quote}\NormalTok{(a +}\StringTok{ }\NormalTok{b))}
-\CommentTok{#> function (a, b = a) }
-\CommentTok{#> a + b}
-\CommentTok{# To take `...` as an argument put it on the LHS of =}
-\KeywordTok{make_function}\NormalTok{(}\KeywordTok{alist}\NormalTok{(}\DataTypeTok{a =} \NormalTok{, }\DataTypeTok{b =} \NormalTok{, }\DataTypeTok{... =}\NormalTok{), }\KeywordTok{quote}\NormalTok{(a +}\StringTok{ }\NormalTok{b))}
-\CommentTok{#> function (a, b, ...) }
-\CommentTok{#> a + b}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## [1] 3
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{add}\NormalTok{(}\DecValTok{1}\NormalTok{, }\DecValTok{2}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] 3
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{# To have an argument with no default, you need an explicit =}
+\KeywordTok{make_function}\NormalTok{(}\KeywordTok{alist}\NormalTok{(}\DataTypeTok{a =}\NormalTok{ , }\DataTypeTok{b =}\NormalTok{ a), }\KeywordTok{quote}\NormalTok{(a }\OperatorTok{+}\StringTok{ }\NormalTok{b))}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## function (a, b = a) 
+## a + b
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\CommentTok{# To take `...` as an argument put it on the LHS of =}
+\KeywordTok{make_function}\NormalTok{(}\KeywordTok{alist}\NormalTok{(}\DataTypeTok{a =}\NormalTok{ , }\DataTypeTok{b =}\NormalTok{ , }\DataTypeTok{... =}\NormalTok{), }\KeywordTok{quote}\NormalTok{(a }\OperatorTok{+}\StringTok{ }\NormalTok{b))}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## function (a, b, ...) 
+## a + b
+\end{verbatim}
 
 \texttt{make\_function()} has one advantage over using closures to
 construct functions: with it, you can easily read the source code. For
@@ -886,16 +1320,19 @@ example:
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{adder <-}\StringTok{ }\NormalTok{function(x) \{}
-  \KeywordTok{make_function}\NormalTok{(}\KeywordTok{alist}\NormalTok{(}\DataTypeTok{y =}\NormalTok{), }\KeywordTok{substitute}\NormalTok{(\{x +}\StringTok{ }\NormalTok{y\}), }\KeywordTok{parent.frame}\NormalTok{())}
+\NormalTok{adder <-}\StringTok{ }\ControlFlowTok{function}\NormalTok{(x) \{}
+  \KeywordTok{make_function}\NormalTok{(}\KeywordTok{alist}\NormalTok{(}\DataTypeTok{y =}\NormalTok{), }\KeywordTok{substitute}\NormalTok{(\{x }\OperatorTok{+}\StringTok{ }\NormalTok{y\}), }\KeywordTok{parent.frame}\NormalTok{())}
 \NormalTok{\}}
 \KeywordTok{adder}\NormalTok{(}\DecValTok{10}\NormalTok{)}
-\CommentTok{#> function (y) }
-\CommentTok{#> \{}
-\CommentTok{#>     10 + y}
-\CommentTok{#> \}}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## function (y) 
+## {
+##     10 + y
+## }
+\end{verbatim}
 
 One useful application of \texttt{make\_function()} is in functions like
 \texttt{curve()}. \texttt{curve()} allows you to plot a mathematical
@@ -903,11 +1340,11 @@ function without creating an explicit R function:
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\KeywordTok{curve}\NormalTok{(}\KeywordTok{sin}\NormalTok{(}\KeywordTok{exp}\NormalTok{(}\DecValTok{4} \NormalTok{*}\StringTok{ }\NormalTok{x)), }\DataTypeTok{n =} \DecValTok{1000}\NormalTok{)}
+\KeywordTok{curve}\NormalTok{(}\KeywordTok{sin}\NormalTok{(}\KeywordTok{exp}\NormalTok{(}\DecValTok{4} \OperatorTok{*}\StringTok{ }\NormalTok{x)), }\DataTypeTok{n =} \DecValTok{1000}\NormalTok{)}
 \end{Highlighting}
 \end{Shaded}
 
-\includegraphics{figures/curve-demo-1.pdf}
+\includegraphics{/home/elio/Documents/adv-r/book/tex/Expressions_files/figure-latex/curve-demo-1.png}
 
 Here \texttt{x} is a pronoun. \texttt{x} doesn't represent a single
 concrete value, but is instead a placeholder that varies over the range
@@ -916,12 +1353,12 @@ of the plot. One way to implement \texttt{curve()} would be with
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{curve2 <-}\StringTok{ }\NormalTok{function(expr, }\DataTypeTok{xlim =} \KeywordTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{, }\DecValTok{1}\NormalTok{), }\DataTypeTok{n =} \DecValTok{100}\NormalTok{, }
+\NormalTok{curve2 <-}\StringTok{ }\ControlFlowTok{function}\NormalTok{(expr, }\DataTypeTok{xlim =} \KeywordTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{, }\DecValTok{1}\NormalTok{), }\DataTypeTok{n =} \DecValTok{100}\NormalTok{, }
                    \DataTypeTok{env =} \KeywordTok{parent.frame}\NormalTok{()) \{}
-  \NormalTok{f <-}\StringTok{ }\KeywordTok{make_function}\NormalTok{(}\KeywordTok{alist}\NormalTok{(}\DataTypeTok{x =} \NormalTok{), }\KeywordTok{substitute}\NormalTok{(expr), env)}
+\NormalTok{  f <-}\StringTok{ }\KeywordTok{make_function}\NormalTok{(}\KeywordTok{alist}\NormalTok{(}\DataTypeTok{x =}\NormalTok{ ), }\KeywordTok{substitute}\NormalTok{(expr), env)}
 
-  \NormalTok{x <-}\StringTok{ }\KeywordTok{seq}\NormalTok{(xlim[}\DecValTok{1}\NormalTok{], xlim[}\DecValTok{2}\NormalTok{], }\DataTypeTok{length =} \NormalTok{n)}
-  \NormalTok{y <-}\StringTok{ }\KeywordTok{f}\NormalTok{(x)}
+\NormalTok{  x <-}\StringTok{ }\KeywordTok{seq}\NormalTok{(xlim[}\DecValTok{1}\NormalTok{], xlim[}\DecValTok{2}\NormalTok{], }\DataTypeTok{length =}\NormalTok{ n)}
+\NormalTok{  y <-}\StringTok{ }\KeywordTok{f}\NormalTok{(x)}
 
   \KeywordTok{plot}\NormalTok{(x, y, }\DataTypeTok{type =} \StringTok{"l"}\NormalTok{, }\DataTypeTok{ylab =} \KeywordTok{deparse}\NormalTok{(}\KeywordTok{substitute}\NormalTok{(expr)))}
 \NormalTok{\}}
@@ -937,12 +1374,13 @@ language),
 \href{http://amalloy.hubpages.com/hub/Unhygenic-anaphoric-Clojure-macros-for-fun-and-profit}{Clojure}.
 \index{anaphoric functions} \index{functions!anaphoric}
 
-\subsection{Exercises}
+\hypertarget{exercises-4}{%
+\subsection{Exercises}\label{exercises-4}}
 
 \begin{enumerate}
 \def\labelenumi{\arabic{enumi}.}
 \item
-  How are \texttt{alist(a)} and \texttt{alist(a = )} different? Think
+  How are \texttt{alist(a)} and \texttt{alist(a\ =\ )} different? Think
   about both the input and the output.
 \item
   Read the documentation and source code for \texttt{pryr::partial()}.
@@ -954,13 +1392,13 @@ language),
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{curve3 <-}\StringTok{ }\NormalTok{function(expr, }\DataTypeTok{xlim =} \KeywordTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{, }\DecValTok{1}\NormalTok{), }\DataTypeTok{n =} \DecValTok{100}\NormalTok{,}
+\NormalTok{curve3 <-}\StringTok{ }\ControlFlowTok{function}\NormalTok{(expr, }\DataTypeTok{xlim =} \KeywordTok{c}\NormalTok{(}\DecValTok{0}\NormalTok{, }\DecValTok{1}\NormalTok{), }\DataTypeTok{n =} \DecValTok{100}\NormalTok{,}
                    \DataTypeTok{env =} \KeywordTok{parent.frame}\NormalTok{()) \{}
-  \NormalTok{env2 <-}\StringTok{ }\KeywordTok{new.env}\NormalTok{(}\DataTypeTok{parent =} \NormalTok{env)}
-  \NormalTok{env2$x <-}\StringTok{ }\KeywordTok{seq}\NormalTok{(xlim[}\DecValTok{1}\NormalTok{], xlim[}\DecValTok{2}\NormalTok{], }\DataTypeTok{length =} \NormalTok{n)}
+\NormalTok{  env2 <-}\StringTok{ }\KeywordTok{new.env}\NormalTok{(}\DataTypeTok{parent =}\NormalTok{ env)}
+\NormalTok{  env2}\OperatorTok{$}\NormalTok{x <-}\StringTok{ }\KeywordTok{seq}\NormalTok{(xlim[}\DecValTok{1}\NormalTok{], xlim[}\DecValTok{2}\NormalTok{], }\DataTypeTok{length =}\NormalTok{ n)}
 
-  \NormalTok{y <-}\StringTok{ }\KeywordTok{eval}\NormalTok{(}\KeywordTok{substitute}\NormalTok{(expr), env2)}
-  \KeywordTok{plot}\NormalTok{(env2$x, y, }\DataTypeTok{type =} \StringTok{"l"}\NormalTok{, }
+\NormalTok{  y <-}\StringTok{ }\KeywordTok{eval}\NormalTok{(}\KeywordTok{substitute}\NormalTok{(expr), env2)}
+  \KeywordTok{plot}\NormalTok{(env2}\OperatorTok{$}\NormalTok{x, y, }\DataTypeTok{type =} \StringTok{"l"}\NormalTok{, }
     \DataTypeTok{ylab =} \KeywordTok{deparse}\NormalTok{(}\KeywordTok{substitute}\NormalTok{(expr)))}
 \NormalTok{\}}
 \end{Highlighting}
@@ -969,8 +1407,8 @@ language),
   How does this approach differ from \texttt{curve2()} defined above?
 \end{enumerate}
 
-\hyperdef{}{parsing-and-deparsing}{\section{Parsing and
-deparsing}\label{parsing-and-deparsing}}
+\hypertarget{parsing-and-deparsing}{%
+\section{Parsing and deparsing}\label{parsing-and-deparsing}}
 
 Sometimes code is represented as a string, rather than as an expression.
 You can convert a string to an expression with \texttt{parse()}.
@@ -982,14 +1420,24 @@ need to use the \texttt{text} argument: \indexc{parse()}
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{z <-}\StringTok{ }\KeywordTok{quote}\NormalTok{(y <-}\StringTok{ }\NormalTok{x *}\StringTok{ }\DecValTok{10}\NormalTok{)}
+\NormalTok{z <-}\StringTok{ }\KeywordTok{quote}\NormalTok{(y <-}\StringTok{ }\NormalTok{x }\OperatorTok{*}\StringTok{ }\DecValTok{10}\NormalTok{)}
 \KeywordTok{deparse}\NormalTok{(z)}
-\CommentTok{#> [1] "y <- x * 10"}
-
-\KeywordTok{parse}\NormalTok{(}\DataTypeTok{text =} \KeywordTok{deparse}\NormalTok{(z))}
-\CommentTok{#> expression(y <- x * 10)}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## [1] "y <- x * 10"
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{parse}\NormalTok{(}\DataTypeTok{text =} \KeywordTok{deparse}\NormalTok{(z))}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## expression(y <- x * 10)
+\end{verbatim}
 
 Because there might be many top-level calls in a file, \texttt{parse()}
 doesn't return just a single expression. Instead, it returns an
@@ -1004,16 +1452,42 @@ expression object, which is essentially a list of expressions:
 \StringTok{  5}
 \StringTok{"}\NormalTok{))}
 \KeywordTok{length}\NormalTok{(exp)}
-\CommentTok{#> [1] 3}
-\KeywordTok{typeof}\NormalTok{(exp)}
-\CommentTok{#> [1] "expression"}
-
-\NormalTok{exp[[}\DecValTok{1}\NormalTok{]]}
-\CommentTok{#> x <- 4}
-\NormalTok{exp[[}\DecValTok{2}\NormalTok{]]}
-\CommentTok{#> x}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## [1] 3
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{typeof}\NormalTok{(exp)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] "expression"
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{exp[[}\DecValTok{1}\NormalTok{]]}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## x <- 4
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\NormalTok{exp[[}\DecValTok{2}\NormalTok{]]}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## x
+\end{verbatim}
 
 You can create expression objects by hand with \texttt{expression()},
 but I wouldn't recommend it. There's no need to learn about this
@@ -1030,19 +1504,19 @@ does the same. \index{source()}
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{simple_source <-}\StringTok{ }\NormalTok{function(file, }\DataTypeTok{envir =} \KeywordTok{new.env}\NormalTok{()) \{}
+\NormalTok{simple_source <-}\StringTok{ }\ControlFlowTok{function}\NormalTok{(file, }\DataTypeTok{envir =} \KeywordTok{new.env}\NormalTok{()) \{}
   \KeywordTok{stopifnot}\NormalTok{(}\KeywordTok{file.exists}\NormalTok{(file))}
   \KeywordTok{stopifnot}\NormalTok{(}\KeywordTok{is.environment}\NormalTok{(envir))}
 
-  \NormalTok{lines <-}\StringTok{ }\KeywordTok{readLines}\NormalTok{(file, }\DataTypeTok{warn =} \OtherTok{FALSE}\NormalTok{)}
-  \NormalTok{exprs <-}\StringTok{ }\KeywordTok{parse}\NormalTok{(}\DataTypeTok{text =} \NormalTok{lines)}
+\NormalTok{  lines <-}\StringTok{ }\KeywordTok{readLines}\NormalTok{(file, }\DataTypeTok{warn =} \OtherTok{FALSE}\NormalTok{)}
+\NormalTok{  exprs <-}\StringTok{ }\KeywordTok{parse}\NormalTok{(}\DataTypeTok{text =}\NormalTok{ lines)}
 
-  \NormalTok{n <-}\StringTok{ }\KeywordTok{length}\NormalTok{(exprs)}
-  \NormalTok{if (n ==}\StringTok{ }\NormalTok{0L) }\KeywordTok{return}\NormalTok{(}\KeywordTok{invisible}\NormalTok{())}
+\NormalTok{  n <-}\StringTok{ }\KeywordTok{length}\NormalTok{(exprs)}
+  \ControlFlowTok{if}\NormalTok{ (n }\OperatorTok{==}\StringTok{ }\NormalTok{0L) }\KeywordTok{return}\NormalTok{(}\KeywordTok{invisible}\NormalTok{())}
 
-  \NormalTok{for (i in }\KeywordTok{seq_len}\NormalTok{(n -}\StringTok{ }\DecValTok{1}\NormalTok{)) \{}
+  \ControlFlowTok{for}\NormalTok{ (i }\ControlFlowTok{in} \KeywordTok{seq_len}\NormalTok{(n }\OperatorTok{-}\StringTok{ }\DecValTok{1}\NormalTok{)) \{}
     \KeywordTok{eval}\NormalTok{(exprs[i], envir)}
-  \NormalTok{\}}
+\NormalTok{  \}}
   \KeywordTok{invisible}\NormalTok{(}\KeywordTok{eval}\NormalTok{(exprs[n], envir))}
 \NormalTok{\}}
 \end{Highlighting}
@@ -1052,7 +1526,8 @@ The real \texttt{source()} is considerably more complicated because it
 can \texttt{echo} input and output, and also has many additional
 settings to control behaviour.
 
-\subsection{Exercises}
+\hypertarget{exercises-5}{%
+\subsection{Exercises}\label{exercises-5}}
 
 \begin{enumerate}
 \def\labelenumi{\arabic{enumi}.}
@@ -1077,8 +1552,8 @@ settings to control behaviour.
   function, you'll see the comment and not just the source code.
 \end{enumerate}
 
-\hyperdef{}{ast-funs}{\section{Walking the AST with recursive
-functions}\label{ast-funs}}
+\hypertarget{ast-funs}{%
+\section{Walking the AST with recursive functions}\label{ast-funs}}
 
 It's easy to modify a single call with \texttt{substitute()} or
 \texttt{pryr::modify\_call()}. For more complicated tasks we need to
@@ -1110,40 +1585,52 @@ look like:
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{recurse_call <-}\StringTok{ }\NormalTok{function(x) \{}
-  \NormalTok{if (}\KeywordTok{is.atomic}\NormalTok{(x)) \{}
+\NormalTok{recurse_call <-}\StringTok{ }\ControlFlowTok{function}\NormalTok{(x) \{}
+  \ControlFlowTok{if}\NormalTok{ (}\KeywordTok{is.atomic}\NormalTok{(x)) \{}
     \CommentTok{# Return a value}
-  \NormalTok{\} else if (}\KeywordTok{is.name}\NormalTok{(x)) \{}
+\NormalTok{  \} }\ControlFlowTok{else} \ControlFlowTok{if}\NormalTok{ (}\KeywordTok{is.name}\NormalTok{(x)) \{}
     \CommentTok{# Return a value}
-  \NormalTok{\} else if (}\KeywordTok{is.call}\NormalTok{(x)) \{}
+\NormalTok{  \} }\ControlFlowTok{else} \ControlFlowTok{if}\NormalTok{ (}\KeywordTok{is.call}\NormalTok{(x)) \{}
     \CommentTok{# Call recurse_call recursively}
-  \NormalTok{\} else if (}\KeywordTok{is.pairlist}\NormalTok{(x)) \{}
+\NormalTok{  \} }\ControlFlowTok{else} \ControlFlowTok{if}\NormalTok{ (}\KeywordTok{is.pairlist}\NormalTok{(x)) \{}
     \CommentTok{# Call recurse_call recursively}
-  \NormalTok{\} else \{}
+\NormalTok{  \} }\ControlFlowTok{else}\NormalTok{ \{}
     \CommentTok{# User supplied incorrect input}
     \KeywordTok{stop}\NormalTok{(}\StringTok{"Don't know how to handle type "}\NormalTok{, }\KeywordTok{typeof}\NormalTok{(x), }
       \DataTypeTok{call. =} \OtherTok{FALSE}\NormalTok{)}
-  \NormalTok{\}}
+\NormalTok{  \}}
 \NormalTok{\}}
 \end{Highlighting}
 \end{Shaded}
 
-\subsection{Finding F and T}
+\hypertarget{finding-f-and-t}{%
+\subsection{Finding F and T}\label{finding-f-and-t}}
 
 We'll start simple with a function that determines whether a function
 uses the logical abbreviations \texttt{T} and \texttt{F}. Using
 \texttt{T} and \texttt{F} is generally considered to be poor coding
-practice, and is something that \texttt{R CMD check} will warn about.
+practice, and is something that \texttt{R\ CMD\ check} will warn about.
 Let's first compare the AST for \texttt{T} vs. \texttt{TRUE}:
 
 \begin{Shaded}
 \begin{Highlighting}[]
 \KeywordTok{ast}\NormalTok{(}\OtherTok{TRUE}\NormalTok{)}
-\CommentTok{#> \textbackslash{}-  TRUE}
-\KeywordTok{ast}\NormalTok{(T)}
-\CommentTok{#> \textbackslash{}- `T}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## \-  TRUE
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{ast}\NormalTok{(T)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## \- `T
+\end{verbatim}
 
 \texttt{TRUE} is parsed as a logical vector of length one, while
 \texttt{T} is parsed as a name. This tells us how to write our base
@@ -1156,34 +1643,63 @@ they do the same thing in both cases: they recursively call
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{logical_abbr <-}\StringTok{ }\NormalTok{function(x) \{}
-  \NormalTok{if (}\KeywordTok{is.atomic}\NormalTok{(x)) \{}
+\NormalTok{logical_abbr <-}\StringTok{ }\ControlFlowTok{function}\NormalTok{(x) \{}
+  \ControlFlowTok{if}\NormalTok{ (}\KeywordTok{is.atomic}\NormalTok{(x)) \{}
     \OtherTok{FALSE}
-  \NormalTok{\} else if (}\KeywordTok{is.name}\NormalTok{(x)) \{}
-    \KeywordTok{identical}\NormalTok{(x, }\KeywordTok{quote}\NormalTok{(T)) ||}\StringTok{ }\KeywordTok{identical}\NormalTok{(x, }\KeywordTok{quote}\NormalTok{(F))}
-  \NormalTok{\} else if (}\KeywordTok{is.call}\NormalTok{(x) ||}\StringTok{ }\KeywordTok{is.pairlist}\NormalTok{(x)) \{}
-    \NormalTok{for (i in }\KeywordTok{seq_along}\NormalTok{(x)) \{}
-      \NormalTok{if (}\KeywordTok{logical_abbr}\NormalTok{(x[[i]])) }\KeywordTok{return}\NormalTok{(}\OtherTok{TRUE}\NormalTok{)}
-    \NormalTok{\}}
+\NormalTok{  \} }\ControlFlowTok{else} \ControlFlowTok{if}\NormalTok{ (}\KeywordTok{is.name}\NormalTok{(x)) \{}
+    \KeywordTok{identical}\NormalTok{(x, }\KeywordTok{quote}\NormalTok{(T)) }\OperatorTok{||}\StringTok{ }\KeywordTok{identical}\NormalTok{(x, }\KeywordTok{quote}\NormalTok{(F))}
+\NormalTok{  \} }\ControlFlowTok{else} \ControlFlowTok{if}\NormalTok{ (}\KeywordTok{is.call}\NormalTok{(x) }\OperatorTok{||}\StringTok{ }\KeywordTok{is.pairlist}\NormalTok{(x)) \{}
+    \ControlFlowTok{for}\NormalTok{ (i }\ControlFlowTok{in} \KeywordTok{seq_along}\NormalTok{(x)) \{}
+      \ControlFlowTok{if}\NormalTok{ (}\KeywordTok{logical_abbr}\NormalTok{(x[[i]])) }\KeywordTok{return}\NormalTok{(}\OtherTok{TRUE}\NormalTok{)}
+\NormalTok{    \}}
     \OtherTok{FALSE}
-  \NormalTok{\} else \{}
+\NormalTok{  \} }\ControlFlowTok{else}\NormalTok{ \{}
     \KeywordTok{stop}\NormalTok{(}\StringTok{"Don't know how to handle type "}\NormalTok{, }\KeywordTok{typeof}\NormalTok{(x), }
       \DataTypeTok{call. =} \OtherTok{FALSE}\NormalTok{)}
-  \NormalTok{\}}
+\NormalTok{  \}}
 \NormalTok{\}}
 
 \KeywordTok{logical_abbr}\NormalTok{(}\KeywordTok{quote}\NormalTok{(}\OtherTok{TRUE}\NormalTok{))}
-\CommentTok{#> [1] FALSE}
-\KeywordTok{logical_abbr}\NormalTok{(}\KeywordTok{quote}\NormalTok{(T))}
-\CommentTok{#> [1] TRUE}
-\KeywordTok{logical_abbr}\NormalTok{(}\KeywordTok{quote}\NormalTok{(}\KeywordTok{mean}\NormalTok{(x, }\DataTypeTok{na.rm =} \NormalTok{T)))}
-\CommentTok{#> [1] TRUE}
-\KeywordTok{logical_abbr}\NormalTok{(}\KeywordTok{quote}\NormalTok{(function(x, }\DataTypeTok{na.rm =} \NormalTok{T) }\OtherTok{FALSE}\NormalTok{))}
-\CommentTok{#> [1] TRUE}
 \end{Highlighting}
 \end{Shaded}
 
-\subsection{Finding all variables created by assignment}
+\begin{verbatim}
+## [1] FALSE
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{logical_abbr}\NormalTok{(}\KeywordTok{quote}\NormalTok{(T))}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] TRUE
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{logical_abbr}\NormalTok{(}\KeywordTok{quote}\NormalTok{(}\KeywordTok{mean}\NormalTok{(x, }\DataTypeTok{na.rm =}\NormalTok{ T)))}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] TRUE
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{logical_abbr}\NormalTok{(}\KeywordTok{quote}\NormalTok{(}\ControlFlowTok{function}\NormalTok{(x, }\DataTypeTok{na.rm =}\NormalTok{ T) }\OtherTok{FALSE}\NormalTok{))}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] TRUE
+\end{verbatim}
+
+\hypertarget{finding-all-variables-created-by-assignment}{%
+\subsection{Finding all variables created by
+assignment}\label{finding-all-variables-created-by-assignment}}
 
 \texttt{logical\_abbr()} is very simple: it only returns a single
 \texttt{TRUE} or \texttt{FALSE}. The next task, listing all variables
@@ -1196,12 +1712,15 @@ Again, we start by looking at the AST for assignment:
 \begin{Shaded}
 \begin{Highlighting}[]
 \KeywordTok{ast}\NormalTok{(x <-}\StringTok{ }\DecValTok{10}\NormalTok{)}
-\CommentTok{#> \textbackslash{}- ()}
-\CommentTok{#>   \textbackslash{}- `<-}
-\CommentTok{#>   \textbackslash{}- `x}
-\CommentTok{#>   \textbackslash{}-  10}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## \- ()
+##   \- `<-
+##   \- `x
+##   \-  10
+\end{verbatim}
 
 Assignment is a call where the first element is the name
 \texttt{\textless{}-}, the second is the object the name is assigned to,
@@ -1213,38 +1732,49 @@ simple: constants and names don't create assignments, so they return
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{find_assign <-}\StringTok{ }\NormalTok{function(x) \{}
-  \NormalTok{if (}\KeywordTok{is.atomic}\NormalTok{(x) ||}\StringTok{ }\KeywordTok{is.name}\NormalTok{(x)) \{}
+\NormalTok{find_assign <-}\StringTok{ }\ControlFlowTok{function}\NormalTok{(x) \{}
+  \ControlFlowTok{if}\NormalTok{ (}\KeywordTok{is.atomic}\NormalTok{(x) }\OperatorTok{||}\StringTok{ }\KeywordTok{is.name}\NormalTok{(x)) \{}
     \OtherTok{NULL}
-  \NormalTok{\} else if (}\KeywordTok{is.call}\NormalTok{(x)) \{}
-    \NormalTok{if (}\KeywordTok{identical}\NormalTok{(x[[}\DecValTok{1}\NormalTok{]], }\KeywordTok{quote}\NormalTok{(}\StringTok{`}\DataTypeTok{<-}\StringTok{`}\NormalTok{))) \{}
-      \NormalTok{x[[}\DecValTok{2}\NormalTok{]]}
-    \NormalTok{\} else \{}
+\NormalTok{  \} }\ControlFlowTok{else} \ControlFlowTok{if}\NormalTok{ (}\KeywordTok{is.call}\NormalTok{(x)) \{}
+    \ControlFlowTok{if}\NormalTok{ (}\KeywordTok{identical}\NormalTok{(x[[}\DecValTok{1}\NormalTok{]], }\KeywordTok{quote}\NormalTok{(}\StringTok{`}\DataTypeTok{<-}\StringTok{`}\NormalTok{))) \{}
+\NormalTok{      x[[}\DecValTok{2}\NormalTok{]]}
+\NormalTok{    \} }\ControlFlowTok{else}\NormalTok{ \{}
       \KeywordTok{lapply}\NormalTok{(x, find_assign)}
-    \NormalTok{\}}
-  \NormalTok{\} else if (}\KeywordTok{is.pairlist}\NormalTok{(x)) \{}
+\NormalTok{    \}}
+\NormalTok{  \} }\ControlFlowTok{else} \ControlFlowTok{if}\NormalTok{ (}\KeywordTok{is.pairlist}\NormalTok{(x)) \{}
     \KeywordTok{lapply}\NormalTok{(x, find_assign)}
-  \NormalTok{\} else \{}
+\NormalTok{  \} }\ControlFlowTok{else}\NormalTok{ \{}
     \KeywordTok{stop}\NormalTok{(}\StringTok{"Don't know how to handle type "}\NormalTok{, }\KeywordTok{typeof}\NormalTok{(x), }
       \DataTypeTok{call. =} \OtherTok{FALSE}\NormalTok{)}
-  \NormalTok{\}}
+\NormalTok{  \}}
 \NormalTok{\}}
 \KeywordTok{find_assign}\NormalTok{(}\KeywordTok{quote}\NormalTok{(a <-}\StringTok{ }\DecValTok{1}\NormalTok{))}
-\CommentTok{#> a}
-\KeywordTok{find_assign}\NormalTok{(}\KeywordTok{quote}\NormalTok{(\{}
-  \NormalTok{a <-}\StringTok{ }\DecValTok{1}
-  \NormalTok{b <-}\StringTok{ }\DecValTok{2}
-\NormalTok{\}))}
-\CommentTok{#> [[1]]}
-\CommentTok{#> NULL}
-\CommentTok{#> }
-\CommentTok{#> [[2]]}
-\CommentTok{#> a}
-\CommentTok{#> }
-\CommentTok{#> [[3]]}
-\CommentTok{#> b}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## a
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{find_assign}\NormalTok{(}\KeywordTok{quote}\NormalTok{(\{}
+\NormalTok{  a <-}\StringTok{ }\DecValTok{1}
+\NormalTok{  b <-}\StringTok{ }\DecValTok{2}
+\NormalTok{\}))}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [[1]]
+## NULL
+## 
+## [[2]]
+## a
+## 
+## [[3]]
+## b
+\end{verbatim}
 
 This function works for these simple cases, but the output is rather
 verbose and includes some extraneous \texttt{NULL}s. Instead of
@@ -1253,36 +1783,46 @@ also test it with two slightly more complicated examples:
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{find_assign2 <-}\StringTok{ }\NormalTok{function(x) \{}
-  \NormalTok{if (}\KeywordTok{is.atomic}\NormalTok{(x) ||}\StringTok{ }\KeywordTok{is.name}\NormalTok{(x)) \{}
+\NormalTok{find_assign2 <-}\StringTok{ }\ControlFlowTok{function}\NormalTok{(x) \{}
+  \ControlFlowTok{if}\NormalTok{ (}\KeywordTok{is.atomic}\NormalTok{(x) }\OperatorTok{||}\StringTok{ }\KeywordTok{is.name}\NormalTok{(x)) \{}
     \KeywordTok{character}\NormalTok{()}
-  \NormalTok{\} else if (}\KeywordTok{is.call}\NormalTok{(x)) \{}
-    \NormalTok{if (}\KeywordTok{identical}\NormalTok{(x[[}\DecValTok{1}\NormalTok{]], }\KeywordTok{quote}\NormalTok{(}\StringTok{`}\DataTypeTok{<-}\StringTok{`}\NormalTok{))) \{}
+\NormalTok{  \} }\ControlFlowTok{else} \ControlFlowTok{if}\NormalTok{ (}\KeywordTok{is.call}\NormalTok{(x)) \{}
+    \ControlFlowTok{if}\NormalTok{ (}\KeywordTok{identical}\NormalTok{(x[[}\DecValTok{1}\NormalTok{]], }\KeywordTok{quote}\NormalTok{(}\StringTok{`}\DataTypeTok{<-}\StringTok{`}\NormalTok{))) \{}
       \KeywordTok{as.character}\NormalTok{(x[[}\DecValTok{2}\NormalTok{]])}
-    \NormalTok{\} else \{}
+\NormalTok{    \} }\ControlFlowTok{else}\NormalTok{ \{}
       \KeywordTok{unlist}\NormalTok{(}\KeywordTok{lapply}\NormalTok{(x, find_assign2))}
-    \NormalTok{\}}
-  \NormalTok{\} else if (}\KeywordTok{is.pairlist}\NormalTok{(x)) \{}
+\NormalTok{    \}}
+\NormalTok{  \} }\ControlFlowTok{else} \ControlFlowTok{if}\NormalTok{ (}\KeywordTok{is.pairlist}\NormalTok{(x)) \{}
     \KeywordTok{unlist}\NormalTok{(}\KeywordTok{lapply}\NormalTok{(x, find_assign2))}
-  \NormalTok{\} else \{}
+\NormalTok{  \} }\ControlFlowTok{else}\NormalTok{ \{}
     \KeywordTok{stop}\NormalTok{(}\StringTok{"Don't know how to handle type "}\NormalTok{, }\KeywordTok{typeof}\NormalTok{(x), }
       \DataTypeTok{call. =} \OtherTok{FALSE}\NormalTok{)}
-  \NormalTok{\}}
+\NormalTok{  \}}
 \NormalTok{\}}
 
 \KeywordTok{find_assign2}\NormalTok{(}\KeywordTok{quote}\NormalTok{(\{}
-  \NormalTok{a <-}\StringTok{ }\DecValTok{1}
-  \NormalTok{b <-}\StringTok{ }\DecValTok{2}
-  \NormalTok{a <-}\StringTok{ }\DecValTok{3}
+\NormalTok{  a <-}\StringTok{ }\DecValTok{1}
+\NormalTok{  b <-}\StringTok{ }\DecValTok{2}
+\NormalTok{  a <-}\StringTok{ }\DecValTok{3}
 \NormalTok{\}))}
-\CommentTok{#> [1] "a" "b" "a"}
+\end{Highlighting}
+\end{Shaded}
 
+\begin{verbatim}
+## [1] "a" "b" "a"
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
 \KeywordTok{find_assign2}\NormalTok{(}\KeywordTok{quote}\NormalTok{(\{}
   \KeywordTok{system.time}\NormalTok{(x <-}\StringTok{ }\KeywordTok{print}\NormalTok{(y <-}\StringTok{ }\DecValTok{5}\NormalTok{))}
 \NormalTok{\}))}
-\CommentTok{#> [1] "x"}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## [1] "x"
+\end{verbatim}
 
 This is better, but we have two problems: dealing with repeated names
 and neglecting assignments inside other assignments. The fix for the
@@ -1294,51 +1834,64 @@ strategies:
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{find_assign3 <-}\StringTok{ }\NormalTok{function(x) \{}
-  \NormalTok{if (}\KeywordTok{is.atomic}\NormalTok{(x) ||}\StringTok{ }\KeywordTok{is.name}\NormalTok{(x)) \{}
+\NormalTok{find_assign3 <-}\StringTok{ }\ControlFlowTok{function}\NormalTok{(x) \{}
+  \ControlFlowTok{if}\NormalTok{ (}\KeywordTok{is.atomic}\NormalTok{(x) }\OperatorTok{||}\StringTok{ }\KeywordTok{is.name}\NormalTok{(x)) \{}
     \KeywordTok{character}\NormalTok{()}
-  \NormalTok{\} else if (}\KeywordTok{is.call}\NormalTok{(x)) \{}
-    \NormalTok{if (}\KeywordTok{identical}\NormalTok{(x[[}\DecValTok{1}\NormalTok{]], }\KeywordTok{quote}\NormalTok{(}\StringTok{`}\DataTypeTok{<-}\StringTok{`}\NormalTok{))) \{}
-      \NormalTok{lhs <-}\StringTok{ }\KeywordTok{as.character}\NormalTok{(x[[}\DecValTok{2}\NormalTok{]])}
-    \NormalTok{\} else \{}
-      \NormalTok{lhs <-}\StringTok{ }\KeywordTok{character}\NormalTok{()}
-    \NormalTok{\}}
+\NormalTok{  \} }\ControlFlowTok{else} \ControlFlowTok{if}\NormalTok{ (}\KeywordTok{is.call}\NormalTok{(x)) \{}
+    \ControlFlowTok{if}\NormalTok{ (}\KeywordTok{identical}\NormalTok{(x[[}\DecValTok{1}\NormalTok{]], }\KeywordTok{quote}\NormalTok{(}\StringTok{`}\DataTypeTok{<-}\StringTok{`}\NormalTok{))) \{}
+\NormalTok{      lhs <-}\StringTok{ }\KeywordTok{as.character}\NormalTok{(x[[}\DecValTok{2}\NormalTok{]])}
+\NormalTok{    \} }\ControlFlowTok{else}\NormalTok{ \{}
+\NormalTok{      lhs <-}\StringTok{ }\KeywordTok{character}\NormalTok{()}
+\NormalTok{    \}}
 
     \KeywordTok{unique}\NormalTok{(}\KeywordTok{c}\NormalTok{(lhs, }\KeywordTok{unlist}\NormalTok{(}\KeywordTok{lapply}\NormalTok{(x, find_assign3))))}
-  \NormalTok{\} else if (}\KeywordTok{is.pairlist}\NormalTok{(x)) \{}
+\NormalTok{  \} }\ControlFlowTok{else} \ControlFlowTok{if}\NormalTok{ (}\KeywordTok{is.pairlist}\NormalTok{(x)) \{}
     \KeywordTok{unique}\NormalTok{(}\KeywordTok{unlist}\NormalTok{(}\KeywordTok{lapply}\NormalTok{(x, find_assign3)))}
-  \NormalTok{\} else \{}
+\NormalTok{  \} }\ControlFlowTok{else}\NormalTok{ \{}
     \KeywordTok{stop}\NormalTok{(}\StringTok{"Don't know how to handle type "}\NormalTok{, }\KeywordTok{typeof}\NormalTok{(x), }
       \DataTypeTok{call. =} \OtherTok{FALSE}\NormalTok{)}
-  \NormalTok{\}}
+\NormalTok{  \}}
 \NormalTok{\}}
 
 \KeywordTok{find_assign3}\NormalTok{(}\KeywordTok{quote}\NormalTok{(\{}
-  \NormalTok{a <-}\StringTok{ }\DecValTok{1}
-  \NormalTok{b <-}\StringTok{ }\DecValTok{2}
-  \NormalTok{a <-}\StringTok{ }\DecValTok{3}
+\NormalTok{  a <-}\StringTok{ }\DecValTok{1}
+\NormalTok{  b <-}\StringTok{ }\DecValTok{2}
+\NormalTok{  a <-}\StringTok{ }\DecValTok{3}
 \NormalTok{\}))}
-\CommentTok{#> [1] "a" "b"}
+\end{Highlighting}
+\end{Shaded}
 
+\begin{verbatim}
+## [1] "a" "b"
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
 \KeywordTok{find_assign3}\NormalTok{(}\KeywordTok{quote}\NormalTok{(\{}
   \KeywordTok{system.time}\NormalTok{(x <-}\StringTok{ }\KeywordTok{print}\NormalTok{(y <-}\StringTok{ }\DecValTok{5}\NormalTok{))}
 \NormalTok{\}))}
-\CommentTok{#> [1] "x" "y"}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## [1] "x" "y"
+\end{verbatim}
 
 We also need to test subassignment:
 
 \begin{Shaded}
 \begin{Highlighting}[]
 \KeywordTok{find_assign3}\NormalTok{(}\KeywordTok{quote}\NormalTok{(\{}
-  \NormalTok{l <-}\StringTok{ }\KeywordTok{list}\NormalTok{()}
-  \NormalTok{l$a <-}\StringTok{ }\DecValTok{5}
+\NormalTok{  l <-}\StringTok{ }\KeywordTok{list}\NormalTok{()}
+\NormalTok{  l}\OperatorTok{$}\NormalTok{a <-}\StringTok{ }\DecValTok{5}
   \KeywordTok{names}\NormalTok{(l) <-}\StringTok{ "b"}
 \NormalTok{\}))}
-\CommentTok{#> [1] "l"     "$"     "a"     "names"}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## [1] "l"     "$"     "a"     "names"
+\end{verbatim}
 
 We only want assignment of the object itself, not assignment that
 modifies a property of the object. Drawing the tree for the quoted
@@ -1347,61 +1900,76 @@ of the call to \texttt{\textless{}-} should be a name, not another call.
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\KeywordTok{ast}\NormalTok{(l$a <-}\StringTok{ }\DecValTok{5}\NormalTok{)}
-\CommentTok{#> \textbackslash{}- ()}
-\CommentTok{#>   \textbackslash{}- `<-}
-\CommentTok{#>   \textbackslash{}- ()}
-\CommentTok{#>     \textbackslash{}- `$}
-\CommentTok{#>     \textbackslash{}- `l}
-\CommentTok{#>     \textbackslash{}- `a}
-\CommentTok{#>   \textbackslash{}-  5}
-\KeywordTok{ast}\NormalTok{(}\KeywordTok{names}\NormalTok{(l) <-}\StringTok{ "b"}\NormalTok{)}
-\CommentTok{#> \textbackslash{}- ()}
-\CommentTok{#>   \textbackslash{}- `<-}
-\CommentTok{#>   \textbackslash{}- ()}
-\CommentTok{#>     \textbackslash{}- `names}
-\CommentTok{#>     \textbackslash{}- `l}
-\CommentTok{#>   \textbackslash{}-  "b"}
+\KeywordTok{ast}\NormalTok{(l}\OperatorTok{$}\NormalTok{a <-}\StringTok{ }\DecValTok{5}\NormalTok{)}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## \- ()
+##   \- `<-
+##   \- ()
+##     \- `$
+##     \- `l
+##     \- `a
+##   \-  5
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{ast}\NormalTok{(}\KeywordTok{names}\NormalTok{(l) <-}\StringTok{ "b"}\NormalTok{)}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## \- ()
+##   \- `<-
+##   \- ()
+##     \- `names
+##     \- `l
+##   \-  "b"
+\end{verbatim}
 
 Now we have a complete version:
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{find_assign4 <-}\StringTok{ }\NormalTok{function(x) \{}
-  \NormalTok{if (}\KeywordTok{is.atomic}\NormalTok{(x) ||}\StringTok{ }\KeywordTok{is.name}\NormalTok{(x)) \{}
+\NormalTok{find_assign4 <-}\StringTok{ }\ControlFlowTok{function}\NormalTok{(x) \{}
+  \ControlFlowTok{if}\NormalTok{ (}\KeywordTok{is.atomic}\NormalTok{(x) }\OperatorTok{||}\StringTok{ }\KeywordTok{is.name}\NormalTok{(x)) \{}
     \KeywordTok{character}\NormalTok{()}
-  \NormalTok{\} else if (}\KeywordTok{is.call}\NormalTok{(x)) \{}
-    \NormalTok{if (}\KeywordTok{identical}\NormalTok{(x[[}\DecValTok{1}\NormalTok{]], }\KeywordTok{quote}\NormalTok{(}\StringTok{`}\DataTypeTok{<-}\StringTok{`}\NormalTok{)) &&}\StringTok{ }\KeywordTok{is.name}\NormalTok{(x[[}\DecValTok{2}\NormalTok{]])) \{}
-      \NormalTok{lhs <-}\StringTok{ }\KeywordTok{as.character}\NormalTok{(x[[}\DecValTok{2}\NormalTok{]])}
-    \NormalTok{\} else \{}
-      \NormalTok{lhs <-}\StringTok{ }\KeywordTok{character}\NormalTok{()}
-    \NormalTok{\}}
+\NormalTok{  \} }\ControlFlowTok{else} \ControlFlowTok{if}\NormalTok{ (}\KeywordTok{is.call}\NormalTok{(x)) \{}
+    \ControlFlowTok{if}\NormalTok{ (}\KeywordTok{identical}\NormalTok{(x[[}\DecValTok{1}\NormalTok{]], }\KeywordTok{quote}\NormalTok{(}\StringTok{`}\DataTypeTok{<-}\StringTok{`}\NormalTok{)) }\OperatorTok{&&}\StringTok{ }\KeywordTok{is.name}\NormalTok{(x[[}\DecValTok{2}\NormalTok{]])) \{}
+\NormalTok{      lhs <-}\StringTok{ }\KeywordTok{as.character}\NormalTok{(x[[}\DecValTok{2}\NormalTok{]])}
+\NormalTok{    \} }\ControlFlowTok{else}\NormalTok{ \{}
+\NormalTok{      lhs <-}\StringTok{ }\KeywordTok{character}\NormalTok{()}
+\NormalTok{    \}}
 
     \KeywordTok{unique}\NormalTok{(}\KeywordTok{c}\NormalTok{(lhs, }\KeywordTok{unlist}\NormalTok{(}\KeywordTok{lapply}\NormalTok{(x, find_assign4))))}
-  \NormalTok{\} else if (}\KeywordTok{is.pairlist}\NormalTok{(x)) \{}
+\NormalTok{  \} }\ControlFlowTok{else} \ControlFlowTok{if}\NormalTok{ (}\KeywordTok{is.pairlist}\NormalTok{(x)) \{}
     \KeywordTok{unique}\NormalTok{(}\KeywordTok{unlist}\NormalTok{(}\KeywordTok{lapply}\NormalTok{(x, find_assign4)))}
-  \NormalTok{\} else \{}
+\NormalTok{  \} }\ControlFlowTok{else}\NormalTok{ \{}
     \KeywordTok{stop}\NormalTok{(}\StringTok{"Don't know how to handle type "}\NormalTok{, }\KeywordTok{typeof}\NormalTok{(x), }
       \DataTypeTok{call. =} \OtherTok{FALSE}\NormalTok{)}
-  \NormalTok{\}}
+\NormalTok{  \}}
 \NormalTok{\}}
 
 \KeywordTok{find_assign4}\NormalTok{(}\KeywordTok{quote}\NormalTok{(\{}
-  \NormalTok{l <-}\StringTok{ }\KeywordTok{list}\NormalTok{()}
-  \NormalTok{l$a <-}\StringTok{ }\DecValTok{5}
+\NormalTok{  l <-}\StringTok{ }\KeywordTok{list}\NormalTok{()}
+\NormalTok{  l}\OperatorTok{$}\NormalTok{a <-}\StringTok{ }\DecValTok{5}
   \KeywordTok{names}\NormalTok{(l) <-}\StringTok{ "b"}
 \NormalTok{\}))}
-\CommentTok{#> [1] "l"}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## [1] "l"
+\end{verbatim}
 
 While the complete version of this function is quite complicated, it's
 important to remember we wrote it by working our way up by writing
 simple component parts.
 
-\subsection{Modifying the call tree}\label{modifying-code}
+\hypertarget{modifying-code}{%
+\subsection{Modifying the call tree}\label{modifying-code}}
 
 The next step up in complexity is returning a modified call tree, like
 what you get with \texttt{bquote()}. \texttt{bquote()} is a slightly
@@ -1415,16 +1983,43 @@ in \texttt{.()} in which case it's evaluated and the result is inserted:
 \begin{Highlighting}[]
 \NormalTok{a <-}\StringTok{ }\DecValTok{1}
 \NormalTok{b <-}\StringTok{ }\DecValTok{3}
-\KeywordTok{bquote}\NormalTok{(a +}\StringTok{ }\NormalTok{b)}
-\CommentTok{#> a + b}
-\KeywordTok{bquote}\NormalTok{(a +}\StringTok{ }\NormalTok{.(b))}
-\CommentTok{#> a + 3}
-\KeywordTok{bquote}\NormalTok{(.(a) +}\StringTok{ }\NormalTok{.(b))}
-\CommentTok{#> 1 + 3}
-\KeywordTok{bquote}\NormalTok{(.(a +}\StringTok{ }\NormalTok{b))}
-\CommentTok{#> [1] 4}
+\KeywordTok{bquote}\NormalTok{(a }\OperatorTok{+}\StringTok{ }\NormalTok{b)}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## a + b
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{bquote}\NormalTok{(a }\OperatorTok{+}\StringTok{ }\NormalTok{.(b))}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## a + 3
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{bquote}\NormalTok{(.(a) }\OperatorTok{+}\StringTok{ }\NormalTok{.(b))}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## 1 + 3
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{bquote}\NormalTok{(.(a }\OperatorTok{+}\StringTok{ }\NormalTok{b))}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## [1] 4
+\end{verbatim}
 
 This provides a fairly easy way to control what gets evaluated and when.
 How does \texttt{bquote()} work? Below, I've rewritten \texttt{bquote()}
@@ -1433,39 +2028,50 @@ quoted already, and makes the base and recursive cases more explicit:
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{bquote2 <-}\StringTok{ }\NormalTok{function (x, }\DataTypeTok{where =} \KeywordTok{parent.frame}\NormalTok{()) \{}
-  \NormalTok{if (}\KeywordTok{is.atomic}\NormalTok{(x) ||}\StringTok{ }\KeywordTok{is.name}\NormalTok{(x)) \{}
+\NormalTok{bquote2 <-}\StringTok{ }\ControlFlowTok{function}\NormalTok{ (x, }\DataTypeTok{where =} \KeywordTok{parent.frame}\NormalTok{()) \{}
+  \ControlFlowTok{if}\NormalTok{ (}\KeywordTok{is.atomic}\NormalTok{(x) }\OperatorTok{||}\StringTok{ }\KeywordTok{is.name}\NormalTok{(x)) \{}
     \CommentTok{# Leave unchanged}
-    \NormalTok{x}
-  \NormalTok{\} else if (}\KeywordTok{is.call}\NormalTok{(x)) \{}
-    \NormalTok{if (}\KeywordTok{identical}\NormalTok{(x[[}\DecValTok{1}\NormalTok{]], }\KeywordTok{quote}\NormalTok{(.))) \{}
+\NormalTok{    x}
+\NormalTok{  \} }\ControlFlowTok{else} \ControlFlowTok{if}\NormalTok{ (}\KeywordTok{is.call}\NormalTok{(x)) \{}
+    \ControlFlowTok{if}\NormalTok{ (}\KeywordTok{identical}\NormalTok{(x[[}\DecValTok{1}\NormalTok{]], }\KeywordTok{quote}\NormalTok{(.))) \{}
       \CommentTok{# Call to .(), so evaluate}
       \KeywordTok{eval}\NormalTok{(x[[}\DecValTok{2}\NormalTok{]], where)}
-    \NormalTok{\} else \{}
+\NormalTok{    \} }\ControlFlowTok{else}\NormalTok{ \{}
       \CommentTok{# Otherwise apply recursively, turning result back into call}
-      \KeywordTok{as.call}\NormalTok{(}\KeywordTok{lapply}\NormalTok{(x, bquote2, }\DataTypeTok{where =} \NormalTok{where))}
-    \NormalTok{\}}
-  \NormalTok{\} else if (}\KeywordTok{is.pairlist}\NormalTok{(x)) \{}
-    \KeywordTok{as.pairlist}\NormalTok{(}\KeywordTok{lapply}\NormalTok{(x, bquote2, }\DataTypeTok{where =} \NormalTok{where))}
-  \NormalTok{\} else \{}
+      \KeywordTok{as.call}\NormalTok{(}\KeywordTok{lapply}\NormalTok{(x, bquote2, }\DataTypeTok{where =}\NormalTok{ where))}
+\NormalTok{    \}}
+\NormalTok{  \} }\ControlFlowTok{else} \ControlFlowTok{if}\NormalTok{ (}\KeywordTok{is.pairlist}\NormalTok{(x)) \{}
+    \KeywordTok{as.pairlist}\NormalTok{(}\KeywordTok{lapply}\NormalTok{(x, bquote2, }\DataTypeTok{where =}\NormalTok{ where))}
+\NormalTok{  \} }\ControlFlowTok{else}\NormalTok{ \{}
     \CommentTok{# User supplied incorrect input}
     \KeywordTok{stop}\NormalTok{(}\StringTok{"Don't know how to handle type "}\NormalTok{, }\KeywordTok{typeof}\NormalTok{(x), }
       \DataTypeTok{call. =} \OtherTok{FALSE}\NormalTok{)}
-  \NormalTok{\}}
+\NormalTok{  \}}
 \NormalTok{\}}
 
 \NormalTok{x <-}\StringTok{ }\DecValTok{1}
 \NormalTok{y <-}\StringTok{ }\DecValTok{2}
-\KeywordTok{bquote2}\NormalTok{(}\KeywordTok{quote}\NormalTok{(x ==}\StringTok{ }\NormalTok{.(x)))}
-\CommentTok{#> x == 1}
-\KeywordTok{bquote2}\NormalTok{(}\KeywordTok{quote}\NormalTok{(function(}\DataTypeTok{x =} \NormalTok{.(x)) \{}
-  \NormalTok{x +}\StringTok{ }\NormalTok{.(y)}
-\NormalTok{\}))}
-\CommentTok{#> function(x = 1) \{}
-\CommentTok{#>     x + 2}
-\CommentTok{#> \}}
+\KeywordTok{bquote2}\NormalTok{(}\KeywordTok{quote}\NormalTok{(x }\OperatorTok{==}\StringTok{ }\NormalTok{.(x)))}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## x == 1
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{bquote2}\NormalTok{(}\KeywordTok{quote}\NormalTok{(}\ControlFlowTok{function}\NormalTok{(}\DataTypeTok{x =}\NormalTok{ .(x)) \{}
+\NormalTok{  x }\OperatorTok{+}\StringTok{ }\NormalTok{.(y)}
+\NormalTok{\}))}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## function(x = 1) {
+##     x + 2
+## }
+\end{verbatim}
 
 The main difference between this and the previous recursive functions is
 that after we process each element of calls and pairlists, we need to
@@ -1478,16 +2084,19 @@ information is lost:
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\KeywordTok{bquote2}\NormalTok{(}\KeywordTok{quote}\NormalTok{(function(}\DataTypeTok{x =} \NormalTok{.(x)) \{}
+\KeywordTok{bquote2}\NormalTok{(}\KeywordTok{quote}\NormalTok{(}\ControlFlowTok{function}\NormalTok{(}\DataTypeTok{x =}\NormalTok{ .(x)) \{}
   \CommentTok{# This is a comment}
-  \NormalTok{x +}\StringTok{  }\CommentTok{# funky spacing}
+\NormalTok{  x }\OperatorTok{+}\StringTok{  }\CommentTok{# funky spacing}
 \StringTok{    }\NormalTok{.(y)}
 \NormalTok{\}))}
-\CommentTok{#> function(x = 1) \{}
-\CommentTok{#>     x + 2}
-\CommentTok{#> \}}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## function(x = 1) {
+##     x + 2
+## }
+\end{verbatim}
 
 These tools are somewhat similar to Lisp macros, as discussed in
 \href{http://www.r-project.org/doc/Rnews/Rnews_2001-3.pdf\#page=10}{Programmer's
@@ -1499,7 +2108,8 @@ where the arguments are not evaluated by default. The terms macro and
 fexpr are useful to know when looking for useful techniques from other
 languages. \index{macros} \index{fexprs}
 
-\subsection{Exercises}
+\hypertarget{exercises-6}{%
+\subsection{Exercises}\label{exercises-6}}
 
 \begin{enumerate}
 \def\labelenumi{\arabic{enumi}.}
@@ -1514,8 +2124,8 @@ languages. \index{macros} \index{fexprs}
 
 \begin{Shaded}
 \begin{Highlighting}[]
-\NormalTok{f <-}\StringTok{ }\NormalTok{function(}\DataTypeTok{x =} \OtherTok{TRUE}\NormalTok{) \{}
-  \KeywordTok{g}\NormalTok{(x +}\StringTok{ }\NormalTok{T)}
+\NormalTok{f <-}\StringTok{ }\ControlFlowTok{function}\NormalTok{(}\DataTypeTok{x =} \OtherTok{TRUE}\NormalTok{) \{}
+  \KeywordTok{g}\NormalTok{(x }\OperatorTok{+}\StringTok{ }\NormalTok{T)}
 \NormalTok{\}}
 \KeywordTok{logical_abbr}\NormalTok{(f)}
 \end{Highlighting}
@@ -1541,11 +2151,22 @@ languages. \index{macros} \index{fexprs}
 \begin{Shaded}
 \begin{Highlighting}[]
 \KeywordTok{bquote}\NormalTok{(.(x)(), }\KeywordTok{list}\NormalTok{(}\DataTypeTok{x =} \KeywordTok{quote}\NormalTok{(f)))}
-\CommentTok{#> .(x)()}
-\KeywordTok{bquote}\NormalTok{(.(x)(}\DecValTok{1}\NormalTok{), }\KeywordTok{list}\NormalTok{(}\DataTypeTok{x =} \KeywordTok{quote}\NormalTok{(f)))}
-\CommentTok{#> f(1)}
 \end{Highlighting}
 \end{Shaded}
+
+\begin{verbatim}
+## .(x)()
+\end{verbatim}
+
+\begin{Shaded}
+\begin{Highlighting}[]
+\KeywordTok{bquote}\NormalTok{(.(x)(}\DecValTok{1}\NormalTok{), }\KeywordTok{list}\NormalTok{(}\DataTypeTok{x =} \KeywordTok{quote}\NormalTok{(f)))}
+\end{Highlighting}
+\end{Shaded}
+
+\begin{verbatim}
+## f(1)
+\end{verbatim}
 \item
   Improve the base \texttt{recurse\_call()} template to also work with
   lists of functions and expressions (e.g., as from
