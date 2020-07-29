@@ -27,7 +27,7 @@ Book:
 
 * Inconsolata scaled (by fontspec) to match main font is 9.42pt.
 
-* Preview at 100% matches physical size of book. Maximum diagram width is 11cm.
+* Preview at 100% matches physical size of book. Maxiumum diagram width is 11cm.
 
 R Markdown
 
