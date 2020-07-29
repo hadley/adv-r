@@ -29,7 +29,7 @@ Book:
 
 * Preview at 100% matches physical size of book. Maximum diagram width is 11cm.
 
-RMarkdown
+R Markdown
 
 * Remove dpi specification from `include_graphics()`, instead relying
   on `common.R`. Chunk should have `output.width = NULL`.
