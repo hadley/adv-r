@@ -42,7 +42,7 @@ knitr::knit_hooks$set(
 )
 
 # Make error messages closer to base R
-registerS3method("wrap", "error", envir = asNamespace("knitr"),
+registerS3method("sew", "error", envir = asNamespace("knitr"),
   function(x, options) {
     msg <- conditionMessage(x)
 
