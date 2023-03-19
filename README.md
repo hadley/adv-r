@@ -1,6 +1,6 @@
 # Advanced R
 
-[![build-book](https://github.com/hadley/adv-r/actions/workflows/build-book.yaml/badge.svg?branch=master&event=push)](https://github.com/hadley/adv-r/actions/workflows/build-book.yaml)
+[![bookdown](https://github.com/hadley/adv-r/actions/workflows/bookdown.yaml/badge.svg?event=push)](https://github.com/hadley/adv-r/actions/workflows/bookdown.yaml)
 
 This is code and text behind the [Advanced R](http://adv-r.hadley.nz)
 book.  The site is built with [bookdown](https://bookdown.org/yihui/bookdown/).
