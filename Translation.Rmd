@@ -11,10 +11,12 @@ The combination of first-class environments, lexical scoping, and metaprogrammin
 
 ```{r}
 library(dbplyr)
-translate_sql(x ^ 2)
-translate_sql(x < 5 & !is.na(x))
-translate_sql(!first %in% c("John", "Roger", "Robert"))
-translate_sql(select == 7)
+con <- simulate_postgres()
+
+translate_sql(x^2, con = con)
+translate_sql(x < 5 & !is.na(x), con = con)
+translate_sql(!first %in% c("John", "Roger", "Robert"), con = con)
+translate_sql(select == 7, con = con)
 ```
 
 Translating R to SQL is complex because of the many idiosyncrasies of SQL dialects, so here I'll develop two simple, but useful, domain specific languages (DSL): one to generate HTML, and the other to generate mathematical equations in LaTeX. 
@@ -171,13 +173,13 @@ We could list all the possible attributes of the `<p>` tag in the function defin
 ```{r named}
 dots_partition <- function(...) {
   dots <- list2(...)
-  
- if (is.null(names(dots))) {
-  is_named <- rep(FALSE, length(dots))
-} else {
-  is_named <- names(dots) != ""
-}
-  
+
+  if (is.null(names(dots))) {
+    is_named <- rep(FALSE, length(dots))
+  } else {
+    is_named <- names(dots) != ""
+  }
+
   list(
     named = dots[is_named],
     unnamed = dots[!is_named]
@@ -199,7 +201,9 @@ p <- function(...) {
   children <- map_chr(dots$unnamed, escape)
 
   html(paste0(
-    "<p", attribs, ">",
+    "<p",
+    attribs,
+    ">",
     paste(children, collapse = ""),
     "</p>"
   ))
@@ -224,7 +228,9 @@ tag <- function(tag) {
       children <- map_chr(dots$unnamed, escape)
 
       html(paste0(
-        !!paste0("<", tag), attribs, ">",
+        !!paste0("<", tag),
+        attribs,
+        ">",
         paste(children, collapse = ""),
         !!paste0("</", tag, ">")
       ))
@@ -275,25 +281,120 @@ img(src = "myimage.png", width = 100, height = 100)
 Next we need to generate these functions for every tag. We'll start with a list of all HTML tags:
 
 ```{r}
-tags <- c("a", "abbr", "address", "article", "aside", "audio",
-  "b","bdi", "bdo", "blockquote", "body", "button", "canvas",
-  "caption","cite", "code", "colgroup", "data", "datalist",
-  "dd", "del","details", "dfn", "div", "dl", "dt", "em",
-  "eventsource","fieldset", "figcaption", "figure", "footer",
-  "form", "h1", "h2", "h3", "h4", "h5", "h6", "head", "header",
-  "hgroup", "html", "i","iframe", "ins", "kbd", "label",
-  "legend", "li", "mark", "map","menu", "meter", "nav",
-  "noscript", "object", "ol", "optgroup", "option", "output",
-  "p", "pre", "progress", "q", "ruby", "rp","rt", "s", "samp",
-  "script", "section", "select", "small", "span", "strong",
-  "style", "sub", "summary", "sup", "table", "tbody", "td",
-  "textarea", "tfoot", "th", "thead", "time", "title", "tr",
-  "u", "ul", "var", "video"
+tags <- c(
+  "a",
+  "abbr",
+  "address",
+  "article",
+  "aside",
+  "audio",
+  "b",
+  "bdi",
+  "bdo",
+  "blockquote",
+  "body",
+  "button",
+  "canvas",
+  "caption",
+  "cite",
+  "code",
+  "colgroup",
+  "data",
+  "datalist",
+  "dd",
+  "del",
+  "details",
+  "dfn",
+  "div",
+  "dl",
+  "dt",
+  "em",
+  "eventsource",
+  "fieldset",
+  "figcaption",
+  "figure",
+  "footer",
+  "form",
+  "h1",
+  "h2",
+  "h3",
+  "h4",
+  "h5",
+  "h6",
+  "head",
+  "header",
+  "hgroup",
+  "html",
+  "i",
+  "iframe",
+  "ins",
+  "kbd",
+  "label",
+  "legend",
+  "li",
+  "mark",
+  "map",
+  "menu",
+  "meter",
+  "nav",
+  "noscript",
+  "object",
+  "ol",
+  "optgroup",
+  "option",
+  "output",
+  "p",
+  "pre",
+  "progress",
+  "q",
+  "ruby",
+  "rp",
+  "rt",
+  "s",
+  "samp",
+  "script",
+  "section",
+  "select",
+  "small",
+  "span",
+  "strong",
+  "style",
+  "sub",
+  "summary",
+  "sup",
+  "table",
+  "tbody",
+  "td",
+  "textarea",
+  "tfoot",
+  "th",
+  "thead",
+  "time",
+  "title",
+  "tr",
+  "u",
+  "ul",
+  "var",
+  "video"
 )
 
-void_tags <- c("area", "base", "br", "col", "command", "embed",
-  "hr", "img", "input", "keygen", "link", "meta", "param",
-  "source", "track", "wbr"
+void_tags <- c(
+  "area",
+  "base",
+  "br",
+  "col",
+  "command",
+  "embed",
+  "hr",
+  "img",
+  "input",
+  "keygen",
+  "link",
+  "meta",
+  "param",
+  "source",
+  "track",
+  "wbr"
 )
 ```
 
@@ -367,10 +468,10 @@ If you want to access the R function overridden by an HTML tag with the same nam
     attribute names (like below), creates tag functions with named arguments.
 
     ```{r, eval = FALSE}
-    list(
-      a = c("href"),
-      img = c("src", "width", "height")
-    )
+list(
+  a = c("href"),
+  img = c("src", "width", "height")
+)
     ```
 
     All tags should get `class` and `id` attributes.
@@ -380,12 +481,12 @@ If you want to access the R function overridden by an HTML tag with the same nam
     verify your predictions.
 
     ```{r, eval = FALSE}
-    greeting <- "Hello!"
-    with_html(p(greeting))
+greeting <- "Hello!"
+with_html(p(greeting))
 
-    p <- function() "p"
-    address <- "123 anywhere street"
-    with_html(p(address))
+p <- function() "p"
+address <- "123 anywhere street"
+with_html(p(address))
     ```
 
 1.  Currently the HTML doesn't look terribly pretty, and it's hard to see the
@@ -476,12 +577,45 @@ Our first step is to create an environment that will convert the special LaTeX s
 
 ```{r}
 greek <- c(
-  "alpha", "theta", "tau", "beta", "vartheta", "pi", "upsilon",
-  "gamma", "varpi", "phi", "delta", "kappa", "rho",
-  "varphi", "epsilon", "lambda", "varrho", "chi", "varepsilon",
-  "mu", "sigma", "psi", "zeta", "nu", "varsigma", "omega", "eta",
-  "xi", "Gamma", "Lambda", "Sigma", "Psi", "Delta", "Xi",
-  "Upsilon", "Omega", "Theta", "Pi", "Phi"
+  "alpha",
+  "theta",
+  "tau",
+  "beta",
+  "vartheta",
+  "pi",
+  "upsilon",
+  "gamma",
+  "varpi",
+  "phi",
+  "delta",
+  "kappa",
+  "rho",
+  "varphi",
+  "epsilon",
+  "lambda",
+  "varrho",
+  "chi",
+  "varepsilon",
+  "mu",
+  "sigma",
+  "psi",
+  "zeta",
+  "nu",
+  "varsigma",
+  "omega",
+  "eta",
+  "xi",
+  "Gamma",
+  "Lambda",
+  "Sigma",
+  "Psi",
+  "Delta",
+  "Xi",
+  "Upsilon",
+  "Omega",
+  "Theta",
+  "Pi",
+  "Phi"
 )
 greek_list <- set_names(paste0("\\", greek), greek)
 greek_env <- as_environment(greek_list)
@@ -519,7 +653,8 @@ expr_type <- function(x) {
   }
 }
 switch_expr <- function(x, ...) {
-  switch(expr_type(x),
+  switch(
+    expr_type(x),
     ...,
     stop("Don't know how to handle type ", typeof(x), call. = FALSE)
   )
@@ -533,10 +668,11 @@ flat_map_chr <- function(.x, .f, ...) {
 
 ```{r}
 all_names_rec <- function(x) {
-  switch_expr(x,
+  switch_expr(
+    x,
     constant = character(),
-    symbol =   as.character(x),
-    call =     flat_map_chr(as.list(x[-1]), all_names)
+    symbol = as.character(x),
+    call = flat_map_chr(as.list(x[-1]), all_names)
   )
 }
 
@@ -628,15 +764,15 @@ f_env <- child_env(
 
   # Other math functions
   sqrt = unary_op("\\sqrt{", "}"),
-  sin =  unary_op("\\sin(", ")"),
-  log =  unary_op("\\log(", ")"),
-  abs =  unary_op("\\left| ", "\\right| "),
+  sin = unary_op("\\sin(", ")"),
+  log = unary_op("\\log(", ")"),
+  abs = unary_op("\\left| ", "\\right| "),
   frac = function(a, b) {
     paste0("\\frac{", a, "}{", b, "}")
   },
 
   # Labelling
-  hat =   unary_op("\\hat{", "}"),
+  hat = unary_op("\\hat{", "}"),
   tilde = unary_op("\\tilde{", "}")
 )
 ```
@@ -669,15 +805,11 @@ Finally, we'll add a default for functions that we don't yet know about. We can'
 
 ```{r}
 all_calls_rec <- function(x) {
-  switch_expr(x,
-    constant = ,
-    symbol =   character(),
-    call = {
-      fname <- as.character(x[[1]])
-      children <- flat_map_chr(as.list(x[-1]), all_calls)
-      c(fname, children)
-    }
-  )
+  switch_expr(x, constant = , symbol = character(), call = {
+    fname <- as.character(x[[1]])
+    children <- flat_map_chr(as.list(x[-1]), all_calls)
+    c(fname, children)
+  })
 }
 all_calls <- function(x) {
   unique(all_calls_rec(x))
