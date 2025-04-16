@@ -577,31 +577,42 @@ This loop is surprisingly slow because each iteration of the loop copies the dat
 
 ```{r, eval = FALSE}
 cat(tracemem(x), "\n")
-#> <0x7f80c429e020> 
+#> <0x1d4053f6238> 
 
 for (i in 1:5) {
   x[[i]] <- x[[i]] - medians[[i]]
 }
-#> tracemem[0x7f80c429e020 -> 0x7f80c0c144d8]: 
-#> tracemem[0x7f80c0c144d8 -> 0x7f80c0c14540]: [[<-.data.frame [[<- 
-#> tracemem[0x7f80c0c14540 -> 0x7f80c0c145a8]: [[<-.data.frame [[<- 
-#> tracemem[0x7f80c0c145a8 -> 0x7f80c0c14610]: 
-#> tracemem[0x7f80c0c14610 -> 0x7f80c0c14678]: [[<-.data.frame [[<- 
-#> tracemem[0x7f80c0c14678 -> 0x7f80c0c146e0]: [[<-.data.frame [[<- 
-#> tracemem[0x7f80c0c146e0 -> 0x7f80c0c14748]: 
-#> tracemem[0x7f80c0c14748 -> 0x7f80c0c147b0]: [[<-.data.frame [[<- 
-#> tracemem[0x7f80c0c147b0 -> 0x7f80c0c14818]: [[<-.data.frame [[<- 
-#> tracemem[0x7f80c0c14818 -> 0x7f80c0c14880]: 
-#> tracemem[0x7f80c0c14880 -> 0x7f80c0c148e8]: [[<-.data.frame [[<- 
-#> tracemem[0x7f80c0c148e8 -> 0x7f80c0c14950]: [[<-.data.frame [[<- 
-#> tracemem[0x7f80c0c14950 -> 0x7f80c0c149b8]: 
-#> tracemem[0x7f80c0c149b8 -> 0x7f80c0c14a20]: [[<-.data.frame [[<- 
-#> tracemem[0x7f80c0c14a20 -> 0x7f80c0c14a88]: [[<-.data.frame [[<- 
+#> tracemem[0x1d4053f6238 -> 0x1d405407c38]: 
+#> tracemem[0x1d405407c38 -> 0x1d4053ffa88]: [[<-.data.frame [[<- 
+#> tracemem[0x1d4053ffa88 -> 0x1d4053ffa18]: 
+#> tracemem[0x1d4053ffa18 -> 0x1d4053ff9a8]: [[<-.data.frame [[<- 
+#> tracemem[0x1d4053ff9a8 -> 0x1d4053ff938]: 
+#> tracemem[0x1d4053ff938 -> 0x1d4053ff8c8]: [[<-.data.frame [[<- 
+#> tracemem[0x1d4053ff8c8 -> 0x1d4053ff858]: 
+#> tracemem[0x1d4053ff858 -> 0x1d4053ff7e8]: [[<-.data.frame [[<- 
+#> tracemem[0x1d4053ff7e8 -> 0x1d4053ff778]: 
+#> tracemem[0x1d4053ff778 -> 0x1d4053ff708]: [[<-.data.frame [[<- 
 
 untracemem(x)
 ```
 
-In fact, each iteration copies the data frame not once, not twice, but three times! Two copies are made by `[[.data.frame`, and a further copy[^shallow-copy] is made because `[[.data.frame` is a regular function that increments the reference count of `x`. 
+In fact, each iteration copies the data frame twice! In order to fully understand what's happening above, knowledge from Chapter \@ref(replacement-functions) is required. The line:
+
+```{r, eval = FALSE}
+x[[i]] <- x[[i]] - medians[[i]]
+```
+
+is roughly translated to:
+
+```{r, eval = FALSE}
+`*tmp*` <- x
+x <- `[[<-`(*tmp*, i, value = x[[i]] - medians[[i]])
+rm(`*tmp*`)
+```
+
+The first copy is made when the value of x is assigned to `*tmp*`[^tmp-variables]. A second copy[^shallow-copy] is made because `[[.data.frame` is a regular function that increments the reference count of `*tmp*` and subsequently modifies `*tmp*` in its body, thus triggering copy-on-modify. 
+
+[^tmp-variables]: Notice that if the assignment of `*tmp*` was done through regular assignment, the value of x would not be copied at this stage. However, as the assignment of the `*tmp*` variable is done internally via the underlying C code, a duplication does occur here. It is for this reason, that if you were to copy and paste the translated subassignment replacement function directly into R, you will only see one copy made per loop.
 
 [^shallow-copy]: These copies are shallow: they only copy the reference to each individual column, not the contents of the columns. This means the performance isn't terrible, but it's obviously not as good as it could be.
 
